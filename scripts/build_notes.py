@@ -489,6 +489,21 @@ def render_all(j):
     ])
 
 
+AUTHOR_NOTE = """  <h2 id="author"><span class="num">✎</span>A note from the author <span class="side">why I made these journals</span></h2>
+  <aside class="author-note" aria-labelledby="author">
+    <p class="lead">Your AI agent can write a saga orchestrator in eleven seconds. It cannot tell you whether you needed one.</p>
+    <p>These notebooks are for that second part. They're for new developers learning what all the arrows mean, and for experienced ones who've been nodding along in design reviews since 2019. They're short on purpose. Read one on the train, in a tunnel with no signal, or while the progress bar says “Thinking…” for the fourth minute.</p>
+    <p>Each note gives you three things:</p>
+    <ul>
+      <li><b>Better questions for the code review.</b> When the agent says “Done! ✅”, you'll know to ask: <i>is this idempotent? Where's the timeout? What happens when it runs twice?</i> Ask before you tell your boss it's done. Not after.</li>
+      <li><b>Better prompts for the next ticket.</b> “Add retries” gets you a loop. “Add capped retries with jitter and an idempotency key, only on 5xx” gets you a pattern. Vocabulary is leverage.</li>
+      <li><b>A sense of the trade-offs.</b> Every pattern here has a “what we lose” column. The agent rarely volunteers that column. Somebody in the room should know it exists.</li>
+    </ul>
+    <p>The honest origin story: I had usage left before my weekly limit reset, and wasting it felt worse than wasting snacks. So I asked the agent to help me write notes about what agents get wrong. It found this very relatable.</p>
+    <p class="author-sign">Read one note a day. Argue with the ratings. Doodle in the margins.<br><span>by Jefrey Romel Tagunicar</span></p>
+  </aside>"""
+
+
 def render_landing():
     books = []
     for j in JOURNALS:
@@ -526,6 +541,7 @@ def render_landing():
         f'  <p class="lead">A student\'s bullet journals on software design patterns: what problem each pattern solves, an everyday analogy with doodles, how it works, what it costs, how it rates, and how people get it wrong. <b>{len(JOURNALS)} volumes, {total} notes</b> so far, more on the way.</p>',
         '  <h2 id="shelf"><span class="num">✎</span>The shelf <span class="side">pick a journal</span></h2>',
         f'  <ul class="shelf">\n{chr(10).join(books)}\n  </ul>',
+        AUTHOR_NOTE,
         '  <h2 id="future"><span class="num">→</span>Future log <span class="side">plans, not promises</span></h2>',
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
         f'  <div class="future">\n{chr(10).join(months)}\n  </div>',
