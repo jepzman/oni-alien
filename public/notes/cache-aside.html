@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cache-Aside · Margin Notes</title>
+<meta name="description" content="Check a fast cache first; on a miss, load from the database and keep a copy.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../assets/notebook.css">
+<link rel="stylesheet" href="../assets/bujo.css">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<script src="../assets/notebook.js" defer></script>
+</head>
+<body class="bujo">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../index.html"><b>Margin<span>.</span>Notes</b><small>distributed design patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole notebook</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="desk">
+<article class="sheet" id="cache-aside">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Wed · 14.10.26</span><span class="topic">collection · <b>scaling data</b></span></div>
+  <p class="kicker">a.k.a. “check the fridge first”</p>
+  <h1><span class="hl">Cache-Aside</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Keep a copy of frequently read data in a fast cache (like Redis). The <b>application</b> checks the cache first; on a <b>miss</b> it reads the database and <b>puts the result in the cache</b> with an expiry (TTL). On a write, it updates the database and <b>deletes the cached copy</b>, so the next read loads fresh data.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> data / performance</li><li><b>Lives in:</b> the application (cache is a side store)</li><li><b>Also called:</b> lazy loading</li><li><b>Pairs with:</b> TTLs, read replicas, CQRS</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Many systems read the same data <span class="hl-pink">far more often than it changes</span>: product details, prices, user profiles, configuration.</p>
+  <ul>
+    <li>The product page asks the database for the same popular item 5,000 times a minute.</li>
+    <li>Each query takes 40 ms and uses CPU, so the database gets busy doing repeated work.</li>
+    <li>Users wait for every one of those queries, and the database needs a bigger (pricier) machine.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of the product page hitting the database for the same popular product 5,000 times a minute. Each query takes 40 milliseconds and the database CPU is at 85 percent, even though the product details rarely change."><g class="rough"><rect class="d f-blue" x="20" y="90" width="150" height="70" rx="10"/><path class="d" d="M176 101 L420 113.0"/><path class="d" d="M409.0 117.7 L420 113.0 L409.5 107.3"/><path class="d" d="M176 117 L420 121.0"/><path class="d" d="M409.1 126.0 L420 121.0 L409.3 115.6"/><path class="d d-red" d="M176 133 L420 129.0"/><path class="d d-red" d="M409.3 134.4 L420 129.0 L409.1 124.0"/><path class="d d-red" d="M176 149 L420 137.0"/><path class="d d-red" d="M409.5 142.7 L420 137.0 L409.0 132.3"/><path class="d d-thin f-pink d-red" d="M425 80 v90 a75 9 0 0 0 150 0 v-90"/><ellipse class="d d-thin f-pink d-red" cx="500" cy="80" rx="75" ry="9"/></g><text class="t-head" x="95" y="132" text-anchor="middle" font-size="18">product page</text><text class="t-s t-red" x="300" y="80" text-anchor="middle">5,000 × /min, same product</text><text class="t-head" x="500" y="140" text-anchor="middle" font-size="19">CPU 85%</text><text class="t-s t-red" x="660" y="70" text-anchor="start">40 ms each</text><text class="t-s t-pen" x="660" y="110" text-anchor="start">data changes</text><text class="t-s t-pen" x="660" y="134" text-anchor="start">once a day</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The same unchanged answer is computed thousands of times a minute.</figcaption></figure>
+
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the fridge and the grocery store</span></h2>
+  <p>When you want milk, you <b>check the fridge first</b>. If it's there, you're done in seconds. If not, you go to the store (slow), buy some, and <b>put it in the fridge</b> so next time is quick.</p>
+  <ul>
+    <li>Milk has a <b>use-by date</b>. After that you throw it out and buy fresh. That's a <b>TTL</b>.</li>
+    <li>If you switch to oat milk, you throw out the old carton straight away so nobody pours the wrong one: <b>invalidate on write</b>.</li>
+    <li>The fridge is small, so the stuff you rarely use gets pushed out: <b>eviction (LRU)</b>.</li>
+    <li>If ten flatmates find the fridge empty at once and all run to the store, that's a <b>cache stampede</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a kitchen fridge and a grocery store. When you want milk you check the fridge first. If it&#x27;s there, great, that took seconds. If not, you go to the store, buy milk, and put some in the fridge for next time. Milk has a use-by date so you throw it out after a while."><g class="rough"><g transform="translate(30 100) scale(1.1)"><g class="d"><path class="f-paper" d="M6 16 h40 v20 a20 20 0 0 1 -40 0 z"/><path d="M46 22 h6 a7 7 0 0 1 0 14 h-7 M14 4 q4 5 0 9 M26 2 q4 5 0 9"/></g></g><path class="d" d="M100 130 L220 130"/><path class="d" d="M209.2 135.2 L220 130 L209.2 124.8"/><g transform="translate(230 70) scale(1.6)"><g class="d"><rect class="f-paper" x="6" y="0" width="44" height="64" rx="5"/><path d="M6 24 h44 M14 8 v10 M14 30 v14"/></g></g><path class="d d-dash" d="M320 110 L520 110"/><path class="d" d="M509.2 115.2 L520 110 L509.2 104.8"/><g transform="translate(530 70) scale(1.6)"><g class="d"><rect class="f-paper" x="4" y="22" width="60" height="38"/><path class="f-paper" d="M0 22 l8 -16 h52 l8 16 z"/><rect x="26" y="38" width="16" height="22"/></g></g><path class="d" d="M530 160 L322 160"/><path class="d" d="M332.8 154.8 L322 160 L332.8 165.2"/></g><text class="t-s" x="60" y="190" text-anchor="middle">want milk</text><text class="t-s" x="160" y="118" text-anchor="middle">① check fridge</text><text class="t-s t-green" x="275" y="200" text-anchor="middle">hit: 10 s ✓</text><text class="t-s" x="420" y="98" text-anchor="middle">② empty? go to the store</text><text class="t-s t-red" x="585" y="200" text-anchor="middle">miss: 20 min</text><text class="t-s" x="426" y="184" text-anchor="middle">③ put some in the fridge</text><text class="t-s t-pen" x="380" y="240" text-anchor="middle">use-by date = TTL</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Check the fridge first. Empty? Go to the store, and put some in the fridge on the way back.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your system</th></tr></thead>
+    <tbody>
+      <tr><td>The fridge</td><td>The cache (Redis, Memcached)</td></tr>
+      <tr><td>The grocery store</td><td>The database (slow, authoritative)</td></tr>
+      <tr><td>Milk is in the fridge</td><td>Cache hit</td></tr>
+      <tr><td>Fridge empty, go to the store</td><td>Cache miss → read the database</td></tr>
+      <tr><td>Use-by date</td><td>TTL (time to live)</td></tr>
+      <tr><td>Throw out old milk when you switch</td><td>Delete the key when the data changes</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">lazy loading + invalidation</span></h2>
+  <p>The cache doesn't talk to the database; <b>the app sits beside both</b> and manages the cache itself (that's the “aside”).</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 320" role="img" aria-label="Cache-aside flow. On a read, the app checks Redis first. On a hit it returns the cached value. On a miss it reads from the database, stores the result in the cache with a time-to-live, then returns it. On a write, the app updates the database and then deletes the cache key so the next read reloads it."><g class="rough"><rect class="d f-blue" x="20" y="120" width="140" height="70" rx="10"/><rect class="d f-y" x="320" y="20" width="170" height="70" rx="10"/><path class="d d-thin f-paper" d="M335 200 v60 a70 9 0 0 0 140 0 v-60"/><ellipse class="d d-thin f-paper" cx="405" cy="200" rx="70" ry="9"/><path class="d" d="M166 130 L314 60"/><path class="d" d="M306.5 69.3 L314 60 L302.0 59.9"/><path class="d d-green" d="M314 80 L166 150"/><path class="d d-green" d="M173.5 140.7 L166 150 L178.0 150.1"/><path class="d d-dash" d="M166 175 L330 220"/><path class="d" d="M318.2 222.2 L330 220 L321.0 212.1"/><path class="d" d="M480 196 L480 96"/><path class="d" d="M485.2 106.8 L480 96 L474.8 106.8"/><rect class="d f-pink d-red" x="580" y="210" width="160" height="80" rx="10"/></g><text class="t-head" x="90" y="162" text-anchor="middle">app</text><text class="t-head" x="405" y="62" text-anchor="middle">Redis cache</text><text class="t-head" x="405" y="255" text-anchor="middle" font-size="18">database</text><text class="t-s" x="150" y="56" text-anchor="start">① GET product:42</text><text class="t-s t-green" x="272" y="140" text-anchor="start">hit → return</text><text class="t-s" x="170" y="244" text-anchor="start">② miss → SELECT</text><text class="t-s" x="490" y="150" text-anchor="start">③ SET … EX 300</text><text class="t-head t-red" x="660" y="246" text-anchor="middle">on write:</text><text class="t" x="660" y="270" text-anchor="middle" font-size="17">UPDATE db, DEL key</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Reads: cache first, database on a miss, then fill the cache. Writes: update the database, then delete the key.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Read: try the cache</b><p><code>GET product:42</code>. Hit? Return it. This is often under 1 ms.</p></li>
+    <li><b>Miss: load and fill</b><p>Read from the database, then <code>SET product:42 … EX 300</code> (5-minute TTL), then return.</p></li>
+    <li><b>Write: update, then delete</b><p>Update the database first, then <code>DEL product:42</code>. Deleting (not overwriting) avoids racing writers putting old values back.</p></li>
+    <li><b>Always set a TTL</b><p>Even with invalidation, a TTL bounds how long any mistake or missed delete can serve stale data. Add a little random jitter to TTLs.</p></li>
+    <li><b>Protect against stampedes</b><p>When a hot key expires, let one request reload it (a lock or “single flight”) while others wait or get the stale value.</p></li>
+  </ol>
+
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Cache hit / miss</dt><dd>Found in the cache / not found, go to the source.</dd></div>
+    <div><dt>TTL</dt><dd>How long a cached item lives before expiring.</dd></div>
+    <div><dt>Invalidation</dt><dd>Removing a cached item because the source changed.</dd></div>
+    <div><dt>Eviction (LRU)</dt><dd>Dropping least-recently-used items when memory is full.</dd></div>
+    <div><dt>Cache stampede</dt><dd>Many requests missing at once and hammering the DB.</dd></div>
+    <div><dt>Hit ratio</dt><dd>Hits ÷ all lookups; the main health metric.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>product-cache.ts</span><span>cache-aside with Redis</span></div>
+<pre><code><span class="k">export</span> <span class="k">async</span> <span class="k">function</span> getProduct(id: string): Promise&lt;Product&gt; {
+  <span class="k">const</span> key = <span class="s">`product:${id}`</span>;
+  <span class="k">const</span> cached = <span class="k">await</span> redis.get(key);
+  <span class="k">if</span> (cached) <span class="k">return</span> JSON.parse(cached);                       <span class="c">// hit</span>
+
+  <span class="k">const</span> product = <span class="k">await</span> db.one(<span class="s">"SELECT * FROM products WHERE id = $1"</span>, [id]);  <span class="c">// miss</span>
+  <span class="k">const</span> ttl = 300 + Math.floor(Math.random() * 60);           <span class="c">// TTL + jitter</span>
+  <span class="k">await</span> redis.set(key, JSON.stringify(product), { EX: ttl });
+  <span class="k">return</span> product;
+}
+
+<span class="k">export</span> <span class="k">async</span> <span class="k">function</span> updatePrice(id: string, price: number) {
+  <span class="k">await</span> db.query(<span class="s">"UPDATE products SET price = $1 WHERE id = $2"</span>, [price, id]);
+  <span class="k">await</span> redis.del(<span class="s">`product:${id}`</span>);                           <span class="c">// delete, don't set</span>
+}</code></pre>
+  </div>
+  <p class="aside">caches: Redis / Valkey, Memcached, AWS ElastiCache, Azure Cache for Redis; in-process caches (Caffeine, MemoryCache) for tiny hot data; CDNs do the same idea for HTTP responses.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Much faster reads</b>: sub-millisecond instead of tens of milliseconds.</li><li><b>Less database load</b>, so a smaller or cheaper database.</li><li><b>Absorbs read spikes</b> on hot items.</li><li><b>Only caches what's actually used</b> (lazy loading).</li><li><b>Cache outage is survivable</b>: the app falls back to the database.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Stale data</b> for up to the TTL, or longer if invalidation is missed.</li><li><b>Cache invalidation is famously hard</b> to get right.</li><li><b>First request after a miss is slower</b> (extra round trip).</li><li><b>Another system</b> to run, size and monitor.</li><li><b>Stampedes and hot keys</b> need extra care.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Architecture ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>reading everything from the database</b> to the same app using <b>cache-aside with Redis</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Characteristic</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to understand?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Simple to add, tricky to keep correct (invalidation, stampedes).</td></tr>
+      <tr data-before="3" data-after="4"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A small cache often replaces a much bigger database.</td></tr>
+      <tr data-before="4" data-after="4"><td>Deployability<small>safe, easy releases?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="4" data-after="3"><td>Testability<small>test with confidence?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Need tests for misses, invalidation and stale data.</td></tr>
+      <tr data-before="3" data-after="4"><td>Scalability<small>more users &amp; data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Reads scale cheaply; the DB sees far less load.</td></tr>
+      <tr data-before="2" data-after="4"><td>Elasticity<small>sudden spikes?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Hot items are served from memory during spikes.</td></tr>
+      <tr data-before="3" data-after="3"><td>Fault tolerance<small>failure stays contained?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Can fall back to the DB, but a cold cache after an outage hurts.</td></tr>
+      <tr data-before="2" data-after="5"><td>Performance<small>fast typical request?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Hits are sub-millisecond.</td></tr>
+      <tr data-before="4" data-after="3"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Every data change must remember its cache keys.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical system, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Updating the cache instead of deleting</h3><p>Two writers race; the older value is written to the cache last and stays there until TTL. <span class="fix">Fix →</span> update the DB, then delete the key.</p></li>
+    <li><h3>No TTL</h3><p>A missed invalidation serves the wrong price for weeks. <span class="fix">Fix →</span> always set a TTL as a safety net.</p></li>
+    <li><h3>Cache stampede</h3><p>A hot key expires and 2,000 requests hit the database at the same moment. <span class="fix">Fix →</span> single-flight locking, early refresh, TTL jitter.</p></li>
+    <li><h3>Caching everything</h3><p>Rarely read data fills memory and evicts the hot items. <span class="fix">Fix →</span> cache what's read often; measure the hit ratio.</p></li>
+    <li><h3>Caching per-user data under shared keys</h3><p>User A's cart is shown to user B. <span class="fix">Fix →</span> include every varying input (user, locale, permissions) in the key.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Data is read much more often than it changes.</li><li>Slight staleness (seconds to minutes) is acceptable.</li><li>Database load or latency is the bottleneck.</li><li>The same items are requested by many users.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Data changes constantly and must always be exact (balances, stock at checkout).</li><li>Every request is unique (low hit ratio).</li><li>The database is already fast enough.</li><li>You can't find all the places that change the data.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Leader–follower replication</b> · read replicas</li><li><b>CQRS</b> · purpose-built read models</li><li><b>Read-through / write-through</b> caches</li><li><b>CDN</b></li><li><b>Rate limiter</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why delete the cache key on write instead of setting the new value?</summary><p>Concurrent writers can race and leave an older value in the cache; deleting forces the next read to load the latest value from the database.</p></details>
+    <details><summary>What is a cache stampede and one way to prevent it?</summary><p>Many requests miss on the same expired hot key and hit the database together. Use a lock/single-flight so one request reloads, or refresh early, or add TTL jitter.</p></details>
+    <details><summary>Cache-aside vs read-through: who loads the data on a miss?</summary><p>In cache-aside the application loads it and fills the cache; in read-through the cache library/service loads it from the database itself.</p></details>
+    <details><summary>What's the main metric to watch?</summary><p>The hit ratio (plus latency and evictions).</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Fridge first, store second, and <span class="hl">throw out</span> what changed. Every cached thing gets an expiry date.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/17-cache-aside.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Microsoft Azure Architecture Center, “Cache-Aside pattern”.</li><li>AWS whitepaper, “Database Caching Strategies Using Redis”.</li><li>Facebook, “Scaling Memcache at Facebook” (NSDI 2013).</li><li>Redis docs, “Client-side caching” and key expiration.</li></ul>
+  </div>
+  <p class="folio">17</p>
+</article>
+
+<nav class="pager" aria-label="Notes">
+  <a href="replication.html"><small>← previous note</small>16 · Leader–Follower Replication</a>
+  <a href="leader-election.html"><small>Next note →</small>18 · Leader Election</a>
+</nav>
+<footer class="foot"><span>Margin Notes · a student's bullet journal on distributed design patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

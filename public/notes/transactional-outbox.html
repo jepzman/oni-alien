@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Transactional Outbox · Margin Notes</title>
+<meta name="description" content="Save the change and the event in one transaction, then publish the event reliably.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../assets/notebook.css">
+<link rel="stylesheet" href="../assets/bujo.css">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<script src="../assets/notebook.js" defer></script>
+</head>
+<body class="bujo">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../index.html"><b>Margin<span>.</span>Notes</b><small>distributed design patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole notebook</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="desk">
+<article class="sheet" id="transactional-outbox">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 18.09.26</span><span class="topic">collection · <b>data consistency</b></span></div>
+  <p class="kicker">a.k.a. “don't write to two places at once”</p>
+  <h1><span class="hl">Transactional Outbox</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>When a service must <b>update its database and publish an event</b>, don't do two separate writes. Write the change <b>and the event</b> (into an <code>outbox</code> table) in <b>one local transaction</b>. A separate relay reads the outbox and publishes the events to the broker, retrying until each one is sent.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> data consistency / messaging</li><li><b>Lives in:</b> the service + its own database</li><li><b>Solves:</b> the dual-write problem</li><li><b>Pairs with:</b> saga, idempotent consumer, CDC</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">In event-driven systems a service often has to do two things together: <b>save a change</b> and <b>tell others about it</b>. Those are writes to two different systems (database + message broker), and there's <span class="hl-pink">no transaction that covers both</span>.</p>
+  <ul>
+    <li><b>DB first, then publish:</b> crash in between and the order exists but nobody hears about it. Shipping never ships.</li>
+    <li><b>Publish first, then DB:</b> crash in between and everyone hears about an order that was never saved.</li>
+    <li>Wrapping the publish in a DB transaction doesn't help: the broker isn't part of it, and the publish can't be rolled back.</li>
+  </ul>
+  <p>This is the <b>dual-write problem</b>, and it's one of the most common sources of “ghost” and “missing” data in microservices.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Doodle of the dual-write problem. The Order service saves the order in its database, then crashes before publishing the OrderPlaced event to the broker. The database has the order, but Shipping and Email never hear about it."><g class="rough"><rect class="d f-blue" x="20" y="100" width="170" height="80" rx="10"/><path class="d d-green" d="M196 120 L330 70"/><path class="d d-green" d="M321.7 78.7 L330 70 L318.1 68.9"/><path class="d d-thin f-paper" d="M346 50 v40 a34 9 0 0 0 68 0 v-40"/><ellipse class="d d-thin f-paper" cx="380" cy="50" rx="34" ry="9"/><path class="d d-red d-dash" d="M196 160 L330 210"/><path class="d d-red" d="M318.1 211.1 L330 210 L321.7 201.3"/><rect class="d f-y" x="340" y="180" width="140" height="60" rx="10"/><g transform="translate(250 150) scale(0.6)"><g class="d d-red"><path d="M8 8 L52 52 M52 8 L8 52"/></g></g><rect class="d f-paper" x="580" y="150" width="150" height="50" rx="10"/><rect class="d f-paper" x="580" y="220" width="150" height="50" rx="10"/><path class="d d-red d-dash" d="M486 205 L574 175"/><path class="d d-red" d="M565.5 183.4 L574 175 L562.1 173.5"/><path class="d d-red d-dash" d="M486 215 L574 240"/><path class="d d-red" d="M562.2 242.1 L574 240 L565.0 232.0"/></g><text class="t-head" x="105" y="147" text-anchor="middle">Order service</text><text class="t-s t-green" x="250" y="72" text-anchor="middle">① INSERT order ✓</text><text class="t t-soft" x="380" y="120" text-anchor="middle" font-size="16">orders db</text><text class="t-s t-red" x="250" y="226" text-anchor="middle">② publish event</text><text class="t-head" x="410" y="217" text-anchor="middle">broker</text><text class="t-s t-red" x="150" y="270" text-anchor="middle">crash between ① and ② !</text><text class="t-head" x="655" y="182" text-anchor="middle" font-size="18">Shipping</text><text class="t-head" x="655" y="252" text-anchor="middle" font-size="18">Email</text><text class="t-s t-red" x="655" y="130" text-anchor="middle">never hear about it</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Two separate writes, no shared transaction: a crash in between leaves them disagreeing forever.</figcaption></figure>
+
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the office out-tray</span></h2>
+  <p>In an old-style office you don't walk every letter to the post office yourself. You write it, and in the same moment you drop it in <b>your own out-tray</b>. A mail clerk comes round on a schedule, collects everything in the tray, posts it, and ticks it off in a log.</p>
+  <ul>
+    <li>Writing the letter and putting it in the tray is <b>one action at your own desk</b>. It can't half-happen.</li>
+    <li>If the clerk is off sick, the letters wait safely and go out tomorrow. Nothing is lost.</li>
+    <li>If the clerk posts a letter but forgets to tick it off, it might be posted twice. The receiver should notice a duplicate.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of an office out-tray. You write the letter and drop it in your own out-tray in one go. A mail clerk walks by on a schedule, collects everything in the out-tray, posts it, and ticks it off. If the clerk is off sick, the letters wait safely in the tray."><g class="rough"><rect class="d f-paper" x="30" y="80" width="170" height="120" rx="10"/><g transform="translate(60 100) scale(0.9)"><g class="d"><rect class="f-y" x="0" y="10" width="60" height="40" rx="3"/><path d="M0 12 L30 34 L60 12"/></g></g><g transform="translate(110 120) scale(0.9)"><g class="d"><rect class="f-y" x="0" y="10" width="60" height="40" rx="3"/><path d="M0 12 L30 34 L60 12"/></g></g><path class="d" d="M210 140 L390 140"/><path class="d" d="M379.2 145.2 L390 140 L379.2 134.8"/><g transform="translate(400 105) scale(1.1)"><g class="d"><rect class="f-paper" x="4" y="14" width="52" height="40" rx="2"/><path d="M4 26 h52 M30 14 v40"/></g></g><path class="d" d="M470 140 L600 140"/><path class="d" d="M589.2 145.2 L600 140 L589.2 134.8"/><g transform="translate(610 110) scale(1.6)"><g class="d"><rect class="f-paper" x="0" y="10" width="40" height="30" rx="3"/><path class="f-paper" d="M40 20 h12 l8 10 v10 h-20 z"/><circle class="f-paper" cx="12" cy="44" r="6"/><circle class="f-paper" cx="48" cy="44" r="6"/></g></g></g><text class="t-s" x="115" y="230" text-anchor="middle">my out-tray</text><text class="t-s" x="300" y="128" text-anchor="middle">clerk collects every 5 min</text><text class="t-s" x="535" y="128" text-anchor="middle">posts it</text><text class="t-s t-pen" x="300" y="190" text-anchor="middle">…and ticks it off in the log ✓</text><text class="t-s t-pen" x="560" y="236" text-anchor="middle">clerk off sick? letters just wait</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>You only ever drop letters into your own out-tray. The mail clerk delivers them later, even after a sick day.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your system</th></tr></thead>
+    <tbody>
+      <tr><td>Writing the letter + dropping it in the tray</td><td>One DB transaction: business row + outbox row</td></tr>
+      <tr><td>Your own out-tray</td><td>The <code>outbox</code> table in the service's own database</td></tr>
+      <tr><td>The mail clerk's rounds</td><td>The relay: a poller or change-data-capture (CDC)</td></tr>
+      <tr><td>Posting the letter</td><td>Publishing the event to the broker</td></tr>
+      <tr><td>Ticking it off in the log</td><td>Marking the outbox row as sent</td></tr>
+      <tr><td>Same letter posted twice</td><td>At-least-once delivery → consumers must dedupe</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">one transaction, then a relay</span></h2>
+  <p>The trick is to turn two writes into <b>one local write</b> plus a reliable background job.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Outbox flow. The Order service writes the order row and an outbox row in the same database transaction. A separate relay process reads new outbox rows, publishes each to the broker, and marks it sent. Consumers receive the event, possibly more than once."><g class="rough"><rect class="d f-blue" x="20" y="120" width="160" height="70" rx="10"/><rect class="d f-paper d-dash" x="240" y="40" width="250" height="230" rx="10"/><path class="d d-thin f-paper" d="M255 90 v40 a45 9 0 0 0 90 0 v-40"/><ellipse class="d d-thin f-paper" cx="300" cy="90" rx="45" ry="9"/><path class="d d-thin f-y" d="M385 90 v40 a45 9 0 0 0 90 0 v-40"/><ellipse class="d d-thin f-y" cx="430" cy="90" rx="45" ry="9"/><path class="d" d="M186 155 L250 155"/><path class="d" d="M239.2 160.2 L250 155 L239.2 149.8"/><rect class="d f-y" x="540" y="50" width="200" height="60" rx="10"/><path class="d" d="M480 96 L536 84"/><path class="d" d="M526.5 91.4 L536 84 L524.3 81.2"/><rect class="d f-green" x="560" y="170" width="170" height="56" rx="10"/><path class="d" d="M640 114 L640 166"/><path class="d" d="M634.8 155.2 L640 166 L645.2 155.2"/><path class="d" d="M640 230 L640 280"/><path class="d" d="M634.8 269.2 L640 280 L645.2 269.2"/></g><text class="t-head" x="100" y="162" text-anchor="middle">Order service</text><text class="t-head" x="365" y="30" text-anchor="middle" font-size="18">ONE transaction</text><text class="t-s" x="300" y="175" text-anchor="middle">orders</text><text class="t-s" x="430" y="175" text-anchor="middle">outbox</text><text class="t" x="365" y="230" text-anchor="middle" font-size="16">BEGIN · insert both · COMMIT</text><text class="t-head" x="640" y="87" text-anchor="middle">relay / CDC</text><text class="t-s" x="500" y="134" text-anchor="start">poll new rows</text><text class="t-head" x="645" y="205" text-anchor="middle">broker</text><text class="t-s" x="650" y="146" text-anchor="start">publish</text><text class="t-s" x="630" y="272" text-anchor="end">consumers (dedupe!)</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One local transaction writes both rows. The relay turns outbox rows into messages, at least once.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Add an outbox table</b><p>Columns like <code>id</code>, <code>aggregate_id</code>, <code>type</code>, <code>payload</code>, <code>created_at</code>, <code>sent_at</code>. It lives in the same database as the business data.</p></li>
+    <li><b>Write both in one transaction</b><p><code>BEGIN</code>; insert the order; insert an <code>OrderPlaced</code> row into the outbox; <code>COMMIT</code>. Both happen or neither does.</p></li>
+    <li><b>Relay the rows</b><p>A poller selects unsent rows in order (or a CDC tool like Debezium tails the DB log) and publishes each one to the broker.</p></li>
+    <li><b>Mark as sent (or delete)</b><p>After the broker confirms, set <code>sent_at</code>. If the relay crashes first, it publishes again on restart: delivery is <b>at least once</b>.</p></li>
+    <li><b>Make consumers idempotent</b><p>Each event carries its outbox <code>id</code>; consumers skip ids they've already processed (see note 07). Clean up old outbox rows regularly.</p></li>
+  </ol>
+
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Dual write</dt><dd>Writing to two systems without a shared transaction.</dd></div>
+    <div><dt>Outbox table</dt><dd>A table of events waiting to be published, in the service's DB.</dd></div>
+    <div><dt>Message relay</dt><dd>The process that moves outbox rows to the broker.</dd></div>
+    <div><dt>Change data capture (CDC)</dt><dd>Reading the DB's transaction log to stream changes.</dd></div>
+    <div><dt>At-least-once delivery</dt><dd>Every message arrives, maybe more than once.</dd></div>
+    <div><dt>Inbox table</dt><dd>The consumer-side twin: records processed message ids.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>place-order.sql + relay.ts</span><span>Postgres, polling relay</span></div>
+<pre><code><span class="c">-- ① the service: both rows in ONE transaction</span>
+<span class="k">BEGIN</span>;
+<span class="k">INSERT</span> <span class="k">INTO</span> orders (id, customer_id, total) <span class="k">VALUES</span> (<span class="s">'o-42'</span>, <span class="s">'c-7'</span>, 49.00);
+<span class="k">INSERT</span> <span class="k">INTO</span> outbox (id, <span class="k">type</span>, aggregate_id, payload)
+<span class="k">VALUES</span> (gen_random_uuid(), <span class="s">'OrderPlaced'</span>, <span class="s">'o-42'</span>, <span class="s">'{"total":49.00}'</span>);
+<span class="k">COMMIT</span>;
+
+<span class="c">// ② the relay: runs every second, safe with several copies running</span>
+<span class="k">const</span> rows = <span class="k">await</span> db.query(`
+  <span class="k">SELECT</span> * <span class="k">FROM</span> outbox <span class="k">WHERE</span> sent_at IS NULL
+  <span class="k">ORDER</span> <span class="k">BY</span> created_at <span class="k">LIMIT</span> 100
+  <span class="k">FOR</span> <span class="k">UPDATE</span> <span class="k">SKIP</span> <span class="k">LOCKED</span>`);              <span class="c">// two relays never grab the same row</span>
+<span class="k">for</span> (<span class="k">const</span> row <span class="k">of</span> rows) {
+  <span class="k">await</span> broker.publish(row.<span class="k">type</span>, { id: row.id, ...row.payload });
+  <span class="k">await</span> db.query(<span class="s">"UPDATE outbox SET sent_at = now() WHERE id = $1"</span>, [row.id]);
+}</code></pre>
+  </div>
+  <p class="aside">tools: Debezium (CDC from Postgres / MySQL logs to Kafka), MassTransit and NServiceBus outbox (.NET), Spring Modulith / Eventuate Tram (Java), AWS DynamoDB Streams.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>No lost or ghost events.</b> The change and the event commit together.</li><li><b>Works with any broker</b>; no distributed transactions needed.</li><li><b>Survives outages.</b> If the broker is down, events wait in the outbox.</li><li><b>Keeps event order per aggregate</b> when the relay reads in order.</li><li><b>An audit trail</b> of what was published and when.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>At-least-once, not exactly-once.</b> Consumers must handle duplicates.</li><li><b>A little delay</b> between commit and publish (polling interval).</li><li><b>Another moving part</b>: the relay or CDC pipeline to run and monitor.</li><li><b>Extra DB load</b> and a table that needs cleaning up.</li><li><b>Ordering across instances</b> needs care if several relays run.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Architecture ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares a service that does a <b>dual write</b> (save, then publish) to the same service using a <b>transactional outbox</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Characteristic</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to understand?</small></td><td class="dcell"></td><td class="score"></td><td class="why">An extra table, a relay and duplicate handling to understand.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Some extra DB writes and a relay or CDC service to run.</td></tr>
+      <tr data-before="4" data-after="4"><td>Deployability<small>safe, easy releases?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral. The relay deploys independently.</td></tr>
+      <tr data-before="3" data-after="4"><td>Testability<small>test with confidence?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Easy to test: assert the outbox row exists after the transaction.</td></tr>
+      <tr data-before="4" data-after="4"><td>Scalability<small>more users &amp; data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral to slightly positive; CDC scales well.</td></tr>
+      <tr data-before="3" data-after="4"><td>Elasticity<small>sudden spikes?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Events queue up in the outbox during spikes or broker outages.</td></tr>
+      <tr data-before="2" data-after="5"><td>Fault tolerance<small>failure stays contained?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Crashes and broker outages no longer lose or invent events.</td></tr>
+      <tr data-before="4" data-after="3"><td>Performance<small>fast typical request?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One extra insert per transaction; events arrive a bit later.</td></tr>
+      <tr data-before="3" data-after="4"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Adding new event types or consumers is straightforward.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical system, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Publishing inside the transaction anyway</h3><p>Code calls <code>broker.publish()</code> before <code>COMMIT</code> “to be safe”, bringing the dual write back. <span class="fix">Fix →</span> only the relay publishes; the service only writes rows.</p></li>
+    <li><h3>Consumers that can't handle duplicates</h3><p>The relay crashes after publishing but before marking the row, so the event goes out twice and an email is sent twice. <span class="fix">Fix →</span> idempotent consumers keyed by the event id.</p></li>
+    <li><h3>Several relays stepping on each other</h3><p>Two relay instances read the same rows and publish everything twice, out of order. <span class="fix">Fix →</span> <code>FOR UPDATE SKIP LOCKED</code>, partitioning, or a single active relay.</p></li>
+    <li><h3>Never cleaning the outbox</h3><p>The table grows to 500 million rows and the polling query slows the whole DB. <span class="fix">Fix →</span> delete or archive sent rows; index <code>sent_at IS NULL</code>.</p></li>
+    <li><h3>Huge payloads in the outbox</h3><p>Whole documents are copied into every event, bloating the DB and the broker. <span class="fix">Fix →</span> send ids plus the fields consumers actually need.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>A service changes its own data <b>and</b> must notify others reliably.</li><li>You use sagas or event-driven integration between services.</li><li>The broker doesn't share a transaction with your database (almost always).</li><li>Losing or inventing an event would cost money or trust.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Nobody else needs to know about the change.</li><li>The database and queue really are the same system with one transaction.</li><li>A short delay before others hear about the change is unacceptable.</li><li>A lost notification is harmless (e.g. a best-effort cache refresh).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Saga</b></li><li><b>Idempotent consumer</b></li><li><b>Publish–subscribe</b></li><li><b>Event sourcing</b> · the event log is the outbox</li><li><b>Change data capture</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What is the dual-write problem?</summary><p>Writing to two systems (e.g. a database and a broker) without one transaction covering both, so a crash in between leaves them inconsistent.</p></details>
+    <details><summary>Why does the outbox give at-least-once delivery, not exactly-once?</summary><p>The relay can publish a message and crash before marking it sent; on restart it publishes it again.</p></details>
+    <details><summary>Polling relay or CDC: what's the difference?</summary><p>A poller queries the outbox table on a schedule; CDC reads the database's transaction log and streams new rows, with lower latency and no polling load.</p></details>
+    <details><summary>Where must the outbox table live?</summary><p>In the same database as the business data, so both inserts are in one local transaction.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Never write to two places at once. Write <span class="hl">once, locally</span>, and let a relay carry the news, and expect the news to arrive twice.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/06-transactional-outbox.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Chris Richardson, <i>Microservices Patterns</i>, “Transactional outbox”, and microservices.io.</li><li>Debezium docs, “Outbox Event Router”.</li><li>Gunnar Morling, “Reliable Microservices Data Exchange With the Outbox Pattern”.</li><li>Martin Kleppmann, <i>Designing Data-Intensive Applications</i>, chapter 11.</li></ul>
+  </div>
+  <p class="folio">06</p>
+</article>
+
+<nav class="pager" aria-label="Notes">
+  <a href="saga.html"><small>← previous note</small>05 · Saga</a>
+  <a href="idempotent-consumer.html"><small>Next note →</small>07 · Idempotent Consumer</a>
+</nav>
+<footer class="foot"><span>Margin Notes · a student's bullet journal on distributed design patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

@@ -22,9 +22,10 @@ const server = createServer(async (req, res) => {
 await new Promise((ok) => server.listen(0, ok));
 const base = `http://localhost:${server.address().port}/`;
 
+// One PDF per note (from public/notes.json, written by scripts/build_notes.py) plus the whole notebook.
+const notes = JSON.parse(await readFile(join(root, 'notes.json'), 'utf8'));
 const jobs = [
-  ['notes/circuit-breaker.html', 'pdf/01-circuit-breaker.pdf'],
-  ['notes/saga.html', 'pdf/02-saga.pdf'],
+  ...notes.map((n) => [`notes/${n.slug}.html`, n.pdf]),
   ['all.html', 'pdf/margin-notes.pdf'],
 ];
 
@@ -32,7 +33,7 @@ const browser = await chromium.launch();
 for (const [url, out] of jobs) {
   const page = await browser.newPage({ colorScheme: 'light' });
   await page.goto(base + url, { waitUntil: 'networkidle' });
-  if (url === 'all.html') await page.waitForFunction(() => document.querySelectorAll('article.sheet').length >= 2);
+  if (url === 'all.html') await page.waitForFunction((n) => document.querySelectorAll('article.sheet').length >= n, notes.length, { timeout: 60000 });
   await page.evaluate(async () => {
     await document.fonts.ready;
     document.querySelectorAll('.quiz details').forEach((d) => { d.open = true; });

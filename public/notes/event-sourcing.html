@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Event Sourcing · Margin Notes</title>
+<meta name="description" content="Store every change as an event and rebuild the current state from the log.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../assets/notebook.css">
+<link rel="stylesheet" href="../assets/bujo.css">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<script src="../assets/notebook.js" defer></script>
+</head>
+<body class="bujo">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../index.html"><b>Margin<span>.</span>Notes</b><small>distributed design patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole notebook</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="desk">
+<article class="sheet" id="event-sourcing">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Wed · 23.09.26</span><span class="topic">collection · <b>data consistency</b></span></div>
+  <p class="kicker">a.k.a. “keep the receipts, all of them”</p>
+  <h1><span class="hl">Event Sourcing</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Instead of storing only the <b>current state</b> and overwriting it, store <b>every change as an immutable event</b> in an append-only log (<code>Deposited 100</code>, <code>Withdrew 30</code>…). The current state is <b>derived by replaying the events</b>. You never lose history, and you can build new views of the past at any time.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> data management</li><li><b>Lives in:</b> the service that owns the data</li><li><b>Popular with:</b> finance, logistics, audit-heavy domains</li><li><b>Pairs with:</b> CQRS, outbox, snapshots</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Most systems store state with <code>UPDATE</code>: each change <span class="hl-pink">overwrites the previous value</span>. That's simple, but it throws away the story.</p>
+  <ul>
+    <li><b>Audit:</b> “Who changed this order's address, and when?” Not recorded, or scattered across logs.</li>
+    <li><b>Debugging:</b> “How did this account end up negative?” You only see the end result.</li>
+    <li><b>New questions:</b> “How many people added an item and then removed it?” The removes were overwritten.</li>
+    <li><b>Integration:</b> other services want to know <i>what happened</i>, not just the latest snapshot.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="Doodle of a normal accounts table storing only the current balance of 70 dollars. Someone asks how it got to 70, whether it was 120 last Tuesday, and who changed it. The table can&#x27;t answer: each update overwrote the previous value."><g class="rough"><rect class="d f-paper" x="30" y="60" width="260" height="120" rx="10"/><path class="d d-thin" d="M30 100 H290 M150 60 V180"/><path class="d d-dash" d="M300 120 L410 100"/><path class="d" d="M400.3 107.1 L410 100 L398.4 96.8"/></g><text class="t-head" x="160" y="52" text-anchor="middle" font-size="18">accounts</text><text class="t" x="90" y="88" text-anchor="middle" font-size="17">id</text><text class="t" x="220" y="88" text-anchor="middle" font-size="17">balance</text><text class="t" x="90" y="140" text-anchor="middle" font-size="19">acc-1</text><text class="t-head" x="220" y="142" text-anchor="middle" font-size="24">$70</text><text class="t-s t-red" x="160" y="214" text-anchor="middle">UPDATE … SET balance = 70</text><text class="t-s t-pen" x="420" y="70" text-anchor="start">how did it get to $70?</text><text class="t-s t-pen" x="420" y="110" text-anchor="start">was it $120 last Tuesday?</text><text class="t-s t-pen" x="420" y="150" text-anchor="start">who changed it, and why?</text><text class="t-s t-red" x="420" y="196" text-anchor="start">…no idea, it was overwritten ✗</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>UPDATE overwrites history. The current value survives; the story of how we got there doesn't.</figcaption></figure>
+
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the bank passbook</span></h2>
+  <p>An old bank passbook (or any accountant's ledger) doesn't have a single “balance” box that gets rubbed out and rewritten. It has <b>lines</b>: every deposit and withdrawal, in order. The balance is just those lines added up.</p>
+  <ul>
+    <li>Accountants never erase. A mistake is fixed by adding a <b>correcting entry</b>.</li>
+    <li>You can answer “what was the balance on 1 March?” by adding up the lines until that date.</li>
+    <li>Adding up thousands of lines every time is slow, so the book prints a <b>carried-forward balance</b> at the top of each page (a snapshot).</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a bank passbook with lines: deposit 100, deposit 50, withdraw 30, withdraw 50. The balance of 70 is just the sum of the lines. Mistakes are never erased; a correcting line is added instead."><g class="rough"><rect class="d f-paper" x="30" y="30" width="380" height="200" rx="10"/><path class="d d-soft d-thin" d="M45 80 H395"/><path class="d d-soft d-thin" d="M45 114 H395"/><path class="d d-soft d-thin" d="M45 148 H395"/><path class="d d-soft d-thin" d="M45 182 H395"/><g transform="translate(500 60) scale(1.8)"><g class="d"><path class="f-paper" d="M4 6 h22 a6 6 0 0 1 6 6 v44 a6 6 0 0 0 -6 -6 h-22 z"/><path class="f-paper" d="M60 6 h-22 a6 6 0 0 0 -6 6 v44 a6 6 0 0 1 6 -6 h22 z"/></g></g></g><text class="t" x="60" y="70" text-anchor="start" font-size="19">+ deposit</text><text class="t" x="380" y="70" text-anchor="end" font-size="19">+100</text><text class="t" x="60" y="104" text-anchor="start" font-size="19">+ deposit</text><text class="t" x="380" y="104" text-anchor="end" font-size="19">+50</text><text class="t" x="60" y="138" text-anchor="start" font-size="19">− cash out</text><text class="t" x="380" y="138" text-anchor="end" font-size="19">−30</text><text class="t" x="60" y="172" text-anchor="start" font-size="19">− card</text><text class="t" x="380" y="172" text-anchor="end" font-size="19">−50</text><text class="t-head" x="60" y="214" text-anchor="start" font-size="19">balance</text><text class="t-head" x="380" y="214" text-anchor="end" font-size="22">= $70</text><text class="t-s t-pen" x="560" y="200" text-anchor="middle">never erase, only add</text><text class="t-s t-pen" x="560" y="226" text-anchor="middle">a mistake? add a correcting line</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The passbook never erases a line. The balance is just the lines added up.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your system</th></tr></thead>
+    <tbody>
+      <tr><td>Each line in the passbook</td><td>An immutable event (MoneyDeposited, MoneyWithdrawn)</td></tr>
+      <tr><td>The passbook itself</td><td>The event store (append-only log per aggregate)</td></tr>
+      <tr><td>Adding up the lines</td><td>Replaying events to rebuild state</td></tr>
+      <tr><td>Correcting entry, never an eraser</td><td>Compensating event, never UPDATE/DELETE</td></tr>
+      <tr><td>Carried-forward balance on each page</td><td>Snapshot to speed up replay</td></tr>
+      <tr><td>A monthly statement printed from the lines</td><td>A projection / read model</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">append facts, derive state</span></h2>
+  <p>Events are <b>facts in the past tense</b>. They're appended to a stream per entity (an “aggregate”), and everything else is calculated from them.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Event sourcing flow. A command Withdraw 50 dollars arrives. The service loads the account&#x27;s past events, replays them to get the current state, checks the rule, then appends a new MoneyWithdrawn event to the append-only event store. Projections read the events to build query views like the current balance and a monthly statement."><g class="rough"><rect class="d f-blue" x="20" y="40" width="170" height="60" rx="10"/><path class="d" d="M196 70 L290 70"/><path class="d" d="M279.2 75.2 L290 70 L279.2 64.8"/><rect class="d f-y" x="296" y="30" width="190" height="80" rx="10"/><path class="d" d="M492 70 L560 130"/><path class="d" d="M548.4 126.8 L560 130 L555.4 118.9"/><rect class="d f-paper" x="20" y="150" width="700" height="56" rx="10"/><rect class="d f-y" x="28" y="158" width="132" height="40" rx="4"/><rect class="d f-y" x="166" y="158" width="132" height="40" rx="4"/><rect class="d f-y" x="304" y="158" width="132" height="40" rx="4"/><rect class="d f-y" x="442" y="158" width="132" height="40" rx="4"/><rect class="d f-green" x="580" y="158" width="132" height="40" rx="4"/><path class="d d-dash" d="M390 104 L300 150"/><path class="d" d="M307.2 140.4 L300 150 L312.0 149.7"/><path class="d" d="M200 210 L140 260"/><path class="d" d="M145.0 249.1 L140 260 L151.6 257.1"/><rect class="d f-green" x="150" y="250" width="160" height="44" rx="10"/><path class="d" d="M520 210 L580 250"/><path class="d" d="M568.1 248.3 L580 250 L573.9 239.7"/><rect class="d f-green" x="500" y="250" width="220" height="44" rx="10"/></g><text class="t-head" x="105" y="77" text-anchor="middle" font-size="19">Withdraw $50</text><text class="t-head" x="391" y="66" text-anchor="middle">Account</text><text class="t" x="391" y="90" text-anchor="middle" font-size="17">replay → check → decide</text><text class="t-s" x="540" y="88" text-anchor="start">append</text><text class="t-head" x="94" y="185" text-anchor="middle" font-size="13">Opened</text><text class="t-head" x="232" y="185" text-anchor="middle" font-size="13">Deposited 100</text><text class="t-head" x="370" y="185" text-anchor="middle" font-size="13">Deposited 50</text><text class="t-head" x="508" y="185" text-anchor="middle" font-size="13">Withdrew 30</text><text class="t-head" x="646" y="185" text-anchor="middle" font-size="13">Withdrew 50</text><text class="t-s t-pen" x="370" y="230" text-anchor="middle">event store: append-only log for acc-1</text><text class="t-s" x="270" y="132" text-anchor="end">load + replay</text><text class="t-s" x="120" y="240" text-anchor="end">project</text><text class="t-head" x="230" y="279" text-anchor="middle" font-size="17">balance = $70</text><text class="t-head" x="610" y="279" text-anchor="middle" font-size="17">monthly statement</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Commands are checked against state rebuilt from events; new facts are appended, never updated.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Model events as past-tense facts</b><p><code>OrderPlaced</code>, <code>ItemAdded</code>, <code>AddressChanged</code>, each with the data needed to apply it and a timestamp.</p></li>
+    <li><b>Handle a command</b><p>Load the aggregate's events (or the latest snapshot + newer events), replay them to get current state, and check business rules.</p></li>
+    <li><b>Append new events</b><p>Write the resulting events to the stream with an expected version number, so two concurrent writers can't both succeed (optimistic concurrency).</p></li>
+    <li><b>Project for reading</b><p>Subscribers turn events into read models: a balance table, a search index, a statement. These can be rebuilt from scratch at any time.</p></li>
+    <li><b>Snapshot and version</b><p>Save a snapshot every N events to keep loading fast, and version event schemas so old events still replay after the code changes.</p></li>
+  </ol>
+
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Event</dt><dd>An immutable record of something that happened.</dd></div>
+    <div><dt>Event store</dt><dd>Append-only database of events, grouped into streams.</dd></div>
+    <div><dt>Aggregate / stream</dt><dd>One entity's events, e.g. all events for acc-1.</dd></div>
+    <div><dt>Projection</dt><dd>Code that turns events into a read model.</dd></div>
+    <div><dt>Snapshot</dt><dd>Saved state at event N, to avoid replaying from zero.</dd></div>
+    <div><dt>Upcasting</dt><dd>Converting old event versions to the current shape on read.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>account.ts</span><span>replay, decide, append</span></div>
+<pre><code><span class="k">type</span> Event =
+  | { <span class="k">type</span>: <span class="s">"Deposited"</span>; amount: number }
+  | { <span class="k">type</span>: <span class="s">"Withdrew"</span>; amount: number };
+
+<span class="k">const</span> apply = (balance: number, e: Event) =&gt;
+  e.<span class="k">type</span> === <span class="s">"Deposited"</span> ? balance + e.amount : balance - e.amount;
+
+<span class="k">export</span> <span class="k">async</span> <span class="k">function</span> withdraw(accountId: string, amount: number) {
+  <span class="k">const</span> { events, version } = <span class="k">await</span> store.load(<span class="s">`account-${accountId}`</span>);
+  <span class="k">const</span> balance = events.reduce(apply, 0);            <span class="c">// replay</span>
+  <span class="k">if</span> (amount &gt; balance) <span class="k">throw</span> <span class="k">new</span> Error(<span class="s">"Insufficient funds"</span>);   <span class="c">// decide</span>
+  <span class="k">await</span> store.append(<span class="s">`account-${accountId}`</span>,          <span class="c">// append, never update</span>
+    [{ <span class="k">type</span>: <span class="s">"Withdrew"</span>, amount }],
+    { expectedVersion: version });                     <span class="c">// optimistic concurrency</span>
+}</code></pre>
+  </div>
+  <p class="aside">tools: EventStoreDB (Kurrent), Marten (Postgres, .NET), Axon (Java), Eventuous, or a plain append-only table with a (stream_id, version) unique key. Kafka is a log, but not a per-aggregate event store by itself.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Complete audit trail</b> for free: every change, who, when.</li><li><b>Time travel.</b> Rebuild state at any point in the past.</li><li><b>New read models any time</b> by replaying history.</li><li><b>Natural integration.</b> Events are already there for other services.</li><li><b>Append-only writes</b> are fast and conflict-friendly.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Steep learning curve</b> and an unusual way of thinking.</li><li><b>Event schema changes are forever.</b> Old events must still replay.</li><li><b>Querying current state needs projections</b> (usually CQRS).</li><li><b>Eventual consistency</b> between the log and the read models.</li><li><b>Deleting data</b> (e.g. GDPR) needs special techniques.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Architecture ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares a service that stores <b>current state with UPDATE</b> to the same service using <b>event sourcing</b> (with projections for reads).</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Characteristic</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="2"><td>Simplicity<small>easy to understand?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Events, streams, projections, snapshots and versioning to master.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More storage and more components (projections, event store).</td></tr>
+      <tr data-before="4" data-after="3"><td>Deployability<small>safe, easy releases?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Event schema changes need careful, backward-compatible releases.</td></tr>
+      <tr data-before="3" data-after="4"><td>Testability<small>test with confidence?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Given these events, when this command, then these events: very testable.</td></tr>
+      <tr data-before="3" data-after="4"><td>Scalability<small>more users &amp; data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Append-only writes and independent read models scale well.</td></tr>
+      <tr data-before="3" data-after="3"><td>Elasticity<small>sudden spikes?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral; projections can lag during spikes.</td></tr>
+      <tr data-before="3" data-after="4"><td>Fault tolerance<small>failure stays contained?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Read models can be rebuilt; history is never lost.</td></tr>
+      <tr data-before="4" data-after="3"><td>Performance<small>fast typical request?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Writes are fast; reads depend on projections; long streams need snapshots.</td></tr>
+      <tr data-before="3" data-after="4"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New questions about the past can be answered later.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical system, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Using it everywhere</h3><p>Every CRUD table becomes event-sourced, and simple screens need projections and replays. <span class="fix">Fix →</span> use it only where history and audit really matter.</p></li>
+    <li><h3>Events that are really commands or CRUD</h3><p>Events like <code>OrderUpdated</code> with the whole object say nothing about intent. <span class="fix">Fix →</span> small, past-tense, meaningful events (AddressChanged).</p></li>
+    <li><h3>Changing old events</h3><p>Someone edits stored events to fix a bug, and replays now disagree with what happened. <span class="fix">Fix →</span> never edit; add correcting events and use upcasters.</p></li>
+    <li><h3>Querying the event store directly</h3><p>Screens scan millions of events to show a list. <span class="fix">Fix →</span> build projections (CQRS) for every query.</p></li>
+    <li><h3>No snapshots on long streams</h3><p>An account with 2 million events takes seconds to load. <span class="fix">Fix →</span> snapshot every N events, or close and reopen streams per period.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Audit and history are core requirements (finance, healthcare, logistics).</li><li>The business thinks in events (“booked”, “shipped”, “refunded”).</li><li>You need to answer new questions about the past later.</li><li>You already need events for integration and want one source of truth.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Simple CRUD with no history requirements.</li><li>The team is new to it and the deadline is tight.</li><li>Strong, immediate read-after-write consistency on every screen is a must.</li><li>You'd need to delete data often and can't encrypt-and-forget.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>CQRS</b> · its usual partner</li><li><b>Transactional outbox</b></li><li><b>Saga</b></li><li><b>Idempotent consumer</b> · projections must be</li><li><b>Snapshots</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>How do you fix a wrong event in an event-sourced system?</summary><p>You don't edit it. You append a new, correcting event, just as an accountant adds a correcting entry.</p></details>
+    <details><summary>Why do event-sourced systems usually need CQRS?</summary><p>Replaying events is great for one aggregate but bad for queries across many, so separate read models (projections) are built for querying.</p></details>
+    <details><summary>What problem do snapshots solve?</summary><p>Long streams are slow to replay; a snapshot stores the state at version N so you only replay events after it.</p></details>
+    <details><summary>What does “expected version” protect against?</summary><p>Two writers changing the same aggregate at once; the second append fails because the stream version moved, so it reloads and retries.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>State is just the <span class="hl">sum of the story</span>. Keep the story, and you can always rebuild the state, or any new view of it.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/08-event-sourcing.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Martin Fowler, “Event Sourcing” (martinfowler.com).</li><li>Greg Young, “CQRS Documents” and talks on event sourcing.</li><li>Microsoft Azure Architecture Center, “Event Sourcing pattern”.</li><li>Martin Kleppmann, <i>Designing Data-Intensive Applications</i>, “Event Sourcing”.</li></ul>
+  </div>
+  <p class="folio">08</p>
+</article>
+
+<nav class="pager" aria-label="Notes">
+  <a href="idempotent-consumer.html"><small>← previous note</small>07 · Idempotent Consumer</a>
+  <a href="cqrs.html"><small>Next note →</small>09 · CQRS</a>
+</nav>
+<footer class="foot"><span>Margin Notes · a student's bullet journal on distributed design patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

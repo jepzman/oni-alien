@@ -40,25 +40,23 @@ jobs:
 
       # The runner image already has the system libraries Chromium needs, so we skip
       # `--with-deps` (it pulls ~100 apt packages and fails when Ubuntu mirrors are flaky).
-      # If the rebuild fails for any reason, the committed PDFs in public/pdf are deployed instead.
-      - name: Rebuild the ready-made PDFs
-        id: pdf
-        continue-on-error: true
-        timeout-minutes: 10
+      - name: Build the ready-made PDFs
+        timeout-minutes: 15
         run: |
           npx playwright install chromium
           npm run pdf
 
-      - name: Note when committed PDFs were used
-        if: steps.pdf.outcome == 'failure'
-        run: echo "::warning::PDF rebuild failed; deploying the PDFs committed in public/pdf."
-
       - name: Make sure every page and PDF exists
         run: |
-          for f in index.html all.html notes/circuit-breaker.html notes/saga.html \
-                   pdf/01-circuit-breaker.pdf pdf/02-saga.pdf pdf/margin-notes.pdf; do
-            test -s "public/$f" || { echo "Missing public/$f"; exit 1; }
-          done
+          node -e '
+            const fs = require("fs");
+            const notes = JSON.parse(fs.readFileSync("public/notes.json", "utf8"));
+            const need = ["index.html", "all.html", "pdf/margin-notes.pdf",
+                          ...notes.flatMap((n) => [`notes/${n.slug}.html`, n.pdf])];
+            const missing = need.filter((f) => !fs.existsSync("public/" + f) || fs.statSync("public/" + f).size === 0);
+            if (missing.length) { console.error("Missing:", missing); process.exit(1); }
+            console.log(`OK: ${need.length} files`);
+          '
           touch public/.nojekyll
 
       - uses: actions/configure-pages@v5

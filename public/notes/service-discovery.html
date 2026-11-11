@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Service Discovery · Margin Notes</title>
+<meta name="description" content="Look up where a service is running right now instead of hard-coding addresses.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../assets/notebook.css">
+<link rel="stylesheet" href="../assets/bujo.css">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<script src="../assets/notebook.js" defer></script>
+</head>
+<body class="bujo">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../index.html"><b>Margin<span>.</span>Notes</b><small>distributed design patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole notebook</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="desk">
+<article class="sheet" id="service-discovery">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Wed · 07.10.26</span><span class="topic">collection · <b>communication</b></span></div>
+  <p class="kicker">a.k.a. “look it up, don't hard-code it”</p>
+  <h1><span class="hl">Service Discovery</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>In the cloud, service instances <b>come and go with new addresses</b>. Instead of hard-coding IPs, each instance <b>registers</b> in a <b>service registry</b> (and keeps sending heartbeats); callers <b>look up a name</b> and get the current list of <b>healthy instances</b> to load-balance across.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> communication / infrastructure</li><li><b>Lives in:</b> registry + client, proxy or DNS</li><li><b>Examples:</b> Kubernetes DNS, Consul, Eureka</li><li><b>Pairs with:</b> health checks, load balancing, sidecars</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">In a data centre of the past, servers had fixed addresses for years. Today, <span class="hl-pink">instances are cattle, not pets</span>: autoscaling, deploys, spot instances and crashes create and destroy them all day.</p>
+  <ul>
+    <li>A hard-coded list of IPs is wrong within minutes: callers hit dead instances and miss new ones.</li>
+    <li>Scaling Payments from 3 to 10 instances doesn't help if callers only know about the old 3.</li>
+    <li>A crashed instance keeps receiving traffic until someone edits the config.</li>
+    <li>Different environments (dev, staging, prod) need different addresses everywhere.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a config file with hard-coded IP addresses for the Payments service. Kubernetes and autoscaling keep creating and destroying instances with new addresses, so the caller keeps calling dead addresses and missing new ones."><g class="rough"><rect class="d f-paper" x="20" y="50" width="220" height="150" rx="10"/><path class="d d-red" d="M246 100 L430 60"/><path class="d d-red" d="M420.6 67.4 L430 60 L418.3 57.2"/><path class="d d-red" d="M246 130 L430 130"/><path class="d d-red" d="M419.2 135.2 L430 130 L419.2 124.8"/><path class="d d-dash" d="M246 160 L430 200"/><path class="d" d="M418.3 202.8 L430 200 L420.6 192.6"/><rect class="d f-pink d-red d-dash" x="436" y="30" width="130" height="50" rx="10"/><rect class="d f-pink d-red d-dash" x="436" y="106" width="130" height="50" rx="10"/><rect class="d f-green" x="436" y="182" width="130" height="50" rx="10"/><rect class="d f-green" x="610" y="70" width="130" height="50" rx="10"/><rect class="d f-green" x="610" y="150" width="130" height="50" rx="10"/></g><text class="t-head" x="130" y="40" text-anchor="middle" font-size="18">config.yaml</text><text class="t" x="40" y="90" text-anchor="start" font-size="17">payments: 10.0.1.12</text><text class="t" x="40" y="124" text-anchor="start" font-size="17">payments: 10.0.1.15</text><text class="t" x="40" y="158" text-anchor="start" font-size="17">payments: 10.0.1.19</text><text class="t-s t-red" x="340" y="64" text-anchor="middle">dead ✗</text><text class="t-s t-red" x="340" y="122" text-anchor="middle">dead ✗</text><text class="t-head t-red" x="501" y="62" text-anchor="middle" font-size="16">10.0.1.12</text><text class="t-head t-red" x="501" y="138" text-anchor="middle" font-size="16">10.0.1.15</text><text class="t-head" x="501" y="214" text-anchor="middle" font-size="16">10.0.1.19</text><text class="t-head" x="675" y="102" text-anchor="middle" font-size="16">10.0.3.7</text><text class="t-head" x="675" y="182" text-anchor="middle" font-size="16">10.0.3.9</text><text class="t-s t-pen" x="675" y="50" text-anchor="middle">new, unknown</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Instances come and go with new addresses. A hard-coded list is out of date within minutes.</figcaption></figure>
+
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the phone directory</span></h2>
+  <p>You don't memorise the phone number of every shop. You look it up by <b>name</b> in the directory (or a maps app) and get the <b>current</b> number. When a shop moves, <b>it</b> updates its listing; you don't have to do anything.</p>
+  <ul>
+    <li>Shops that close are removed, so you don't call dead numbers (health checks + heartbeats).</li>
+    <li>A chain lists several branches; you pick the nearest or least busy one (load balancing).</li>
+    <li>You might keep a recent lookup on a sticky note for a while (client-side caching with a TTL).</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="Doodle of a phone directory and a phone. You look up a business by name in the directory and get its current number, instead of memorising numbers that change. Businesses update their own entry when they move."><g class="rough"><g transform="translate(40 80) scale(1.6)"><g class="d"><rect class="f-paper" x="16" y="0" width="30" height="56" rx="6"/><path d="M26 48 h10"/></g></g><path class="d" d="M110 120 L260 120"/><path class="d" d="M249.2 125.2 L260 120 L249.2 114.8"/><g transform="translate(270 70) scale(1.8)"><g class="d"><rect class="f-paper" x="0" y="0" width="56" height="60" rx="3"/><path d="M8 12 h28 M8 22 h40 M8 32 h34 M8 42 h40 M8 52 h26"/><rect class="f-paper" x="56" y="6" width="8" height="12"/><rect class="f-paper" x="56" y="22" width="8" height="12"/></g></g><path class="d" d="M400 120 L540 120"/><path class="d" d="M529.2 125.2 L540 120 L529.2 114.8"/><g transform="translate(560 70) scale(1.4)"><g class="d"><rect class="f-paper" x="4" y="22" width="60" height="38"/><path class="f-paper" d="M0 22 l8 -16 h52 l8 16 z"/><rect x="26" y="38" width="16" height="22"/></g></g><path class="d d-dash" d="M600 200 Q470 240 340 210"/><path class="d" d="M351.7 207.3 L340 210 L349.4 217.5"/></g><text class="t-s" x="185" y="108" text-anchor="middle">“Payments?”</text><text class="t-s" x="470" y="108" text-anchor="middle">10.0.3.7, 10.0.3.9</text><text class="t-s t-pen" x="600" y="190" text-anchor="middle">moved? updates its listing</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>You look up a name and get the current number. Businesses update their own entry when they move.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your system</th></tr></thead>
+    <tbody>
+      <tr><td>A shop's name</td><td>A logical service name (“payments”)</td></tr>
+      <tr><td>Its current phone number(s)</td><td>The current instance addresses</td></tr>
+      <tr><td>The directory</td><td>The service registry</td></tr>
+      <tr><td>Shop updates its own listing</td><td>Self-registration on startup</td></tr>
+      <tr><td>Closed shops removed</td><td>Heartbeats and health checks</td></tr>
+      <tr><td>Several branches of a chain</td><td>Multiple instances → load balancing</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">register, check, look up</span></h2>
+  <p>There are two flavours:</p>
+  <ul>
+    <li><b>Client-side discovery:</b> the caller (or its library/sidecar) queries the registry and picks an instance itself.</li>
+    <li><b>Server-side discovery:</b> the caller sends to a load balancer or DNS name, which looks up the registry for it.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 340" role="img" aria-label="Service discovery flow. Payments instances register themselves with a service registry and send heartbeats. The registry removes instances that miss heartbeats or fail health checks. The Orders service, or its sidecar or a load balancer, asks the registry for healthy Payments instances and load-balances across them. In Kubernetes, DNS and endpoints do this for you."><g class="rough"><rect class="d f-y" x="270" y="20" width="220" height="90" rx="10"/><rect class="d f-green" x="550" y="150" width="200" height="42" rx="10"/><path class="d d-dash" d="M546 171 L470 112"/><path class="d" d="M481.7 114.5 L470 112 L475.3 122.7"/><rect class="d f-green" x="550" y="202" width="200" height="42" rx="10"/><path class="d d-dash" d="M546 223 L470 112"/><path class="d" d="M480.4 118.0 L470 112 L471.8 123.9"/><rect class="d f-green" x="550" y="254" width="200" height="42" rx="10"/><path class="d d-dash" d="M546 275 L470 112"/><path class="d" d="M479.3 119.6 L470 112 L469.8 124.0"/><rect class="d f-blue" x="20" y="180" width="180" height="70" rx="10"/><path class="d" d="M110 176 L280 100"/><path class="d" d="M272.3 109.2 L280 100 L268.0 99.6"/><path class="d d-green" d="M206 230 L542 216"/><path class="d d-green" d="M531.4 221.7 L542 216 L531.0 211.2"/></g><text class="t-head" x="380" y="61" text-anchor="middle">service registry</text><text class="t" x="380" y="85" text-anchor="middle" font-size="17">name → healthy instances</text><text class="t-head" x="650" y="178" text-anchor="middle" font-size="15">payments 10.0.3.7</text><text class="t-head" x="650" y="230" text-anchor="middle" font-size="15">payments 10.0.3.9</text><text class="t-head" x="650" y="282" text-anchor="middle" font-size="15">payments 10.0.4.2</text><text class="t-s t-pen" x="610" y="140" text-anchor="middle">register + heartbeat</text><text class="t-head" x="110" y="222" text-anchor="middle">Orders</text><text class="t-s" x="20" y="140" text-anchor="start">① lookup “payments”</text><text class="t-s t-green" x="370" y="250" text-anchor="middle">② call a healthy one</text><text class="t-s t-pen" x="380" y="330" text-anchor="middle">Kubernetes: Service DNS + EndpointSlices do this for you</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Instances register and heartbeat; callers look up healthy instances by name.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Register</b><p>On startup an instance registers its name, address, port and metadata (version, zone), or the platform (Kubernetes) does it automatically.</p></li>
+    <li><b>Stay healthy</b><p>The instance sends heartbeats or the registry runs health checks. Missing ones get removed after a short TTL.</p></li>
+    <li><b>Look up by name</b><p>Callers ask for “payments” and get the list of healthy instances (via an API, DNS, or the sidecar).</p></li>
+    <li><b>Load-balance</b><p>Pick an instance (round robin, least requests, same zone first) and keep the list cached briefly.</p></li>
+    <li><b>Deregister on shutdown</b><p>On a graceful stop, remove the instance first and drain in-flight requests.</p></li>
+  </ol>
+
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Service registry</dt><dd>A database of available service instances.</dd></div>
+    <div><dt>Self-registration</dt><dd>The instance registers itself.</dd></div>
+    <div><dt>Third-party registration</dt><dd>The platform registers instances for them.</dd></div>
+    <div><dt>Heartbeat / TTL</dt><dd>Regular “I'm alive” signals; missing ones expire.</dd></div>
+    <div><dt>Client-side discovery</dt><dd>The caller looks up and chooses an instance.</dd></div>
+    <div><dt>Server-side discovery</dt><dd>A load balancer / DNS looks up for the caller.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>orders-service.ts</span><span>Kubernetes: the name IS the discovery</span></div>
+<pre><code><span class="c">// In Kubernetes a Service named "payments" gets a stable DNS name.</span>
+<span class="c">// kube-proxy / the mesh spreads calls over the healthy pods behind it.</span>
+<span class="k">const</span> res = <span class="k">await</span> fetch(<span class="s">"http://payments.shop.svc.cluster.local/charge"</span>, {
+  method: <span class="s">"POST"</span>, body: JSON.stringify(order), signal: AbortSignal.timeout(2000),
+});
+
+<span class="c">// Outside Kubernetes, e.g. with Consul's HTTP API (client-side discovery):</span>
+<span class="k">const</span> instances = <span class="k">await</span> (<span class="k">await</span> fetch(
+  <span class="s">"http://consul:8500/v1/health/service/payments?passing=true"</span>)).json();
+<span class="k">const</span> pick = instances[Math.floor(Math.random() * instances.length)].Service;
+<span class="k">await</span> fetch(<span class="s">`http://${pick.Address}:${pick.Port}/charge`</span>, { method: <span class="s">"POST"</span> });</code></pre>
+  </div>
+  <p class="aside">registries: Kubernetes Services + DNS (CoreDNS) + EndpointSlices, HashiCorp Consul, Netflix Eureka, etcd / ZooKeeper, AWS Cloud Map, Spring Cloud LoadBalancer; meshes do client-side discovery in the sidecar.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>No hard-coded addresses</b>; instances can move freely.</li><li><b>Autoscaling just works</b>; new instances get traffic right away.</li><li><b>Dead instances are removed</b> automatically.</li><li><b>Same code in every environment</b>; only the registry differs.</li><li><b>Smarter routing</b> by zone, version or health.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>The registry is critical</b>; it must be highly available.</li><li><b>Stale data windows</b>: a crashed instance may get traffic until its TTL expires.</li><li><b>More moving parts</b> outside a platform like Kubernetes.</li><li><b>DNS caching surprises</b> (clients ignoring TTLs).</li><li><b>Debugging “why did it call that instance?”</b> gets harder.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Architecture ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares callers with <b>hard-coded addresses in config</b> to the same system using <b>a service registry with health checks</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Characteristic</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to understand?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One more concept; on Kubernetes it's nearly invisible.</td></tr>
+      <tr data-before="4" data-after="4"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Built into most platforms; a registry cluster otherwise.</td></tr>
+      <tr data-before="2" data-after="5"><td>Deployability<small>safe, easy releases?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Instances can be replaced, moved and scaled without config edits.</td></tr>
+      <tr data-before="3" data-after="3"><td>Testability<small>test with confidence?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral; local dev needs a registry or DNS stub.</td></tr>
+      <tr data-before="2" data-after="5"><td>Scalability<small>more users &amp; data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New instances join the pool automatically.</td></tr>
+      <tr data-before="2" data-after="5"><td>Elasticity<small>sudden spikes?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Autoscaling depends on it.</td></tr>
+      <tr data-before="2" data-after="4"><td>Fault tolerance<small>failure stays contained?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Unhealthy instances are dropped from rotation.</td></tr>
+      <tr data-before="4" data-after="4"><td>Performance<small>fast typical request?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A cached lookup costs almost nothing.</td></tr>
+      <tr data-before="2" data-after="4"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Services can be split, moved or renamed behind names.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical system, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Caching lookups forever</h3><p>A client resolves DNS once at startup and keeps calling an instance that died an hour ago. <span class="fix">Fix →</span> respect TTLs; re-resolve; use a client that refreshes.</p></li>
+    <li><h3>Health checks that check nothing</h3><p><code>/health</code> always returns 200, even when the DB is unreachable, so broken instances stay in rotation. <span class="fix">Fix →</span> readiness checks that test what the instance needs to serve.</p></li>
+    <li><h3>Health checks that check too much</h3><p>Every instance's health depends on a shared DB, so a DB blip marks all of them unhealthy at once. <span class="fix">Fix →</span> liveness = “am I stuck?”; readiness = “can I serve?”; avoid deep cascading checks.</p></li>
+    <li><h3>No graceful deregistration</h3><p>Pods are killed mid-request because they were still in the registry. <span class="fix">Fix →</span> deregister first, drain, then stop (preStop hooks).</p></li>
+    <li><h3>A single registry node</h3><p>The registry dies and nothing can find anything. <span class="fix">Fix →</span> a replicated registry cluster and client-side caches.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Instances are dynamic: containers, autoscaling, spot instances.</li><li>Many services call each other.</li><li>You deploy to several environments or regions.</li><li>You want health-aware load balancing.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>A few long-lived servers with stable addresses.</li><li>A single service behind one load balancer.</li><li>Your platform already does it (Kubernetes Services, serverless). Use that, don't add another registry.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Sidecar &amp; service mesh</b></li><li><b>API gateway</b></li><li><b>Leader election</b> · often uses the same store</li><li><b>Health checks</b></li><li><b>Circuit breaker</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Client-side vs server-side discovery?</summary><p>Client-side: the caller queries the registry and picks an instance. Server-side: the caller hits a load balancer or DNS name that does the lookup.</p></details>
+    <details><summary>How does a registry learn an instance has died?</summary><p>Missed heartbeats (TTL expiry) or failed health checks remove it from the list.</p></details>
+    <details><summary>What's the difference between liveness and readiness checks?</summary><p>Liveness asks “is the process stuck and in need of a restart?”; readiness asks “can it serve traffic right now?”, which decides whether it stays in rotation.</p></details>
+    <details><summary>What does Kubernetes use for service discovery?</summary><p>Service objects with stable DNS names, backed by EndpointSlices that list the ready pods.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Call services by <span class="hl">name</span>, never by address. The registry knows who's alive; your config shouldn't have to.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/14-service-discovery.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Chris Richardson, microservices.io, “Client-side / Server-side discovery” and “Service registry”.</li><li>Kubernetes docs, “Service” and “DNS for Services and Pods”.</li><li>HashiCorp Consul docs, “Service discovery”.</li><li>Sam Newman, <i>Building Microservices</i>, 2nd ed., “Service Discovery”.</li></ul>
+  </div>
+  <p class="folio">14</p>
+</article>
+
+<nav class="pager" aria-label="Notes">
+  <a href="sidecar.html"><small>← previous note</small>13 · Sidecar &amp; Service Mesh</a>
+  <a href="sharding.html"><small>Next note →</small>15 · Sharding</a>
+</nav>
+<footer class="foot"><span>Margin Notes · a student's bullet journal on distributed design patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>
