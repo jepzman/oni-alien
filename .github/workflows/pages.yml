@@ -1,0 +1,62 @@
+name: Deploy to GitHub Pages
+
+# Every push to these branches rebuilds the PDFs and publishes public/ to GitHub Pages.
+on:
+  push:
+    branches:
+      - main
+      - claude/design-patterns-notebook-site-6p22em
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; a newer push replaces a queued one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Playwright and Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Rebuild the ready-made PDFs
+        run: npm run pdf
+
+      - name: Make sure every page and PDF exists
+        run: |
+          for f in index.html all.html notes/circuit-breaker.html notes/saga.html \
+                   pdf/01-circuit-breaker.pdf pdf/02-saga.pdf pdf/margin-notes.pdf; do
+            test -s "public/$f" || { echo "Missing public/$f"; exit 1; }
+          done
+          touch public/.nojekyll
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
