@@ -30,6 +30,6 @@ To add a pattern: add it to `CATALOGUE` in `scripts/build_notes.py`, write its d
 
 ## Publishing (GitHub Pages)
 
-`.github/workflows/pages.yml` runs on every push to `main` (and to the current working branch): it installs Chromium, builds the PDFs, checks every page and PDF exists, and deploys `public/` to GitHub Pages. PDFs are not committed; the workflow builds them. You can also run it from the Actions tab ("Run workflow").
+`.github/workflows/pages.yml` runs on every push to `main`: it installs Chromium, builds the PDFs, checks every page and PDF exists, and deploys `public/` to GitHub Pages. PDFs are not committed; the workflow builds them. You can also run it from the Actions tab ("Run workflow").
 
 One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
