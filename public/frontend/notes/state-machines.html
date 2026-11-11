@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>State Machines · Margin Notes</title>
+<meta name="description" content="Model UI as explicit states and allowed transitions, so impossible states can&#x27;t happen.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-frontend">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Margin<span>.</span>Notes</b><small>vol. 2 · frontend design patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="state-machines">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 01.10.26</span><span class="topic">collection · <b>state &amp; data</b></span></div>
+  <p class="kicker">a.k.a. “make impossible states impossible”</p>
+  <h1><span class="hl">State Machines</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Instead of a pile of booleans (<code>isLoading</code>, <code>isError</code>…), describe a UI as a <b>finite set of states</b> (<code>idle</code>, <code>loading</code>, <code>success</code>, <code>failure</code>) and the <b>events allowed in each</b>. The component is always in <b>exactly one state</b>, and transitions not drawn simply can't happen.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> state modelling</li><li><b>Theory:</b> finite-state machines, Harel statecharts (1987)</li><li><b>Libraries:</b> XState, Zag, Robot</li><li><b>Pairs with:</b> headless components, global store</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">UI state is often tracked with independent booleans. Four booleans allow 16 combinations, and most of them make no sense. The bugs live in <span class="hl-pink">impossible combinations</span>.</p>
+  <ul>
+    <li>A spinner and an error message show at the same time.</li>
+    <li>The submit button is clickable while a request is already in flight, so the form is submitted twice.</li>
+    <li>A late response arrives after the user cancelled and overwrites the screen.</li>
+    <li>Nobody can say exactly which states the checkout flow has.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="Doodle of a fetch component with four booleans: isLoading, isError, isSuccess and isRetrying. They allow 16 combinations, many impossible, such as loading and error at the same time, so the screen shows a spinner and an error message together."><g class="rough"><rect class="d f-paper" x="20" y="40" width="300" height="180" rx="10"/><path class="d d-red" d="M326 130 L420 130"/><path class="d d-red" d="M409.2 135.2 L420 130 L409.2 124.8"/><rect class="d f-pink d-red" x="430" y="50" width="300" height="170" rx="10"/><g transform="translate(470 80) scale(1.2)"><g class="d"><path class="f-paper" d="M0 0 h24 M0 34 h24 M3 0 q0 13 9 17 q-9 4 -9 17 M21 0 q0 13 -9 17 q9 4 9 17"/></g></g></g><text class="t" x="46" y="82" text-anchor="start" font-size="18">isLoading = true</text><text class="t" x="46" y="116" text-anchor="start" font-size="18">isError = true</text><text class="t" x="46" y="150" text-anchor="start" font-size="18">isSuccess = false</text><text class="t" x="46" y="184" text-anchor="start" font-size="18">isRetrying = true</text><text class="t" x="600" y="100" text-anchor="middle" font-size="18">Loading…</text><text class="t" x="600" y="150" text-anchor="middle" font-size="18">Something went wrong</text><text class="t-s t-red" x="580" y="250" text-anchor="middle">spinner AND error at once ✗</text><text class="t-s t-red" x="170" y="250" text-anchor="middle">2⁴ = 16 combinations</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Four booleans = 16 combinations, most of them impossible, and bugs live in the impossible ones.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the traffic light</span></h2>
+  <p>A <b>traffic light</b> is red, green or amber: never two at once, never purple. It moves in a fixed order. Pressing the pedestrian button while it's already red does nothing. That's a <b>state machine</b>.</p>
+  <ul>
+    <li>Exactly one state at a time: <b>no impossible combinations</b>.</li>
+    <li>Only certain moves are allowed: <b>transitions</b>.</li>
+    <li>Inputs that don't apply right now are <b>ignored</b>, not half-handled.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a traffic light. It can only be red, green or amber, never two at once, and it only moves in a fixed order: red to green, green to amber, amber to red. A pedestrian button is ignored while the light is already red."><g class="rough"><g transform="translate(60 40) scale(2.4)"><g class="d"><rect class="f-paper" x="14" y="0" width="30" height="74" rx="8"/><circle cx="29" cy="15" r="8"/><circle cx="29" cy="37" r="8"/><circle cx="29" cy="59" r="8"/><path d="M29 74 v14"/></g></g><circle class="d f-pink d-red" cx="380" cy="70" r="40"/><circle class="d f-green d-green" cx="560" cy="160" r="40"/><circle class="d f-y" cx="380" cy="220" r="36"/><path class="d" d="M420 80 L525 135"/><path class="d" d="M513.0 134.6 L525 135 L517.9 125.4"/><path class="d" d="M525 180 L418 214"/><path class="d" d="M426.7 205.8 L418 214 L429.9 215.7"/><path class="d" d="M370 184 L370 112"/><path class="d" d="M375.2 122.8 L370 112 L364.8 122.8"/></g><text class="t-head" x="380" y="77" text-anchor="middle">red</text><text class="t-head" x="560" y="167" text-anchor="middle">green</text><text class="t-head" x="380" y="227" text-anchor="middle">amber</text><text class="t-s" x="505" y="92" text-anchor="middle">timer</text><text class="t-s" x="505" y="222" text-anchor="middle">timer</text><text class="t-s" x="340" y="150" text-anchor="end">timer</text><text class="t-s t-pen" x="650" y="60" text-anchor="middle">never two at once</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A traffic light is in exactly one state, and only certain moves are allowed.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Red, amber, green</td><td>Finite states: idle, loading, success, failure</td></tr>
+      <tr><td>Never two lights at once</td><td>Exactly one current state</td></tr>
+      <tr><td>Timer: red → green</td><td>An event causing a transition</td></tr>
+      <tr><td>Button ignored on red</td><td>Events not allowed in a state are ignored</td></tr>
+      <tr><td>The wiring diagram on the pole</td><td>The statechart: documentation you can run</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">states, events, transitions</span></h2>
+  <p>Draw the states and arrows first; the code follows the drawing. A plain <code>useReducer</code> with a <code>status</code> field already gets you most of the way; libraries like XState add nested and parallel states, guards, timers and a visualiser.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 320" role="img" aria-label="Statechart for a data request. From idle, FETCH goes to loading. From loading, RESOLVE goes to success and REJECT goes to failure. From failure, RETRY goes back to loading. From success, REFRESH goes to loading. Events not listed for a state are ignored."><g class="rough"><circle class="d f-paper" cx="90" cy="160" r="56"/><circle class="d f-y" cx="330" cy="160" r="62"/><circle class="d f-green" cx="600" cy="70" r="60"/><circle class="d f-pink" cx="600" cy="260" r="60"/><path class="d" d="M148 160 L266 160"/><path class="d" d="M255.2 165.2 L266 160 L255.2 154.8"/><path class="d d-green" d="M388 135 L540 85"/><path class="d d-green" d="M531.4 93.3 L540 85 L528.1 83.4"/><path class="d d-red" d="M388 190 L540 245"/><path class="d d-red" d="M528.1 246.2 L540 245 L531.6 236.4"/><path class="d" d="M560 300 Q420 320 330 226"/><path class="d" d="M341.2 230.2 L330 226 L333.7 237.4"/><path class="d" d="M560 30 Q420 10 330 96"/><path class="d" d="M334.2 84.8 L330 96 L341.4 92.3"/></g><text class="t-head" x="90" y="167" text-anchor="middle">idle</text><text class="t-head" x="330" y="167" text-anchor="middle">loading</text><text class="t-head" x="600" y="77" text-anchor="middle">success</text><text class="t-head" x="600" y="267" text-anchor="middle">failure</text><text class="t-s" x="207" y="148" text-anchor="middle">FETCH</text><text class="t-s t-green" x="455" y="92" text-anchor="middle">RESOLVE</text><text class="t-s t-red" x="455" y="242" text-anchor="middle">REJECT</text><text class="t-s" x="420" y="308" text-anchor="middle">RETRY</text><text class="t-s" x="440" y="26" text-anchor="middle">REFRESH</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Explicit states + allowed events. Anything not drawn simply can't happen.</figcaption></figure>
+  <ol class="steps">
+    <li><b>List the real states</b><p>Replace booleans with one <code>status</code>: <code>"idle" | "loading" | "success" | "failure"</code>.</p></li>
+    <li><b>List the events</b><p><code>FETCH</code>, <code>RESOLVE</code>, <code>REJECT</code>, <code>RETRY</code>, <code>CANCEL</code>: things that happen, named in the past or imperative.</p></li>
+    <li><b>Define allowed transitions</b><p>For each state, which events move where. Anything else is ignored.</p></li>
+    <li><b>Attach data to states</b><p>Errors only exist in <code>failure</code>; results only in <code>success</code> (a TypeScript discriminated union enforces it).</p></li>
+    <li><b>Render by state</b><p><code>switch (state.status)</code> renders exactly one view; the button is disabled because the state says so.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Finite-state machine</dt><dd>A model with a fixed set of states and transitions.</dd></div>
+    <div><dt>Statechart</dt><dd>State machines with nesting, parallel regions and history.</dd></div>
+    <div><dt>Event</dt><dd>Something that happened and may cause a transition.</dd></div>
+    <div><dt>Guard</dt><dd>A condition that must be true for a transition.</dd></div>
+    <div><dt>Discriminated union</dt><dd>A TS type where a tag field decides the shape.</dd></div>
+    <div><dt>Impossible state</dt><dd>A combination of values that should never occur.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>useRequest.ts</span><span>a tiny state machine with useReducer</span></div>
+<pre><code><span class="k">type</span> State =
+  | { status: <span class="s">"idle"</span> }
+  | { status: <span class="s">"loading"</span> }
+  | { status: <span class="s">"success"</span>; data: Order[] }
+  | { status: <span class="s">"failure"</span>; error: string };
+<span class="k">type</span> Event = { <span class="k">type</span>: <span class="s">"FETCH"</span> } | { <span class="k">type</span>: <span class="s">"RESOLVE"</span>; data: Order[] } | { <span class="k">type</span>: <span class="s">"REJECT"</span>; error: string } | { <span class="k">type</span>: <span class="s">"RETRY"</span> };
+
+<span class="k">function</span> machine(state: State, event: Event): State {
+  <span class="k">switch</span> (state.status) {
+    <span class="k">case</span> <span class="s">"idle"</span>:    <span class="k">return</span> event.<span class="k">type</span> === <span class="s">"FETCH"</span> ? { status: <span class="s">"loading"</span> } : state;
+    <span class="k">case</span> <span class="s">"loading"</span>: <span class="k">return</span> event.<span class="k">type</span> === <span class="s">"RESOLVE"</span> ? { status: <span class="s">"success"</span>, data: event.data }
+                         : event.<span class="k">type</span> === <span class="s">"REJECT"</span> ? { status: <span class="s">"failure"</span>, error: event.error } : state;
+    <span class="k">case</span> <span class="s">"failure"</span>: <span class="k">return</span> event.<span class="k">type</span> === <span class="s">"RETRY"</span> ? { status: <span class="s">"loading"</span> } : state;
+    <span class="k">case</span> <span class="s">"success"</span>: <span class="k">return</span> event.<span class="k">type</span> === <span class="s">"FETCH"</span> ? { status: <span class="s">"loading"</span> } : state;
+  }
+}
+
+<span class="c">// render exactly one view per state</span>
+<span class="k">switch</span> (state.status) {
+  <span class="k">case</span> <span class="s">"loading"</span>: <span class="k">return</span> &lt;Spinner /&gt;;
+  <span class="k">case</span> <span class="s">"failure"</span>: <span class="k">return</span> &lt;ErrorPanel message={state.error} onRetry={() =&gt; send({ <span class="k">type</span>: <span class="s">"RETRY"</span> })} /&gt;;
+  <span class="k">case</span> <span class="s">"success"</span>: <span class="k">return</span> &lt;OrderList orders={state.data} /&gt;;
+  <span class="k">default</span>:        <span class="k">return</span> &lt;button onClick={() =&gt; send({ <span class="k">type</span>: <span class="s">"FETCH"</span> })}&gt;Load orders&lt;/button&gt;;
+}</code></pre>
+  </div>
+  <p class="aside">tools: XState (+ Stately visual editor), Zag.js (state machines behind Ark UI widgets), Robot, @xstate/store; plain TypeScript discriminated unions + useReducer for small cases.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Impossible states can't happen.</b></li><li><b>Every flow is documented</b> as a diagram you can run.</li><li><b>Fewer race-condition bugs</b> (late events are ignored).</li><li><b>Easy to test</b>: given state + event, expect state.</li><li><b>Shared language</b> with designers and product.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More upfront modelling</b> than a few booleans.</li><li><b>Unfamiliar</b> to many teams.</li><li><b>Library weight</b> if you use a full statechart engine.</li><li><b>Overkill</b> for a simple toggle.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>UI state tracked with independent booleans</b> to the same UI modelled as an <b>explicit state machine</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More upfront thinking, much simpler reading later.</td></tr>
+      <tr data-before="3" data-after="4"><td>Reusability<small>use it in many places?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Machines are reusable across UIs (and frameworks).</td></tr>
+      <tr data-before="2" data-after="5"><td>Testability<small>test with confidence?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Pure transition functions; even model-based testing.</td></tr>
+      <tr data-before="2" data-after="4"><td>Maintainability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Adding a state or event is a visible, local change.</td></tr>
+      <tr data-before="3" data-after="3"><td>Performance<small>fast to load &amp; respond?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Bundle size<small>ships little JS?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral by hand; a statechart library adds some kB.</td></tr>
+      <tr data-before="3" data-after="4"><td>Accessibility<small>works for everyone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Focus and announcements can be tied to clear states.</td></tr>
+      <tr data-before="3" data-after="4"><td>Developer experience<small>pleasant to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Visualisers and types catch mistakes early.</td></tr>
+      <tr data-before="3" data-after="4"><td>Team scalability<small>many devs at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Diagrams make complex flows easy to hand over.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Booleans next to the machine</h3><p>A status field plus an extra <code>isSubmitting</code> flag that drifts out of sync. <span class="fix">Fix →</span> derive everything from the one state; no parallel flags.</p></li>
+    <li><h3>A machine for every toggle</h3><p>An accordion open/closed gets a full XState setup. <span class="fix">Fix →</span> use a boolean or useReducer for trivial cases.</p></li>
+    <li><h3>Handling every event in every state</h3><p>Defensive code reacts to events that shouldn't be possible, recreating the mess. <span class="fix">Fix →</span> let unlisted events be ignored by design.</p></li>
+    <li><h3>Not drawing it</h3><p>The machine exists only in code and nobody can review it. <span class="fix">Fix →</span> keep a diagram (or use a visual editor) in the PR.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Multi-step flows: checkout, onboarding, wizards, uploads.</li><li>Async UI with loading, error, retry and cancel.</li><li>Complex widgets (comboboxes, date pickers, drag and drop).</li><li>Bugs keep appearing in “weird” combinations.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>A single toggle or open/closed flag.</li><li>Static pages with no interaction.</li><li>A server-state library already models loading/error for you (use its status).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Headless components</b></li><li><b>Global store</b></li><li><b>Optimistic UI</b></li><li><b>Saga</b> (Vol. 1, orchestration)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why are four independent booleans risky?</summary><p>They allow 2⁴ = 16 combinations, many of which are impossible (like loading and error together) and cause bugs.</p></details>
+    <details><summary>What happens to an event not allowed in the current state?</summary><p>It's ignored; the machine stays in its current state.</p></details>
+    <details><summary>How does TypeScript help?</summary><p>A discriminated union ties data to states (error only exists in failure), so invalid access fails to compile.</p></details>
+    <details><summary>What do statecharts add to plain state machines?</summary><p>Nested (hierarchical) states, parallel regions, history and guards, which keep complex machines manageable.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>If you can <span class="hl">draw it</span>, you can trust it. One state at a time, and only the arrows you drew.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/08-state-machines.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>David Harel, “Statecharts: A Visual Formalism for Complex Systems” (1987).</li><li>David Khourshid, XState docs and “No, disabling a button is not app logic”.</li><li>Kent C. Dodds, “Stop using isLoading booleans”.</li><li>Richard Feldman, “Making Impossible States Impossible” (talk).</li></ul>
+  </div>
+  <p class="folio">08</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="optimistic-ui.html"><small>← previous note</small>07 · Optimistic UI</a>
+  <a href="ssr-hydration.html"><small>Next note →</small>09 · SSR &amp; Hydration</a>
+</nav>
+<footer class="foot"><span>Margin Notes · Vol. 2 · a student's bullet journal on frontend design patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

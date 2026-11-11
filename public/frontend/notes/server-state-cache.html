@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Server-State Cache · Margin Notes</title>
+<meta name="description" content="Treat API data as a cache: show it instantly, revalidate in the background.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-frontend">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Margin<span>.</span>Notes</b><small>vol. 2 · frontend design patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="server-state-cache">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 24.09.26</span><span class="topic">collection · <b>state &amp; data</b></span></div>
+  <p class="kicker">a.k.a. “stale-while-revalidate”</p>
+  <h1><span class="hl">Server-State Cache</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Data from the server isn't really <i>your</i> state; it's a <b>cache of someone else's</b>. Fetch it by a <b>key</b> through a cache that <b>dedupes requests</b>, shows <b>cached data instantly</b>, <b>revalidates in the background</b>, and <b>invalidates</b> after mutations. Components just ask for the key.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> data fetching</li><li><b>Libraries:</b> TanStack Query, SWR, RTK Query, Apollo</li><li><b>Built on:</b> HTTP stale-while-revalidate idea</li><li><b>Pairs with:</b> optimistic UI, global store</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Fetching in <code>useEffect</code> looks simple, but real apps need much more: loading and error states, caching, deduplication, retries, refetching on focus, pagination, invalidation. Doing it by hand <span class="hl-pink">everywhere</span> goes wrong.</p>
+  <ul>
+    <li>Three components fetch the same user, so three requests and three spinners.</li>
+    <li>Navigating back shows a spinner again for data you had a second ago.</li>
+    <li>After editing the profile, the header still shows the old name.</li>
+    <li>Race conditions: a slow old response overwrites a newer one.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="Doodle of the same user profile fetched three times on one screen by the Header, Sidebar and Settings components, each with its own loading spinner. Going back to a page shows a spinner again, and data edited in one place stays stale in the others."><g class="rough"><rect class="d f-paper" x="20" y="30" width="160" height="54" rx="10"/><g transform="translate(196 40) scale(1.0)"><g class="d"><path class="f-paper" d="M0 0 h24 M0 34 h24 M3 0 q0 13 9 17 q-9 4 -9 17 M21 0 q0 13 -9 17 q9 4 9 17"/></g></g><path class="d d-red" d="M230 57 L470 130"/><path class="d d-red" d="M458.1 131.8 L470 130 L461.2 121.9"/><rect class="d f-paper" x="20" y="104" width="160" height="54" rx="10"/><g transform="translate(196 114) scale(1.0)"><g class="d"><path class="f-paper" d="M0 0 h24 M0 34 h24 M3 0 q0 13 9 17 q-9 4 -9 17 M21 0 q0 13 -9 17 q9 4 9 17"/></g></g><path class="d d-red" d="M230 131 L470 130"/><path class="d d-red" d="M459.2 135.3 L470 130 L459.2 124.8"/><rect class="d f-paper" x="20" y="178" width="160" height="54" rx="10"/><g transform="translate(196 188) scale(1.0)"><g class="d"><path class="f-paper" d="M0 0 h24 M0 34 h24 M3 0 q0 13 9 17 q-9 4 -9 17 M21 0 q0 13 -9 17 q9 4 9 17"/></g></g><path class="d d-red" d="M230 205 L470 130"/><path class="d d-red" d="M461.2 138.2 L470 130 L458.1 128.2"/><rect class="d f-blue" x="476" y="96" width="160" height="70" rx="10"/></g><text class="t-head" x="100" y="64" text-anchor="middle" font-size="18">Header</text><text class="t-s t-red" x="340" y="60" text-anchor="middle">GET /me</text><text class="t-head" x="100" y="138" text-anchor="middle" font-size="18">Sidebar</text><text class="t-head" x="100" y="212" text-anchor="middle" font-size="18">Settings</text><text class="t-head" x="556" y="138" text-anchor="middle">API</text><text class="t-s t-red" x="560" y="210" text-anchor="middle">3 requests for the same user</text><text class="t-s t-red" x="560" y="236" text-anchor="middle">back button → spinner again</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Every component fetches for itself: duplicate requests, spinners everywhere, stale copies.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the newspaper on the doorstep</span></h2>
+  <p>You read the <b>newspaper you already have</b>, right away, even though it's from this morning. A new edition is on its way, and when it arrives you swap it in. The whole house reads <b>one copy</b>; nobody orders their own.</p>
+  <ul>
+    <li>Instant reading, slightly old news: <b>stale-while-revalidate</b>.</li>
+    <li>A paper older than a week goes in the recycling: <b>garbage collection</b> of unused cache entries.</li>
+    <li>Big news (you changed the data)? Throw out today's copy and fetch a fresh one: <b>invalidation</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a newspaper on the doorstep. You read the copy you already have straight away, even if it&#x27;s from this morning. Meanwhile a new edition is delivered, and you swap to it when it arrives. Everyone in the house reads the same copy."><g class="rough"><g transform="translate(100 50) scale(2.2)"><g class="d"><rect class="f-paper" x="0" y="0" width="60" height="62" rx="2"/><path d="M8 12 h44 M8 22 h20 M8 30 h20 M8 38 h20 M8 46 h44 M8 54 h44"/><rect x="34" y="20" width="18" height="20"/></g></g><path class="d d-dash" d="M260 120 L470 120"/><path class="d" d="M459.2 125.2 L470 120 L459.2 114.8"/><g transform="translate(480 80) scale(1.8)"><g class="d"><rect class="f-paper" x="0" y="10" width="40" height="30" rx="3"/><path class="f-paper" d="M40 20 h12 l8 10 v10 h-20 z"/><circle class="f-paper" cx="12" cy="44" r="6"/><circle class="f-paper" cx="48" cy="44" r="6"/></g></g></g><text class="t-s" x="165" y="220" text-anchor="middle">this morning&#x27;s copy: read now</text><text class="t-s" x="365" y="106" text-anchor="middle">new edition on its way…</text><text class="t-s t-green" x="560" y="220" text-anchor="middle">swap when it arrives</text><text class="t-s t-pen" x="380" y="252" text-anchor="middle">one copy for the whole house = one cache key</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Read the copy you have right away; swap in the new edition when it arrives.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The paper you already have</td><td>Cached data shown instantly</td></tr>
+      <tr><td>The new edition arriving</td><td>Background revalidation</td></tr>
+      <tr><td>One copy for the house</td><td>Deduplicated requests by cache key</td></tr>
+      <tr><td>Recycling old papers</td><td>Garbage-collecting unused entries</td></tr>
+      <tr><td>Big news → fetch a fresh copy</td><td>Invalidate the key after a mutation</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">cache by key, revalidate in the background</span></h2>
+  <p>Every query has a <b>key</b> (<code>["user", "me"]</code>, <code>["products", { page: 2 }]</code>) and a <b>fetch function</b>. The cache decides when to use stored data and when to fetch.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Stale-while-revalidate flow. Three components ask the cache for the key user/me. The cache returns cached data immediately and sends a single deduplicated request to the API in the background. When the fresh data returns, the cache updates and all three components re-render. Mutations invalidate the key."><g class="rough"><rect class="d f-green" x="20" y="30" width="160" height="54" rx="10"/><path class="d" d="M186 57 L300 130"/><path class="d" d="M288.1 128.6 L300 130 L293.7 119.8"/><rect class="d f-green" x="20" y="104" width="160" height="54" rx="10"/><path class="d" d="M186 131 L300 130"/><path class="d" d="M289.2 135.3 L300 130 L289.1 124.9"/><rect class="d f-green" x="20" y="178" width="160" height="54" rx="10"/><path class="d" d="M186 205 L300 130"/><path class="d" d="M293.8 140.3 L300 130 L288.1 131.6"/><rect class="d f-y" x="306" y="80" width="200" height="110" rx="10"/><path class="d" d="M512 120 L600 120"/><path class="d" d="M589.2 125.2 L600 120 L589.2 114.8"/><rect class="d f-blue" x="606" y="90" width="140" height="64" rx="10"/><path class="d d-dash" d="M676 158 L450 196"/><path class="d" d="M459.8 189.1 L450 196 L461.5 199.4"/><rect class="d f-pink d-red" x="286" y="240" width="250" height="50" rx="10"/></g><text class="t-head" x="100" y="64" text-anchor="middle" font-size="18">Header</text><text class="t-head" x="100" y="138" text-anchor="middle" font-size="18">Sidebar</text><text class="t-head" x="100" y="212" text-anchor="middle" font-size="18">Settings</text><text class="t-head" x="406" y="131" text-anchor="middle">cache</text><text class="t" x="406" y="155" text-anchor="middle" font-size="17">key: [&quot;user&quot;, &quot;me&quot;]</text><text class="t-s t-green" x="406" y="70" text-anchor="middle">① show cached now</text><text class="t-s" x="550" y="100" text-anchor="middle">② 1 request</text><text class="t-head" x="676" y="129" text-anchor="middle">API</text><text class="t-s" x="560" y="214" text-anchor="middle">③ fresh → update all</text><text class="t-head t-red" x="411" y="272" text-anchor="middle" font-size="16">mutation → invalidate</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One key, one request: cached data shows instantly, fresh data replaces it in the background.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Name queries by key</b><p>Keys describe the data and its parameters, so identical requests share one cache entry.</p></li>
+    <li><b>Read through the cache</b><p><code>useQuery({ queryKey, queryFn })</code> returns data, status and errors; concurrent calls share one request.</p></li>
+    <li><b>Decide freshness</b><p><code>staleTime</code>: how long data counts as fresh. Stale data is still shown, then refetched on mount, focus or reconnect.</p></li>
+    <li><b>Mutate and invalidate</b><p>After a POST/PUT, invalidate affected keys (or update the cache directly) so every screen refreshes.</p></li>
+    <li><b>Prefetch the next step</b><p>Hover or route intent can prefetch data so the next screen opens without a spinner.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Server state</dt><dd>Data owned by the server that you only cache.</dd></div>
+    <div><dt>Query key</dt><dd>The identity of a cached query.</dd></div>
+    <div><dt>Stale time</dt><dd>How long cached data is considered fresh.</dd></div>
+    <div><dt>Revalidation</dt><dd>Refetching in the background to update the cache.</dd></div>
+    <div><dt>Invalidation</dt><dd>Marking cached data out of date after a change.</dd></div>
+    <div><dt>Deduplication</dt><dd>Merging identical in-flight requests into one.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>profile.tsx</span><span>TanStack Query</span></div>
+<pre><code><span class="k">const</span> userQuery = { queryKey: [<span class="s">"user"</span>, <span class="s">"me"</span>], queryFn: () =&gt; api.get&lt;User&gt;(<span class="s">"/me"</span>), staleTime: 60_000 };
+
+<span class="k">function</span> Header() {
+  <span class="k">const</span> { data: user } = useQuery(userQuery);          <span class="c">// same key → same cache, 1 request</span>
+  <span class="k">return</span> &lt;Avatar name={user?.name} /&gt;;
+}
+
+<span class="k">function</span> ProfileForm() {
+  <span class="k">const</span> qc = useQueryClient();
+  <span class="k">const</span> { data: user, isPending } = useQuery(userQuery);
+  <span class="k">const</span> save = useMutation({
+    mutationFn: (patch: Partial&lt;User&gt;) =&gt; api.patch(<span class="s">"/me"</span>, patch),
+    onSuccess: () =&gt; qc.invalidateQueries({ queryKey: [<span class="s">"user"</span>, <span class="s">"me"</span>] }),   <span class="c">// all screens refresh</span>
+  });
+  <span class="k">if</span> (isPending) <span class="k">return</span> &lt;Skeleton /&gt;;
+  <span class="k">return</span> &lt;Form initial={user} onSubmit={(v) =&gt; save.mutate(v)} /&gt;;
+}</code></pre>
+  </div>
+  <p class="aside">libraries: TanStack Query (React, Vue, Svelte, Solid), SWR (Vercel), RTK Query, Apollo Client / urql for GraphQL; frameworks: Next.js and Remix data caching, Angular resource().</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Instant screens</b> from cache; fewer spinners.</li><li><b>Fewer requests</b> through deduplication.</li><li><b>Fresh data</b> via background revalidation and invalidation.</li><li><b>Less code</b>: loading, error, retry and race handling built in.</li><li><b>Global store stays small</b> (only client state).</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Stale data is shown</b> briefly; must be acceptable.</li><li><b>Cache keys must be designed</b> carefully.</li><li><b>Invalidation bugs</b> leave screens out of date.</li><li><b>Another library</b> and its mental model.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>fetching in each component with useEffect</b> to the same app using a <b>server-state cache</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="2" data-after="4"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Components declare what data they need; the cache does the rest.</td></tr>
+      <tr data-before="3" data-after="4"><td>Reusability<small>use it in many places?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Queries are shared by key across screens.</td></tr>
+      <tr data-before="2" data-after="4"><td>Testability<small>test with confidence?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Query functions are plain; caches can be seeded in tests.</td></tr>
+      <tr data-before="2" data-after="4"><td>Maintainability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One place for fetching rules instead of dozens of effects.</td></tr>
+      <tr data-before="2" data-after="5"><td>Performance<small>fast to load &amp; respond?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Cached screens render instantly; fewer requests.</td></tr>
+      <tr data-before="3" data-after="2"><td>Bundle size<small>ships little JS?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Adds a library (roughly 10–15 kB gzipped).</td></tr>
+      <tr data-before="3" data-after="3"><td>Accessibility<small>works for everyone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fewer jarring spinners; announce updates politely.</td></tr>
+      <tr data-before="2" data-after="5"><td>Developer experience<small>pleasant to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Devtools, retries and race handling out of the box.</td></tr>
+      <tr data-before="3" data-after="4"><td>Team scalability<small>many devs at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Shared query definitions keep teams consistent.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Copying query data into local state</h3><p>The form copies the user into useState and never sees updates. <span class="fix">Fix →</span> read from the query, or reset the form when data changes.</p></li>
+    <li><h3>Keys missing parameters</h3><p><code>["products"]</code> for every page, so page 2 shows page 1. <span class="fix">Fix →</span> put every input in the key: <code>["products", { page, filter }]</code>.</p></li>
+    <li><h3>Forgetting to invalidate</h3><p>After saving, other screens show the old name until reload. <span class="fix">Fix →</span> invalidate (or update) affected keys in onSuccess.</p></li>
+    <li><h3>Server data in the global store too</h3><p>Two caches disagree. <span class="fix">Fix →</span> server data in the query cache; client state in the store.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Most apps that read data from APIs.</li><li>The same data is shown on several screens.</li><li>You want instant back-navigation and fewer spinners.</li><li>Data changes on the server and should refresh on focus or reconnect.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Real-time data streams (use websockets + a store or a subscription-aware cache).</li><li>The framework's own data layer already caches (e.g. server components with fetch caching).</li><li>A one-page app with one request.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Optimistic UI</b></li><li><b>Global store</b></li><li><b>Cache-aside</b> (Vol. 1)</li><li><b>Custom hooks</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does stale-while-revalidate mean?</summary><p>Show the cached (possibly stale) data immediately, then fetch fresh data in the background and update when it arrives.</p></details>
+    <details><summary>Two components call useQuery with the same key at once. How many requests?</summary><p>One. The cache deduplicates identical in-flight queries.</p></details>
+    <details><summary>Why invalidate after a mutation?</summary><p>So every screen using that data refetches and shows the change, instead of the old cached value.</p></details>
+    <details><summary>What's the difference between server state and client state?</summary><p>Server state is owned by the backend and only cached locally; client state (theme, open dialogs, cart draft) is owned by the app.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Server data is a <span class="hl">copy</span>. Show it fast, refresh it quietly, and throw it out when you know it changed.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/06-server-state-cache.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>TanStack Query docs, “Overview” and “Important Defaults”.</li><li>Tanner Linsley, “It's Time to Break up with your Global State”.</li><li>SWR docs and RFC 5861 (HTTP stale-while-revalidate).</li><li>TkDodo's blog, “Practical React Query”.</li></ul>
+  </div>
+  <p class="folio">06</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="global-store.html"><small>← previous note</small>05 · Global Store (Flux)</a>
+  <a href="optimistic-ui.html"><small>Next note →</small>07 · Optimistic UI</a>
+</nav>
+<footer class="foot"><span>Margin Notes · Vol. 2 · a student's bullet journal on frontend design patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

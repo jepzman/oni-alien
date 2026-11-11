@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Error Boundaries · Margin Notes</title>
+<meta name="description" content="Catch a crashing part of the UI and show a fallback, instead of a blank page.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-frontend">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Margin<span>.</span>Notes</b><small>vol. 2 · frontend design patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="error-boundaries">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 27.10.26</span><span class="topic">collection · <b>architecture &amp; resilience</b></span></div>
+  <p class="kicker">a.k.a. “the understudy”</p>
+  <h1><span class="hl">Error Boundaries</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Wrap regions of the UI in <b>error boundaries</b>: components that <b>catch rendering errors</b> in their children, show a <b>fallback</b> for just that region (with a retry), and <b>report</b> the error. One broken widget no longer turns the whole page white.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> resilience</li><li><b>Mechanism:</b> React error boundaries, Vue onErrorCaptured, Angular ErrorHandler</li><li><b>Frameworks:</b> Next.js error.tsx, React Router errorElement</li><li><b>Pairs with:</b> code splitting, micro-frontends</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">In React, an error thrown while rendering <span class="hl-pink">unmounts the entire tree</span> by default. The user sees a blank page, even if only one small widget was broken.</p>
+  <ul>
+    <li>An API returns <code>null</code> where an array was expected, and the recommendations panel throws.</li>
+    <li>The whole dashboard disappears, including the parts that worked.</li>
+    <li>A lazy chunk fails to download after a deploy, and the app is gone.</li>
+    <li>Nobody knows it happened unless users complain.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a dashboard page where one small widget, a recommendations panel, throws an error because an API returned null. Without boundaries the whole React tree unmounts and the user sees a blank white page instead of the rest of the working dashboard."><g class="rough"><rect class="d f-paper" x="20" y="30" width="330" height="200" rx="10"/><rect class="d f-green" x="40" y="50" width="290" height="40" rx="4"/><rect class="d f-green" x="40" y="100" width="140" height="40" rx="4"/><rect class="d f-green" x="190" y="100" width="140" height="40" rx="4"/><rect class="d f-pink d-red" x="40" y="156" width="290" height="54" rx="4"/><path class="d d-red" d="M356 130 L440 130"/><path class="d d-red" d="M429.2 135.2 L440 130 L429.2 124.8"/><rect class="d f-paper d-dash" x="446" y="30" width="290" height="200" rx="10"/></g><text class="t-head" x="185" y="77" text-anchor="middle" font-size="16">header</text><text class="t-head" x="110" y="127" text-anchor="middle" font-size="16">orders</text><text class="t-head" x="260" y="127" text-anchor="middle" font-size="16">stats</text><text class="t-head t-red" x="185" y="190" text-anchor="middle" font-size="16">recs: null.map() ✗</text><text class="t-s t-red" x="591" y="130" text-anchor="middle">(blank white page)</text><text class="t-s t-red" x="591" y="252" text-anchor="middle">everything gone for one widget</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One widget throws, the whole tree unmounts, and the user gets a blank white page.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the theatre understudy</span></h2>
+  <p>In a theatre, if one actor forgets their lines, the <b>understudy</b> steps in for that scene. The curtain doesn't come down and the audience doesn't go home. The stage manager notes what happened for later.</p>
+  <ul>
+    <li>The problem is <b>contained</b> to one scene.</li>
+    <li>The cover is simpler than the original performance: a <b>fallback UI</b>.</li>
+    <li>Only if the whole theatre loses power does the show stop: the <b>app-level boundary</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a theatre stage. When one actor forgets their lines in a scene, the understudy steps in for that scene and the curtain stays up; the rest of the play goes on."><g class="rough"><g transform="translate(40 30) scale(2.4)"><g class="d"><path d="M0 0 h80"/><path class="f-paper" d="M2 0 q4 30 -2 60 h22 q-10 -30 0 -60 z"/><path class="f-paper" d="M78 0 q-4 30 2 60 h-22 q10 -30 0 -60 z"/></g></g><rect class="d f-pink d-red" x="260" y="60" width="200" height="80" rx="10"/><path class="d" d="M466 100 L560 100"/><path class="d" d="M549.2 105.2 L560 100 L549.2 94.8"/><rect class="d f-green" x="566" y="60" width="170" height="80" rx="10"/></g><text class="t-head t-red" x="360" y="96" text-anchor="middle">scene 3</text><text class="t" x="360" y="120" text-anchor="middle" font-size="17">actor forgot lines</text><text class="t-s t-pen" x="560" y="172" text-anchor="middle">understudy steps in</text><text class="t-head" x="651" y="96" text-anchor="middle">scene 3</text><text class="t" x="651" y="120" text-anchor="middle" font-size="17">covered ✓</text><text class="t-s t-green" x="400" y="220" text-anchor="middle">the rest of the play carries on</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One actor stumbles; the understudy covers that scene and the show goes on.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>An actor forgetting their lines</td><td>A component throwing while rendering</td></tr>
+      <tr><td>The understudy covering the scene</td><td>The boundary's fallback UI</td></tr>
+      <tr><td>The rest of the play continuing</td><td>Other regions keep working</td></tr>
+      <tr><td>Stage manager's notes</td><td>Error reported to monitoring</td></tr>
+      <tr><td>Power cut: show stops</td><td>Top-level boundary: full-page error screen</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">catch close to the problem</span></h2>
+  <p>Place boundaries in <b>layers</b>: one at the app root (last resort), one per route, and around risky or optional widgets (third-party embeds, recommendations, charts, lazy chunks).</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Error boundaries placed around regions. An app-level boundary shows a full-page error as a last resort. Route-level boundaries protect each page. Widget-level boundaries wrap risky widgets such as recommendations, so when that widget throws, only it is replaced by a small fallback with a retry button, and the error is reported to monitoring."><g class="rough"><rect class="d f-paper d-dash" x="20" y="20" width="720" height="260" rx="10"/><rect class="d f-paper d-dash" x="40" y="60" width="680" height="200" rx="10"/><rect class="d f-green" x="60" y="100" width="300" height="140" rx="10"/><rect class="d f-pink d-red d-dash" x="380" y="100" width="320" height="140" rx="10"/><rect class="d f-y" x="480" y="186" width="120" height="36" rx="6"/></g><text class="t-s t-pen" x="120" y="46" text-anchor="middle" font-size="18">app boundary (last resort)</text><text class="t-s t-pen" x="150" y="86" text-anchor="middle" font-size="18">route boundary</text><text class="t-head" x="210" y="177" text-anchor="middle">orders</text><text class="t-head" x="540" y="130" text-anchor="middle" font-size="16">widget boundary</text><text class="t" x="540" y="166" text-anchor="middle" font-size="15">“Recommendations unavailable”</text><text class="t-head" x="540" y="211" text-anchor="middle" font-size="15">Retry</text><text class="t-s t-pen" x="640" y="292" text-anchor="middle">+ report to monitoring</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Boundaries at app, route and widget level: a crash is caught by the nearest one.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Add a root boundary</b><p>A friendly full-page error with a reload button, so users never see a white screen.</p></li>
+    <li><b>Add route boundaries</b><p>Frameworks make this easy (<code>error.tsx</code>, <code>errorElement</code>); navigation and layout stay usable.</p></li>
+    <li><b>Wrap risky widgets</b><p>Optional features get small inline fallbacks: “Recommendations unavailable. Retry”.</p></li>
+    <li><b>Offer recovery</b><p>A retry resets the boundary (and refetches data); reset automatically when the route or key changes.</p></li>
+    <li><b>Report every catch</b><p>Send the error and component stack to monitoring (Sentry, Datadog) with release info.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Error boundary</dt><dd>Component that catches errors in its children's rendering.</dd></div>
+    <div><dt>Fallback UI</dt><dd>What's shown instead of the crashed region.</dd></div>
+    <div><dt>Reset keys</dt><dd>Values that reset the boundary when they change.</dd></div>
+    <div><dt>Component stack</dt><dd>Which components led to the error.</dd></div>
+    <div><dt>Graceful degradation</dt><dd>Losing a feature instead of the whole page.</dd></div>
+    <div><dt>Event handler errors</dt><dd>Not caught by boundaries; handle with try/catch.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>Dashboard.tsx</span><span>react-error-boundary</span></div>
+<pre><code><span class="k">function</span> WidgetFallback({ resetErrorBoundary }: FallbackProps) {
+  <span class="k">return</span> (
+    &lt;div role=<span class="s">"alert"</span> className=<span class="s">"widget-error"</span>&gt;
+      &lt;p&gt;Recommendations are unavailable right now.&lt;/p&gt;
+      &lt;button onClick={resetErrorBoundary}&gt;Try again&lt;/button&gt;
+    &lt;/div&gt;
+  );
+}
+
+<span class="k">export</span> <span class="k">function</span> Dashboard() {
+  <span class="k">const</span> { reset } = useQueryErrorResetBoundary();       <span class="c">// also refetch on retry</span>
+  <span class="k">return</span> (
+    &lt;main className=<span class="s">"dashboard"</span>&gt;
+      &lt;Orders /&gt;
+      &lt;Stats /&gt;
+      &lt;ErrorBoundary FallbackComponent={WidgetFallback} onReset={reset}
+                     onError={(error, info) =&gt; monitoring.capture(error, { extra: info })}&gt;
+        &lt;Recommendations /&gt;                               {/* <span class="k">if</span> this throws, only this box changes */}
+      &lt;/ErrorBoundary&gt;
+    &lt;/main&gt;
+  );
+}</code></pre>
+  </div>
+  <p class="aside">tools: react-error-boundary, Next.js error.tsx / global-error.tsx, React Router errorElement, Vue onErrorCaptured, Angular ErrorHandler, Svelte +error.svelte; report to Sentry, Datadog RUM, Bugsnag.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>No more white screens</b>: failures stay local.</li><li><b>Users keep working</b> with the rest of the page.</li><li><b>Recovery</b> through retry without a full reload.</li><li><b>Visibility</b>: every caught error is reported.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Doesn't catch everything</b>: event handlers, async code, SSR need their own handling.</li><li><b>Can hide bugs</b> if fallbacks aren't monitored.</li><li><b>Design work</b> for many fallback states.</li><li><b>Too many boundaries</b> clutter the tree.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares an app with <b>no error boundaries</b> (one error = blank page) to the same app with <b>layered boundaries</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="4"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A wrapper component; easy to understand.</td></tr>
+      <tr data-before="3" data-after="4"><td>Reusability<small>use it in many places?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One boundary + fallback component reused everywhere.</td></tr>
+      <tr data-before="3" data-after="4"><td>Testability<small>test with confidence?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Easy to test: render a child that throws.</td></tr>
+      <tr data-before="3" data-after="4"><td>Maintainability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Failures are isolated and reported with context.</td></tr>
+      <tr data-before="3" data-after="3"><td>Performance<small>fast to load &amp; respond?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Bundle size<small>ships little JS?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tiny (a few hundred bytes).</td></tr>
+      <tr data-before="2" data-after="4"><td>Accessibility<small>works for everyone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fallbacks with role=alert beat a blank page.</td></tr>
+      <tr data-before="3" data-after="4"><td>Developer experience<small>pleasant to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Errors are visible and recoverable in dev and prod.</td></tr>
+      <tr data-before="3" data-after="4"><td>Team scalability<small>many devs at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A team's broken widget doesn't take down others' pages.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Expecting it to catch everything</h3><p>An error in an onClick handler or a promise isn't caught, and nothing happens. <span class="fix">Fix →</span> try/catch in handlers, error states from data libraries, and a global unhandledrejection reporter.</p></li>
+    <li><h3>Only one boundary at the root</h3><p>Any error still wipes the whole page, just with a nicer message. <span class="fix">Fix →</span> add route and widget boundaries.</p></li>
+    <li><h3>Fallbacks that hide problems</h3><p>Errors are caught but never reported, so the widget has been broken for weeks. <span class="fix">Fix →</span> report every caught error with release info.</p></li>
+    <li><h3>No way to recover</h3><p>The fallback stays until a full reload. <span class="fix">Fix →</span> retry buttons and reset keys tied to route/data changes.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Every React app (at least a root and route boundaries).</li><li>Optional or risky widgets: third-party embeds, recommendations, charts.</li><li>Lazy-loaded chunks and micro-frontends.</li><li>Dashboards with many independent panels.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Wrapping every tiny component (too fine-grained to be useful).</li><li>Expected states like “no results” or validation errors: render them normally.</li><li>Errors you can handle where they happen (handlers, data hooks).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Code splitting</b></li><li><b>Micro-frontends</b></li><li><b>Circuit breaker</b> (Vol. 1)</li><li><b>Bulkhead</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What do error boundaries catch, and what not?</summary><p>They catch errors during rendering, lifecycle methods and constructors of their children; not errors in event handlers, async code (like setTimeout or promises) or server rendering.</p></details>
+    <details><summary>Where should you place boundaries?</summary><p>At the app root, per route, and around risky or optional widgets.</p></details>
+    <details><summary>How does a user recover from a caught error?</summary><p>A retry button that resets the boundary (and refetches data), or automatic reset when the route or key changes.</p></details>
+    <details><summary>Which Vol. 1 pattern is the backend cousin of this?</summary><p>Bulkhead (and circuit breaker): contain failures so one part can't take down everything.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>One stumble shouldn't <span class="hl">drop the curtain</span>. Cover the scene, note it down, and let the show go on.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/15-error-boundaries.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>React docs, “Catching rendering errors with an error boundary”.</li><li>react-error-boundary (Brian Vaughn) docs.</li><li>Next.js docs, “Error Handling”.</li><li>Kent C. Dodds, “Use react-error-boundary to handle errors in React”.</li></ul>
+  </div>
+  <p class="folio">15</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="design-tokens.html"><small>← previous note</small>14 · Design Tokens</a>
+  <a href="../index.html"><small>back to →</small>Index</a>
+</nav>
+<footer class="foot"><span>Margin Notes · Vol. 2 · a student's bullet journal on frontend design patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

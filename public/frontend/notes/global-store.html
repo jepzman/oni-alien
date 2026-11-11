@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Global Store (Flux) · Margin Notes</title>
+<meta name="description" content="One store for shared app state, changed only through named actions.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-frontend">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Margin<span>.</span>Notes</b><small>vol. 2 · frontend design patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="global-store">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 22.09.26</span><span class="topic">collection · <b>state &amp; data</b></span></div>
+  <p class="kicker">a.k.a. “one calendar on the fridge”</p>
+  <h1><span class="hl">Global Store (Flux)</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Keep <b>truly shared client state</b> (cart, signed-in user, UI preferences) in <b>one store</b> outside the component tree. Components <b>select</b> the slice they need, and change it only by <b>dispatching named actions</b> handled by pure functions, so every change is predictable and traceable.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> state management</li><li><b>Origin:</b> Flux (Facebook, 2014), Redux (2015)</li><li><b>Modern options:</b> Redux Toolkit, Zustand, Pinia, signals</li><li><b>Pairs with:</b> server-state cache, state machines</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Some state is needed in many places far apart in the tree: the cart count in the header and at checkout, the signed-in user everywhere. Passing it down by hand becomes <span class="hl-pink">prop drilling</span>, and keeping copies leads to <span class="hl-pink">out-of-sync UIs</span>.</p>
+  <ul>
+    <li>Props travel through layers that don't use them, so every refactor touches five files.</li>
+    <li>Two components keep their own copy of “cart”, and the header says 3 while checkout says 2.</li>
+    <li>Anything can change state from anywhere, so bugs are hard to trace: <i>who set this to null?</i></li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="Doodle of a component tree where the cart count is needed by the Header and the Checkout button, which are far apart. The cart state lives in App and is passed down through Layout, Page, Sidebar and other components that don&#x27;t use it, while sibling components keep their own out-of-sync copies."><g class="rough"><rect class="d f-y" x="300" y="10" width="160" height="44" rx="10"/><rect class="d f-paper" x="300" y="80" width="160" height="44" rx="10"/><rect class="d f-paper" x="140" y="150" width="160" height="44" rx="10"/><rect class="d f-paper" x="460" y="150" width="160" height="44" rx="10"/><rect class="d f-green" x="40" y="220" width="160" height="44" rx="10"/><rect class="d f-paper" x="230" y="220" width="180" height="44" rx="10"/><rect class="d f-green" x="480" y="220" width="160" height="44" rx="10"/><path class="d d-red" d="M380 56 L380 78"/><path class="d d-red" d="M374.8 67.2 L380 78 L385.2 67.2"/><path class="d d-red" d="M340 126 L240 148"/><path class="d d-red" d="M249.4 140.6 L240 148 L251.7 150.8"/><path class="d d-red" d="M420 126 L520 148"/><path class="d d-red" d="M508.3 150.8 L520 148 L510.6 140.6"/><path class="d d-red" d="M200 196 L130 218"/><path class="d d-red" d="M138.7 209.8 L130 218 L141.9 219.7"/><path class="d d-red" d="M540 196 L560 218"/><path class="d d-red" d="M548.9 213.5 L560 218 L556.6 206.5"/></g><text class="t-head" x="380" y="39" text-anchor="middle" font-size="17">App · cart</text><text class="t-head" x="380" y="109" text-anchor="middle" font-size="16">Layout</text><text class="t-head" x="220" y="179" text-anchor="middle" font-size="16">Page</text><text class="t-head" x="540" y="179" text-anchor="middle" font-size="16">Sidebar</text><text class="t-head" x="120" y="249" text-anchor="middle" font-size="16">Header</text><text class="t-head" x="320" y="249" text-anchor="middle" font-size="16">ProductGrid</text><text class="t-head" x="560" y="249" text-anchor="middle" font-size="16">Checkout</text><text class="t-s t-red" x="650" y="40" text-anchor="middle">props passed</text><text class="t-s t-red" x="650" y="64" text-anchor="middle">through 4 layers</text><text class="t-s t-red" x="670" y="120" text-anchor="middle">that don&#x27;t use them</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Shared state passed down through five layers that don't use it, and copies that drift apart.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the family calendar on the fridge</span></h2>
+  <p>A family keeps <b>one calendar</b> on the fridge. Everyone reads it. To change something you don't scribble over it: you leave a note (“add dentist on Tuesday”) and the changes are written in, one at a time.</p>
+  <ul>
+    <li>There's one truth, so nobody turns up on the wrong day: <b>single source of truth</b>.</li>
+    <li>The notes are a history of what changed and why: <b>actions + devtools time travel</b>.</li>
+    <li>But not everything belongs on the fridge. Your own homework stays in your room: <b>local state stays local</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a family calendar on the fridge. Everyone reads it. To change it you write a request on a sticky note, like add dentist Tuesday, and one person updates the calendar, so changes are tracked and nobody scribbles over each other."><g class="rough"><g transform="translate(330 40) scale(2.6)"><g class="d"><rect class="f-paper" x="6" y="0" width="44" height="64" rx="5"/><path d="M6 24 h44 M14 8 v10 M14 30 v14"/></g></g><g transform="translate(345 70) scale(1.4)"><g class="d"><rect class="f-y" x="0" y="8" width="56" height="50" rx="4"/><path d="M0 22 h56 M14 2 v12 M42 2 v12"/><path d="M10 32 h8 M24 32 h8 M38 32 h8 M10 44 h8 M24 44 h8"/></g></g><rect class="d f-y" x="40" y="50" width="220" height="50" rx="3"/><path class="d" d="M266 75 L334 120"/><path class="d" d="M322.1 118.4 L334 120 L327.9 109.7"/><rect class="d f-y" x="40" y="130" width="220" height="50" rx="3"/><path class="d" d="M266 155 L334 120"/><path class="d" d="M326.8 129.6 L334 120 L322.0 120.3"/><path class="d d-dash" d="M560 100 L470 120"/><path class="d" d="M479.4 112.6 L470 120 L481.7 122.8"/></g><text class="t-s" x="395" y="248" text-anchor="middle">the one calendar (store)</text><text class="t-head" x="150" y="82" text-anchor="middle" font-size="16">“add dentist, Tue”</text><text class="t-head" x="150" y="162" text-anchor="middle" font-size="16">“move football to Sat”</text><text class="t-s t-pen" x="150" y="230" text-anchor="middle">requests = actions</text><text class="t-s t-pen" x="620" y="90" text-anchor="middle">everyone reads it</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One calendar everyone reads. Changes go through written requests, applied one at a time.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The fridge calendar</td><td>The global store</td></tr>
+      <tr><td>A note: “add dentist Tuesday”</td><td>An action: <code>{ type: "cart/addItem" }</code></td></tr>
+      <tr><td>Writing changes in, one at a time</td><td>Reducers: pure (state, action) → new state</td></tr>
+      <tr><td>Everyone reading the calendar</td><td>Components selecting state</td></tr>
+      <tr><td>Homework stays in your room</td><td>Local UI state stays in components</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">one-way data flow</span></h2>
+  <p>The Flux idea is a <b>one-way loop</b>: views dispatch actions, the store computes new state, views re-render. Modern libraries cut the boilerplate, but the loop is the same.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="Flux one-way data flow. A component dispatches an action like addItem. The store runs a reducer, a pure function from old state and action to new state. Subscribed components that select the changed slice re-render. The cycle always goes one way."><g class="rough"><rect class="d f-blue" x="20" y="110" width="170" height="70" rx="10"/><path class="d" d="M196 130 L300 70"/><path class="d" d="M293.2 79.9 L300 70 L288.0 70.9"/><rect class="d f-y" x="306" y="30" width="180" height="70" rx="10"/><path class="d" d="M492 65 L560 110"/><path class="d" d="M548.1 108.4 L560 110 L553.9 99.7"/><rect class="d f-green" x="560" y="110" width="180" height="80" rx="10"/><path class="d" d="M640 194 L520 240"/><path class="d" d="M528.2 231.3 L520 240 L532.0 241.0"/><rect class="d f-y" x="300" y="210" width="220" height="60" rx="10"/><path class="d" d="M296 240 L110 186"/><path class="d" d="M121.8 184.0 L110 186 L118.9 194.0"/></g><text class="t-head" x="105" y="152" text-anchor="middle">component</text><text class="t-s" x="24" y="96" text-anchor="start">dispatch(addItem)</text><text class="t-head" x="396" y="61" text-anchor="middle">action</text><text class="t" x="396" y="85" text-anchor="middle" font-size="17">{ type, payload }</text><text class="t-head" x="650" y="146" text-anchor="middle">reducer</text><text class="t" x="650" y="170" text-anchor="middle" font-size="17">(state, action) → state</text><text class="t-head" x="410" y="247" text-anchor="middle" font-size="18">store (one state)</text><text class="t-s" x="24" y="268" text-anchor="start">select → re-render</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Data flows one way: action → reducer → new state → subscribed components re-render.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Decide what's global</b><p>Only state needed by distant components: cart, session, feature flags, theme. Forms, toggles and server data usually aren't.</p></li>
+    <li><b>Model state and actions</b><p>A slice like <code>cart</code> with actions <code>addItem</code>, <code>removeItem</code>, <code>clear</code>.</p></li>
+    <li><b>Write pure reducers</b><p>Given the old state and an action, return the new state. No API calls, no randomness.</p></li>
+    <li><b>Select narrowly</b><p>Components subscribe to the smallest slice they need (<code>s =&gt; s.cart.count</code>) so they re-render only when it changes.</p></li>
+    <li><b>Keep side effects at the edges</b><p>API calls live in thunks, listeners or (better) a server-state cache, not in reducers.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Store</dt><dd>Object holding the shared state, outside components.</dd></div>
+    <div><dt>Action</dt><dd>A plain object describing what happened.</dd></div>
+    <div><dt>Reducer</dt><dd>Pure function: (state, action) → new state.</dd></div>
+    <div><dt>Selector</dt><dd>Function that picks a slice of state for a component.</dd></div>
+    <div><dt>Prop drilling</dt><dd>Passing props through components that don't use them.</dd></div>
+    <div><dt>Time-travel debugging</dt><dd>Replaying actions to step through state changes.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>cartSlice.ts</span><span>Redux Toolkit</span></div>
+<pre><code><span class="k">const</span> cartSlice = createSlice({
+  name: <span class="s">"cart"</span>,
+  initialState: { items: [] as { id: string; qty: number }[] },
+  reducers: {
+    addItem(state, action: PayloadAction&lt;string&gt;) {
+      <span class="k">const</span> line = state.items.find((i) =&gt; i.id === action.payload);
+      <span class="k">if</span> (line) line.qty += 1;                 <span class="c">// Immer makes this immutable</span>
+      <span class="k">else</span> state.items.push({ id: action.payload, qty: 1 });
+    },
+    clear(state) { state.items = []; },
+  },
+});
+<span class="k">export</span> <span class="k">const</span> { addItem, clear } = cartSlice.actions;
+<span class="k">export</span> <span class="k">const</span> selectCount = (s: RootState) =&gt; s.cart.items.reduce((n, i) =&gt; n + i.qty, 0);
+
+<span class="c">// anywhere in the tree, no prop drilling</span>
+<span class="k">function</span> CartBadge() {
+  <span class="k">const</span> count = useSelector(selectCount);       <span class="c">// re-renders only when count changes</span>
+  <span class="k">return</span> &lt;span aria-label={<span class="s">`${count} items in cart`</span>}&gt;{count}&lt;/span&gt;;
+}</code></pre>
+  </div>
+  <p class="aside">options: Redux Toolkit (+ DevTools), Zustand, Jotai, MobX, NgRx (Angular), Pinia (Vue), signals (Preact, Solid, Angular). For many apps, React context + useReducer is enough.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>One source of truth</b> for shared state.</li><li><b>No prop drilling</b> for distant components.</li><li><b>Predictable changes</b>: every update is a named action.</li><li><b>Great debugging</b>: action logs, time travel, state snapshots.</li><li><b>Reducers are trivial to test</b>: pure functions.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Boilerplate and indirection</b> (less with modern tools).</li><li><b>Everything drifts into the store</b>, even local state.</li><li><b>Performance traps</b> with broad selectors.</li><li><b>A poor fit for server data</b> (caching, refetching) without extra tools.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>shared state passed by props and duplicated in components</b> to the same app with a <b>global store</b> for the shared parts.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One clear model, but actions/selectors add indirection.</td></tr>
+      <tr data-before="3" data-after="4"><td>Reusability<small>use it in many places?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Components read state without caring where they sit.</td></tr>
+      <tr data-before="3" data-after="5"><td>Testability<small>test with confidence?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Reducers and selectors are pure functions.</td></tr>
+      <tr data-before="2" data-after="4"><td>Maintainability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One place to change shared logic; no drilling.</td></tr>
+      <tr data-before="3" data-after="3"><td>Performance<small>fast to load &amp; respond?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fine with narrow selectors; costly with broad ones.</td></tr>
+      <tr data-before="3" data-after="2"><td>Bundle size<small>ships little JS?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A state library adds some JS.</td></tr>
+      <tr data-before="3" data-after="3"><td>Accessibility<small>works for everyone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Developer experience<small>pleasant to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">DevTools and time travel make bugs visible.</td></tr>
+      <tr data-before="2" data-after="4"><td>Team scalability<small>many devs at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Teams share a clear contract: state shape + actions.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Putting everything in the store</h3><p>Form inputs, hover flags and modals all live globally; every keystroke dispatches an action. <span class="fix">Fix →</span> keep local state local; globalise only what's shared.</p></li>
+    <li><h3>Caching server data by hand</h3><p>You write loading/error/refetch logic for every API call in reducers. <span class="fix">Fix →</span> use a server-state cache for API data (note 06).</p></li>
+    <li><h3>Broad selectors</h3><p><code>useSelector(s =&gt; s)</code> re-renders the component on every change. <span class="fix">Fix →</span> select the smallest slice; memoise derived data.</p></li>
+    <li><h3>Side effects in reducers</h3><p>A reducer calls the API or generates ids, so replays and tests break. <span class="fix">Fix →</span> keep reducers pure; effects in thunks/listeners.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>State used by many distant components (session, cart, preferences, flags).</li><li>Complex client-side state with many ways to change it.</li><li>You need traceable, debuggable changes.</li><li>Several teams touch the same shared state.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Small apps where context + useReducer is enough.</li><li>State that's only used by one component or one subtree.</li><li>Data that really belongs to the server (use a server-state cache).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Server-state cache</b></li><li><b>State machines</b></li><li><b>Custom hooks</b></li><li><b>Container &amp; presentational</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What is the one-way data flow in Flux?</summary><p>View dispatches an action → the store/reducer computes new state → views that selected that state re-render.</p></details>
+    <details><summary>Why must reducers be pure?</summary><p>So the same state and action always give the same result, which makes testing, replay and time-travel debugging possible.</p></details>
+    <details><summary>Should API data live in the global store?</summary><p>Usually not. A server-state cache handles fetching, caching, deduping and refetching better.</p></details>
+    <details><summary>How do you avoid needless re-renders with a store?</summary><p>Select the smallest slice a component needs and memoise derived values.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>One <span class="hl">calendar</span> for what everyone needs; your own <span class="hl">notebook</span> for the rest. Change it with notes, not scribbles.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/05-global-store.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Facebook, “Flux: Application architecture for building user interfaces”.</li><li>Redux docs, “Redux Essentials” and “Style Guide”.</li><li>Kent C. Dodds, “Application State Management with React”.</li><li>patterns.dev, “Provider Pattern”.</li></ul>
+  </div>
+  <p class="folio">05</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="headless-components.html"><small>← previous note</small>04 · Headless Components</a>
+  <a href="server-state-cache.html"><small>Next note →</small>06 · Server-State Cache</a>
+</nav>
+<footer class="foot"><span>Margin Notes · Vol. 2 · a student's bullet journal on frontend design patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

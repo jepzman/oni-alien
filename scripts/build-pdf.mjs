@@ -1,7 +1,7 @@
 // Builds the ready-made PDFs in public/pdf/ using the site's own print stylesheet.
 // Usage: node scripts/build-pdf.mjs   (needs Playwright + Chromium)
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -22,18 +22,19 @@ const server = createServer(async (req, res) => {
 await new Promise((ok) => server.listen(0, ok));
 const base = `http://localhost:${server.address().port}/`;
 
-// One PDF per note (from public/notes.json, written by scripts/build_notes.py) plus the whole notebook.
-const notes = JSON.parse(await readFile(join(root, 'notes.json'), 'utf8'));
-const jobs = [
-  ...notes.map((n) => [`notes/${n.slug}.html`, n.pdf]),
-  ['all.html', 'pdf/margin-notes.pdf'],
-];
+// One PDF per note plus one per journal, from public/journals.json (written by scripts/build_notes.py).
+const journals = JSON.parse(await readFile(join(root, 'journals.json'), 'utf8'));
+const jobs = journals.flatMap((j) => [
+  ...j.notes.map((n) => [n.page, n.pdf, 0]),
+  [j.all, j.pdf, j.notes.length],
+]);
+await Promise.all(journals.map((j) => mkdir(join(root, j.key, 'pdf'), { recursive: true })));
 
 const browser = await chromium.launch();
-for (const [url, out] of jobs) {
+for (const [url, out, expect] of jobs) {
   const page = await browser.newPage({ colorScheme: 'light' });
   await page.goto(base + url, { waitUntil: 'networkidle' });
-  if (url === 'all.html') await page.waitForFunction((n) => document.querySelectorAll('article.sheet').length >= n, notes.length, { timeout: 60000 });
+  if (expect) await page.waitForFunction((n) => document.querySelectorAll('article.sheet').length >= n, expect, { timeout: 90000 });
   await page.evaluate(async () => {
     await document.fonts.ready;
     document.querySelectorAll('.quiz details').forEach((d) => { d.open = true; });

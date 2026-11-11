@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Custom Hooks · Margin Notes</title>
+<meta name="description" content="Pull reusable stateful logic out of components into small, testable functions.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-frontend">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Margin<span>.</span>Notes</b><small>vol. 2 · frontend design patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="custom-hooks">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 15.09.26</span><span class="topic">collection · <b>components</b></span></div>
+  <p class="kicker">a.k.a. “share the logic, not the looks”</p>
+  <h1><span class="hl">Custom Hooks</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>When several components need the same <b>stateful logic</b> (debounced search, media queries, form handling, online status), move it into a function whose name starts with <code>use</code>. Each component that calls the hook gets <b>its own state</b>, and the logic is written, fixed and tested <b>once</b>.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> logic reuse</li><li><b>Replaced:</b> mixins, HOCs, render props</li><li><b>Framework:</b> React (Vue: composables)</li><li><b>Pairs with:</b> container/presentational, headless components</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Components often need the same behaviour, not the same markup. Without a way to share it, logic gets <span class="hl-pink">copy-pasted</span>, and the copies drift apart.</p>
+  <ul>
+    <li>Three search inputs each implement debounce, fetch and cleanup slightly differently.</li>
+    <li>A bug fixed in one copy (cancelling stale requests) stays in the other two.</li>
+    <li>Older sharing tools had costs: mixins clashed, higher-order components and render props created deep “wrapper hell”.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="Doodle of three components, SearchBox, CommandPalette and UserPicker, each with its own copy of debounced search logic: state, a timer, a fetch and cleanup. One copy forgot to clear the timer and another forgot to cancel stale requests, so they behave differently."><g class="rough"><rect class="d f-paper" x="20" y="30" width="228" height="180" rx="10"/><rect class="d f-pink d-red" x="268" y="30" width="228" height="180" rx="10"/><rect class="d f-pink d-red" x="516" y="30" width="228" height="180" rx="10"/></g><text class="t-head" x="134" y="60" text-anchor="middle" font-size="18">SearchBox</text><text class="t" x="134" y="94" text-anchor="middle" font-size="16">useState(query)</text><text class="t" x="134" y="120" text-anchor="middle" font-size="16">useEffect(timer…)</text><text class="t" x="134" y="146" text-anchor="middle" font-size="16">fetch(results)</text><text class="t" x="134" y="172" text-anchor="middle" font-size="16">cleanup?</text><text class="t-s t-green" x="134" y="240" text-anchor="middle">✓ ok</text><text class="t-head" x="382" y="60" text-anchor="middle" font-size="18">CommandPalette</text><text class="t" x="382" y="94" text-anchor="middle" font-size="16">useState(query)</text><text class="t" x="382" y="120" text-anchor="middle" font-size="16">useEffect(timer…)</text><text class="t" x="382" y="146" text-anchor="middle" font-size="16">fetch(results)</text><text class="t" x="382" y="172" text-anchor="middle" font-size="16">cleanup?</text><text class="t-s t-red" x="382" y="240" text-anchor="middle">forgot clearTimeout ✗</text><text class="t-head" x="630" y="60" text-anchor="middle" font-size="18">UserPicker</text><text class="t" x="630" y="94" text-anchor="middle" font-size="16">useState(query)</text><text class="t" x="630" y="120" text-anchor="middle" font-size="16">useEffect(timer…)</text><text class="t" x="630" y="146" text-anchor="middle" font-size="16">fetch(results)</text><text class="t" x="630" y="172" text-anchor="middle" font-size="16">cleanup?</text><text class="t-s t-red" x="630" y="240" text-anchor="middle">stale results ✗</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The same logic copy-pasted three times, and each copy has drifted with its own bugs.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">one recipe card, many dishes</span></h2>
+  <p>A good tomato-sauce <b>recipe card</b> can be used for pasta and for pizza. Each cook follows the same steps but makes <b>their own pot</b>; nobody shares a pot by accident. Improve the recipe once and every dish gets better.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of one recipe card for a tomato sauce, used by two different dishes: pasta and pizza. Each cook makes their own pot from the same recipe; the dishes look different."><g class="rough"><g transform="translate(320 30) scale(2.0)"><g class="d"><rect class="f-paper" x="0" y="0" width="50" height="62" rx="3"/><path d="M8 12 h34 M8 22 h26 M8 34 h34 M8 44 h30 M8 54 h20"/><circle class="f-paper" cx="44" cy="8" r="6"/></g></g><path class="d" d="M310 100 L180 130"/><path class="d" d="M189.4 122.5 L180 130 L191.7 132.7"/><path class="d" d="M430 100 L560 130"/><path class="d" d="M548.3 132.7 L560 130 L550.6 122.5"/><g transform="translate(60 140) scale(1.6)"><g class="d"><ellipse class="f-paper" cx="34" cy="40" rx="32" ry="12"/><ellipse cx="34" cy="38" rx="20" ry="6"/><path d="M22 34 q6 -14 12 -4 q6 -12 12 2"/></g></g><g transform="translate(570 140) scale(1.6)"><g class="d"><ellipse class="f-paper" cx="34" cy="40" rx="32" ry="12"/><ellipse cx="34" cy="38" rx="20" ry="6"/><path d="M22 34 q6 -14 12 -4 q6 -12 12 2"/></g></g></g><text class="t-s t-pen" x="370" y="182" text-anchor="middle">tomato sauce recipe</text><text class="t-s" x="115" y="236" text-anchor="middle">pasta (own pot)</text><text class="t-s" x="625" y="236" text-anchor="middle">pizza (own pot)</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One recipe card, many dishes. Each cook makes their own pot from it.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The recipe card</td><td>The custom hook (<code>useDebouncedSearch</code>)</td></tr>
+      <tr><td>Each cook's own pot</td><td>Each component's own state from the hook</td></tr>
+      <tr><td>Pasta and pizza look different</td><td>Components keep their own markup</td></tr>
+      <tr><td>Improving the recipe once</td><td>Fixing a bug in one place</td></tr>
+      <tr><td>Recipe names start with “Sauce:”</td><td>Hook names start with <code>use</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">extract, name, reuse</span></h2>
+  <p>A custom hook is just a function that calls other hooks. It returns values and callbacks, never markup. Calls are independent: two components using it don't share state unless the hook reads a shared store.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="A custom hook useDebouncedSearch contains the state, timer, fetch, cancellation and cleanup once. SearchBox, CommandPalette and UserPicker each call it and get their own independent query, results and loading values."><g class="rough"><rect class="d f-y" x="240" y="20" width="280" height="110" rx="10"/><rect class="d f-green" x="20" y="190" width="220" height="60" rx="10"/><path class="d" d="M130 186 L380 134"/><path class="d" d="M370.5 141.3 L380 134 L368.4 131.1"/><rect class="d f-green" x="270" y="190" width="220" height="60" rx="10"/><path class="d" d="M380 186 L380 134"/><path class="d" d="M385.2 144.8 L380 134 L374.8 144.8"/><rect class="d f-green" x="520" y="190" width="220" height="60" rx="10"/><path class="d" d="M630 186 L380 134"/><path class="d" d="M391.6 131.1 L380 134 L389.5 141.3"/></g><text class="t-head" x="380" y="71" text-anchor="middle">useDebouncedSearch()</text><text class="t" x="380" y="95" text-anchor="middle" font-size="17">state · timer · abort · cleanup</text><text class="t-head" x="130" y="227" text-anchor="middle" font-size="18">SearchBox</text><text class="t-head" x="380" y="227" text-anchor="middle" font-size="18">CommandPalette</text><text class="t-head" x="630" y="227" text-anchor="middle" font-size="18">UserPicker</text><text class="t-s t-pen" x="380" y="274" text-anchor="middle">each call = its own state</text><text class="t-s t-green" x="650" y="60" text-anchor="middle">tested once</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Write the logic once in a hook; every component that calls it gets its own copy of the state.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Spot repeated stateful logic</b><p>The same <code>useState</code> + <code>useEffect</code> combination in more than one component.</p></li>
+    <li><b>Extract to a use-function</b><p>Move state, effects and handlers into <code>useSomething()</code>; return what callers need.</p></li>
+    <li><b>Design a small API</b><p>Return an object (<code>{ query, setQuery, results, isLoading }</code>) or a tuple for two values.</p></li>
+    <li><b>Clean up properly</b><p>Clear timers, abort requests and remove listeners in effect cleanups, once, inside the hook.</p></li>
+    <li><b>Test the hook alone</b><p>Use <code>renderHook</code> to test behaviour without any markup.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Hook</dt><dd>A function that lets components use React state and lifecycle.</dd></div>
+    <div><dt>Custom hook</dt><dd>Your own function built from other hooks.</dd></div>
+    <div><dt>Rules of hooks</dt><dd>Call hooks at the top level, only from components or hooks.</dd></div>
+    <div><dt>Effect cleanup</dt><dd>Code that undoes an effect (timers, listeners, requests).</dd></div>
+    <div><dt>Composable (Vue)</dt><dd>Vue's equivalent of a custom hook.</dd></div>
+    <div><dt>renderHook</dt><dd>Testing helper that runs a hook without UI.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>useDebouncedSearch.ts</span><span>one hook, many search boxes</span></div>
+<pre><code><span class="k">export</span> <span class="k">function</span> useDebouncedSearch&lt;T&gt;(search: (q: string, s: AbortSignal) =&gt; Promise&lt;T[]&gt;, delayMs = 250) {
+  <span class="k">const</span> [query, setQuery] = useState(<span class="s">""</span>);
+  <span class="k">const</span> [results, setResults] = useState&lt;T[]&gt;([]);
+  <span class="k">const</span> [isLoading, setLoading] = useState(<span class="k">false</span>);
+
+  useEffect(() =&gt; {
+    <span class="k">if</span> (!query) { setResults([]); <span class="k">return</span>; }
+    <span class="k">const</span> ctrl = <span class="k">new</span> AbortController();
+    <span class="k">const</span> timer = setTimeout(<span class="k">async</span> () =&gt; {
+      setLoading(<span class="k">true</span>);
+      <span class="k">try</span> { setResults(<span class="k">await</span> search(query, ctrl.signal)); }
+      <span class="k">catch</span> (e) { <span class="k">if</span> ((e as Error).name !== <span class="s">"AbortError"</span>) <span class="k">throw</span> e; }
+      <span class="k">finally</span> { setLoading(<span class="k">false</span>); }
+    }, delayMs);
+    <span class="k">return</span> () =&gt; { clearTimeout(timer); ctrl.abort(); };   <span class="c">// cleanup, written once</span>
+  }, [query, search, delayMs]);
+
+  <span class="k">return</span> { query, setQuery, results, isLoading };
+}
+
+<span class="c">// any component: its own state, shared behaviour</span>
+<span class="k">const</span> { query, setQuery, results } = useDebouncedSearch(searchUsers);</code></pre>
+  </div>
+  <p class="aside">ready-made collections: usehooks-ts, react-use, TanStack Query (useQuery), React Hook Form (useForm); Vue: VueUse composables.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Logic written and fixed once.</b></li><li><b>Components stay small</b> and focused on markup.</li><li><b>Testable without UI</b> via renderHook.</li><li><b>No wrapper hell</b> compared with HOCs and render props.</li><li><b>Composable</b>: hooks can use other hooks.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Hidden complexity</b> behind a friendly name.</li><li><b>Rules of hooks</b> to learn (no conditional calls).</li><li><b>Dependency arrays</b> are easy to get wrong.</li><li><b>Over-abstraction</b>: hooks for logic used only once.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>logic copy-pasted into each component</b> to the same logic in a <b>shared custom hook</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="4"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Components read as markup; logic has a name.</td></tr>
+      <tr data-before="1" data-after="5"><td>Reusability<small>use it in many places?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One hook serves any component that needs it.</td></tr>
+      <tr data-before="2" data-after="4"><td>Testability<small>test with confidence?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Test the hook alone with renderHook.</td></tr>
+      <tr data-before="2" data-after="5"><td>Maintainability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fix once, fixed everywhere.</td></tr>
+      <tr data-before="3" data-after="3"><td>Performance<small>fast to load &amp; respond?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral; watch effects running too often.</td></tr>
+      <tr data-before="3" data-after="4"><td>Bundle size<small>ships little JS?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Less duplicated code in the bundle.</td></tr>
+      <tr data-before="3" data-after="3"><td>Accessibility<small>works for everyone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral (a hook can also share focus/keyboard logic).</td></tr>
+      <tr data-before="3" data-after="4"><td>Developer experience<small>pleasant to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Less boilerplate per component.</td></tr>
+      <tr data-before="3" data-after="4"><td>Team scalability<small>many devs at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Teams share a library of well-tested hooks.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Assuming hooks share state</h3><p>Two components call <code>useCart()</code> and expect the same cart, but each gets its own. <span class="fix">Fix →</span> put shared state in context or a store and read it from the hook.</p></li>
+    <li><h3>Missing cleanup</h3><p>Timers fire after unmount and set state on a gone component; old requests overwrite new results. <span class="fix">Fix →</span> clear timers and abort requests in the effect's cleanup.</p></li>
+    <li><h3>Wrong dependency arrays</h3><p>The effect uses a stale value or loops forever. <span class="fix">Fix →</span> follow the exhaustive-deps lint rule; memoise callbacks.</p></li>
+    <li><h3>A hook for everything</h3><p><code>useButtonColor()</code> wraps one line of logic. <span class="fix">Fix →</span> extract when logic is reused or complex enough to test.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>The same stateful logic appears in two or more components.</li><li>Logic is complex enough to deserve its own tests.</li><li>You're replacing HOCs or render props.</li><li>Wrapping a browser API (resize, media queries, online status, storage).</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Pure calculations: a plain function is simpler.</li><li>Logic used once and easy to read in place.</li><li>State that must be shared between components (use context or a store).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Container &amp; presentational</b></li><li><b>Headless components</b></li><li><b>Server-state cache</b></li><li><b>Global store</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Two components call the same custom hook. Do they share state?</summary><p>No. Each call has its own state, unless the hook reads from a shared store or context.</p></details>
+    <details><summary>Why must hooks be called at the top level?</summary><p>React tracks hooks by call order; calling them conditionally would change the order between renders.</p></details>
+    <details><summary>What did custom hooks replace?</summary><p>Mixins, higher-order components and render props for sharing stateful logic.</p></details>
+    <details><summary>How do you test a hook without a component?</summary><p>With a helper like renderHook from Testing Library.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Share the <span class="hl">recipe</span>, not the pot. A hook is logic with a name, and every caller cooks their own state.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/03-custom-hooks.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>React docs, “Reusing Logic with Custom Hooks”.</li><li>Dan Abramov, “Making Sense of React Hooks”.</li><li>patterns.dev, “Hooks Pattern”.</li><li>Vue docs, “Composables”.</li></ul>
+  </div>
+  <p class="folio">03</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="compound-components.html"><small>← previous note</small>02 · Compound Components</a>
+  <a href="headless-components.html"><small>Next note →</small>04 · Headless Components</a>
+</nav>
+<footer class="foot"><span>Margin Notes · Vol. 2 · a student's bullet journal on frontend design patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

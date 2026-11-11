@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Code Splitting &amp; Lazy Loading · Margin Notes</title>
+<meta name="description" content="Load only the code a screen needs now; fetch the rest when it&#x27;s needed.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-frontend">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Margin<span>.</span>Notes</b><small>vol. 2 · frontend design patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="code-splitting">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 13.10.26</span><span class="topic">collection · <b>rendering &amp; performance</b></span></div>
+  <p class="kicker">a.k.a. “don't download the whole season”</p>
+  <h1><span class="hl">Code Splitting &amp; Lazy Loading</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Instead of one giant JavaScript bundle, let the bundler <b>split the code into chunks</b>: one per route and per heavy feature. Load the <b>small entry chunk first</b>, and <b>lazy-load</b> the others with dynamic <code>import()</code> when the user needs them (or <b>prefetch</b> them just before).</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> performance / loading</li><li><b>Mechanism:</b> dynamic import(), React.lazy, Suspense</li><li><b>Bundlers:</b> Vite / Rollup, webpack, esbuild, Turbopack</li><li><b>Pairs with:</b> SSR, islands, error boundaries</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Bundlers combine your code into files the browser can load. By default you often get <span class="hl-pink">one big bundle</span> containing every page and every library.</p>
+  <ul>
+    <li>A visitor to the home page downloads the admin panel, the charting library and the rich-text editor.</li>
+    <li>JS is the most expensive byte: it must be downloaded, parsed, compiled and run.</li>
+    <li>One small change invalidates the whole cached bundle, so returning users download it all again.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a single 2.4 megabyte JavaScript bundle containing the home page, the admin panel, the chart library, the rich text editor and the PDF exporter. A visitor who only wants the home page downloads all of it."><g class="rough"><rect class="d f-pink d-red" x="20" y="30" width="400" height="200" rx="10"/><rect class="d f-paper" x="40" y="80" width="80" height="36" rx="4"/><rect class="d f-paper" x="230" y="80" width="150" height="36" rx="4"/><rect class="d f-paper" x="40" y="128" width="130" height="36" rx="4"/><rect class="d f-paper" x="230" y="128" width="170" height="36" rx="4"/><rect class="d f-paper" x="40" y="176" width="120" height="36" rx="4"/><path class="d d-red" d="M426 130 L520 130"/><path class="d d-red" d="M509.2 135.2 L520 130 L509.2 124.8"/><g transform="translate(530 80) scale(1.6)"><g class="d"><rect class="f-paper" x="16" y="0" width="30" height="56" rx="6"/><path d="M26 48 h10"/></g></g></g><text class="t-head t-red" x="220" y="60" text-anchor="middle" font-size="20">app.js · 2.4 MB</text><text class="t-head" x="80" y="105" text-anchor="middle" font-size="15">home</text><text class="t-head" x="305" y="105" text-anchor="middle" font-size="15">admin panel</text><text class="t-head" x="105" y="153" text-anchor="middle" font-size="15">charts lib</text><text class="t-head" x="315" y="153" text-anchor="middle" font-size="15">rich-text editor</text><text class="t-head" x="100" y="201" text-anchor="middle" font-size="15">PDF export</text><text class="t-s t-pen" x="690" y="110" text-anchor="middle">only wanted</text><text class="t-s t-pen" x="690" y="134" text-anchor="middle">the home page</text><text class="t-s t-red" x="560" y="220" text-anchor="middle">6 s on 4G before anything works</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One giant bundle: every visitor downloads every feature, even the ones they'll never open.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">streaming episodes</span></h2>
+  <p>You don't download a whole TV season before watching episode 1. You <b>stream the episode you're on</b>, the next one <b>preloads</b> while you watch, and the episodes you never watch are never downloaded.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a TV streaming episodes. Instead of downloading the whole season before watching, you stream episode 1 now; the next episode loads while you watch, and you never download the episodes you don&#x27;t watch."><g class="rough"><g transform="translate(60 50) scale(2.0)"><g class="d"><rect class="f-paper" x="0" y="10" width="70" height="46" rx="5"/><path d="M24 0 l11 10 l11 -10 M14 62 h42"/><path d="M10 20 h40 v28 h-40 z"/></g></g><rect class="d f-y" x="300" y="70" width="140" height="60" rx="10"/><rect class="d f-paper d-dash" x="450" y="70" width="140" height="60" rx="10"/><rect class="d f-paper d-dash" x="600" y="70" width="140" height="60" rx="10"/></g><text class="t-s" x="130" y="200" text-anchor="middle">episode 1: now</text><text class="t-head" x="370" y="107" text-anchor="middle" font-size="15">ep. 2 · next</text><text class="t-head" x="520" y="107" text-anchor="middle" font-size="15">ep. 3</text><text class="t-head" x="670" y="107" text-anchor="middle" font-size="15">ep. 4 … 10</text><text class="t-s t-pen" x="450" y="170" text-anchor="middle">only fetched if you keep watching</text><text class="t-s t-green" x="450" y="230" text-anchor="middle">nobody downloads the whole season first</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Stream the episode you're watching now; fetch the next one just before you need it.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The whole season</td><td>The full application code</td></tr>
+      <tr><td>Episode 1 now</td><td>The entry chunk for the current route</td></tr>
+      <tr><td>Next episode preloading</td><td>Prefetching the next likely chunk</td></tr>
+      <tr><td>Episodes you never watch</td><td>Features the user never opens, never downloaded</td></tr>
+      <tr><td>A short buffering spinner</td><td>Suspense fallback while a chunk loads</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">split by route and by heavy feature</span></h2>
+  <p>Every dynamic <code>import()</code> tells the bundler “make this a separate chunk”. Frameworks split by route automatically; you add splits for heavy, rarely used features.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Code splitting. The bundler splits the app into a small entry chunk with the shell and home route, plus separate chunks for the admin route, the chart library and the editor. The home page loads only the entry chunk. Opening the admin route fetches its chunk on demand, and hovering a link prefetches the next chunk."><g class="rough"><rect class="d f-green" x="20" y="100" width="200" height="90" rx="10"/><rect class="d f-y" x="470" y="20" width="260" height="64" rx="10"/><path class="d d-dash" d="M226 145 L464 52"/><path class="d" d="M455.8 60.8 L464 52 L452.0 51.1"/><rect class="d f-y" x="470" y="112" width="260" height="64" rx="10"/><path class="d d-dash" d="M226 145 L464 144"/><path class="d" d="M453.2 149.3 L464 144 L453.2 138.8"/><rect class="d f-y" x="470" y="204" width="260" height="64" rx="10"/><path class="d d-dash" d="M226 145 L464 236"/><path class="d" d="M452.0 237.0 L464 236 L455.8 227.3"/></g><text class="t-head" x="120" y="141" text-anchor="middle">entry.js · 120 kB</text><text class="t" x="120" y="165" text-anchor="middle" font-size="17">shell + home</text><text class="t-head" x="600" y="59" text-anchor="middle" font-size="16">admin.js · 300 kB</text><text class="t-s" x="455" y="36" text-anchor="end">on route /admin</text><text class="t-head" x="600" y="151" text-anchor="middle" font-size="16">charts.js · 180 kB</text><text class="t-s" x="455" y="128" text-anchor="end">when chart scrolls in</text><text class="t-head" x="600" y="243" text-anchor="middle" font-size="16">editor.js · 420 kB</text><text class="t-s" x="455" y="266" text-anchor="end">when “Edit” is clicked</text><text class="t-s t-green" x="120" y="230" text-anchor="middle">loaded first</text><text class="t-s t-pen" x="120" y="260" text-anchor="middle">hover a link → prefetch</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Split by route and by heavy feature; load each chunk when it's needed (or about to be).</figcaption></figure>
+  <ol class="steps">
+    <li><b>Measure first</b><p>Use a bundle analyser to see what's big and who uses it.</p></li>
+    <li><b>Split by route</b><p>Each page gets its own chunk (frameworks do this for you).</p></li>
+    <li><b>Lazy-load heavy features</b><p>Editors, charts, maps, PDF export: <code>React.lazy(() =&gt; import("./Editor"))</code> behind a click or when visible.</p></li>
+    <li><b>Show a fallback</b><p>Wrap lazy parts in <code>Suspense</code> with a skeleton; wrap in an error boundary in case the chunk fails to load.</p></li>
+    <li><b>Prefetch likely next steps</b><p>On link hover, on idle, or with <code>&lt;link rel="prefetch"&gt;</code>, so the split doesn't add waiting.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Bundle / chunk</dt><dd>A file of JavaScript produced by the bundler.</dd></div>
+    <div><dt>Entry chunk</dt><dd>The code needed to start the app.</dd></div>
+    <div><dt>Dynamic import</dt><dd><code>import()</code> that loads a module on demand.</dd></div>
+    <div><dt>Lazy loading</dt><dd>Loading something only when it's needed.</dd></div>
+    <div><dt>Prefetch / preload</dt><dd>Fetch soon-needed / needed-now resources early.</dd></div>
+    <div><dt>Tree shaking</dt><dd>Removing unused exports at build time.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>routes.tsx</span><span>React + Vite</span></div>
+<pre><code><span class="k">const</span> AdminPage = lazy(() =&gt; <span class="k">import</span>(<span class="s">"./pages/AdminPage"</span>));          <span class="c">// own chunk</span>
+<span class="k">const</span> RichTextEditor = lazy(() =&gt; <span class="k">import</span>(<span class="s">"./components/RichTextEditor"</span>));
+
+<span class="k">export</span> <span class="k">function</span> App() {
+  <span class="k">return</span> (
+    &lt;ErrorBoundary fallback={&lt;p&gt;Couldn't load this part. &lt;a href=<span class="s">""</span>&gt;Reload&lt;/a&gt;&lt;/p&gt;}&gt;
+      &lt;Suspense fallback={&lt;PageSkeleton /&gt;}&gt;
+        &lt;Routes&gt;
+          &lt;Route path=<span class="s">"/"</span> element={&lt;HomePage /&gt;} /&gt;                  {/* <span class="k">in</span> entry chunk */}
+          &lt;Route path=<span class="s">"/admin/*"</span> element={&lt;AdminPage /&gt;} /&gt;          {/* loaded on visit */}
+        &lt;/Routes&gt;
+      &lt;/Suspense&gt;
+    &lt;/ErrorBoundary&gt;
+  );
+}
+
+<span class="c">// heavy feature behind an interaction, prefetched on hover</span>
+<span class="k">function</span> EditButton() {
+  <span class="k">const</span> [editing, setEditing] = useState(<span class="k">false</span>);
+  <span class="k">return</span> editing
+    ? &lt;Suspense fallback={&lt;EditorSkeleton /&gt;}&gt;&lt;RichTextEditor /&gt;&lt;/Suspense&gt;
+    : &lt;button onMouseEnter={() =&gt; <span class="k">import</span>(<span class="s">"./components/RichTextEditor"</span>)} onClick={() =&gt; setEditing(<span class="k">true</span>)}&gt;Edit&lt;/button&gt;;
+}</code></pre>
+  </div>
+  <p class="aside">tools: Vite / Rollup manualChunks, webpack SplitChunks, Next.js / React Router route splitting, next/dynamic, rollup-plugin-visualizer or webpack-bundle-analyzer, Lighthouse “Reduce unused JavaScript”, loading="lazy" for images and iframes.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Much smaller first load</b> and faster interactivity.</li><li><b>Better caching</b>: unchanged chunks stay cached.</li><li><b>Pay only for what you use.</b></li><li><b>Heavy libraries isolated</b> from the main path.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Waiting later</b>: a spinner when a chunk is first needed.</li><li><b>More requests</b> and a waterfall if chunks load chunks.</li><li><b>Chunk load failures</b> after deploys (old chunk names gone).</li><li><b>More moving parts</b> in the build.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>one big bundle</b> to the same app <b>split by route and heavy feature</b> with lazy loading and prefetch.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A few Suspense boundaries and loading states to design.</td></tr>
+      <tr data-before="3" data-after="3"><td>Reusability<small>use it in many places?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Testability<small>test with confidence?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Need tests for loading and chunk-failure states.</td></tr>
+      <tr data-before="3" data-after="4"><td>Maintainability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Features are isolated; dependencies are clearer.</td></tr>
+      <tr data-before="2" data-after="4"><td>Performance<small>fast to load &amp; respond?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Much faster first load; small delays on first use.</td></tr>
+      <tr data-before="1" data-after="5"><td>Bundle size<small>ships little JS?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Initial JS can drop by half or more.</td></tr>
+      <tr data-before="3" data-after="3"><td>Accessibility<small>works for everyone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Announce loading states; keep focus stable when content appears.</td></tr>
+      <tr data-before="3" data-after="3"><td>Developer experience<small>pleasant to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Frameworks automate route splitting; manual splits need care.</td></tr>
+      <tr data-before="3" data-after="4"><td>Team scalability<small>many devs at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Teams' features don't bloat each other's pages.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Splitting too small</h3><p>Hundreds of tiny chunks cause request overhead and waterfalls. <span class="fix">Fix →</span> split at routes and genuinely heavy features.</p></li>
+    <li><h3>Lazy-loading what's above the fold</h3><p>The hero component is lazy, so the main content appears later than before. <span class="fix">Fix →</span> keep first-view components in the entry chunk.</p></li>
+    <li><h3>No error handling for chunk loads</h3><p>After a deploy, old tabs request deleted chunks and the app breaks. <span class="fix">Fix →</span> error boundary + reload, and keep old assets for a while.</p></li>
+    <li><h3>Waterfalls</h3><p>The route chunk loads, then requests its data, then another chunk. <span class="fix">Fix →</span> preload data and chunks in parallel (route loaders, prefetch).</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Bundles over ~200 kB of JS (compressed).</li><li>Apps with many routes or rarely used heavy features.</li><li>Users on mobile or slow networks.</li><li>Admin areas or tools only some users open.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Tiny apps where the whole bundle is small.</li><li>Code needed on every screen (keep it in the entry).</li><li>Static content pages (islands or plain HTML ship even less).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>SSR &amp; hydration</b></li><li><b>Islands architecture</b></li><li><b>Error boundaries</b></li><li><b>Micro-frontends</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does a dynamic import() tell the bundler?</summary><p>To put that module (and its dependencies) into a separate chunk that's loaded on demand.</p></details>
+    <details><summary>Prefetch vs preload?</summary><p>Preload fetches a resource needed for the current page right away; prefetch fetches something likely needed soon at low priority.</p></details>
+    <details><summary>Why wrap lazy components in an error boundary?</summary><p>Chunk downloads can fail (network or deploys), and the boundary shows a fallback instead of crashing the app.</p></details>
+    <details><summary>Name something you should not lazy-load.</summary><p>Above-the-fold content or code needed on every screen.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Stream the <span class="hl">episode</span> they're watching, preload the next one, and never make them download the <span class="hl">whole season</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/11-code-splitting.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>web.dev, “Reduce JavaScript payloads with code splitting”.</li><li>React docs, “lazy” and “Suspense”.</li><li>Vite docs, “Building for Production” (chunking).</li><li>patterns.dev, “Dynamic Import” and “Import On Interaction”.</li></ul>
+  </div>
+  <p class="folio">11</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="islands.html"><small>← previous note</small>10 · Islands Architecture</a>
+  <a href="virtualization.html"><small>Next note →</small>12 · List Virtualization</a>
+</nav>
+<footer class="foot"><span>Margin Notes · Vol. 2 · a student's bullet journal on frontend design patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

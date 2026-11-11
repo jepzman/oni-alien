@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Leader–Follower Replication · Margin Notes</title>
+<meta name="description" content="Copy data to followers for reads and failover; one leader takes the writes.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Margin<span>.</span>Notes</b><small>vol. 1 · distributed design patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="replication">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 12.10.26</span><span class="topic">collection · <b>scaling data</b></span></div>
+  <p class="kicker">a.k.a. “one writes, many copy”</p>
+  <h1><span class="hl">Leader–Follower Replication</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Keep <b>copies of the same data</b> on several machines. One node, the <b>leader</b>, accepts all writes and streams its change log to <b>followers</b>, which apply the changes in order. Followers serve <b>reads</b> and can be <b>promoted</b> if the leader fails.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> data / availability</li><li><b>Lives in:</b> the database layer</li><li><b>Also called:</b> primary–replica, master–slave (old term)</li><li><b>Pairs with:</b> leader election, sharding, CQRS</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">A single database server is both a <span class="hl-pink">single point of failure</span> and a single bottleneck.</p>
+  <ul>
+    <li>If its disk or machine dies, the app is down until it's restored, and data since the last backup is lost.</li>
+    <li>All reads land on one machine: app queries, reports and analytics compete for CPU.</li>
+    <li>Users far away (another continent) get slow responses from one location.</li>
+    <li>Maintenance (patching, upgrades) means downtime.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a single database server. When it fails, the whole app is down and recent data may be lost. Meanwhile reporting queries and app queries compete for the same machine."><g class="rough"><path class="d d-thin f-pink d-red" d="M60 60 v120 a100 9 0 0 0 200 0 v-120"/><ellipse class="d d-thin f-pink d-red" cx="160" cy="60" rx="100" ry="9"/><g transform="translate(260 40) scale(0.7)"><g class="d d-red"><path d="M8 8 L52 52 M52 8 L8 52"/></g></g></g><text class="t-head" x="160" y="140" text-anchor="middle" font-size="20">the only copy</text><text class="t-s t-red" x="450" y="70" text-anchor="start">disk dies → app down for hours</text><text class="t-s t-red" x="450" y="110" text-anchor="start">→ last backup was 6 hours ago</text><text class="t-s t-red" x="450" y="160" text-anchor="start">reports + app reads fight for CPU</text><text class="t-s t-red" x="450" y="200" text-anchor="start">no copy near users in Europe</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One copy of the data is one disk failure away from an outage, and every read lands on the same box.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the teacher's board</span></h2>
+  <p>In class, <b>only the teacher writes on the board</b>. Every student copies it into their own notebook. When you need to check something, you read your own copy instead of crowding round the board.</p>
+  <ul>
+    <li>If the teacher steps out, a student with good notes can take over at the board (a <b>failover</b>).</li>
+    <li>A student who looked away is a line or two behind: <b>replication lag</b>. Reading from their notebook might miss the latest line.</li>
+    <li>For an exam answer that must be exactly right, you check the board itself: <b>read from the leader</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a teacher writing on the main whiteboard while students copy the notes into their own notebooks. Students answer questions from their notebook copies. Only the teacher writes on the board. A student who looks away briefly is a line or two behind."><g class="rough"><rect class="d f-paper" x="240" y="30" width="280" height="120" rx="10"/><g transform="translate(100 180) scale(1.0)"><g class="d"><path class="f-paper" d="M4 6 h22 a6 6 0 0 1 6 6 v44 a6 6 0 0 0 -6 -6 h-22 z"/><path class="f-paper" d="M60 6 h-22 a6 6 0 0 0 -6 6 v44 a6 6 0 0 1 6 -6 h22 z"/></g></g><path class="d d-dash" d="M380 154 L130 180"/><path class="d" d="M140.2 173.7 L130 180 L141.3 184.1"/><g transform="translate(340 180) scale(1.0)"><g class="d"><path class="f-paper" d="M4 6 h22 a6 6 0 0 1 6 6 v44 a6 6 0 0 0 -6 -6 h-22 z"/><path class="f-paper" d="M60 6 h-22 a6 6 0 0 0 -6 6 v44 a6 6 0 0 1 6 -6 h22 z"/></g></g><path class="d d-dash" d="M380 154 L370 180"/><path class="d" d="M369.0 168.0 L370 180 L378.8 171.8"/><g transform="translate(580 180) scale(1.0)"><g class="d"><path class="f-paper" d="M4 6 h22 a6 6 0 0 1 6 6 v44 a6 6 0 0 0 -6 -6 h-22 z"/><path class="f-paper" d="M60 6 h-22 a6 6 0 0 0 -6 6 v44 a6 6 0 0 1 6 -6 h22 z"/></g></g><path class="d d-dash" d="M380 154 L610 180"/><path class="d" d="M598.7 184.0 L610 180 L599.8 173.6"/></g><text class="t-head" x="380" y="60" text-anchor="middle" font-size="20">main board</text><text class="t" x="380" y="92" text-anchor="middle" font-size="16">1. cache-aside</text><text class="t" x="380" y="114" text-anchor="middle" font-size="16">2. replication</text><text class="t" x="380" y="136" text-anchor="middle" font-size="16">3. …</text><text class="t-s t-pen" x="380" y="22" text-anchor="middle">only the teacher writes here</text><text class="t-s" x="130" y="256" text-anchor="middle">up to date</text><text class="t-s" x="370" y="256" text-anchor="middle">up to date</text><text class="t-s t-red" x="610" y="256" text-anchor="middle">one line behind</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Only the teacher writes on the board; everyone copies it. Read from any copy; it may be a line behind.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The teacher at the board</td><td>The leader (primary)</td></tr>
+      <tr><td>Students' notebooks</td><td>Followers (replicas)</td></tr>
+      <tr><td>Copying line by line, in order</td><td>Streaming the change log (WAL / binlog)</td></tr>
+      <tr><td>A student a line behind</td><td>Replication lag</td></tr>
+      <tr><td>Checking your own notebook</td><td>Reads served by followers</td></tr>
+      <tr><td>A student takes over the board</td><td>Promoting a follower on failover</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">a log, shipped in order</span></h2>
+  <p>The leader writes every change to a <b>log</b> (Postgres WAL, MySQL binlog). Followers receive the log and replay it in the same order, so they end up with the same data.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 320" role="img" aria-label="Leader-follower replication. All writes go to the leader, which records them in its log and streams the log to two followers. Followers apply the changes and serve read queries. If the leader fails, one follower is promoted to be the new leader. Synchronous replication waits for a follower to confirm; asynchronous does not."><g class="rough"><rect class="d f-blue" x="20" y="40" width="140" height="56" rx="10"/><rect class="d f-blue" x="20" y="210" width="140" height="56" rx="10"/><path class="d" d="M166 68 L266 88"/><path class="d" d="M254.4 91.0 L266 88 L256.4 80.8"/><path class="d d-thin f-y" d="M270 60 v70 a60 9 0 0 0 120 0 v-70"/><ellipse class="d d-thin f-y" cx="330" cy="60" rx="60" ry="9"/><path class="d" d="M396 90 L536 60"/><path class="d" d="M526.5 67.4 L536 60 L524.3 57.2"/><path class="d d-dash" d="M396 120 L536 210"/><path class="d" d="M524.1 208.5 L536 210 L529.7 199.8"/><path class="d d-thin f-green" d="M555 40 v60 a55 9 0 0 0 110 0 v-60"/><ellipse class="d d-thin f-green" cx="610" cy="40" rx="55" ry="9"/><path class="d d-thin f-green" d="M555 190 v60 a55 9 0 0 0 110 0 v-60"/><ellipse class="d d-thin f-green" cx="610" cy="190" rx="55" ry="9"/><path class="d d-green" d="M166 238 L548 230"/><path class="d d-green" d="M537.3 235.4 L548 230 L537.1 225.0"/></g><text class="t-head" x="90" y="75" text-anchor="middle">writes</text><text class="t-head" x="90" y="245" text-anchor="middle">reads</text><text class="t-head" x="330" y="120" text-anchor="middle" font-size="19">leader</text><text class="t" x="330" y="172" text-anchor="middle" font-size="16">change log →</text><text class="t-s" x="470" y="48" text-anchor="middle">sync (wait for ack)</text><text class="t-s" x="560" y="160" text-anchor="start">async (don&#x27;t wait)</text><text class="t-head" x="610" y="92" text-anchor="middle" font-size="17">follower 1</text><text class="t-head" x="610" y="242" text-anchor="middle" font-size="17">follower 2</text><text class="t-s t-green" x="330" y="290" text-anchor="middle">read from followers</text><text class="t-s t-red" x="660" y="300" text-anchor="middle">leader dies → promote one</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Writes go to the leader; its change log streams to followers, which serve reads and can take over.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Send all writes to the leader</b><p>One place decides the order of writes, so there are no write conflicts.</p></li>
+    <li><b>Stream the log</b><p>The leader ships each change to followers. <b>Synchronous</b>: the commit waits for at least one follower (no data loss on failover, slower). <b>Asynchronous</b>: it doesn't wait (fast, but recent writes can be lost).</p></li>
+    <li><b>Read from followers</b><p>Route read-only queries, reports and analytics to followers. Accept that they may lag by milliseconds or seconds.</p></li>
+    <li><b>Handle read-your-writes</b><p>After a user changes something, read their data from the leader (or wait for the follower to catch up) for a short time.</p></li>
+    <li><b>Fail over safely</b><p>Detect the leader is down, promote the most up-to-date follower, repoint clients, and make sure the old leader can't keep accepting writes (fencing).</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Leader / primary</dt><dd>The node that accepts writes.</dd></div>
+    <div><dt>Follower / replica</dt><dd>A node that copies the leader's changes.</dd></div>
+    <div><dt>Replication lag</dt><dd>How far behind a follower is.</dd></div>
+    <div><dt>Sync vs async</dt><dd>Whether a commit waits for followers to confirm.</dd></div>
+    <div><dt>Failover</dt><dd>Promoting a follower when the leader fails.</dd></div>
+    <div><dt>Split brain</dt><dd>Two nodes both acting as leader at once.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>db.ts</span><span>route reads and writes</span></div>
+<pre><code><span class="k">const</span> leader   = <span class="k">new</span> Pool({ host: <span class="s">"db-leader"</span> });
+<span class="k">const</span> follower = <span class="k">new</span> Pool({ host: <span class="s">"db-replicas"</span> });          <span class="c">// load-balanced replicas</span>
+
+<span class="k">export</span> <span class="k">async</span> <span class="k">function</span> placeOrder(order: Order) {
+  <span class="k">await</span> leader.query(<span class="s">"INSERT INTO orders ..."</span>, [order.id]);   <span class="c">// writes: leader only</span>
+  recentlyWrote.set(order.customerId, Date.now());
+}
+
+<span class="k">export</span> <span class="k">async</span> <span class="k">function</span> myOrders(customerId: string) {
+  <span class="c">// read-your-writes: just after a write, read from the leader</span>
+  <span class="k">const</span> fresh = Date.now() - (recentlyWrote.get(customerId) ?? 0) &lt; 5_000;
+  <span class="k">const</span> pool = fresh ? leader : follower;
+  <span class="k">return</span> pool.query(<span class="s">"SELECT * FROM orders WHERE customer_id = $1"</span>, [customerId]);
+}</code></pre>
+  </div>
+  <p class="aside">built in: Postgres streaming replication (+ Patroni for failover), MySQL replication / Group Replication, AWS RDS / Aurora read replicas and Multi-AZ, MongoDB replica sets, Redis replicas + Sentinel.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>High availability</b>: a follower can take over in seconds.</li><li><b>Read scale</b>: add followers for more read capacity.</li><li><b>Isolation</b>: reports and backups run on followers.</li><li><b>Lower latency</b> with followers near users in other regions.</li><li><b>Durability</b>: data exists on several machines.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Replication lag</b>: followers can return stale data.</li><li><b>Writes don't scale</b>: still one leader.</li><li><b>Failover is tricky</b>: lost async writes, split brain.</li><li><b>More machines</b> and monitoring.</li><li><b>App complexity</b> for routing and read-your-writes.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Architecture ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>a single database server</b> to the same database with <b>a leader and replicated followers</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to understand?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Lag, routing reads and failover behaviour to understand.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Extra servers (often managed, but billed).</td></tr>
+      <tr data-before="2" data-after="4"><td>Deployability<small>safe, easy releases?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Upgrades can roll through followers, then fail over.</td></tr>
+      <tr data-before="3" data-after="3"><td>Testability<small>test with confidence?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Need tests for lag and failover; mostly neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>more users &amp; data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Reads scale out; writes still go to one leader.</td></tr>
+      <tr data-before="2" data-after="3"><td>Elasticity<small>sudden spikes?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Adding a follower takes time to copy data.</td></tr>
+      <tr data-before="1" data-after="4"><td>Fault tolerance<small>failure stays contained?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A failed leader is replaced by a follower.</td></tr>
+      <tr data-before="3" data-after="4"><td>Performance<small>fast typical request?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Reads spread out; sync replication slows writes a little.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Reading your own write from a follower</h3><p>A user updates their profile, the page reloads from a lagging follower and shows the old name. <span class="fix">Fix →</span> read-your-writes from the leader for a short window, or wait for the follower's position.</p></li>
+    <li><h3>Assuming async = no data loss</h3><p>The leader dies with 2 seconds of unreplicated writes; they're gone after failover. <span class="fix">Fix →</span> synchronous (or semi-sync) to at least one follower for important data.</p></li>
+    <li><h3>Split brain</h3><p>The old leader comes back and keeps accepting writes alongside the new one. <span class="fix">Fix →</span> fencing (see note 18), a consensus-based failover manager.</p></li>
+    <li><h3>Followers as backups</h3><p>Someone runs DELETE without WHERE, and it replicates everywhere within milliseconds. <span class="fix">Fix →</span> replicas are not backups; keep point-in-time backups too.</p></li>
+    <li><h3>Unmonitored lag</h3><p>A follower falls 3 hours behind and serves very stale reports. <span class="fix">Fix →</span> alert on lag; remove lagging followers from the read pool.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>You need the database to survive a machine or zone failure.</li><li>Reads far outnumber writes.</li><li>Reports and analytics shouldn't slow the app.</li><li>Users in several regions need fast reads.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Writes are the bottleneck (shard instead, or as well).</li><li>Every read must be perfectly up to date and you can't route to the leader.</li><li>A dev/test database where downtime doesn't matter.</li><li>Your managed database already does it (just turn it on).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Leader election</b> · failover</li><li><b>Sharding</b> · each shard is replicated</li><li><b>CQRS</b></li><li><b>Cache-aside</b></li><li><b>Multi-leader / leaderless</b> replication</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Sync vs async replication: which can lose data on failover?</summary><p>Asynchronous: the leader may have acknowledged writes that never reached a follower before it died.</p></details>
+    <details><summary>Does adding followers increase write capacity?</summary><p>No. All writes still go through the single leader; followers add read capacity and availability.</p></details>
+    <details><summary>What is read-your-writes consistency?</summary><p>A user always sees their own recent changes, e.g. by reading from the leader just after they write.</p></details>
+    <details><summary>Why are replicas not a backup?</summary><p>Mistakes like accidental deletes replicate to every follower; backups let you go back in time.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>One <span class="hl">writer</span>, many readers, and every reader might be a little behind. Know which reads can wait and which must ask the leader.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/16-replication.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Martin Kleppmann, <i>Designing Data-Intensive Applications</i>, chapter 5 “Replication”.</li><li>PostgreSQL docs, “High Availability, Load Balancing, and Replication”.</li><li>AWS docs, “Working with read replicas” (RDS).</li><li>Patroni docs, “Replication modes”.</li></ul>
+  </div>
+  <p class="folio">16</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="sharding.html"><small>← previous note</small>15 · Sharding</a>
+  <a href="cache-aside.html"><small>Next note →</small>17 · Cache-Aside</a>
+</nav>
+<footer class="foot"><span>Margin Notes · Vol. 1 · a student's bullet journal on distributed design patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

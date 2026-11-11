@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SSR &amp; Hydration · Margin Notes</title>
+<meta name="description" content="Render HTML on the server for a fast first view, then make it interactive in the browser.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-frontend">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Margin<span>.</span>Notes</b><small>vol. 2 · frontend design patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="ssr-hydration">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 06.10.26</span><span class="topic">collection · <b>rendering &amp; performance</b></span></div>
+  <p class="kicker">a.k.a. “send the page, then wake it up”</p>
+  <h1><span class="hl">SSR &amp; Hydration</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Render the page to <b>HTML on the server</b> (with its data) so the browser can <b>show content immediately</b>, and search engines and link previews see it. Then the same JavaScript runs in the browser and <b>hydrates</b> the HTML: it attaches event handlers and state so the page becomes <b>interactive</b>.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> rendering strategy</li><li><b>Frameworks:</b> Next.js, Remix/React Router, Nuxt, SvelteKit, Angular SSR</li><li><b>Variants:</b> streaming SSR, partial/progressive hydration</li><li><b>Pairs with:</b> code splitting, islands, server-state cache</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">A purely <b>client-side rendered</b> (CSR) app sends an almost empty HTML file and a large JavaScript bundle. Nothing appears until the JS has <span class="hl-pink">downloaded, run and fetched data</span>.</p>
+  <ul>
+    <li>On a mid-range phone and 4G, that's a blank screen for several seconds.</li>
+    <li>Search crawlers and social link previews may see an empty page.</li>
+    <li>Core Web Vitals (LCP) suffer, and so do conversions.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="Doodle of a client-side rendered page loading on a phone. The server sends an empty div and a 900 kilobyte JavaScript bundle. For 3.5 seconds the user sees a blank white screen while the bundle downloads, parses and fetches data. Search engine crawlers and link previews also see an empty page."><g class="rough"><rect class="d f-paper" x="20" y="30" width="220" height="200" rx="10"/><path class="d d-soft" d="M260 140 H720"/><rect class="d f-pink" x="270" y="110" width="136" height="50" rx="6"/><rect class="d f-pink" x="420" y="110" width="136" height="50" rx="6"/><rect class="d f-pink" x="560" y="110" width="136" height="50" rx="6"/></g><text class="t-head" x="130" y="60" text-anchor="middle" font-size="18">index.html</text><text class="t" x="130" y="110" text-anchor="middle" font-size="16">&lt;div id=&quot;root&quot;&gt;</text><text class="t" x="130" y="136" text-anchor="middle" font-size="16">&lt;/div&gt;</text><text class="t" x="130" y="180" text-anchor="middle" font-size="16">app.js · 900 kB</text><text class="t-head" x="338" y="142" text-anchor="middle" font-size="15">download</text><text class="t-head" x="488" y="142" text-anchor="middle" font-size="15">parse + run</text><text class="t-head" x="628" y="142" text-anchor="middle" font-size="15">fetch data</text><text class="t-s t-red" x="490" y="90" text-anchor="middle">blank white screen for 3.5 s</text><text class="t-s t-red" x="490" y="200" text-anchor="middle">crawlers &amp; link previews: empty page too</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Client-only rendering: an empty page until all the JavaScript has downloaded, run and fetched data.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the lamp delivered assembled</span></h2>
+  <p>Some furniture shops deliver a lamp <b>already assembled</b>. The moment you open the box, it looks finished and you can put it where it belongs. It doesn't light up until you <b>plug it in</b>.</p>
+  <ul>
+    <li>Assembled in the warehouse: <b>rendered on the server</b>.</li>
+    <li>Plugging in: <b>hydration</b> makes it work.</li>
+    <li>If you press the switch before plugging in, nothing happens: the <b>gap between visible and interactive</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a lamp delivered already assembled. It looks finished the moment the box is opened, so you can see it straight away, but it only works once you plug it in. Plugging in is hydration."><g class="rough"><g transform="translate(40 90) scale(1.6)"><g class="d"><rect class="f-paper" x="4" y="14" width="52" height="40" rx="2"/><path d="M4 26 h52 M30 14 v40"/></g></g><path class="d" d="M140 130 L260 130"/><path class="d" d="M249.2 135.2 L260 130 L249.2 124.8"/><g transform="translate(280 60) scale(2.2)"><g class="d"><path class="f-paper" d="M14 6 h28 l10 26 h-48 z"/><path d="M28 32 v24 M14 58 h28 M44 56 q14 0 14 10"/></g></g><path class="d" d="M420 130 L540 130"/><path class="d" d="M529.2 135.2 L540 130 L529.2 124.8"/><g transform="translate(560 90) scale(1.8)"><g class="d"><rect class="f-paper" x="8" y="18" width="30" height="24" rx="4"/><path d="M16 18 v-10 M30 18 v-10 M23 42 v8 q0 10 20 10 h14"/></g></g></g><text class="t-s" x="90" y="210" text-anchor="middle">delivered assembled</text><text class="t-s" x="200" y="118" text-anchor="middle">open box</text><text class="t-s" x="340" y="230" text-anchor="middle">looks finished (HTML)</text><text class="t-s" x="480" y="118" text-anchor="middle">plug in</text><text class="t-s t-green" x="620" y="230" text-anchor="middle">now it works (hydrated)</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The lamp arrives assembled, so it looks done at once. It works once you plug it in.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Assembled in the warehouse</td><td>HTML rendered on the server</td></tr>
+      <tr><td>Opening the box: it looks done</td><td>First contentful paint</td></tr>
+      <tr><td>Plugging it in</td><td>Hydration attaches handlers and state</td></tr>
+      <tr><td>Switch does nothing before plugging in</td><td>Visible but not yet interactive</td></tr>
+      <tr><td>Same lamp, same parts</td><td>Same components run on server and client</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">render on the server, hydrate in the browser</span></h2>
+  <p>The server runs your components with real data and streams HTML. The browser paints it, downloads the JS, and React (or Vue, Svelte…) <b>re-runs the components</b> to attach to the existing DOM instead of rebuilding it.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="SSR timeline. The server fetches data and renders the page to HTML. The browser shows that HTML quickly: first contentful paint at about 1 second. Meanwhile JavaScript downloads; hydration attaches event handlers to the existing HTML, and the page becomes interactive at about 2.5 seconds. Between the two, the page is visible but not yet clickable."><g class="rough"><rect class="d f-y" x="20" y="40" width="220" height="70" rx="10"/><path class="d" d="M246 75 L330 75"/><path class="d" d="M319.2 80.2 L330 75 L319.2 69.8"/><path class="d d-soft" d="M330 170 H740"/><rect class="d f-green" x="340" y="140" width="150" height="56" rx="6"/><rect class="d f-paper" x="500" y="140" width="120" height="56" rx="6"/><rect class="d f-y" x="630" y="140" width="110" height="56" rx="6"/></g><text class="t-head" x="130" y="71" text-anchor="middle">server</text><text class="t" x="130" y="95" text-anchor="middle" font-size="17">fetch data → render HTML</text><text class="t-s" x="288" y="63" text-anchor="middle">HTML</text><text class="t-head" x="415" y="175" text-anchor="middle" font-size="16">content visible</text><text class="t-head" x="560" y="175" text-anchor="middle" font-size="16">JS loads</text><text class="t-head" x="685" y="175" text-anchor="middle" font-size="16">hydrate</text><text class="t-s t-green" x="415" y="230" text-anchor="middle">FCP ≈ 1.0 s</text><text class="t-s t-pen" x="685" y="230" text-anchor="middle">TTI ≈ 2.5 s</text><text class="t-s t-red" x="560" y="270" text-anchor="middle">the uncanny valley: visible, not clickable yet</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>HTML shows content early; hydration makes it interactive later. Mind the gap in between.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Fetch on the server</b><p>Load data in a loader / server component so it's ready before HTML is sent.</p></li>
+    <li><b>Render to HTML (and stream it)</b><p>Send the shell first and stream slower sections as they resolve (Suspense), so the top of the page appears fast.</p></li>
+    <li><b>Embed the data</b><p>Serialise the data the client needs so hydration doesn't refetch it.</p></li>
+    <li><b>Hydrate</b><p>The client renders the same tree and attaches event handlers. Output must match the server's HTML exactly.</p></li>
+    <li><b>Shrink the gap</b><p>Ship less JS, hydrate important parts first, and avoid layout shifts while JS loads.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>CSR</dt><dd>Client-side rendering: the browser builds the page with JS.</dd></div>
+    <div><dt>SSR</dt><dd>Server-side rendering per request.</dd></div>
+    <div><dt>Hydration</dt><dd>Attaching client JS to server-rendered HTML.</dd></div>
+    <div><dt>Hydration mismatch</dt><dd>Client render differs from the server HTML.</dd></div>
+    <div><dt>FCP / LCP</dt><dd>First / Largest Contentful Paint.</dd></div>
+    <div><dt>TTI / INP</dt><dd>Time to Interactive / Interaction to Next Paint.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>app/orders/page.tsx</span><span>Next.js App Router</span></div>
+<pre><code><span class="c">// runs on the server: data + HTML, no client JS for this part</span>
+<span class="k">export</span> <span class="k">default</span> <span class="k">async</span> <span class="k">function</span> OrdersPage() {
+  <span class="k">const</span> orders = <span class="k">await</span> db.order.findMany({ take: 20, orderBy: { createdAt: <span class="s">"desc"</span> } });
+  <span class="k">return</span> (
+    &lt;main&gt;
+      &lt;h1&gt;Your orders&lt;/h1&gt;
+      &lt;OrderTable orders={orders} /&gt;                 {/* plain HTML <span class="k">from</span> the server */}
+      &lt;Suspense fallback={&lt;p&gt;Loading suggestions…&lt;/p&gt;}&gt;
+        &lt;Suggestions /&gt;                               {/* streamed <span class="k">in</span> when ready */}
+      &lt;/Suspense&gt;
+      &lt;ReorderButton lastOrderId={orders[0]?.id} /&gt;  {/* <span class="s">"use client"</span>: hydrated */}
+    &lt;/main&gt;
+  );
+}
+
+<span class="c">// ReorderButton.tsx</span>
+<span class="s">"use client"</span>;
+<span class="k">export</span> <span class="k">function</span> ReorderButton({ lastOrderId }: { lastOrderId?: string }) {
+  <span class="k">const</span> [pending, start] = useTransition();
+  <span class="k">return</span> &lt;button disabled={pending} onClick={() =&gt; start(() =&gt; reorder(lastOrderId))}&gt;Reorder&lt;/button&gt;;
+}</code></pre>
+  </div>
+  <p class="aside">frameworks: Next.js, React Router v7 (Remix), Nuxt, SvelteKit, SolidStart, Angular SSR, Astro; measure with Lighthouse, WebPageTest and the Chrome UX Report.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Fast first paint</b> and better LCP.</li><li><b>SEO and link previews</b> see real content.</li><li><b>Works before JS</b> for reading (and forms, with progressive enhancement).</li><li><b>Data fetched close to the database</b>, not over slow mobile networks.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Server cost and complexity</b>: a Node/edge server per request.</li><li><b>Hydration cost</b>: all that JS still runs on the client.</li><li><b>The uncanny valley</b>: visible but not yet clickable.</li><li><b>Hydration mismatches</b> (dates, random ids, window checks).</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares a <b>client-side rendered SPA</b> to the same app with <b>server-side rendering + hydration</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Two environments (server and browser) to reason about.</td></tr>
+      <tr data-before="3" data-after="3"><td>Reusability<small>use it in many places?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral; components are shared.</td></tr>
+      <tr data-before="3" data-after="3"><td>Testability<small>test with confidence?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Need tests for server rendering and mismatches.</td></tr>
+      <tr data-before="3" data-after="3"><td>Maintainability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Framework conventions help; server/client boundaries add rules.</td></tr>
+      <tr data-before="2" data-after="4"><td>Performance<small>fast to load &amp; respond?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Much faster first content; interactivity depends on JS size.</td></tr>
+      <tr data-before="3" data-after="3"><td>Bundle size<small>ships little JS?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Same JS still ships for hydration (server components help).</td></tr>
+      <tr data-before="3" data-after="4"><td>Accessibility<small>works for everyone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Real HTML early; works better with assistive tech and slow devices.</td></tr>
+      <tr data-before="3" data-after="3"><td>Developer experience<small>pleasant to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Great frameworks, but more concepts and build config.</td></tr>
+      <tr data-before="3" data-after="3"><td>Team scalability<small>many devs at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Hydration mismatches</h3><p><code>new Date()</code> or <code>Math.random()</code> renders differently on server and client, and React throws away the HTML. <span class="fix">Fix →</span> compute such values once on the server and pass them down, or render them only after mount.</p></li>
+    <li><h3>SSR with a giant bundle</h3><p>Content shows at 1 s but buttons don't work until 6 s. <span class="fix">Fix →</span> code splitting, server components, islands for mostly static pages.</p></li>
+    <li><h3>Accessing window on the server</h3><p><code>window is not defined</code> crashes the render. <span class="fix">Fix →</span> browser-only code in effects or client components.</p></li>
+    <li><h3>Slow data blocks the whole page</h3><p>One slow API delays the entire HTML. <span class="fix">Fix →</span> stream with Suspense; show the shell first.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Public pages where SEO, link previews or first paint matter (shops, content, marketing).</li><li>Users on slow devices and networks.</li><li>Data that's close to the server (database, internal APIs).</li><li>You already use a framework that supports it.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Apps behind a login where SEO doesn't matter and users are on fast machines (internal dashboards).</li><li>Mostly static content: pre-render at build time or use islands instead.</li><li>You can't run or afford servers (static hosting only).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Islands architecture</b></li><li><b>Code splitting</b></li><li><b>Server-state cache</b></li><li><b>Container &amp; presentational</b> (server vs client)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does hydration do?</summary><p>It runs the components in the browser and attaches event handlers and state to the server-rendered HTML instead of rebuilding the DOM.</p></details>
+    <details><summary>What causes a hydration mismatch?</summary><p>The client's first render differs from the server HTML, e.g. using dates, random values or window-only checks during render.</p></details>
+    <details><summary>Does SSR reduce the JavaScript users download?</summary><p>Not by itself; the same components still hydrate. Server components, islands and code splitting reduce it.</p></details>
+    <details><summary>What is the “uncanny valley” of SSR?</summary><p>The time when content is visible but not yet interactive because JS hasn't hydrated.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Deliver it <span class="hl">assembled</span>, then <span class="hl">plug it in</span> fast. Visible early is great; clickable soon after is the goal.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/09-ssr-hydration.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>patterns.dev, “Server-side Rendering” and “Progressive Hydration”.</li><li>web.dev, “Rendering on the Web” (Jason Miller &amp; Addy Osmani).</li><li>React docs, “Server Components” and “hydrateRoot”.</li><li>Next.js docs, “Rendering”.</li></ul>
+  </div>
+  <p class="folio">09</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="state-machines.html"><small>← previous note</small>08 · State Machines</a>
+  <a href="islands.html"><small>Next note →</small>10 · Islands Architecture</a>
+</nav>
+<footer class="foot"><span>Margin Notes · Vol. 2 · a student's bullet journal on frontend design patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

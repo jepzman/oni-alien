@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Optimistic UI · Margin Notes</title>
+<meta name="description" content="Show the result before the server confirms, and roll back if it fails.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-frontend">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Margin<span>.</span>Notes</b><small>vol. 2 · frontend design patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="optimistic-ui">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 29.09.26</span><span class="topic">collection · <b>state &amp; data</b></span></div>
+  <p class="kicker">a.k.a. “assume it worked”</p>
+  <h1><span class="hl">Optimistic UI</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>For actions that <b>almost always succeed</b> (like, star, rename, reorder, send a message), <b>update the UI immediately</b> as if the server said yes. Send the request in the background. If it fails, <b>roll back</b> to the saved snapshot and tell the user, with a way to retry.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> data mutations / UX</li><li><b>Seen in:</b> chat apps, likes, todo lists, Figma, Linear</li><li><b>Built into:</b> React useOptimistic, TanStack Query</li><li><b>Pairs with:</b> server-state cache, idempotency keys</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Network round trips take 100 ms to several seconds. If every tap waits for the server, the app <span class="hl-pink">feels sluggish</span>, even though the action almost never fails.</p>
+  <ul>
+    <li>A like button shows a spinner for 800 ms before turning red.</li>
+    <li>Users tap again because nothing seemed to happen, sending duplicate requests.</li>
+    <li>Reordering a list snaps back and forth while waiting.</li>
+    <li>On slow mobile networks the whole app feels broken.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a like button. The user taps the heart and waits 800 milliseconds with a spinner before the heart turns red, so the app feels slow, and they tap again, sending two requests."><g class="rough"><rect class="d f-paper" x="30" y="80" width="160" height="90" rx="10"/><path class="d" d="M196 125 L300 125"/><path class="d" d="M289.2 130.2 L300 125 L289.2 119.8"/><g transform="translate(320 90) scale(1.6)"><g class="d"><path class="f-paper" d="M0 0 h24 M0 34 h24 M3 0 q0 13 9 17 q-9 4 -9 17 M21 0 q0 13 -9 17 q9 4 9 17"/></g></g><path class="d d-red" d="M370 125 L470 125"/><path class="d d-red" d="M459.2 130.2 L470 125 L459.2 119.8"/><rect class="d f-pink d-red" x="480" y="80" width="160" height="90" rx="10"/></g><text class="t-head" x="110" y="132" text-anchor="middle" font-size="24">♡ Like</text><text class="t-s" x="248" y="112" text-anchor="middle">tap</text><text class="t-s t-red" x="340" y="178" text-anchor="middle">800 ms…</text><text class="t-s t-red" x="420" y="112" text-anchor="middle">tap again?!</text><text class="t-head t-red" x="560" y="132" text-anchor="middle" font-size="24">♥ Liked</text><text class="t-s t-red" x="560" y="210" text-anchor="middle">finally… (2 requests sent)</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Waiting for the server on every small action makes the app feel slow and invites double taps.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">ordering at a café</span></h2>
+  <p>You order a flat white, the barista says <b>“coming right up!”</b>, and you go and sit down straight away. You don't stand at the counter until it's made. Almost always the coffee arrives. Very rarely, someone comes over: “sorry, we're out of oat milk, would you like something else?”</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a café counter. You order a flat white and the barista says coming right up, so you go and sit down. Almost always it arrives. Rarely they come over and say sorry, we&#x27;re out of oat milk, and you choose something else."><g class="rough"><g transform="translate(60 80) scale(1.8)"><g class="d"><path class="f-paper" d="M6 16 h40 v20 a20 20 0 0 1 -40 0 z"/><path d="M46 22 h6 a7 7 0 0 1 0 14 h-7 M14 4 q4 5 0 9 M26 2 q4 5 0 9"/></g></g><path class="d" d="M160 120 L330 120"/><path class="d" d="M319.2 125.2 L330 120 L319.2 114.8"/><rect class="d f-green" x="340" y="80" width="180" height="80" rx="10"/><path class="d d-green" d="M526 120 L600 80"/><path class="d d-green" d="M593.0 89.7 L600 80 L588.0 80.5"/><path class="d d-red d-dash" d="M526 130 L600 180"/><path class="d d-red" d="M588.1 178.3 L600 180 L594.0 169.6"/></g><text class="t-s" x="110" y="210" text-anchor="middle">order a flat white</text><text class="t-s" x="245" y="104" text-anchor="middle">“coming right up!”</text><text class="t-head" x="430" y="127" text-anchor="middle" font-size="19">sit down now</text><text class="t-s t-green" x="630" y="64" text-anchor="middle">99%: it arrives</text><text class="t-s t-red" x="600" y="214" text-anchor="middle">1%: “sorry, no oat milk”</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>“Coming right up!” You sit down straight away. Very rarely: “sorry, we're out of oat milk”.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>“Coming right up!”</td><td>Updating the UI immediately</td></tr>
+      <tr><td>Sitting down without waiting</td><td>The user carries on interacting</td></tr>
+      <tr><td>The coffee arrives</td><td>The server confirms; keep the change</td></tr>
+      <tr><td>“Sorry, no oat milk”</td><td>The request fails; roll back and explain</td></tr>
+      <tr><td>“Something else?”</td><td>A retry or alternative action</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">update, remember, confirm or undo</span></h2>
+  <p>The key is keeping a <b>snapshot</b> so you can undo, and making the request <b>safe to retry</b>. Many libraries handle the bookkeeping.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Optimistic update flow. When the user taps like, the app saves a snapshot, updates the UI immediately, then sends the request. On success it keeps the change and reconciles with the server response. On error it rolls back to the snapshot and shows a message with a retry option."><g class="rough"><rect class="d f-blue" x="20" y="120" width="140" height="60" rx="10"/><path class="d" d="M166 150 L240 150"/><path class="d" d="M229.2 155.2 L240 150 L229.2 144.8"/><rect class="d f-y" x="246" y="40" width="230" height="60" rx="10"/><rect class="d f-green" x="246" y="120" width="230" height="60" rx="10"/><rect class="d f-paper" x="246" y="200" width="230" height="60" rx="10"/><path class="d d-green" d="M482 230 L570 120"/><path class="d d-green" d="M567.3 131.7 L570 120 L559.2 125.2"/><rect class="d f-green" x="576" y="80" width="160" height="60" rx="10"/><path class="d d-red" d="M482 240 L570 240"/><path class="d d-red" d="M559.2 245.2 L570 240 L559.2 234.8"/><rect class="d f-pink d-red" x="576" y="210" width="160" height="70" rx="10"/></g><text class="t-head" x="90" y="157" text-anchor="middle" font-size="19">tap ♡</text><text class="t-head" x="361" y="77" text-anchor="middle" font-size="16">① snapshot old state</text><text class="t-head" x="361" y="157" text-anchor="middle" font-size="18">② show ♥ now</text><text class="t-head" x="361" y="237" text-anchor="middle" font-size="16">③ send POST /like</text><text class="t-s t-green" x="586" y="166" text-anchor="start">ok → keep, sync</text><text class="t-head" x="656" y="117" text-anchor="middle" font-size="18">✓ done</text><text class="t-s t-red" x="526" y="228" text-anchor="middle">error</text><text class="t-head t-red" x="656" y="241" text-anchor="middle">roll back</text><text class="t" x="656" y="265" text-anchor="middle" font-size="17">toast + retry</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Update the screen first, remember how to undo, then confirm or roll back.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Pick the right actions</b><p>High success rate, low cost of being briefly wrong: likes, toggles, renames, reorder, messages. Not payments.</p></li>
+    <li><b>Snapshot</b><p>Save the current cached value before changing it.</p></li>
+    <li><b>Apply the change locally</b><p>Update the cache/state so the UI shows the new result instantly; mark it pending if useful (a faint “sending…”).</p></li>
+    <li><b>Send the request</b><p>With an idempotency key so retries are safe.</p></li>
+    <li><b>Settle</b><p>On success, reconcile with the server's response (or invalidate). On error, restore the snapshot and show a clear message with retry.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Optimistic update</dt><dd>Show the expected result before the server confirms.</dd></div>
+    <div><dt>Pessimistic update</dt><dd>Wait for the server, then update the UI.</dd></div>
+    <div><dt>Rollback</dt><dd>Restoring the previous state after a failure.</dd></div>
+    <div><dt>Reconciliation</dt><dd>Replacing the optimistic value with the server's truth.</dd></div>
+    <div><dt>Pending state</dt><dd>Visual hint that a change isn't confirmed yet.</dd></div>
+    <div><dt>Idempotency key</dt><dd>Lets a retried request be recognised as the same one.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>useToggleLike.ts</span><span>TanStack Query optimistic mutation</span></div>
+<pre><code><span class="k">export</span> <span class="k">function</span> useToggleLike(postId: string) {
+  <span class="k">const</span> qc = useQueryClient();
+  <span class="k">const</span> key = [<span class="s">"post"</span>, postId];
+  <span class="k">return</span> useMutation({
+    mutationFn: (liked: boolean) =&gt;
+      api.put(<span class="s">`/posts/${postId}/like`</span>, { liked }, { headers: { <span class="s">"Idempotency-Key"</span>: crypto.randomUUID() } }),
+    onMutate: <span class="k">async</span> (liked) =&gt; {
+      <span class="k">await</span> qc.cancelQueries({ queryKey: key });          <span class="c">// no stale refetch overwrites us</span>
+      <span class="k">const</span> before = qc.getQueryData&lt;Post&gt;(key);           <span class="c">// ① snapshot</span>
+      qc.setQueryData&lt;Post&gt;(key, (p) =&gt; p &amp;&amp; { ...p, liked, likes: p.likes + (liked ? 1 : -1) });  <span class="c">// ② show now</span>
+      <span class="k">return</span> { before };
+    },
+    onError: (_err, _liked, ctx) =&gt; {
+      qc.setQueryData(key, ctx?.before);                   <span class="c">// roll back</span>
+      toast.error(<span class="s">"Couldn't save your like. Try again?"</span>);
+    },
+    onSettled: () =&gt; qc.invalidateQueries({ queryKey: key }),   <span class="c">// reconcile with the server</span>
+  });
+}</code></pre>
+  </div>
+  <p class="aside">built-in support: React 19 useOptimistic + actions, TanStack Query onMutate/rollback, SWR optimisticData, Apollo optimisticResponse, Remix/React Router fetcher.formData; local-first tools (Replicache, Zero, Automerge) take the idea further.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Feels instant</b>, even on slow networks.</li><li><b>Fewer double taps</b> and duplicate requests.</li><li><b>Users keep flowing</b> instead of waiting.</li><li><b>Perceived performance</b> improves without backend changes.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Briefly showing something untrue</b> when it fails.</li><li><b>Rollback logic</b> and edge cases (concurrent edits).</li><li><b>Harder testing</b>: success, failure and race paths.</li><li><b>Wrong for risky actions</b> (payments, deletes without undo).</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>waiting for the server before updating the UI</b> to the same actions done <b>optimistically with rollback</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Snapshot, rollback and reconciliation to understand.</td></tr>
+      <tr data-before="3" data-after="3"><td>Reusability<small>use it in many places?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral; usually per mutation.</td></tr>
+      <tr data-before="4" data-after="3"><td>Testability<small>test with confidence?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Must test success, failure and overlapping updates.</td></tr>
+      <tr data-before="4" data-after="3"><td>Maintainability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More states to keep correct when features change.</td></tr>
+      <tr data-before="2" data-after="5"><td>Performance<small>fast to load &amp; respond?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Interactions feel instant.</td></tr>
+      <tr data-before="3" data-after="3"><td>Bundle size<small>ships little JS?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Accessibility<small>works for everyone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Announce failures; don't move focus unexpectedly on rollback.</td></tr>
+      <tr data-before="3" data-after="3"><td>Developer experience<small>pleasant to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Libraries help, but it's more to wire up.</td></tr>
+      <tr data-before="3" data-after="3"><td>Team scalability<small>many devs at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Optimistic payments or deletes</h3><p>The UI says “Paid!” and the card is declined a second later. <span class="fix">Fix →</span> only for safe, reversible actions; add undo for deletes instead.</p></li>
+    <li><h3>Silent rollbacks</h3><p>The heart quietly turns grey again and the user never knows why. <span class="fix">Fix →</span> explain the failure and offer retry.</p></li>
+    <li><h3>Refetch overwrites the optimistic value</h3><p>A background refetch lands mid-mutation and the like flickers. <span class="fix">Fix →</span> cancel in-flight queries before applying the change.</p></li>
+    <li><h3>Not idempotent</h3><p>A retry after a timeout likes the post twice. <span class="fix">Fix →</span> idempotency keys or naturally idempotent requests (PUT liked=true).</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Actions that succeed 99%+ of the time.</li><li>Small, reversible changes: likes, toggles, renames, reorders, messages.</li><li>Users on slow or mobile networks.</li><li>Interactions where speed defines the experience (chat, editors, boards).</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Payments, bookings, irreversible actions.</li><li>Actions that often fail validation on the server.</li><li>Results that depend on server computation the client can't predict.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Server-state cache</b></li><li><b>Idempotent consumer</b> (Vol. 1)</li><li><b>Retry with backoff</b> (Vol. 1)</li><li><b>State machines</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What's the difference between optimistic and pessimistic updates?</summary><p>Optimistic updates show the result immediately and roll back on failure; pessimistic updates wait for the server before changing the UI.</p></details>
+    <details><summary>What must you save before an optimistic update?</summary><p>A snapshot of the previous state, so you can roll back if the request fails.</p></details>
+    <details><summary>Why cancel in-flight queries first?</summary><p>So a background refetch that started earlier can't overwrite the optimistic value with old data.</p></details>
+    <details><summary>Name an action that should not be optimistic.</summary><p>A payment (or any irreversible or often-rejected action).</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p><span class="hl">“Coming right up!”</span> Show it now, remember how to undo, and apologise clearly on the rare day it fails.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/07-optimistic-ui.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>React docs, “useOptimistic”.</li><li>TanStack Query docs, “Optimistic Updates”.</li><li>Rauno Freiberg / Vercel, essays on perceived performance.</li><li>Nielsen Norman Group, “Response Time Limits” (0.1 s / 1 s / 10 s).</li></ul>
+  </div>
+  <p class="folio">07</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="server-state-cache.html"><small>← previous note</small>06 · Server-State Cache</a>
+  <a href="state-machines.html"><small>Next note →</small>08 · State Machines</a>
+</nav>
+<footer class="foot"><span>Margin Notes · Vol. 2 · a student's bullet journal on frontend design patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>
