@@ -22,20 +22,36 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
-      - name: Install Playwright and Chromium
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
+      - name: Install dependencies
+        run: npm ci
 
+      - name: Cache the Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('package-lock.json') }}
+
+      # The runner image already has the system libraries Chromium needs, so we skip
+      # `--with-deps` (it pulls ~100 apt packages and fails when Ubuntu mirrors are flaky).
+      # If the rebuild fails for any reason, the committed PDFs in public/pdf are deployed instead.
       - name: Rebuild the ready-made PDFs
-        run: npm run pdf
+        id: pdf
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          npx playwright install chromium
+          npm run pdf
+
+      - name: Note when committed PDFs were used
+        if: steps.pdf.outcome == 'failure'
+        run: echo "::warning::PDF rebuild failed; deploying the PDFs committed in public/pdf."
 
       - name: Make sure every page and PDF exists
         run: |
