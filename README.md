@@ -13,7 +13,7 @@ Live site: https://jepzman.github.io/oni-alien/
 | 5 | Security Patterns (`/security/`) | 15 | field dossier (manila, security-envelope crosshatch, redaction-bar titles, CONFIDENTIAL stamp), steel blue / crimson / khaki | security qualities (simplicity, usability, confidentiality, integrity, availability, containment, auditability, cost, developer experience) |
 | 6 | Cloud & DevOps Patterns (`/cloud/`) | 15 | isometric grid paper (dimension-line titles, status pill), cobalt / sky / signal yellow | operations qualities (simplicity, delivery speed, release safety, reliability, scalability, recoverability, observability, cost, developer experience) |
 
-**Series 2 · The Practitioner's Notebooks.** Book 1 is *The Solution Architect's Notebook* (drafting-sheet skin `theme-architect`: blueprint grid, Architects Daughter, orange / teal / cobalt, a title block on every sheet). Every note follows one case study, Larder, whose facts live in `docs/larder-casebook.md`; the plan for the book is `docs/HANDOFF-solution-architect.md`.
+**Series 2 · The Practitioner's Notebooks.** Book 1 is *The Solution Architect's Notebook* (drafting-sheet skin `theme-architect`: blueprint grid, Architects Daughter, orange / teal / cobalt, a title block on every sheet). Every note follows one case study, Larder: the public **case file** (`/larder/`, built from `content/larder/casefile.py`) introduces the company, its history, goals, cast, books and a story timeline, and each Series 2 book index opens with a “story so far” box (the journal's `story` field). The facts live in `docs/larder-casebook.md`; the plan for the book is `docs/HANDOFF-solution-architect.md`.
 
 | Book · vol. | Journal | Notes | Ratings |
 |---|---|---|---|

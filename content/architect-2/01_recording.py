@@ -86,12 +86,15 @@ are written in one Postgres transaction. We run one Kafka cluster, with no
 transactional producer experience in the team. Launch in Rotterdam is in 6 weeks.
 
 ## Options
-1. Write to Kafka directly from the order service      – simple, but a crash between
-                                                          DB commit and publish loses orders
-2. Transactional outbox in Postgres + relay to Kafka    – no lost orders; one more table
-                                                          and a relay to run
-3. Change data capture (Debezium) on the orders table   – no app changes; new infra, and
-                                                          our table becomes a public contract
+1. Write to Kafka directly from the order service
+   + simple
+   – a crash between the DB commit and the publish loses the order
+2. Transactional outbox in Postgres + a relay to Kafka
+   + no lost orders
+   – one more table and a relay to run
+3. Change data capture (Debezium) on the orders table
+   + no app changes
+   – new infrastructure, and our table becomes a public contract
 
 ## Decision
 Option 2. The order, the payment and the outbox row commit together.

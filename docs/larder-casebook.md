@@ -2,7 +2,9 @@
 
 The running case study for **The Solution Architect's Notebook**. Every note's “situation”, template card
 and example uses these facts. Add to this file whenever a note invents something new, and never contradict
-it. Book 1 follows Larder from October 2025 (Vol. 1) to 2027 (Vol. 6).
+it. Book 1 (architect, Ana) and book 2 (product, Grace) run in parallel from October 2025; book 3 (project, Sanne) from
+January 2026; book 4 (client, Mo) from March 2026. The public version is the case file page, `public/larder/index.html`,
+built from `content/larder/casefile.py`.
 
 ## The company
 
@@ -13,6 +15,19 @@ it. Book 1 follows Larder from October 2025 (Vol. 1) to 2027 (Vol. 6).
 - Growth plan, agreed with investors in September 2025 (a condition of the Series B):
   **six cities by the end of 2027**: Amsterdam (live), **Rotterdam** (launch 27 April 2026),
   Utrecht, The Hague, Eindhoven and **Antwerp** (Belgium: the first city abroad).
+
+## History
+
+| When | What happened |
+| --- | --- |
+| Mar 2024 | Femke and Jasper (co-founder, first CTO) found Larder in Amsterdam. Jasper writes Larder Core. |
+| Jun 2024 | First dark store, **Noord**, opens: about 300 orders a day. |
+| Nov 2024 | Second store, **Zuid**, opens after **5 months** of code changes (everything assumed one store). |
+| Apr 2025 | **King's Day**: checkout times out for **40 minutes** at 5× peak. |
+| Jul 2025 | 4,000 orders a day. **6 %** of orders end in a refund ticket, mostly substitutions. |
+| Aug 2025 | Jasper leaves to start another company. Nobody else knows why Larder Core looks the way it does. |
+| Sep 2025 | **Series B** closes, on one condition: **six cities by the end of 2027**. |
+| Oct 2025 | **Ana** (solution architect, 6 Oct) and **Grace** (product owner, 13 Oct) join. Series 2 starts here. |
 
 ## People
 
@@ -25,13 +40,37 @@ it. Book 1 follows Larder from October 2025 (Vol. 1) to 2027 (Vol. 6).
 | Lena | Legal and data protection officer (DPO) | GDPR, contracts, Belgian rules |
 | Sam | Customer support lead | refunds, complaints, the support tool |
 | Tomás | Manager, dark store Amsterdam-Noord | pickers, the picker app, stock counts |
-| **Ana** | **Solution architect** (joined 6 October 2025; the notebook's “me”) | — |
+| **Ana** | **Solution architect** (joined 6 October 2025; narrator of book 1) | that the platform can grow to six cities without a rewrite |
+| **Grace** | **Product owner, ordering & customer app** (joined 13 October 2025; narrator of book 2) | customers getting what they ordered; fears building the wrong thing fast |
 | Ben | Tech lead, orders team | |
 | Cho | Engineer, payments | |
 | Dee | Tech lead, mobile apps | |
 | Eli | Platform and operations engineer | |
+| Jasper | Co-founder and first CTO (left August 2025) | appears only in old code, old chats and old decisions |
+| Sanne | Delivery manager (joins January 2026; narrator of book 3) | the Rotterdam launch: dates, risks, dependencies |
+| Mo | Key account manager, Larder for Business (joins March 2026; narrator of book 4) | Korenwolf, the first business client |
+
+Grace came from a hotel-booking start-up. She owns the **ordering journey and the customer apps**: basket,
+checkout, slots and **substitutions**; her team is Ben's orders team plus Dee's mobile team. She reports to Priya.
+Ana and Grace start in the same month, learn Larder from opposite sides, and meet in the same workshops: the
+same events appear in both books (Ana's notebook asks “how do we build it?”, Grace's asks “should we, and for whom?”).
 
 Engineering: **14 engineers** in October 2025 (three product teams + platform), hiring to about 22 by 2027.
+
+## Larder for Business and Korenwolf (the client, for book 4)
+
+- **Larder for Business**: weekly restocking of office pantries (fruit, snacks, drinks, coffee), delivered
+  07:00–09:00 by van from the dark stores, invoiced monthly. Femke's idea for a second revenue line with
+  predictable volume.
+- **Korenwolf Group** (fictional): an insurance and pensions company, about **2,400 staff** in three offices
+  (Amsterdam HQ, Rotterdam, Utrecht).
+  - **Hanna**, Head of Workplace: the sponsor; wants happy staff and no complaints to the board.
+  - **Ruben**, procurement: the contract, the price and the service levels; compares Larder with the old caterer.
+- Timeline: met at a facilities trade fair (January 2026) → **pilot** at Amsterdam HQ (May 2026) →
+  **three-office contract** (September 2026): 98 % complete deliveries, delivered by 09:00, monthly report →
+  first hard renewal talk (2027).
+- Why it matters for the other books: B2B orders are large, scheduled and invoiced, which stretches the
+  ordering model (Grace), the architecture (Ana) and the Rotterdam plan (Sanne).
 
 ## Numbers (October 2025, Amsterdam)
 

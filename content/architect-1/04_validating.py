@@ -380,18 +380,19 @@ RISK_STORMING = dict(
            ("Risk owner", "The person responsible for watching and handling one risk."),
            ("Risk register", "The tracked list of risks, owners, actions and status.")],
     code=dict(file="docs/workshops/2025-12-04-risk-storming.md", note="session result, top five", plain=True, src="""
-# Risk-storming: Rotterdam plan                    Thu 4 Dec 2025, 14:00–15:30
+# Risk-storming: Rotterdam plan              Thu 4 Dec 2025, 14:00–15:30
 Diagram   container view v3 (docs/architecture/containers.dsl)
 People    Ana, Ben, Cho, Dee, Eli, Joost, Tomás, Lena, Priya          (9)
 Stickies  47 (21 red, 18 amber, 8 green) → 11 clusters
 
-| # | Risk                                      | L | I | Owner | Action                              | By     |
-|---|-------------------------------------------|---|---|-------|-------------------------------------|--------|
-| 1 | StockPilot API limit (10 req/s) at 6 cities| H | H | Ben   | cache stock per store (ADR 0005)    | 26 Jan |
-| 2 | Rotterdam date slips (lease fixed)        | M | H | Ana   | fixed scope list, weekly check      | weekly |
-| 3 | One Postgres at 5× peak                   | M | H | Eli   | load test at 5× (QAS-1)             | 23 Jan |
-| 4 | Payment provider down on Friday peak      | M | H | Cho   | fallback: queue + retry, status msg | 13 Feb |
-| 5 | Dispatch cron (30 s) too slow for 2 cities| H | M | Ben   | extract Dispatch service (ADR 0002) | Mar    |
+#  Risk                                 L  I  Owner  Action, by
+1  StockPilot API limit (10 req/s)      H  H  Ben    cache stock (ADR 0005), 26 Jan
+2  Rotterdam date slips (lease fixed)   M  H  Ana    fixed scope list, weekly
+3  One Postgres at 5× peak              M  H  Eli    load test at 5× (QAS-1), 23 Jan
+4  Payment provider down at Fri peak    M  H  Cho    queue + retry, status msg, 13 Feb
+5  Dispatch cron too slow for 2 cities  H  M  Ben    extract Dispatch (ADR 0002), March
+
+L = likelihood · I = impact
 
 Surprise of the day: Tomás's single red sticky on the picker app (Wi-Fi) → ASR-2.
 Next session: after the walking skeleton (late January).

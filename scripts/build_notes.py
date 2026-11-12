@@ -310,6 +310,7 @@ JOURNALS = [
         problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
         term="Winter term · 2027", weekdays=(0, 3), start=date(2027, 1, 4),
         kicker="the solution architect's notebook · book 1 · vol. 1",
+        story="<b>October 2025.</b> Larder delivers groceries in Amsterdam from two dark stores and has just promised its investors six cities by the end of 2027. Ana joins as its first solution architect, a week before Grace joins as product owner. This volume follows Ana's first four months, from a one-line brief to a walking skeleton for Rotterdam in January 2026.",
         lead="Volume 1 of <span class=\"hl\">The Solution Architect's Notebook</span>: how an architect gets from a vague business plan to a first architecture people can build, without guessing. {n} notes in {c} collections: understand the problem and the people, find the requirements that really shape the system, choose the first shapes, and test the riskiest ideas before they're expensive. Every note follows <b>Larder</b>, a grocery delivery start-up growing from one city to six, and ends with a <b>try it</b> exercise for your own project.",
         blurb="Stakeholders, drivers, context, the requirements that shape a system, first architecture shapes, and testing risky ideas early.",
         attrs=ARCHITECT_ATTRS, attrs_title="The nine architect ratings", attrs_side="what a good architecture practice is judged on", ratings_h2="Architect ratings",
@@ -345,6 +346,7 @@ JOURNALS = [
         problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
         term="Spring term · 2027", weekdays=(1, 3), start=date(2027, 3, 2),
         kicker="the solution architect's notebook · book 1 · vol. 2 · in progress",
+        story="<b>March 2026.</b> The modular monolith is taking shape, Dispatch is being pulled out into its own service, and Rotterdam opens on 27 April. Every week brings a decision someone will question a year from now. This volume follows how Ana and the team choose, record and live with them.",
         lead="Volume 2 of <span class=\"hl\">The Solution Architect's Notebook</span>: how architects choose between options, record why, and live with the consequences. This volume is <b>in progress</b>: the first note is here, the other fourteen follow (see the future log on the shelf). Same format as Vol. 1, following Larder from March 2026. {n} note so far.",
         blurb="How architects choose between options, record why, and live with the consequences.",
         attrs=ARCHITECT_ATTRS, attrs_title="The nine architect ratings", attrs_side="what a good architecture practice is judged on", ratings_h2="Architect ratings",
@@ -372,9 +374,9 @@ PLANNED_2 = [
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
     ("Jan 2027", [("★", "Book 1, vol. 2 · <b>Decisions &amp; Trade-offs</b>, complete: options analysis, one-way doors, build vs buy, technical debt"), ("•", "One-page printable cheat sheet per collection")]),
-    ("Feb 2027", [("★", "Book 2 · <b>Product Management</b>: discovery, problem framing, prioritisation, roadmaps, metrics that matter"), ("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
-    ("Mar 2027", [("★", "Book 3 · <b>Project Management</b>: planning, estimation, risks and dependencies, delivery rhythms, status that tells the truth"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
-    ("Apr 2027", [("★", "Book 4 · <b>Client Management</b>: expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
+    ("Feb 2027", [("★", "Book 2 · <b>The Product Owner's Notebook</b>: Grace's side of the Larder story: discovery, problem framing, prioritisation, saying no, metrics that matter"), ("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
+    ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b> (Sanne, the Rotterdam launch): planning, estimation, risks and dependencies, delivery rhythms, status that tells the truth"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
+    ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
     ("Mid 2027", [("★", "Book 1, vols. 3–6 · communicating architecture, integration, designing for qualities, governance and influence")]),
     ("Someday", [("•", "Extra notes for Vols. 2, 5 and 6: Debounce &amp; Throttle, Passkeys, Signed Webhooks, Chaos Engineering, Service Catalogues"), ("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
@@ -685,6 +687,15 @@ def attrs_block(j):
   <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained with the pattern</span><span><i class="dot lost"></i> lost with the pattern</span></div>'''
 
 
+def story_box(j):
+    """Series 2 books open with a short “story so far” that links to the Larder case file."""
+    if not j.get("story"):
+        return ""
+    return (f'  <aside class="story" aria-label="The story so far">\n    <span class="tag">the story so far</span>\n'
+            f'    <p>{j["story"]}</p>\n    <p class="story-link"><a href="../larder/index.html">Meet Larder: the case file, the cast '
+            f'and the timeline →</a></p>\n  </aside>')
+
+
 def counts(j):
     return dict(n=len(j["catalogue"]), c=["zero", "one", "two", "three", "four", "five", "six"][len(j["collections"])])
 
@@ -701,6 +712,7 @@ def render_index(j):
         f'  <p class="kicker">{j["kicker"]}</p>',
         f'  <h1 class="cover-title"><span class="hl">{esc(j["title"])}</span></h1>',
         f'  <p class="lead">{j["lead"].format(**counts(j))}</p>',
+        story_box(j),
         KEY,
         '  <h2 id="index"><span class="num">✎</span>Index <span class="side">tap a note to open it</span></h2>',
         index_list(j),
@@ -787,8 +799,20 @@ def shelf():
     return [j for j in JOURNALS if not j.get("draft")]
 
 
+CASEFILE_ITEM = '''    <li class="book book--casefile">
+      <a class="book-cover" href="larder/index.html" aria-label="Open the case file: Meet Larder">
+        <span class="book-band" aria-hidden="true"></span>
+        <span class="book-label"><small>series 2 · read first</small><b>Meet Larder</b><i>the case file</i></span>
+      </a>
+      <div class="book-meta">
+        <p>The company every Series 2 book follows: its history, where it stands, its goals, the cast, and a timeline of every note.</p>
+        <p class="book-actions"><a class="btn" href="larder/index.html">Open the case file</a></p>
+      </div>
+    </li>'''
+
+
 def book_items(journals, planned, series=1):
-    books = []
+    books = [CASEFILE_ITEM] if series == 2 else []
     for j in journals:
         k = j["key"]
         vol = f"book 1 · vol. {j['vol']}" if series == 2 else f"vol. {j['vol']}"
@@ -864,6 +888,86 @@ def render_landing():
     ])
 
 
+def load_casefile():
+    f = CONTENT / "larder" / "casefile.py"
+    spec = importlib.util.spec_from_file_location("larder_casefile", f)
+    mod = importlib.util.module_from_spec(spec)
+    mod.__dict__["Doodle"] = Doodle
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def render_casefile():
+    """The Larder case file: the company, history, goals, cast, books and story timeline behind Series 2."""
+    c = load_casefile()
+    history = "\n".join(f'    <li><span class="when">{w}</span><p>{t}</p></li>' for w, t in c.HISTORY)
+    stats = "\n".join(f'    <div class="stat"><b>{v}</b><span>{l}</span><small>{n}</small></div>' for v, l, n in c.STATS)
+    drivers = "\n".join(f"    <li><b>{d}</b>: {m}</li>" for d, m in c.DRIVERS)
+    cast = "\n".join(
+        f'    <li class="person person--{col}"><span class="avatar" aria-hidden="true">{ini}</span>'
+        f'<div><h3>{name}</h3><p class="role">{role}</p><p><b>Cares about:</b> {cares}</p><p><b>Fears:</b> {fears}</p>'
+        f'<p class="books">{books}</p></div></li>'
+        for ini, name, role, cares, fears, books, col in c.CAST)
+    def book_card(b):
+        num, title, who, when, status, summary, link = b
+        head_ = f'<a href="{link}">{title}</a>' if link else title
+        return (f'    <li class="bookcard{" bookcard--planned" if not link else ""}"><p class="bk">{num} · narrated by {who} · {when}'
+                f'<span class="status">{status}</span></p><h3>{head_}</h3><p>{summary}</p></li>')
+    books = "\n".join(book_card(b) for b in c.BOOKS)
+    months = []
+    for _, label, items in c.TIMELINE:
+        lis = "".join(
+            f'<li class="tl-{k}"><span class="sig">{"★" if k == "s" else "✎"}</span> '
+            + (f'<a href="{href}">{t}</a>' if href else t) + '</li>' for t, href, k in items)
+        months.append(f'    <div class="month"><h3>{label}</h3><ul>{lis}</ul></div>')
+    j = dict(theme="theme-architect casefile")
+    return "\n".join([
+        head("Meet Larder · Jef’s Notes", "The case file for Series 2: Larder's history, goals, cast, books and story timeline.", 1, "Architects+Daughter"),
+        body_open(j),
+        '<a class="skip-link" href="#main">Skip to the case file</a>',
+        bar(None, 1),
+        '<main id="main" class="desk">',
+        '<article class="sheet">',
+        f'  {ROUGH}',
+        SHEET_DOODLES,
+        '  <div class="page-meta"><span class="day">Case file · Oct 2025</span><span class="topic">series 2 · <b>read this first</b></span></div>',
+        '  <p class="kicker">the company behind the practitioner\'s notebooks</p>',
+        '  <h1 class="cover-title"><span class="hl">Meet Larder</span></h1>',
+        f'  <p class="lead">{c.LEAD}</p>',
+        '  <h2 id="premise"><span class="num">1</span>The premise <span class="side">what Larder does</span></h2>',
+        c.PREMISE,
+        '  <h2 id="history"><span class="num">2</span>How it got here <span class="side">2024 → 2025</span></h2>',
+        f'  <ol class="history">\n{history}\n  </ol>',
+        '  <h2 id="now"><span class="num">3</span>Where things stand <span class="side">October 2025, Amsterdam</span></h2>',
+        f'  <div class="stats">\n{stats}\n  </div>',
+        '  <p>The systems: <b>Larder Core</b> (one Django app on PostgreSQL that runs the shop, orders, payments, stock, picking, '
+        'dispatch and support), the customer apps and web shop, the picker app in the stores, <b>StockPilot</b> (a rented warehouse '
+        'system), a payment provider and a helpdesk tool. See the <a href="../architect-1/notes/system-context.html">system context diagram</a>.</p>',
+        '  <h2 id="goals"><span class="num">4</span>The goals <span class="side">six cities by the end of 2027</span></h2>',
+        c.cities.html(),
+        '  <p>Femke, Marco and Joost agreed four business drivers in October 2025. Every book measures its choices against them:</p>',
+        f'  <ul class="drivers">\n{drivers}\n  </ul>',
+        '  <h3>And a second business: Larder for Business</h3>',
+        c.KORENWOLF,
+        '  <h2 id="cast"><span class="num">5</span>The cast <span class="side">who\'s who, and who tells the story</span></h2>',
+        f'  <ul class="cast">\n{cast}\n  </ul>',
+        '  <h2 id="books"><span class="num">6</span>The books <span class="side">one company, four notebooks</span></h2>',
+        c.two_books.html(),
+        f'  <ul class="bookcards">\n{books}\n  </ul>',
+        '  <h2 id="timeline"><span class="num">7</span>The story timeline <span class="side">every note, pinned to its date</span></h2>',
+        '  <p>Read one book from start to end, or follow the story in date order across books. <span class="sig-inline">★</span> marks story events, <span class="sig-inline">✎</span> a note.</p>',
+        f'  <div class="future timeline">\n{chr(10).join(months)}\n  </div>',
+        '  <p class="aside">the facts on this page are the source of truth for every note. If a note and this page disagree, this page wins (and the note gets fixed).</p>',
+        '  <p class="folio">✦</p>',
+        '</article>',
+        foot(),
+        '</main>',
+        '</body>',
+        '</html>',
+        '',
+    ])
+
+
 def redirect(to):
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Moved</title>'
             f'<meta http-equiv="refresh" content="0; url={to}"><link rel="canonical" href="{to}"></head>'
@@ -904,6 +1008,8 @@ def main():
         listing.append(dict(key=key, title=j["title"], all=f"{key}/all.html", pdf=f"{key}/pdf/{journal_pdf(j)}",
                             notes=[dict(num=c[0], slug=c[1], title=c[2], page=f"{key}/notes/{c[1]}.html",
                                         pdf=f"{key}/pdf/{pdf_name(c[0], c[1])}") for c in ready]))
+    (PUBLIC / "larder").mkdir(exist_ok=True)
+    (PUBLIC / "larder" / "index.html").write_text(render_casefile(), encoding="utf-8")
     (PUBLIC / "index.html").write_text(render_landing(), encoding="utf-8")
     (PUBLIC / "journals.json").write_text(json.dumps(listing, indent=1), encoding="utf-8")
     # old links from before the shelf existed (everything was the distributed journal)
