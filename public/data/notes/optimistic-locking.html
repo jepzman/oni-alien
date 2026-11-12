@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Optimistic Locking · Jef’s Notes</title>
+<meta name="description" content="Detect when someone else changed a row first, instead of silently overwriting it.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-data">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 3 · data &amp; database patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="optimistic-locking">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 05.10.26</span><span class="topic">collection · <b>changing safely</b></span></div>
+  <p class="kicker">a.k.a. “check the version stamp”</p>
+  <h1><span class="hl">Optimistic Locking</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Give each row a <b><code>version</code></b> number. When you save, say <b><code>UPDATE … SET version = version + 1 WHERE id = ? AND version = ?</code></b> with the version you read. If <b>0 rows</b> match, someone else changed it first: <b>reload, merge or retry</b> instead of silently overwriting. No locks are held while the user thinks.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> concurrency control</li><li><b>Opposite:</b> pessimistic locking (SELECT … FOR UPDATE)</li><li><b>HTTP cousin:</b> ETag + If-Match</li><li><b>Pairs with:</b> idempotent consumer, history tables</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Read, edit, save. When two people (or two requests) do it on the same row at once, the second save <span class="hl-pink">silently wipes out</span> the first. This is the <b>lost update</b>, and nothing errors.</p>
+  <ul>
+    <li>Two admins edit a product; one price change disappears.</li>
+    <li>Two requests add to a counter; one increment vanishes.</li>
+    <li>Locking the row while the user edits for ten minutes blocks everyone else.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a lost update. Ana and Ben open the same wiki page, version 3. Ana saves a fix to the intro. A minute later Ben saves his edit to the ending, based on the old version, and silently overwrites Ana&#x27;s fix."><g class="rough"><rect class="d f-green" x="20" y="30" width="140" height="50" rx="10"/><rect class="d f-blue" x="20" y="170" width="140" height="50" rx="10"/><rect class="d d-thin f-paper" x="300" y="80" width="220" height="58" rx="4"/><path class="d d-thin f-y" d="M300 84 a4 4 0 0 1 4 -4 h212 a4 4 0 0 1 4 4 v28 h-220 z"/><path class="d" d="M166 50 L296 100"/><path class="d" d="M284.0 101.0 L296 100 L287.8 91.2"/><path class="d d-red" d="M166 196 L296 130"/><path class="d d-red" d="M288.7 139.5 L296 130 L284.0 130.2"/></g><text class="t-head" x="90" y="62" text-anchor="middle" font-size="18">Ana</text><text class="t-head" x="90" y="202" text-anchor="middle" font-size="18">Ben</text><text class="t-head" x="410" y="103" text-anchor="middle" font-size="17">page #7</text><text class="t" x="310" y="131" font-size="16">v3 · “Hello wrold…”</text><text class="t-s" x="300" y="40" text-anchor="middle">① read v3, fix intro, save</text><text class="t-s t-red" x="300" y="210" text-anchor="middle">② save old copy + new ending</text><text class="t-s t-red" x="640" y="120" text-anchor="middle">Ana&#x27;s fix:</text><text class="t-s t-red" x="640" y="146" text-anchor="middle">gone, silently</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Two people edit the same row; the last save silently wipes out the first.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the version stamp</span></h2>
+  <p>Imagine checking out a copy of a shared document stamped <b>v3</b>. When you hand it back, the librarian looks at the master. Still v3? Your changes go in, and the master becomes <b>v4</b>. Already v4? Someone got there first, so you're asked to <b>merge</b> before trying again.</p>
+  <ul>
+    <li>Nobody is blocked while you work: it's <b>optimistic</b> that conflicts are rare.</li>
+    <li>The stamp check happens in <b>one step</b> at hand-in: a conditional UPDATE.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a shared document with a version stamp. Before you hand back your copy, the librarian checks that the stamp on your copy still matches the master. If someone else handed theirs back first, the stamp has changed, and you&#x27;re told to merge first."><g class="rough"><g transform="translate(40 40) scale(1.8)"><g class="d"><rect class="f-y" x="0" y="0" width="50" height="62" rx="3"/><path d="M8 12 h34 M8 22 h26 M8 34 h34 M8 44 h30 M8 54 h20"/><circle class="f-y" cx="44" cy="8" r="6"/></g></g><g transform="translate(120 120) scale(1.0)"><g class="d"><path class="f-paper" d="M22 4 h16 v18 q0 6 8 8 h8 v12 h-48 v-12 h8 q8 -2 8 -8 z"/><path d="M4 50 h52"/></g></g><path class="d" d="M220 100 L400 100"/><path class="d" d="M389.2 105.2 L400 100 L389.2 94.8"/><rect class="d f-pink d-red" x="410" y="60" width="300" height="80" rx="10"/></g><text class="t-s" x="90" y="220" text-anchor="middle">your copy · stamped v3</text><text class="t-s" x="310" y="86" text-anchor="middle">hand it back</text><text class="t-head t-red" x="560" y="107" text-anchor="middle" font-size="19">master is now v4?</text><text class="t-s t-red" x="560" y="175" text-anchor="middle">“someone got there first,</text><text class="t-s t-red" x="560" y="200" text-anchor="middle">merge and try again”</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The librarian checks your copy's version stamp before accepting it.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The stamp on your copy</td><td>The <code>version</code> you read</td></tr>
+      <tr><td>Checking the master's stamp</td><td><code>WHERE version = :read_version</code></td></tr>
+      <tr><td>Master becomes v4</td><td><code>SET version = version + 1</code></td></tr>
+      <tr><td>“Someone got there first”</td><td>0 rows updated → conflict</td></tr>
+      <tr><td>Merge and hand in again</td><td>Reload, merge or retry</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">a conditional update</span></h2>
+  <p>The check and the write are <b>one atomic statement</b>, so there's no gap for another writer to sneak in. The database does the hard part.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="Optimistic locking with a version column. Ana and Ben both read version 3. Ana&#x27;s update says where version equals 3, succeeds, and bumps it to 4. Ben&#x27;s update also says where version equals 3, matches zero rows, and the app tells Ben the page changed and shows him the new version to merge."><g class="rough"><rect class="d f-green" x="20" y="30" width="140" height="50" rx="10"/><rect class="d f-blue" x="20" y="180" width="140" height="50" rx="10"/><rect class="d d-thin f-paper" x="330" y="90" width="220" height="58" rx="4"/><path class="d d-thin f-y" d="M330 94 a4 4 0 0 1 4 -4 h212 a4 4 0 0 1 4 4 v28 h-220 z"/><path class="d d-green" d="M166 54 L326 110"/><path class="d d-green" d="M314.1 111.4 L326 110 L317.5 101.5"/><path class="d d-red" d="M166 204 L326 140"/><path class="d d-red" d="M317.9 148.9 L326 140 L314.0 139.2"/><rect class="d f-pink d-red" x="560" y="170" width="190" height="70" rx="10"/><path class="d d-red d-dash" d="M400 160 L554 200"/><path class="d d-red" d="M542.2 202.3 L554 200 L544.9 192.2"/></g><text class="t-head" x="90" y="62" text-anchor="middle" font-size="18">Ana</text><text class="t-head" x="90" y="212" text-anchor="middle" font-size="18">Ben</text><text class="t-head" x="440" y="113" text-anchor="middle" font-size="17">page #7</text><text class="t" x="340" y="141" font-size="16">version = 3 → 4</text><text class="t-s t-green" x="180" y="26" text-anchor="start">WHERE version = 3 → 1 row ✓</text><text class="t-s t-red" x="180" y="254" text-anchor="start">WHERE version = 3 → 0 rows</text><text class="t-head t-red" x="655" y="212" text-anchor="middle" font-size="16">changed! merge?</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>UPDATE … WHERE version = 3. The first save wins; the second matches 0 rows and must retry.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Add a version column</b><p><code>version int NOT NULL DEFAULT 0</code> (or use <code>updated_at</code>, or PostgreSQL's <code>xmin</code>).</p></li>
+    <li><b>Send it to the client</b><p>Include it in the form or as an HTTP <code>ETag</code>.</p></li>
+    <li><b>Update conditionally</b><p><code>… WHERE id = $1 AND version = $2</code>, bumping the version.</p></li>
+    <li><b>Check the row count</b><p>1 = saved. 0 = conflict: return HTTP 409 / 412 with the latest data.</p></li>
+    <li><b>Decide the conflict policy</b><p>Show a merge screen, retry automatically (for counters), or let the user choose.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Lost update</dt><dd>A write that overwrites another without noticing.</dd></div>
+    <div><dt>Optimistic locking</dt><dd>Detect conflicts at write time; no locks held.</dd></div>
+    <div><dt>Pessimistic locking</dt><dd>Lock the row first (SELECT … FOR UPDATE).</dd></div>
+    <div><dt>Version column</dt><dd>A counter bumped on every write.</dd></div>
+    <div><dt>Compare-and-set</dt><dd>Write only if the value is still what you saw.</dd></div>
+    <div><dt>ETag / If-Match</dt><dd>HTTP headers for the same idea.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>save_page.ts</span><span>node-postgres</span></div>
+<pre><code><span class="c">// the client sends back the version it loaded</span>
+<span class="k">async</span> <span class="k">function</span> savePage(id: number, body: string, version: number) {
+  <span class="k">const</span> r = <span class="k">await</span> db.query(
+    `<span class="k">UPDATE</span> pages <span class="k">SET</span> body = $1, version = version + 1, updated_at = now()
+     <span class="k">WHERE</span> id = $2 <span class="k">AND</span> version = $3
+     <span class="k">RETURNING</span> version`,
+    [body, id, version],
+  );
+  <span class="k">if</span> (r.rowCount === 0) {
+    <span class="k">const</span> latest = <span class="k">await</span> db.query(<span class="s">"SELECT * FROM pages WHERE id = $1"</span>, [id]);
+    <span class="k">throw</span> <span class="k">new</span> Conflict(409, latest.rows[0]);   <span class="c">// UI shows a merge screen</span>
+  }
+  <span class="k">return</span> r.rows[0].version;                    <span class="c">// the new version for next time</span>
+}
+
+<span class="c">// simple counters don't need versions: let the database do the maths</span>
+<span class="c">// UPDATE stock SET qty = qty - 1 WHERE sku = $1 AND qty &gt; 0</span></code></pre>
+  </div>
+  <p class="aside">tools: JPA/Hibernate <code>@Version</code>, Rails <code>lock_version</code>, Entity Framework <code>[ConcurrencyCheck]</code> / rowversion, Django <code>django-concurrency</code>, HTTP ETag + If-Match, DynamoDB condition expressions.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>No lost updates</b>: conflicts are detected, not hidden.</li><li><b>No locks held</b> while users think.</li><li><b>Scales well</b> when conflicts are rare.</li><li><b>Works across HTTP</b> with ETags.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Conflicts must be handled</b> in the UI or with retries.</li><li><b>Wasted work</b> when conflicts are frequent.</li><li><b>Every write path</b> must check the version.</li><li><b>One more column</b> on each table.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Database ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>plain read-modify-write</b> to the same updates with a <b>version check</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to reason about?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A version column and a conflict path.</td></tr>
+      <tr data-before="3" data-after="3"><td>Read speed<small>fast queries?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="4" data-after="4"><td>Write speed<small>cheap inserts &amp; updates?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One conditional UPDATE, no lock waits.</td></tr>
+      <tr data-before="2" data-after="5"><td>Integrity<small>data stays correct?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Lost updates become visible conflicts.</td></tr>
+      <tr data-before="3" data-after="4"><td>Scalability<small>10× more rows?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No long-held locks, so more concurrency.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low storage cost<small>cheap to keep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One small column.</td></tr>
+      <tr data-before="3" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Operability<small>calm to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No mystery “my change disappeared” tickets.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change shape?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New write paths must remember the check.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Checking, then writing</h3><p>SELECT the version, compare in code, then UPDATE: another write sneaks in between. <span class="fix">Fix →</span> put the check in the UPDATE's WHERE clause.</p></li>
+    <li><h3>Ignoring the row count</h3><p>The UPDATE matched 0 rows and the app said “Saved!”. <span class="fix">Fix →</span> treat 0 rows as a conflict, every time.</p></li>
+    <li><h3>Optimistic under heavy contention</h3><p>A hot counter retries forever. <span class="fix">Fix →</span> use atomic SQL (<code>qty = qty - 1</code>) or a pessimistic lock.</p></li>
+    <li><h3>Bypass paths</h3><p>Admin scripts update rows without bumping the version. <span class="fix">Fix →</span> bump it in a trigger, or in every write path.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Forms and editors where people edit the same records.</li><li>APIs where clients read, change and write back.</li><li>Low-to-medium contention on any given row.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Hot rows updated many times per second (use atomic SQL or a queue).</li><li>Insert-only data that's never updated.</li><li>Short transactions where SELECT … FOR UPDATE is simpler.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>History tables</b></li><li><b>Expand &amp; contract</b></li><li><b>Idempotent consumer</b> (Vol. 1)</li><li><b>Optimistic UI</b> (Vol. 2)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What is a lost update?</summary><p>Two read-modify-write cycles overlap and the second save overwrites the first without any error.</p></details>
+    <details><summary>Why put the version check in the WHERE clause?</summary><p>Check and write happen atomically; there's no gap where another writer can change the row.</p></details>
+    <details><summary>What should the API return on a conflict?</summary><p>An error like HTTP 409 or 412 with the latest data so the client can merge or retry.</p></details>
+    <details><summary>When is pessimistic locking better?</summary><p>When contention is high and retries would waste lots of work, for short transactions.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Hand it back only if the <span class="hl">stamp</span> still matches. 0 rows means <span class="hl">someone got there first</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/09-optimistic-locking.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Martin Fowler, <i>Patterns of Enterprise Application Architecture</i>, “Optimistic Offline Lock”.</li><li>Kung &amp; Robinson, “On Optimistic Methods for Concurrency Control” (1981).</li><li>RFC 9110, HTTP “If-Match” and “ETag”.</li><li>Vlad Mihalcea, “Optimistic vs. Pessimistic Locking”.</li></ul>
+  </div>
+  <p class="folio">09</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="materialized-views.html"><small>← previous note</small>08 · Materialized Views</a>
+  <a href="expand-contract.html"><small>Next note →</small>10 · Expand &amp; Contract Migrations</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 3 · a student's bullet journal on data &amp; database patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

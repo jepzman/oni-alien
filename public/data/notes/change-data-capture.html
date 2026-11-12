@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Change Data Capture · Jef’s Notes</title>
+<meta name="description" content="Stream every committed change from the database log to other systems.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-data">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 3 · data &amp; database patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="change-data-capture">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 12.10.26</span><span class="topic">collection · <b>changing safely</b></span></div>
+  <p class="kicker">a.k.a. “the court stenographer”</p>
+  <h1><span class="hl">Change Data Capture</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Don't make the app write the same change to the database <i>and</i> the search index <i>and</i> the cache. Write <b>only to the database</b>, and let a connector <b>read the database's own log</b> (the WAL or binlog) and publish <b>every committed insert, update and delete</b> as an event. Other systems <b>follow the stream</b>, in order, and catch up after outages.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> data integration</li><li><b>Reads:</b> PostgreSQL WAL, MySQL binlog, SQL Server CDC, Mongo change streams</li><li><b>Tools:</b> Debezium, Kafka Connect, AWS DMS, Fivetran</li><li><b>Pairs with:</b> transactional outbox, materialized views</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Data rarely stays in one place: search, caches, analytics and other services all want a copy. Making the app <span class="hl-pink">write to every one of them</span> (dual writes) means any failure leaves the copies <span class="hl-pink">out of sync</span>.</p>
+  <ul>
+    <li>The database commits, the search call times out: search is missing the order forever.</li>
+    <li>Nightly batch exports are hours stale and hammer the database.</li>
+    <li>Changes made by scripts or admin SQL never reach the other systems.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of dual writes. The app saves an order to the database and then also sends it to the search index, the cache and the warehouse. When the search call times out after the database commit, search is now missing the order, and nobody notices for days."><g class="rough"><rect class="d f-blue" x="20" y="100" width="140" height="60" rx="10"/><rect class="d f-green" x="420" y="10" width="180" height="48" rx="10"/><path class="d" d="M166 130 L414 34"/><path class="d" d="M405.8 42.8 L414 34 L402.0 33.0"/><rect class="d f-pink d-red" x="420" y="72" width="180" height="48" rx="10"/><path class="d d-red" d="M166 130 L414 96"/><path class="d d-red" d="M404.0 102.6 L414 96 L402.6 92.3"/><rect class="d f-green" x="420" y="134" width="180" height="48" rx="10"/><path class="d" d="M166 130 L414 158"/><path class="d" d="M402.7 162.0 L414 158 L403.8 151.6"/><rect class="d f-green" x="420" y="196" width="180" height="48" rx="10"/><path class="d" d="M166 130 L414 220"/><path class="d" d="M402.1 221.2 L414 220 L405.6 211.4"/></g><text class="t-head" x="90" y="137" text-anchor="middle">app</text><text class="t-head" x="510" y="41" text-anchor="middle" font-size="17">database</text><text class="t-head t-red" x="510" y="103" text-anchor="middle" font-size="17">search</text><text class="t-head" x="510" y="165" text-anchor="middle" font-size="17">cache</text><text class="t-head" x="510" y="227" text-anchor="middle" font-size="17">warehouse</text><text class="t-s t-red" x="680" y="100" text-anchor="middle">timeout!</text><text class="t-s t-red" x="680" y="126" text-anchor="middle">order missing</text><text class="t-s t-red" x="680" y="152" text-anchor="middle">from search</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The app writes to four places itself. One call fails, and the copies drift apart.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the court stenographer</span></h2>
+  <p>In court, nobody stops the judge to ask what was just said. A <b>stenographer types every word</b> into a transcript, in order. Newspapers, lawyers and the archive all read the <b>transcript</b>, each at their own pace.</p>
+  <ul>
+    <li>The database already keeps that transcript for crash recovery: the <b>write-ahead log</b>.</li>
+    <li>CDC just lets other systems <b>read it</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a court stenographer typing every word said in the courtroom. Reporters don&#x27;t interrupt the judge to ask what happened; they read the stenographer&#x27;s transcript, in order, as it&#x27;s typed."><g class="rough"><g transform="translate(40 60) scale(1.3)"><g class="d"><rect class="f-paper" x="0" y="0" width="70" height="46" rx="3"/><path d="M14 46 v14 M56 46 v14"/><rect x="8" y="8" width="20" height="14" class="f-paper"/><rect x="38" y="10" width="22" height="12" class="f-paper"/><path d="M10 32 h48"/></g></g><path class="d" d="M150 90 L280 90"/><path class="d" d="M269.2 95.2 L280 90 L269.2 84.8"/><g transform="translate(290 40) scale(1.6)"><g class="d"><path class="f-y" d="M6 0 h48 v62 l-8 -6 l-8 6 l-8 -6 l-8 6 l-8 -6 l-8 6 z"/><path d="M14 12 h32 M14 22 h24 M14 32 h32 M14 42 h18"/></g></g><path class="d" d="M400 90 L540 50"/><path class="d" d="M531.0 58.0 L540 50 L528.2 47.9"/><path class="d" d="M400 90 L540 100"/><path class="d" d="M528.9 104.4 L540 100 L529.6 94.0"/><path class="d" d="M400 90 L540 150"/><path class="d" d="M528.0 150.5 L540 150 L532.1 140.9"/></g><text class="t-s t-pen" x="85" y="160" text-anchor="middle">the courtroom</text><text class="t-s" x="340" y="170" text-anchor="middle">the transcript</text><text class="t-s t-green" x="560" y="56" text-anchor="start">newspaper</text><text class="t-s t-green" x="560" y="106" text-anchor="start">lawyers</text><text class="t-s t-green" x="560" y="156" text-anchor="start">archive</text><text class="t-s t-pen" x="380" y="228" text-anchor="middle">nobody interrupts the judge</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The court stenographer: every word goes into the transcript, and everyone else reads that.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The courtroom</td><td>The database where the app writes</td></tr>
+      <tr><td>The stenographer's transcript</td><td>The WAL / binlog: every committed change, in order</td></tr>
+      <tr><td>Reading the transcript</td><td>A CDC connector (Debezium) tailing the log</td></tr>
+      <tr><td>Newspapers, lawyers, archive</td><td>Search, cache, warehouse, other services</td></tr>
+      <tr><td>“Where did I stop reading?”</td><td>The stored log position (offset / LSN)</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">tail the log, publish the changes</span></h2>
+  <p>Because CDC reads <b>committed</b> changes from the log, it catches every write path (app, scripts, admin SQL), keeps their <b>order</b>, and never sees a transaction that rolled back.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Change data capture pipeline. The app writes only to the database. Every commit lands in the write-ahead log. A connector such as Debezium reads the log and publishes change events, insert, update and delete with before and after values, to a Kafka topic. Search, cache and warehouse consumers each read the stream at their own pace."><g class="rough"><rect class="d f-blue" x="10" y="110" width="96" height="60" rx="10"/><path class="d" d="M112 140 L138 140"/><path class="d" d="M127.2 145.2 L138 140 L127.2 134.8"/><path class="d d-thin f-paper" d="M145 110 v40 a40 9 0 0 0 80 0 v-40"/><ellipse class="d d-thin f-paper" cx="185" cy="110" rx="40" ry="9"/><g transform="translate(238 100) scale(0.9)"><g class="d"><path class="f-y" d="M6 0 h48 v62 l-8 -6 l-8 6 l-8 -6 l-8 6 l-8 -6 l-8 6 z"/><path d="M14 12 h32 M14 22 h24 M14 32 h32 M14 42 h18"/></g></g><path class="d" d="M298 140 L334 140"/><path class="d" d="M323.2 145.2 L334 140 L323.2 134.8"/><rect class="d f-y" x="340" y="110" width="124" height="60" rx="10"/><path class="d" d="M470 140 L498 140"/><path class="d" d="M487.2 145.2 L498 140 L487.2 134.8"/><rect class="d d-thin f-y" x="504" y="130" width="16" height="11.52" rx="2"/><path class="d d-thin" d="M504 130 l8 6.4 l8 -6.4"/><rect class="d d-thin f-y" x="526" y="130" width="16" height="11.52" rx="2"/><path class="d d-thin" d="M526 130 l8 6.4 l8 -6.4"/><rect class="d d-thin f-y" x="548" y="130" width="16" height="11.52" rx="2"/><path class="d d-thin" d="M548 130 l8 6.4 l8 -6.4"/><path class="d d-green" d="M580 140 L606 60"/><path class="d d-green" d="M607.6 71.9 L606 60 L597.7 68.7"/><rect class="d f-green" x="612" y="40" width="140" height="44" rx="10"/><path class="d d-green" d="M580 140 L606 140"/><path class="d d-green" d="M595.2 145.2 L606 140 L595.2 134.8"/><rect class="d f-green" x="612" y="120" width="140" height="44" rx="10"/><path class="d d-green" d="M580 140 L606 220"/><path class="d d-green" d="M597.7 211.3 L606 220 L607.6 208.1"/><rect class="d f-green" x="612" y="200" width="140" height="44" rx="10"/></g><text class="t-head" x="58" y="147" text-anchor="middle">app</text><text class="t t-soft" x="185" y="180" text-anchor="middle" font-size="16">database</text><text class="t-s t-pen" x="266" y="190" text-anchor="middle">WAL / binlog</text><text class="t-head" x="402" y="147" text-anchor="middle" font-size="17">connector</text><text class="t-head" x="682" y="69" text-anchor="middle" font-size="16">search</text><text class="t-head" x="682" y="149" text-anchor="middle" font-size="16">cache</text><text class="t-head" x="682" y="229" text-anchor="middle" font-size="16">warehouse</text><text class="t-s t-pen" x="260" y="260" text-anchor="middle">{ op: &#x27;u&#x27;, before: {…}, after: {…}, lsn }</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The app writes once. A connector tails the database log and streams every committed change.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Enable logical decoding</b><p>PostgreSQL: <code>wal_level = logical</code> plus a publication; MySQL: row-based binlog.</p></li>
+    <li><b>Run a connector</b><p>Debezium (on Kafka Connect or Debezium Server) takes a snapshot, then streams changes.</p></li>
+    <li><b>Publish events</b><p>One topic per table: <code>{op, before, after, source.lsn}</code>, keyed by primary key so a row's changes stay in order.</p></li>
+    <li><b>Consume idempotently</b><p>Consumers upsert by key and can replay from an offset after an outage.</p></li>
+    <li><b>Watch the slot</b><p>A stalled consumer makes the database keep WAL forever; alert on replication slot lag.</p></li>
+    <li><b>Decide the contract</b><p>Raw table events leak your schema; for other teams, publish curated events (outbox) instead.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>CDC</dt><dd>Change data capture: streaming row changes out of a database.</dd></div>
+    <div><dt>WAL / binlog</dt><dd>The database's own ordered log of changes.</dd></div>
+    <div><dt>Log-based CDC</dt><dd>Reading the log (vs. polling or triggers).</dd></div>
+    <div><dt>Replication slot</dt><dd>PostgreSQL bookmark for where a consumer is in the WAL.</dd></div>
+    <div><dt>Snapshot</dt><dd>Initial full copy before streaming changes.</dd></div>
+    <div><dt>Dual write</dt><dd>The app writing to two systems itself (the anti-pattern).</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>cdc.sql + event.json</span><span>PostgreSQL + Debezium</span></div>
+<pre><code><span class="c">-- postgresql.conf: wal_level = logical</span>
+<span class="k">CREATE</span> PUBLICATION app_changes <span class="k">FOR</span> <span class="k">TABLE</span> orders, customers;
+
+<span class="c">-- Debezium creates a replication slot and streams each change:</span>
+{
+  <span class="s">"op"</span>: <span class="s">"u"</span>,                                   <span class="c">// c = insert, u = update, d = delete</span>
+  <span class="s">"before"</span>: { <span class="s">"id"</span>: 9041, <span class="s">"status"</span>: <span class="s">"paid"</span> },
+  <span class="s">"after"</span>:  { <span class="s">"id"</span>: 9041, <span class="s">"status"</span>: <span class="s">"shipped"</span> },
+  <span class="s">"source"</span>: { <span class="s">"table"</span>: <span class="s">"orders"</span>, <span class="s">"lsn"</span>: 2398123408 },
+  <span class="s">"ts_ms"</span>: 1762941660000
+}
+
+<span class="c">-- keep an eye on how far behind consumers are</span>
+<span class="k">SELECT</span> slot_name, pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn))
+<span class="k">FROM</span> pg_replication_slots;</code></pre>
+  </div>
+  <p class="aside">tools: Debezium (PostgreSQL, MySQL, SQL Server, MongoDB, Oracle), Kafka Connect, AWS DMS, Google Datastream, Fivetran, Airbyte, Estuary, PostgreSQL logical replication, MongoDB change streams, DynamoDB Streams.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>One write, many copies</b>, always in sync eventually.</li><li><b>Catches every write path</b>, including scripts and admin SQL.</li><li><b>Ordered and replayable</b>: consumers catch up after outages.</li><li><b>Near real time</b> instead of nightly exports.</li><li><b>Little extra load</b> on the database (reads the log).</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More infrastructure</b>: connectors, Kafka, monitoring.</li><li><b>Eventual consistency</b> for the copies.</li><li><b>Your table schema becomes an API</b> if others consume raw events.</li><li><b>Stuck slots</b> can fill the database disk.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Database ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>dual writes and nightly exports from the app</b> to <b>log-based CDC</b> feeding the same systems.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="2"><td>Simplicity<small>easy to reason about?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A connector and a stream to run and understand.</td></tr>
+      <tr data-before="3" data-after="3"><td>Read speed<small>fast queries?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral for the source database.</td></tr>
+      <tr data-before="2" data-after="4"><td>Write speed<small>cheap inserts &amp; updates?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The app writes once instead of four times.</td></tr>
+      <tr data-before="2" data-after="5"><td>Integrity<small>data stays correct?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Committed changes only, in order, from every writer.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>10× more rows?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Consumers scale independently of the database.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low storage cost<small>cheap to keep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Topics and retained WAL take space.</td></tr>
+      <tr data-before="2" data-after="4"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Every change is available to new consumers.</td></tr>
+      <tr data-before="3" data-after="2"><td>Operability<small>calm to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Slot lag, connector restarts and schema changes to watch.</td></tr>
+      <tr data-before="2" data-after="4"><td>Evolvability<small>easy to change shape?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New consumers plug in without touching the app.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>A forgotten replication slot</h3><p>A consumer stops, PostgreSQL keeps every WAL file, the disk fills. <span class="fix">Fix →</span> alert on slot lag; set <code>max_slot_wal_keep_size</code>.</p></li>
+    <li><h3>Exposing raw tables to other teams</h3><p>Renaming a column breaks three downstream services. <span class="fix">Fix →</span> publish curated events (transactional outbox) for external contracts.</p></li>
+    <li><h3>Non-idempotent consumers</h3><p>A connector restart replays events and doubles counts. <span class="fix">Fix →</span> upsert by key, track offsets.</p></li>
+    <li><h3>Forgetting deletes</h3><p>The search index keeps rows deleted in the database. <span class="fix">Fix →</span> handle <code>op = d</code> and tombstones.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Keeping search indexes, caches and warehouses in sync.</li><li>Replacing nightly batch exports with near-real-time feeds.</li><li>Migrating data to a new database with little downtime.</li><li>Audit streams of every change.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>A single database with no copies to keep in sync.</li><li>Publishing business events to other teams (prefer the outbox).</li><li>Teams that can't run and monitor streaming infrastructure yet.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Transactional outbox</b> (Vol. 1)</li><li><b>Materialized views</b></li><li><b>History tables</b></li><li><b>Publish–subscribe</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why are dual writes unsafe?</summary><p>The two writes aren't atomic; if one fails after the other succeeds, the systems drift apart silently.</p></details>
+    <details><summary>Why does log-based CDC never emit rolled-back changes?</summary><p>It reads committed transactions from the write-ahead log.</p></details>
+    <details><summary>What happens if a CDC consumer stops for a week in PostgreSQL?</summary><p>The replication slot keeps WAL from being removed, so disk usage grows until the consumer resumes or the slot is dropped.</p></details>
+    <details><summary>CDC or outbox for events other teams consume?</summary><p>Outbox: it publishes deliberate business events, so your internal table schema isn't a public contract.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>The database already keeps a <span class="hl">transcript</span>. Let everyone <span class="hl">read it</span>, instead of telling each one yourself.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/11-change-data-capture.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Debezium documentation, “Debezium Architecture” and PostgreSQL connector.</li><li>Martin Kleppmann, “Turning the database inside-out” (talk) and <i>DDIA</i> ch. 11.</li><li>PostgreSQL docs, “Logical Replication” and “Replication Slots”.</li><li>Gunnar Morling, “Reliable Microservices Data Exchange With the Outbox Pattern”.</li></ul>
+  </div>
+  <p class="folio">11</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="expand-contract.html"><small>← previous note</small>10 · Expand &amp; Contract Migrations</a>
+  <a href="partitioning.html"><small>Next note →</small>12 · Table Partitioning</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 3 · a student's bullet journal on data &amp; database patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

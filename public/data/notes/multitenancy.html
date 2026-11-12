@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Multitenancy · Jef’s Notes</title>
+<meta name="description" content="Serve many customers from one database while keeping each one&#x27;s data apart.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-data">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 3 · data &amp; database patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="multitenancy">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 19.10.26</span><span class="topic">collection · <b>growing</b></span></div>
+  <p class="kicker">a.k.a. “the apartment block”</p>
+  <h1><span class="hl">Multitenancy</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Serve many customers (tenants) from one system while <b>keeping their data apart</b>. Choose a model: <b>shared tables with a <code>tenant_id</code></b> (cheapest, most common), <b>a schema per tenant</b>, or <b>a database per tenant</b> (strongest isolation). With shared tables, let the database enforce isolation with <b>row-level security</b>, so one forgotten WHERE can't leak data.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> SaaS data design</li><li><b>Models:</b> shared · schema-per-tenant · database-per-tenant</li><li><b>Guard:</b> row-level security (RLS)</li><li><b>Pairs with:</b> partitioning, sharding, connection pooling</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">A SaaS app holds data for hundreds of companies. Running a database for each is expensive; putting them all in one table is cheap but <span class="hl-pink">one missing filter away from a leak</span>. And one big customer can slow everyone down.</p>
+  <ul>
+    <li>A new query forgets <code>WHERE tenant_id = ?</code> and shows another company's data.</li>
+    <li>One tenant's heavy export slows every other tenant (noisy neighbour).</li>
+    <li>An enterprise customer asks for their data in their own region, or deleted on request.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a SaaS app with three customer companies, Acme, Globex and Initech, in one table. A developer forgets the where tenant_id clause in one new report query, and Acme&#x27;s admin suddenly sees Globex&#x27;s invoices."><g class="rough"><rect class="d d-thin f-paper" x="20" y="30" width="260" height="136" rx="4"/><path class="d d-thin f-y" d="M20 34 a4 4 0 0 1 4 -4 h252 a4 4 0 0 1 4 4 v28 h-260 z"/><path class="d d-thin d-soft" d="M26 88 h248"/><rect class="f-hl" x="23" y="90" width="254" height="22" rx="2" style="stroke:none"/><path class="d d-thin d-soft" d="M26 114 h248"/><path class="d d-thin d-soft" d="M26 140 h248"/><rect class="d f-pink d-red" x="380" y="160" width="300" height="60" rx="10"/></g><text class="t-head" x="150" y="53" text-anchor="middle" font-size="17">invoices</text><text class="t" x="30" y="81" font-size="16">acme · #1 · €900</text><text class="t" x="30" y="107" font-size="16">globex · #2 · €4,100</text><text class="t" x="30" y="133" font-size="16">initech · #3 · €75</text><text class="t" x="30" y="159" font-size="16">acme · #4 · €320</text><text class="t-s t-pen" x="460" y="50" text-anchor="middle">new report:</text><text class="t-s t-pen" x="460" y="76" text-anchor="middle">SELECT * FROM invoices</text><text class="t-s t-red" x="460" y="102" text-anchor="middle">-- forgot WHERE tenant_id</text><text class="t-head t-red" x="530" y="197" text-anchor="middle" font-size="18">Acme sees Globex&#x27;s data</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Many customers in one table, and one missing WHERE away from a data leak.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the apartment block</span></h2>
+  <p>An apartment block <b>shares the foundation, lift and plumbing</b>, which keeps rent low. But every flat has <b>its own locked door</b>. Someone who wants total privacy can rent a <b>house of their own</b>, at a much higher price.</p>
+  <ul>
+    <li>The building is your <b>shared database</b>; flats are <b>rows tagged with tenant_id</b>.</li>
+    <li>The lock on each door is <b>row-level security</b>.</li>
+    <li>A house each is <b>database per tenant</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of an apartment building. Tenants share the foundation, the lift and the plumbing, but each flat has its own locked door. Some buildings put each tenant in a separate house instead: more private, more expensive."><g class="rough"><rect class="d f-paper" x="40" y="30" width="280" height="200" rx="2"/><rect class="d f-green" x="56" y="46" width="76" height="74" rx="2"/><g transform="translate(82 74) scale(0.4)"><g class="d"><rect class="f-paper" x="8" y="26" width="44" height="32" rx="4"/><path d="M18 26 v-8 a12 12 0 0 1 24 0 v8 M30 38 v8"/></g></g><rect class="d f-y" x="144" y="46" width="76" height="74" rx="2"/><g transform="translate(170 74) scale(0.4)"><g class="d"><rect class="f-paper" x="8" y="26" width="44" height="32" rx="4"/><path d="M18 26 v-8 a12 12 0 0 1 24 0 v8 M30 38 v8"/></g></g><rect class="d f-green" x="232" y="46" width="76" height="74" rx="2"/><g transform="translate(258 74) scale(0.4)"><g class="d"><rect class="f-paper" x="8" y="26" width="44" height="32" rx="4"/><path d="M18 26 v-8 a12 12 0 0 1 24 0 v8 M30 38 v8"/></g></g><rect class="d f-y" x="56" y="136" width="76" height="74" rx="2"/><g transform="translate(82 164) scale(0.4)"><g class="d"><rect class="f-paper" x="8" y="26" width="44" height="32" rx="4"/><path d="M18 26 v-8 a12 12 0 0 1 24 0 v8 M30 38 v8"/></g></g><rect class="d f-green" x="144" y="136" width="76" height="74" rx="2"/><g transform="translate(170 164) scale(0.4)"><g class="d"><rect class="f-paper" x="8" y="26" width="44" height="32" rx="4"/><path d="M18 26 v-8 a12 12 0 0 1 24 0 v8 M30 38 v8"/></g></g><rect class="d f-y" x="232" y="136" width="76" height="74" rx="2"/><g transform="translate(258 164) scale(0.4)"><g class="d"><rect class="f-paper" x="8" y="26" width="44" height="32" rx="4"/><path d="M18 26 v-8 a12 12 0 0 1 24 0 v8 M30 38 v8"/></g></g><g transform="translate(470 70) scale(1.3)"><g class="d"><rect class="f-paper" x="4" y="22" width="60" height="38"/><path class="f-paper" d="M0 22 l8 -16 h52 l8 16 z"/><rect x="26" y="38" width="16" height="22"/></g></g><g transform="translate(600 70) scale(1.3)"><g class="d"><rect class="f-paper" x="4" y="22" width="60" height="38"/><path class="f-paper" d="M0 22 l8 -16 h52 l8 16 z"/><rect x="26" y="38" width="16" height="22"/></g></g></g><text class="t-s t-pen" x="180" y="252" text-anchor="middle">shared building, own locked door</text><text class="t-s t-pen" x="580" y="180" text-anchor="middle">or: a house each</text><text class="t-s t-pen" x="580" y="206" text-anchor="middle">(more private, more €)</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>An apartment block: shared building, separate locked flats.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The shared building</td><td>One database and one set of tables</td></tr>
+      <tr><td>The flat number</td><td><code>tenant_id</code> on every row</td></tr>
+      <tr><td>A lock on each door</td><td>Row-level security policies</td></tr>
+      <tr><td>A house each</td><td>Database (or schema) per tenant</td></tr>
+      <tr><td>The noisy neighbour</td><td>One tenant's load hurting others</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">pick a model, then lock the doors</span></h2>
+  <p>Most SaaS products start with <b>shared tables</b> and add <b>row-level security</b>, then move their biggest or most demanding customers to dedicated databases later.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Three multitenancy models side by side. Shared tables with a tenant_id column and row-level security: cheapest, most tenants. Schema per tenant: one schema each in one database. Database per tenant: strongest isolation, highest cost. An arrow from left to right shows isolation and cost going up, tenant count going down."><g class="rough"><rect class="d f-green" x="20" y="40" width="220" height="90" rx="10"/><rect class="d f-y" x="270" y="40" width="220" height="90" rx="10"/><rect class="d f-blue" x="520" y="40" width="220" height="90" rx="10"/><path class="d" d="M40 180 L700 180"/><path class="d" d="M689.2 185.2 L700 180 L689.2 174.8"/><path class="d" d="M700 230 L40 230"/><path class="d" d="M50.8 224.8 L40 230 L50.8 235.2"/></g><text class="t-head" x="130" y="81" text-anchor="middle" font-size="19">shared tables</text><text class="t" x="130" y="105" text-anchor="middle" font-size="17">tenant_id + RLS</text><text class="t-head" x="380" y="81" text-anchor="middle" font-size="19">schema each</text><text class="t" x="380" y="105" text-anchor="middle" font-size="17">acme.*, globex.*</text><text class="t-head" x="630" y="81" text-anchor="middle" font-size="19">database each</text><text class="t" x="630" y="105" text-anchor="middle" font-size="17">acme_db, globex_db</text><text class="t-s" x="370" y="168" text-anchor="middle">isolation ↑ · cost per tenant ↑</text><text class="t-s" x="370" y="262" text-anchor="middle">tenants per server ↑ · ops effort ↓</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Three models: more isolation costs more. Most SaaS starts with shared tables + row-level security.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Choose the model</b><p>Shared tables for many small tenants; schema or database per tenant for few, large or regulated ones. Hybrids are common.</p></li>
+    <li><b>Put tenant_id everywhere</b><p>On every tenant-owned table, first in composite indexes and keys: <code>(tenant_id, id)</code>.</p></li>
+    <li><b>Enforce it in the database</b><p>Enable row-level security with a policy that compares <code>tenant_id</code> to the session's <code>app.tenant_id</code> setting.</p></li>
+    <li><b>Set the tenant per request</b><p><code>SET LOCAL app.tenant_id = …</code> at the start of each transaction (pooler-safe).</p></li>
+    <li><b>Plan for big tenants</b><p>Per-tenant limits, partitioning or sharding by tenant_id, and a way to move a tenant to its own database.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Tenant</dt><dd>One customer organisation using the shared system.</dd></div>
+    <div><dt>Isolation</dt><dd>Guarantee that tenants can't see or affect each other.</dd></div>
+    <div><dt>Row-level security</dt><dd>Database rules that filter rows per session.</dd></div>
+    <div><dt>Noisy neighbour</dt><dd>One tenant hogging shared resources.</dd></div>
+    <div><dt>Silo / pool / bridge</dt><dd>Database-per-tenant / shared / mixed models.</dd></div>
+    <div><dt>Tenant-aware key</dt><dd>Primary or index key starting with tenant_id.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>tenancy.sql</span><span>PostgreSQL row-level security</span></div>
+<pre><code><span class="k">ALTER</span> <span class="k">TABLE</span> invoices <span class="k">ENABLE</span> <span class="k">ROW</span> <span class="k">LEVEL</span> <span class="k">SECURITY</span>;
+<span class="k">ALTER</span> <span class="k">TABLE</span> invoices FORCE <span class="k">ROW</span> <span class="k">LEVEL</span> <span class="k">SECURITY</span>;      <span class="c">-- applies to the table owner too</span>
+
+<span class="k">CREATE</span> <span class="k">POLICY</span> tenant_isolation <span class="k">ON</span> invoices
+  <span class="k">USING</span> (tenant_id = current_setting(<span class="s">'app.tenant_id'</span>)::bigint)
+  <span class="k">WITH</span> <span class="k">CHECK</span> (tenant_id = current_setting(<span class="s">'app.tenant_id'</span>)::bigint);
+
+<span class="k">CREATE</span> <span class="k">INDEX</span> <span class="k">ON</span> invoices (tenant_id, created_at <span class="k">DESC</span>);
+
+<span class="c">-- per request, inside the transaction (safe with transaction poolers)</span>
+<span class="k">BEGIN</span>;
+<span class="k">SET</span> LOCAL app.tenant_id = <span class="s">'42'</span>;
+<span class="k">SELECT</span> * <span class="k">FROM</span> invoices;            <span class="c">-- only tenant 42's rows, even without WHERE</span>
+<span class="k">COMMIT</span>;</code></pre>
+  </div>
+  <p class="aside">tools: PostgreSQL row-level security, Citus (shard by tenant_id), Supabase RLS, Rails <code>acts_as_tenant</code>, Django <code>django-tenants</code> (schema per tenant), AWS SaaS Factory guidance, Nile and Neon for database-per-tenant.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Low cost per tenant</b> with shared tables.</li><li><b>One schema, one deploy</b> for everyone.</li><li><b>Isolation enforced by the database</b>, not just app code.</li><li><b>A path to dedicated databases</b> for big customers.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Noisy neighbours</b> share resources.</li><li><b>tenant_id everywhere</b>: keys, indexes, joins.</li><li><b>Per-tenant restore</b> is harder in shared tables.</li><li><b>Mistakes are expensive</b> (a leak is a breach).</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Database ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>shared tables with app-level WHERE filters only</b> to <b>shared tables with tenant-first keys and row-level security</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to reason about?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Policies and session settings to understand.</td></tr>
+      <tr data-before="3" data-after="4"><td>Read speed<small>fast queries?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tenant-first indexes keep each tenant's data together.</td></tr>
+      <tr data-before="3" data-after="3"><td>Write speed<small>cheap inserts &amp; updates?</small></td><td class="dcell"></td><td class="score"></td><td class="why">RLS checks cost very little per row.</td></tr>
+      <tr data-before="2" data-after="5"><td>Integrity<small>data stays correct?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A forgotten WHERE can no longer leak data.</td></tr>
+      <tr data-before="3" data-after="4"><td>Scalability<small>10× more rows?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Ready to shard or move tenants by tenant_id.</td></tr>
+      <tr data-before="4" data-after="4"><td>Low storage cost<small>cheap to keep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Still one shared database.</td></tr>
+      <tr data-before="4" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Cross-tenant reports need a privileged role.</td></tr>
+      <tr data-before="3" data-after="3"><td>Operability<small>calm to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Policies must be tested with every migration.</td></tr>
+      <tr data-before="3" data-after="4"><td>Evolvability<small>easy to change shape?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tenants can be moved to dedicated databases later.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Isolation only in app code</h3><p>One new endpoint forgets the filter: breach. <span class="fix">Fix →</span> enforce with RLS; test that tenant A can't read tenant B.</p></li>
+    <li><h3>Session settings with a pooler</h3><p>A <code>SET</code> leaks to the next request on the same connection. <span class="fix">Fix →</span> use <code>SET LOCAL</code> inside a transaction.</p></li>
+    <li><h3>tenant_id not first in indexes</h3><p>Queries for one tenant scan everyone's rows. <span class="fix">Fix →</span> lead keys and indexes with tenant_id.</p></li>
+    <li><h3>Schema per tenant at 10,000 tenants</h3><p>Migrations take hours and catalogs bloat. <span class="fix">Fix →</span> use shared tables for the long tail.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>SaaS products serving many organisations.</li><li>Tenants with similar schemas and features.</li><li>You need cheap onboarding for many small customers.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>A handful of huge, regulated customers (give each a database).</li><li>Single-customer internal apps.</li><li>Tenants needing very different schemas.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Table partitioning</b></li><li><b>Connection pooling</b></li><li><b>Surrogate keys</b></li><li><b>Sharding</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Name the three classic multitenancy models.</summary><p>Shared tables with a tenant_id, schema per tenant, and database per tenant.</p></details>
+    <details><summary>What does row-level security add?</summary><p>The database filters rows by tenant automatically, so a query that forgets WHERE tenant_id can't see other tenants' data.</p></details>
+    <details><summary>Why SET LOCAL rather than SET with a connection pooler?</summary><p>SET LOCAL lasts only for the transaction, so the setting can't leak to the next request that reuses the connection.</p></details>
+    <details><summary>Why put tenant_id first in indexes?</summary><p>Queries always filter by tenant, so a tenant-first index jumps straight to that tenant's rows.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Share the <span class="hl">building</span>, lock every <span class="hl">door</span>, and let the <span class="hl">database</span> hold the keys.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/13-multitenancy.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>PostgreSQL docs, “Row Security Policies”.</li><li>AWS whitepaper, “SaaS Tenant Isolation Strategies”.</li><li>Microsoft Azure Architecture Center, “Multitenant SaaS database tenancy patterns”.</li><li>Citus docs, “Multi-tenant Applications”.</li></ul>
+  </div>
+  <p class="folio">13</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="partitioning.html"><small>← previous note</small>12 · Table Partitioning</a>
+  <a href="connection-pooling.html"><small>Next note →</small>14 · Connection Pooling</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 3 · a student's bullet journal on data &amp; database patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

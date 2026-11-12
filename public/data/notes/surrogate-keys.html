@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Surrogate Keys · Jef’s Notes</title>
+<meta name="description" content="Give every row a meaningless, stable id instead of keying on real-world values.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-data">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 3 · data &amp; database patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="surrogate-keys">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 10.09.26</span><span class="topic">collection · <b>modelling</b></span></div>
+  <p class="kicker">a.k.a. “the coat-check ticket”</p>
+  <h1><span class="hl">Surrogate Keys</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Make every table's primary key a <b>meaningless, stable id</b> (an identity number or a UUID), and keep real-world values like email or SKU as <b>UNIQUE columns</b>. References point at the id, so <b>real-world changes stay one-row updates</b>, and joins stay small and fast.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> data modelling</li><li><b>Kinds:</b> identity / sequence, UUID v4, UUID v7, ULID</li><li><b>Opposite:</b> natural keys</li><li><b>Pairs with:</b> normalization, sharding</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">A natural key, like an email, a username or a product code, feels free: it's already unique. But real-world values <span class="hl-pink">change</span>, get <span class="hl-pink">reused</span>, and turn out to be <span class="hl-pink">less unique than promised</span>.</p>
+  <ul>
+    <li>A user changes their email, and every table that stores it must change too.</li>
+    <li>“Unique” national ids get typos, reissues and foreign formats.</li>
+    <li>Wide text keys make every index and foreign key bigger.</li>
+    <li>Keys show up in URLs and logs, leaking personal data.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="Doodle of a users table keyed by email. Orders, sessions and invoices all store the email to point at the user. When the user changes their email, every referencing row in three tables has to be updated, and a missed one breaks the link."><g class="rough"><rect class="d d-thin f-paper" x="20" y="70" width="200" height="84" rx="4"/><path class="d d-thin f-y" d="M20 74 a4 4 0 0 1 4 -4 h192 a4 4 0 0 1 4 4 v28 h-200 z"/><rect class="f-hl" x="23" y="104" width="194" height="22" rx="2" style="stroke:none"/><path class="d d-thin d-soft" d="M26 128 h188"/><rect class="d f-paper" x="460" y="20" width="260" height="56" rx="10"/><path class="d d-red" d="M454 48 L226 110"/><path class="d d-red" d="M235.1 102.1 L226 110 L237.8 112.2"/><rect class="d f-paper" x="460" y="100" width="260" height="56" rx="10"/><path class="d d-red" d="M454 128 L226 110"/><path class="d d-red" d="M237.2 105.6 L226 110 L236.4 116.1"/><rect class="d f-paper" x="460" y="180" width="260" height="56" rx="10"/><path class="d d-red" d="M454 208 L226 110"/><path class="d d-red" d="M238.0 109.5 L226 110 L233.9 119.1"/></g><text class="t-head" x="120" y="93" text-anchor="middle" font-size="17">users</text><text class="t" x="30" y="121" font-size="16">email (PK)</text><text class="t" x="30" y="147" font-size="16">name</text><text class="t-head" x="590" y="55" text-anchor="middle" font-size="17">orders.user_email</text><text class="t-head" x="590" y="135" text-anchor="middle" font-size="17">sessions.user_email</text><text class="t-head" x="590" y="215" text-anchor="middle" font-size="17">invoices.user_email</text><text class="t-s t-red" x="110" y="210" text-anchor="middle">Ana changes her email…</text><text class="t-s t-red" x="110" y="236" text-anchor="middle">…3 tables to rewrite</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Key on a real-world value, and changing that value means rewriting every table that points to it.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the coat-check ticket</span></h2>
+  <p>At a coat check you get <b>ticket 042</b>. The number tells nobody your name, your coat's colour or your phone number. That's the point: you can change your hat, your name or your mind, and <b>042 still finds the coat</b>.</p>
+  <ul>
+    <li>The ticket is the <b>surrogate key</b>; your name is a <b>natural key</b>.</li>
+    <li>The staff still check your name on the list: keep the natural key <b>UNIQUE</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a coat check. You hand over your coat and get a numbered ticket, 042. The ticket number means nothing about you or the coat. If you change your hat or your name, the ticket still finds the coat."><g class="rough"><g transform="translate(60 70) scale(2.0)"><g class="d"><path class="f-y" d="M0 8 h60 v14 a6 6 0 0 0 0 12 v14 h-60 v-14 a6 6 0 0 0 0 -12 z"/><path d="M42 8 v40" stroke-dasharray="4 4"/></g></g><path class="d" d="M220 120 L430 120"/><path class="d" d="M419.2 125.2 L430 120 L419.2 114.8"/><g transform="translate(450 50) scale(1.6)"><g class="d"><rect class="f-paper" x="6" y="0" width="44" height="64" rx="2"/><circle cx="40" cy="34" r="3"/></g></g></g><text class="t-head" x="104" y="132" text-anchor="middle" font-size="28">042</text><text class="t-s" x="130" y="210" text-anchor="middle">a meaningless number</text><text class="t-s" x="325" y="106" text-anchor="middle">finds</text><text class="t-s t-pen" x="540" y="90" text-anchor="start">coat #042</text><text class="t-s t-pen" x="560" y="200" text-anchor="middle">new hat? new name?</text><text class="t-s t-green" x="560" y="228" text-anchor="middle">same ticket</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The coat check gives you ticket 042. It says nothing about you, so it never needs to change.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Ticket 042</td><td><code>id bigint</code> or a UUID primary key</td></tr>
+      <tr><td>Your name on the list</td><td><code>email text UNIQUE</code></td></tr>
+      <tr><td>Coat found by ticket</td><td>Foreign keys reference the id</td></tr>
+      <tr><td>You change your name</td><td>One UPDATE to users; references untouched</td></tr>
+      <tr><td>Ticket says nothing about you</td><td>No personal data in keys, URLs or logs</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">ids for linking, natural values for rules</span></h2>
+  <p>Keep <b>two jobs separate</b>: the id is for <b>linking</b> rows; the natural key is a <b>business rule</b> (“no two users share an email”), enforced with UNIQUE.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="Surrogate key design. The users table has id 7 as its primary key and email as a separate unique column. Orders, sessions and invoices store user_id 7. Changing the email touches one row; all references stay valid."><g class="rough"><rect class="d d-thin f-paper" x="20" y="60" width="210" height="110" rx="4"/><path class="d d-thin f-green" d="M20 64 a4 4 0 0 1 4 -4 h202 a4 4 0 0 1 4 4 v28 h-210 z"/><rect class="f-hl" x="23" y="94" width="204" height="22" rx="2" style="stroke:none"/><path class="d d-thin d-soft" d="M26 118 h198"/><path class="d d-thin d-soft" d="M26 144 h198"/><rect class="d f-paper" x="460" y="20" width="260" height="56" rx="10"/><path class="d d-green" d="M454 48 L236 106"/><path class="d d-green" d="M245.1 98.2 L236 106 L247.8 108.3"/><rect class="d f-paper" x="460" y="100" width="260" height="56" rx="10"/><path class="d d-green" d="M454 128 L236 106"/><path class="d d-green" d="M247.3 101.9 L236 106 L246.2 112.3"/><rect class="d f-paper" x="460" y="180" width="260" height="56" rx="10"/><path class="d d-green" d="M454 208 L236 106"/><path class="d d-green" d="M248.0 105.9 L236 106 L243.6 115.3"/></g><text class="t-head" x="125" y="83" text-anchor="middle" font-size="17">users</text><text class="t" x="30" y="111" font-size="16">id = 7  (PK)</text><text class="t" x="30" y="137" font-size="16">email  (UNIQUE)</text><text class="t" x="30" y="163" font-size="16">name</text><text class="t-head" x="590" y="55" text-anchor="middle" font-size="17">orders.user_id = 7</text><text class="t-head" x="590" y="135" text-anchor="middle" font-size="17">sessions.user_id = 7</text><text class="t-head" x="590" y="215" text-anchor="middle" font-size="17">invoices.user_id = 7</text><text class="t-s t-green" x="125" y="225" text-anchor="middle">new email = 1 UPDATE</text><text class="t-s t-pen" x="125" y="252" text-anchor="middle">ids never change</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Point at a meaningless id; keep the real-world value as a UNIQUE column you're free to change.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Add an id to every table</b><p><code>bigint GENERATED ALWAYS AS IDENTITY</code> for one database, or a UUID if ids are made in many places.</p></li>
+    <li><b>Keep natural keys UNIQUE</b><p>Email, SKU, slug: still unique, just not the primary key.</p></li>
+    <li><b>Reference the id</b><p>Foreign keys point at <code>users.id</code>, never at <code>users.email</code>.</p></li>
+    <li><b>Pick the id type on purpose</b><p>Sequential ids are small and index-friendly but guessable; random UUID v4 is safe to share but scatters inserts; UUID v7 / ULID are time-ordered and shareable.</p></li>
+    <li><b>Don't expose sequential ids carelessly</b><p>Use a separate public id or slug if “user 1,042” leaks your growth or invites guessing.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Natural key</dt><dd>A real-world value that identifies a row (email, ISBN).</dd></div>
+    <div><dt>Surrogate key</dt><dd>An id with no meaning outside the database.</dd></div>
+    <div><dt>Identity column</dt><dd>A column the database fills with 1, 2, 3…</dd></div>
+    <div><dt>UUID</dt><dd>A 128-bit id that can be generated anywhere.</dd></div>
+    <div><dt>UUID v7 / ULID</dt><dd>Time-ordered unique ids: sortable and index-friendly.</dd></div>
+    <div><dt>Composite key</dt><dd>A primary key made of several columns.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>users.sql</span><span>PostgreSQL 13+</span></div>
+<pre><code><span class="k">CREATE</span> <span class="k">TABLE</span> users (
+  id         bigint GENERATED ALWAYS <span class="k">AS</span> IDENTITY <span class="k">PRIMARY</span> <span class="k">KEY</span>,  <span class="c">-- for linking</span>
+  public_id  uuid <span class="k">NOT</span> <span class="k">NULL</span> <span class="k">DEFAULT</span> gen_random_uuid() <span class="k">UNIQUE</span>,  <span class="c">-- safe for URLs</span>
+  email      text <span class="k">NOT</span> <span class="k">NULL</span> <span class="k">UNIQUE</span>,                           <span class="c">-- business rule</span>
+  name       text <span class="k">NOT</span> <span class="k">NULL</span>
+);
+
+<span class="k">CREATE</span> <span class="k">TABLE</span> sessions (
+  id       bigint GENERATED ALWAYS <span class="k">AS</span> IDENTITY <span class="k">PRIMARY</span> <span class="k">KEY</span>,
+  user_id  bigint <span class="k">NOT</span> <span class="k">NULL</span> <span class="k">REFERENCES</span> users (id)
+);
+
+<span class="c">-- a new email is one row; sessions don't care</span>
+<span class="k">UPDATE</span> users <span class="k">SET</span> email = <span class="s">'ana@new.com'</span> <span class="k">WHERE</span> id = 7;</code></pre>
+  </div>
+  <p class="aside">tools: identity columns (PostgreSQL, SQL Server, Oracle), AUTO_INCREMENT (MySQL), gen_random_uuid(), UUID v7 libraries, ULID. Many ORMs default to a surrogate <code>id</code>.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Stable references</b>: real-world changes are one-row updates.</li><li><b>Small, fast joins</b> on 8-byte integers.</li><li><b>Uniform design</b>: every table has an <code>id</code>.</li><li><b>No personal data</b> in keys and URLs (with a public id).</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>An extra column</b> and an extra unique index.</li><li><b>Easy to forget the natural UNIQUE</b>, and then duplicates creep in.</li><li><b>Ids mean nothing</b> when you read raw data.</li><li><b>Random UUIDs scatter inserts</b> across the index.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Database ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares tables keyed by <b>natural values</b> (email, code) to tables with a <b>surrogate id</b> plus a UNIQUE natural key.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="4"><td>Simplicity<small>easy to reason about?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One more column, but one rule for every table.</td></tr>
+      <tr data-before="3" data-after="4"><td>Read speed<small>fast queries?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Integer joins and smaller indexes.</td></tr>
+      <tr data-before="3" data-after="3"><td>Write speed<small>cheap inserts &amp; updates?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One extra index to maintain per table.</td></tr>
+      <tr data-before="3" data-after="4"><td>Integrity<small>data stays correct?</small></td><td class="dcell"></td><td class="score"></td><td class="why">References never break when values change; keep the UNIQUE.</td></tr>
+      <tr data-before="3" data-after="4"><td>Scalability<small>10× more rows?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Small keys; UUIDs help when ids come from many nodes.</td></tr>
+      <tr data-before="3" data-after="4"><td>Low storage cost<small>cheap to keep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">8 bytes instead of long text in every FK.</td></tr>
+      <tr data-before="3" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Operability<small>calm to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No mass rewrites when a code or email changes.</td></tr>
+      <tr data-before="2" data-after="5"><td>Evolvability<small>easy to change shape?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Business rules about identity can change freely.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Dropping the natural UNIQUE</h3><p>Two rows for <code>ana@mail.com</code> because only the id is unique. <span class="fix">Fix →</span> keep UNIQUE on the business identifier.</p></li>
+    <li><h3>Random UUID v4 as a clustered key</h3><p>Inserts land all over the index, causing page splits and cache misses. <span class="fix">Fix →</span> use bigint, UUID v7 or ULID when insert order matters.</p></li>
+    <li><h3>Sequential ids in public URLs</h3><p><code>/invoice/1043</code> invites guessing the next one. <span class="fix">Fix →</span> add a random public id and check permissions anyway.</p></li>
+    <li><h3>Meaning sneaks into the id</h3><p>“Ids starting with 9 are test users.” <span class="fix">Fix →</span> use a real column (<code>is_test</code>); ids stay meaningless.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Almost every OLTP table.</li><li>Natural keys that can change, be reused or contain personal data.</li><li>Ids generated in many services or offline clients (UUID / ULID).</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Join tables, where (user_id, group_id) is a fine composite key.</li><li>Truly immutable codes like ISO country codes.</li><li>Small lookup tables where the code is the meaning (<code>status = 'paid'</code>).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Normalization</b></li><li><b>Multitenancy</b></li><li><b>Sharding</b> (Vol. 1)</li><li><b>Idempotent consumer</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why not use email as the primary key?</summary><p>Emails change and are personal data; every foreign key would need rewriting and would leak the email.</p></details>
+    <details><summary>If the id is the PK, how do you stop duplicate users?</summary><p>Keep a UNIQUE constraint on email (often case-insensitive).</p></details>
+    <details><summary>Why are random UUID v4 keys slow for inserts?</summary><p>Each new key lands at a random spot in the B-tree, causing page splits and poor cache use; time-ordered ids append at the end.</p></details>
+    <details><summary>When is a composite natural key fine?</summary><p>In join tables like (user_id, role_id), where the pair is the identity and never changes.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>The <span class="hl">ticket</span> finds the coat. Your <span class="hl">name</span> is checked, not used as the hook.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/02-surrogate-keys.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>PostgreSQL docs, “Identity Columns” and “UUID Type”.</li><li>RFC 9562, “Universally Unique IDentifiers (UUIDs)” (UUID v7).</li><li>Joe Celko, <i>SQL for Smarties</i>, chapter on keys.</li><li>Buildkite engineering, “Goodbye to sequential integers, hello UUIDv7”.</li></ul>
+  </div>
+  <p class="folio">02</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="normalization.html"><small>← previous note</small>01 · Normalization</a>
+  <a href="soft-delete.html"><small>Next note →</small>03 · Soft Delete</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 3 · a student's bullet journal on data &amp; database patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

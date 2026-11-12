@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Normalization · Jef’s Notes</title>
+<meta name="description" content="Store each fact once so it can&#x27;t disagree with itself; copy it only on purpose.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-data">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 3 · data &amp; database patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="normalization">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 07.09.26</span><span class="topic">collection · <b>modelling</b></span></div>
+  <p class="kicker">a.k.a. “say it once”</p>
+  <h1><span class="hl">Normalization</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Store each fact in <b>exactly one place</b>, and let other tables <b>point to it</b> with a key. Then a change is one update, and the data <b>can't disagree with itself</b>. When reads get too slow, <b>denormalize on purpose</b>: copy a fact into a read-friendly shape, and keep a clear rule for how the copy stays fresh.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> data modelling</li><li><b>Origin:</b> E. F. Codd, 1970–71 (normal forms)</li><li><b>Usual target:</b> third normal form (3NF)</li><li><b>Pairs with:</b> indexing, materialized views, star schema</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">The quickest schema is one wide table that looks like a spreadsheet. It works on day one. Then the same fact, like a customer's email, is copied onto <span class="hl-pink">every row that mentions it</span>, and the copies start to drift.</p>
+  <ul>
+    <li><b>Update anomaly:</b> Ana changes her email, one row gets updated, two don't.</li>
+    <li><b>Delete anomaly:</b> deleting Ben's only order also deletes everything you knew about Ben.</li>
+    <li><b>Insert anomaly:</b> you can't store a new customer until they've ordered something.</li>
+    <li>Storage and backups grow with every copy.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 230" role="img" aria-label="Doodle of one wide orders table where the customer&#x27;s name and email are copied onto every order. Ana changed her email, but only one of her three rows was updated, so the table now holds two different emails for the same person."><g class="rough"><rect class="d d-thin f-paper" x="20" y="20" width="380" height="136" rx="4"/><path class="d d-thin f-y" d="M20 24 a4 4 0 0 1 4 -4 h372 a4 4 0 0 1 4 4 v28 h-380 z"/><path class="d d-thin d-soft" d="M26 78 h368"/><rect class="f-hl" x="23" y="80" width="374" height="22" rx="2" style="stroke:none"/><path class="d d-thin d-soft" d="M26 104 h368"/><path class="d d-thin d-soft" d="M26 130 h368"/><path class="d d-red" d="M410 85 L520 60"/><path class="d d-red" d="M510.6 67.5 L520 60 L508.3 57.3"/></g><text class="t-head" x="210" y="43" text-anchor="middle" font-size="17">orders (one big table)</text><text class="t" x="30" y="71" font-size="16">#1 · Ana · ana@old.com · Lamp</text><text class="t" x="30" y="97" font-size="16">#2 · Ana · ana@new.com · Desk</text><text class="t" x="30" y="123" font-size="16">#3 · Ana · ana@old.com · Mug</text><text class="t" x="30" y="149" font-size="16">#4 · Ben · ben@mail.com · Pen</text><text class="t-s t-red" x="600" y="52" text-anchor="middle">which email is right?</text><text class="t-s t-red" x="600" y="120" text-anchor="middle">update = touch every copy</text><text class="t-s t-red" x="600" y="150" text-anchor="middle">delete order #4 = lose Ben</text><text class="t-s t-red" x="600" y="180" text-anchor="middle">new customer, no order yet?</text><text class="t-s t-red" x="600" y="204" text-anchor="middle">nowhere to put them</text><text class="t-s t-pen" x="210" y="200" text-anchor="middle">the same fact, written 3 times</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One wide table, the same fact copied three times, and now the copies disagree.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the school's one address book</span></h2>
+  <p>A school doesn't let every teacher keep parents' phone numbers in their own class list. The office keeps <b>one address book</b>. Class lists just say <b>student #17</b>. When a family moves, the office fixes <b>one line</b>, and every class list is right again.</p>
+  <ul>
+    <li>The address book is the <b>customers</b> table; student #17 is a <b>foreign key</b>.</li>
+    <li>The head teacher still keeps a printed summary for assemblies: a <b>deliberate copy</b>, reprinted each term.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a school office. Instead of every teacher keeping parents&#x27; phone numbers in their own class lists, the school keeps one address book. Class lists only say the student number. When a family moves, the office updates one line."><g class="rough"><g transform="translate(30 40) scale(1.0)"><g class="d"><rect class="f-paper" x="4" y="0" width="52" height="60" rx="3"/><path d="M14 12 h32 M14 22 h32 M14 32 h32 M14 42 h22"/></g></g><g transform="translate(100 54) scale(1.0)"><g class="d"><rect class="f-paper" x="4" y="0" width="52" height="60" rx="3"/><path d="M14 12 h32 M14 22 h32 M14 32 h32 M14 42 h22"/></g></g><g transform="translate(170 40) scale(1.0)"><g class="d"><rect class="f-paper" x="4" y="0" width="52" height="60" rx="3"/><path d="M14 12 h32 M14 22 h32 M14 32 h32 M14 42 h22"/></g></g><path class="d" d="M250 80 L430 100"/><path class="d" d="M418.7 104.0 L430 100 L419.8 93.6"/><g transform="translate(440 50) scale(2.0)"><g class="d"><path class="f-y" d="M4 6 h22 a6 6 0 0 1 6 6 v44 a6 6 0 0 0 -6 -6 h-22 z"/><path class="f-y" d="M60 6 h-22 a6 6 0 0 0 -6 6 v44 a6 6 0 0 1 6 -6 h22 z"/></g></g></g><text class="t-s t-pen" x="120" y="140" text-anchor="middle">class lists: just</text><text class="t-s t-pen" x="120" y="164" text-anchor="middle">student numbers</text><text class="t-s" x="340" y="76" text-anchor="middle">look up #17</text><text class="t-s" x="505" y="200" text-anchor="middle">one address book</text><text class="t-s t-green" x="505" y="230" text-anchor="middle">family moves → fix one line</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One address book in the office; class lists point to it by student number.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The office address book</td><td>A table that owns one kind of fact (customers)</td></tr>
+      <tr><td>Student #17 on a class list</td><td>A foreign key column (customer_id)</td></tr>
+      <tr><td>A family moves, one line changes</td><td>One UPDATE, no copies to chase</td></tr>
+      <tr><td>The printed assembly summary</td><td>A denormalized copy: a view, cache or summary table</td></tr>
+      <tr><td>Reprinted every term</td><td>A refresh rule for the copy</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">split until every fact has one home</span></h2>
+  <p>Normal forms are a checklist for “one fact, one place”. In practice, aiming for <b>third normal form</b> covers almost everything: every column describes <b>the key, the whole key, and nothing but the key</b>.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Normalized design. A customers table holds id, name and email once. An orders table holds id, customer_id and item, and customer_id points to customers. A separate dashed box shows a denormalized copy, orders_summary with customer_name, kept on purpose for a fast report and refreshed from the source."><g class="rough"><rect class="d d-thin f-paper" x="20" y="30" width="190" height="110" rx="4"/><path class="d d-thin f-green" d="M20 34 a4 4 0 0 1 4 -4 h182 a4 4 0 0 1 4 4 v28 h-190 z"/><path class="d d-thin d-soft" d="M26 88 h178"/><path class="d d-thin d-soft" d="M26 114 h178"/><rect class="d d-thin f-paper" x="330" y="30" width="210" height="136" rx="4"/><path class="d d-thin f-y" d="M330 34 a4 4 0 0 1 4 -4 h202 a4 4 0 0 1 4 4 v28 h-210 z"/><path class="d d-thin d-soft" d="M336 88 h198"/><rect class="f-hl" x="333" y="90" width="204" height="22" rx="2" style="stroke:none"/><path class="d d-thin d-soft" d="M336 114 h198"/><path class="d d-thin d-soft" d="M336 140 h198"/><path class="d" d="M326 100 L214 76"/><path class="d" d="M225.7 73.2 L214 76 L223.5 83.4"/><rect class="d f-blue d-dash" x="330" y="200" width="300" height="80" rx="10"/><path class="d d-dash" d="M330 240 L120 150"/><path class="d" d="M132.0 149.5 L120 150 L127.9 159.1"/></g><text class="t-head" x="115" y="53" text-anchor="middle" font-size="17">customers</text><text class="t" x="30" y="81" font-size="16">id  (PK)</text><text class="t" x="30" y="107" font-size="16">name</text><text class="t" x="30" y="133" font-size="16">email</text><text class="t-head" x="435" y="53" text-anchor="middle" font-size="17">orders</text><text class="t" x="340" y="81" font-size="16">id  (PK)</text><text class="t" x="340" y="107" font-size="16">customer_id  (FK)</text><text class="t" x="340" y="133" font-size="16">item</text><text class="t" x="340" y="159" font-size="16">placed_at</text><text class="t-s" x="270" y="64" text-anchor="middle">points to</text><text class="t-head" x="480" y="236" text-anchor="middle" font-size="18">orders_summary</text><text class="t" x="480" y="260" text-anchor="middle" font-size="17">customer_name copied on purpose</text><text class="t-s" x="110" y="240" text-anchor="start">refresh from source</text><text class="t-s t-green" x="680" y="120" text-anchor="middle">1 fact,</text><text class="t-s t-green" x="680" y="144" text-anchor="middle">1 place</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Each fact lives in one table; others point at it with a foreign key. Copies are made on purpose, and labelled.</figcaption></figure>
+  <ol class="steps">
+    <li><b>List the facts</b><p>Write down the nouns (customer, order, product) and what you know about each.</p></li>
+    <li><b>1NF: one value per cell</b><p>No comma lists like <code>tags = 'a,b,c'</code>; give repeating things their own rows or table.</p></li>
+    <li><b>2NF: depend on the whole key</b><p>In a table keyed by (order_id, product_id), the product's name belongs in <code>products</code>, not in the line item.</p></li>
+    <li><b>3NF: nothing but the key</b><p>If <code>city</code> depends on <code>zip</code>, not on the customer, it moves out (or you accept it, knowingly).</p></li>
+    <li><b>Add constraints</b><p>Foreign keys, NOT NULL and UNIQUE make the database enforce the design.</p></li>
+    <li><b>Denormalize with a reason</b><p>Measure first. If a join is really too slow, copy the column into a read model and write down who refreshes it.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Normal form</dt><dd>A rule a schema can satisfy (1NF, 2NF, 3NF, BCNF…).</dd></div>
+    <div><dt>Anomaly</dt><dd>A bug caused by duplicated facts (update, insert, delete).</dd></div>
+    <div><dt>Foreign key</dt><dd>A column that must match a key in another table.</dd></div>
+    <div><dt>Functional dependency</dt><dd>A → B: knowing A tells you B.</dd></div>
+    <div><dt>Denormalization</dt><dd>Copying a fact on purpose to make reads cheaper.</dd></div>
+    <div><dt>Source of truth</dt><dd>The one table that owns a fact; copies follow it.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>schema.sql</span><span>PostgreSQL</span></div>
+<pre><code><span class="c">-- each fact has one home</span>
+<span class="k">CREATE</span> <span class="k">TABLE</span> customers (
+  id     bigint GENERATED ALWAYS <span class="k">AS</span> IDENTITY <span class="k">PRIMARY</span> <span class="k">KEY</span>,
+  name   text <span class="k">NOT</span> <span class="k">NULL</span>,
+  email  text <span class="k">NOT</span> <span class="k">NULL</span> <span class="k">UNIQUE</span>
+);
+
+<span class="k">CREATE</span> <span class="k">TABLE</span> orders (
+  id          bigint GENERATED ALWAYS <span class="k">AS</span> IDENTITY <span class="k">PRIMARY</span> <span class="k">KEY</span>,
+  customer_id bigint <span class="k">NOT</span> <span class="k">NULL</span> <span class="k">REFERENCES</span> customers (id),
+  item        text   <span class="k">NOT</span> <span class="k">NULL</span>,
+  placed_at   timestamptz <span class="k">NOT</span> <span class="k">NULL</span> <span class="k">DEFAULT</span> now()
+);
+
+<span class="c">-- Ana's new email: one row, everywhere at once</span>
+<span class="k">UPDATE</span> customers <span class="k">SET</span> email = <span class="s">'ana@new.com'</span> <span class="k">WHERE</span> id = 17;
+
+<span class="c">-- the join brings the facts back together for reading</span>
+<span class="k">SELECT</span> o.id, c.name, c.email, o.item
+<span class="k">FROM</span> orders o <span class="k">JOIN</span> customers c <span class="k">ON</span> c.id = o.customer_id;</code></pre>
+  </div>
+  <p class="aside">tools: any relational database (PostgreSQL, MySQL, SQL Server, SQLite). ER diagram tools like dbdiagram.io or DBeaver help you see the shape. Document databases still benefit: embed what's read together, reference what changes on its own.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>No contradictions</b>: one fact, one place.</li><li><b>Cheap, safe updates</b>: change one row, not hundreds.</li><li><b>Smaller tables</b> and backups.</li><li><b>Flexible queries</b>: join the pieces any way you like.</li><li><b>The database guards the rules</b> with foreign keys.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More joins</b> for everyday reads.</li><li><b>More tables</b> to understand at first.</li><li><b>Reporting queries get long</b> without views.</li><li><b>Over-normalizing</b> (a table for every attribute) hurts more than it helps.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Database ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>one wide, copy-everything table</b> to the same data <b>normalized to 3NF</b>, with denormalized copies only where measured.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to reason about?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More tables and joins, but each one is obvious.</td></tr>
+      <tr data-before="4" data-after="3"><td>Read speed<small>fast queries?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Joins cost a little; indexes and read models win it back.</td></tr>
+      <tr data-before="2" data-after="4"><td>Write speed<small>cheap inserts &amp; updates?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Updates touch one row instead of every copy.</td></tr>
+      <tr data-before="1" data-after="5"><td>Integrity<small>data stays correct?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Foreign keys and single facts stop contradictions.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>10× more rows?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Smaller rows; hot read paths can be denormalized later.</td></tr>
+      <tr data-before="2" data-after="4"><td>Low storage cost<small>cheap to keep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No repeated text on every row.</td></tr>
+      <tr data-before="3" data-after="5"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Any question is a join away.</td></tr>
+      <tr data-before="3" data-after="4"><td>Operability<small>calm to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fewer “fix the copies” scripts at 2 a.m.</td></tr>
+      <tr data-before="2" data-after="4"><td>Evolvability<small>easy to change shape?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New attributes go in one obvious place.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Normalizing to the extreme</h3><p>A table for every attribute, and a 9-way join to show a name. <span class="fix">Fix →</span> stop at 3NF unless a real anomaly pushes you further.</p></li>
+    <li><h3>Copies with no owner</h3><p>A denormalized <code>customer_name</code> on orders that nobody updates. <span class="fix">Fix →</span> every copy gets a written refresh rule: trigger, job or event.</p></li>
+    <li><h3>Comma lists in a column</h3><p><code>tags = 'red,blue'</code> can't be indexed, joined or constrained. <span class="fix">Fix →</span> use a join table (or a real array/JSON type with care).</p></li>
+    <li><h3>No foreign keys “for speed”</h3><p>Orphan rows appear and nobody notices for months. <span class="fix">Fix →</span> keep FKs; they're cheap with an index on the referencing column.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Any transactional (OLTP) system: orders, users, bookings, payments.</li><li>Data that changes often and must stay consistent.</li><li>You don't yet know every question you'll ask of the data.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Analytics warehouses where reads dominate (see star schema, note 15).</li><li>Write-once logs and events, which never get updated.</li><li>A measured hot path where a deliberate copy is clearly cheaper.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Surrogate keys</b></li><li><b>Materialized views</b></li><li><b>Star schema</b></li><li><b>CQRS</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What are the three classic anomalies?</summary><p>Update (copies disagree), insert (can't store a fact without another one) and delete (removing one fact loses another).</p></details>
+    <details><summary>Summarise 3NF in one sentence.</summary><p>Every non-key column depends on the key, the whole key, and nothing but the key.</p></details>
+    <details><summary>When is denormalizing a good idea?</summary><p>When a measured read path is too slow, the copied data changes rarely, and there's a clear rule that keeps the copy fresh.</p></details>
+    <details><summary>Why keep foreign keys?</summary><p>The database then refuses orphans and dangling references, so integrity doesn't depend on every app being perfect.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Say it <span class="hl">once</span>. Point to it <span class="hl">everywhere</span>. Copy it only <span class="hl">on purpose</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/01-normalization.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>E. F. Codd, “A Relational Model of Data for Large Shared Data Banks” (1970).</li><li>William Kent, “A Simple Guide to Five Normal Forms in Relational Database Theory” (1983).</li><li>PostgreSQL docs, “Constraints” and “Foreign Keys”.</li><li>Martin Kleppmann, <i>Designing Data-Intensive Applications</i>, ch. 2.</li></ul>
+  </div>
+  <p class="folio">01</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="../index.html"><small>← back to</small>Index</a>
+  <a href="surrogate-keys.html"><small>Next note →</small>02 · Surrogate Keys</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 3 · a student's bullet journal on data &amp; database patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

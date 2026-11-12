@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Materialized Views · Jef’s Notes</title>
+<meta name="description" content="Save the result of an expensive query as a table and refresh it on a schedule.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-data">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 3 · data &amp; database patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="materialized-views">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 01.10.26</span><span class="topic">collection · <b>reading fast</b></span></div>
+  <p class="kicker">a.k.a. “the departure board”</p>
+  <h1><span class="hl">Materialized Views</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>A materialized view <b>stores the result of an expensive query as real rows</b>, which you can index and read in milliseconds. You <b>refresh</b> it on a schedule or after changes, accepting that readers see data that's <b>a few minutes old</b>. Perfect for dashboards, leaderboards and reports that many people read and nobody needs to the second.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> read optimisation</li><li><b>Built in:</b> PostgreSQL, Oracle, SQL Server (indexed views), Snowflake</li><li><b>Trade:</b> freshness for speed</li><li><b>Pairs with:</b> star schema, CQRS</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Some questions are expensive: sales per region per day across 50 million orders. A normal view just <span class="hl-pink">re-runs the query</span> every time, so every viewer pays the full cost.</p>
+  <ul>
+    <li>Dashboards take 12 seconds to load, every time.</li>
+    <li>Twenty people opening it at 9 a.m. means twenty heavy queries at once.</li>
+    <li>The reporting load slows down checkout on the same database.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a sales dashboard. Every time anyone opens it, the database joins orders, items and products across fifty million rows and groups by day and region. The query takes twelve seconds, and twenty people open it every morning."><g class="rough"><path class="d d-thin f-paper" d="M25 40 v40 a45 9 0 0 0 90 0 v-40"/><ellipse class="d d-thin f-paper" cx="70" cy="40" rx="45" ry="9"/><path class="d d-thin f-paper" d="M165 40 v40 a45 9 0 0 0 90 0 v-40"/><ellipse class="d d-thin f-paper" cx="210" cy="40" rx="45" ry="9"/><path class="d d-thin f-paper" d="M305 40 v40 a45 9 0 0 0 90 0 v-40"/><ellipse class="d d-thin f-paper" cx="350" cy="40" rx="45" ry="9"/><path class="d d-red" d="M420 70 L540 70"/><path class="d d-red" d="M529.2 75.2 L540 70 L529.2 64.8"/><g transform="translate(560 40) scale(1.4)"><g class="d"><rect class="f-paper" x="0" y="0" width="64" height="44" rx="4"/><path d="M24 44 l-4 12 h24 l-4 -12"/><path d="M14 30 l10 -10 l8 8 l14 -14"/></g></g></g><text class="t t-soft" x="70" y="110" text-anchor="middle" font-size="16">orders · 50M</text><text class="t t-soft" x="210" y="110" text-anchor="middle" font-size="16">items · 180M</text><text class="t t-soft" x="350" y="110" text-anchor="middle" font-size="16">products</text><text class="t-s t-red" x="480" y="56" text-anchor="middle">JOIN + GROUP BY</text><text class="t-s t-red" x="605" y="140" text-anchor="middle">12 s per view</text><text class="t-s t-red" x="380" y="200" text-anchor="middle">20 people × every morning = 20 × the same work</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The same expensive question, recomputed from scratch for every viewer.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the departure board</span></h2>
+  <p>A station doesn't make every traveller phone the drivers. It computes a <b>departure board</b> and <b>refreshes it every minute</b>. Thousands of people read it instantly. It might be a minute out of date, and nobody minds.</p>
+  <ul>
+    <li>The board is the <b>materialized view</b>.</li>
+    <li>“Updated every minute” is the <b>refresh schedule</b>.</li>
+    <li>For the exact second a train leaves, you ask the platform staff: <b>query the source</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a train station departure board. Nobody phones every train driver to ask when they&#x27;ll leave. The station computes the board and refreshes it every minute; travellers just read it."><g class="rough"><g transform="translate(300 30) scale(2.0)"><g class="d"><rect class="f-y" x="0" y="0" width="70" height="46" rx="3"/><path d="M14 46 v14 M56 46 v14"/><rect x="8" y="8" width="20" height="14" class="f-y"/><rect x="38" y="10" width="22" height="12" class="f-y"/><path d="M10 32 h48"/></g></g><path class="d d-dash" d="M140 60 L290 70"/><path class="d" d="M278.9 74.5 L290 70 L279.6 64.1"/><path class="d d-dash" d="M140 100 L290 80"/><path class="d" d="M280.0 86.6 L290 80 L278.6 76.3"/><path class="d d-dash" d="M140 140 L290 90"/><path class="d" d="M281.4 98.4 L290 90 L278.1 88.5"/><g transform="translate(40 40) scale(1.2)"><g class="d d-red"><rect class="f-paper" x="16" y="0" width="30" height="56" rx="6"/><path d="M26 48 h10"/></g></g><path class="d" d="M560 100 L460 80"/><path class="d" d="M471.6 77.0 L460 80 L469.6 87.2"/></g><text class="t-s t-green" x="370" y="186" text-anchor="middle">refreshed every minute</text><text class="t-s t-red" x="90" y="170" text-anchor="middle">✗ call every driver</text><text class="t-s t-pen" x="620" y="120" text-anchor="middle">everyone just reads</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The departure board: computed once, refreshed every minute, read by everyone.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The departure board</td><td><code>CREATE MATERIALIZED VIEW daily_sales</code></td></tr>
+      <tr><td>Phoning every driver</td><td>Re-running the heavy join for every request</td></tr>
+      <tr><td>Board refreshed every minute</td><td><code>REFRESH MATERIALIZED VIEW</code> on a schedule</td></tr>
+      <tr><td>“Last updated 09:41”</td><td>A <code>refreshed_at</code> shown in the UI</td></tr>
+      <tr><td>Asking the platform staff</td><td>Querying the source tables for exact numbers</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">compute once, read many times</span></h2>
+  <p>A materialized view is a <b>cache that lives in the database</b>. It's queried with plain SQL, can have indexes, and its freshness is set by how often you refresh it.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="Materialized view flow. A materialized view called daily_sales stores the result of the heavy join and group by as real rows with an index. A scheduled job refreshes it concurrently every fifteen minutes. The dashboard reads the small precomputed table in five milliseconds."><g class="rough"><path class="d d-thin f-paper" d="M15 20 v30 a35 9 0 0 0 70 0 v-30"/><ellipse class="d d-thin f-paper" cx="50" cy="20" rx="35" ry="9"/><path class="d d-thin f-paper" d="M15 100 v30 a35 9 0 0 0 70 0 v-30"/><ellipse class="d d-thin f-paper" cx="50" cy="100" rx="35" ry="9"/><path class="d d-thin f-paper" d="M15 180 v30 a35 9 0 0 0 70 0 v-30"/><ellipse class="d d-thin f-paper" cx="50" cy="180" rx="35" ry="9"/><path class="d" d="M220 120 L320 120"/><path class="d" d="M309.2 125.2 L320 120 L309.2 114.8"/><rect class="d d-thin f-paper" x="326" y="60" width="250" height="110" rx="4"/><path class="d d-thin f-green" d="M326 64 a4 4 0 0 1 4 -4 h242 a4 4 0 0 1 4 4 v28 h-250 z"/><path class="d d-thin d-soft" d="M332 118 h238"/><path class="d d-thin d-soft" d="M332 144 h238"/><path class="d d-green" d="M582 120 L650 120"/><path class="d d-green" d="M639.2 125.2 L650 120 L639.2 114.8"/><g transform="translate(656 96) scale(1.0)"><g class="d"><rect class="f-paper" x="0" y="0" width="64" height="44" rx="4"/><path d="M24 44 l-4 12 h24 l-4 -12"/><path d="M14 30 l10 -10 l8 8 l14 -14"/></g></g><rect class="d f-y" x="326" y="210" width="250" height="50" rx="10"/><path class="d d-dash" d="M450 206 L450 178"/><path class="d" d="M455.2 188.8 L450 178 L444.8 188.8"/></g><text class="t-s" x="130" y="44" text-anchor="start">orders</text><text class="t-s" x="130" y="124" text-anchor="start">items</text><text class="t-s" x="130" y="204" text-anchor="start">products</text><text class="t-s" x="270" y="106" text-anchor="middle">heavy query</text><text class="t-head" x="451" y="83" text-anchor="middle" font-size="17">daily_sales (stored)</text><text class="t" x="336" y="111" font-size="16">day · region · total</text><text class="t" x="336" y="137" font-size="16">11 Nov · EU · €82k</text><text class="t" x="336" y="163" font-size="16">11 Nov · US · €91k</text><text class="t-s t-green" x="616" y="106" text-anchor="middle">5 ms</text><text class="t-head" x="451" y="242" text-anchor="middle" font-size="17">REFRESH every 15 min</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Store the answer as a table, index it, and refresh it on a schedule.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Find the heavy, popular query</b><p>Read many times, changes slowly, and slightly stale is fine.</p></li>
+    <li><b>Create the view</b><p><code>CREATE MATERIALIZED VIEW daily_sales AS SELECT …</code>.</p></li>
+    <li><b>Index it</b><p>A unique index is needed for concurrent refresh, plus indexes for the dashboard's filters.</p></li>
+    <li><b>Refresh without blocking</b><p><code>REFRESH MATERIALIZED VIEW CONCURRENTLY</code> keeps readers working during the refresh.</p></li>
+    <li><b>Schedule it</b><p>pg_cron, a job runner, or after a batch load; show “last updated” to users.</p></li>
+    <li><b>Go incremental when it's too slow</b><p>Summary tables updated by triggers or CDC, or a database with incremental views.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>View</dt><dd>A saved query; re-runs every time.</dd></div>
+    <div><dt>Materialized view</dt><dd>A saved query whose result is stored.</dd></div>
+    <div><dt>Refresh</dt><dd>Recomputing the stored result.</dd></div>
+    <div><dt>Staleness</dt><dd>How old the stored result can be.</dd></div>
+    <div><dt>Incremental maintenance</dt><dd>Updating only what changed, not everything.</dd></div>
+    <div><dt>Summary table</dt><dd>A hand-maintained table of precomputed totals.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>daily_sales.sql</span><span>PostgreSQL + pg_cron</span></div>
+<pre><code><span class="k">CREATE</span> <span class="k">MATERIALIZED</span> <span class="k">VIEW</span> daily_sales <span class="k">AS</span>
+<span class="k">SELECT</span> date_trunc(<span class="s">'day'</span>, o.placed_at) <span class="k">AS</span> day, o.region,
+       sum(i.qty * i.price) <span class="k">AS</span> total, count(DISTINCT o.id) <span class="k">AS</span> orders
+<span class="k">FROM</span> orders o <span class="k">JOIN</span> order_items i <span class="k">ON</span> i.order_id = o.id
+<span class="k">GROUP</span> <span class="k">BY</span> 1, 2;
+
+<span class="k">CREATE</span> <span class="k">UNIQUE</span> <span class="k">INDEX</span> <span class="k">ON</span> daily_sales (day, region);  <span class="c">-- needed for CONCURRENTLY</span>
+
+<span class="c">-- every 15 minutes, without blocking readers</span>
+<span class="k">SELECT</span> cron.schedule(<span class="s">'*/15 * * * *'</span>,
+  <span class="s">'REFRESH MATERIALIZED VIEW CONCURRENTLY daily_sales'</span>);
+
+<span class="c">-- the dashboard: milliseconds</span>
+<span class="k">SELECT</span> * <span class="k">FROM</span> daily_sales <span class="k">WHERE</span> day &gt;= now() - interval <span class="s">'30 days'</span>;</code></pre>
+  </div>
+  <p class="aside">tools: PostgreSQL materialized views + pg_cron, Oracle fast refresh, SQL Server indexed views, Snowflake/BigQuery materialized views, dbt incremental models, Materialize and RisingWave for always-fresh incremental views.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Fast reads</b> for expensive questions.</li><li><b>Less load</b>: the heavy query runs once per refresh.</li><li><b>Plain SQL</b>: readers don't know it's precomputed.</li><li><b>Indexable</b>, unlike a normal view.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Stale data</b> between refreshes.</li><li><b>Refresh cost</b>: full recompute by default.</li><li><b>Extra storage</b> for the stored result.</li><li><b>One more thing to schedule</b> and monitor.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Database ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares running the <b>heavy report query on every request</b> to reading a <b>materialized view refreshed every 15 minutes</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="4"><td>Simplicity<small>easy to reason about?</small></td><td class="dcell"></td><td class="score"></td><td class="why">It's just a table you query; refresh is one command.</td></tr>
+      <tr data-before="1" data-after="5"><td>Read speed<small>fast queries?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Seconds become milliseconds.</td></tr>
+      <tr data-before="3" data-after="3"><td>Write speed<small>cheap inserts &amp; updates?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Source writes are untouched; refreshes cost separately.</td></tr>
+      <tr data-before="5" data-after="4"><td>Integrity<small>data stays correct?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Correct as of the last refresh; slightly stale.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>10× more rows?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Read cost no longer grows with viewers.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low storage cost<small>cheap to keep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Stores a copy of the result.</td></tr>
+      <tr data-before="4" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fast for the questions it answers; new ones need new views.</td></tr>
+      <tr data-before="3" data-after="3"><td>Operability<small>calm to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Refresh jobs need monitoring and alerting.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change shape?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Changing the query means recreating the view.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Blocking refresh</h3><p>A plain REFRESH locks the view, so the dashboard hangs for a minute. <span class="fix">Fix →</span> use CONCURRENTLY with a unique index.</p></li>
+    <li><h3>Refreshing too often</h3><p>A 3-minute refresh every minute: refreshes pile up. <span class="fix">Fix →</span> refresh no faster than it can finish; consider incremental tables.</p></li>
+    <li><h3>Hidden staleness</h3><p>Users think the numbers are live and make decisions on old data. <span class="fix">Fix →</span> show “last updated” in the UI.</p></li>
+    <li><h3>Using it for live data</h3><p>Stock levels from a 15-minute-old view. <span class="fix">Fix →</span> keep exact, fast-changing reads on the source tables.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Dashboards, leaderboards and reports read by many people.</li><li>Heavy aggregations over data that changes slowly.</li><li>Offloading reporting queries from transactional work.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Data that must be exact right now (balances, stock).</li><li>Queries that are already fast with the right index.</li><li>Source data that changes faster than you can refresh.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Star schema</b></li><li><b>Normalization</b> (denormalizing on purpose)</li><li><b>CQRS</b> (Vol. 1)</li><li><b>Cache-aside</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Difference between a view and a materialized view?</summary><p>A view re-runs its query every time; a materialized view stores the result and is refreshed explicitly.</p></details>
+    <details><summary>What does REFRESH … CONCURRENTLY need, and why use it?</summary><p>A unique index on the view; it lets readers keep querying during the refresh.</p></details>
+    <details><summary>What's the main trade-off?</summary><p>Freshness for speed: reads are fast but can be as old as the last refresh.</p></details>
+    <details><summary>When would you use incremental maintenance instead?</summary><p>When full refreshes are too slow or you need near-real-time results.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Compute it <span class="hl">once</span>, show it to <span class="hl">everyone</span>, and print <span class="hl">“last updated”</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/08-materialized-views.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>PostgreSQL docs, “Materialized Views” and “REFRESH MATERIALIZED VIEW”.</li><li>Gupta &amp; Mumick, “Maintenance of Materialized Views: Problems, Techniques, and Applications” (1995).</li><li>Microsoft docs, “Create Indexed Views”.</li><li>Materialize docs, “Incremental view maintenance”.</li></ul>
+  </div>
+  <p class="folio">08</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="keyset-pagination.html"><small>← previous note</small>07 · Keyset Pagination</a>
+  <a href="optimistic-locking.html"><small>Next note →</small>09 · Optimistic Locking</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 3 · a student's bullet journal on data &amp; database patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Star Schema · Jef’s Notes</title>
+<meta name="description" content="Shape analytics data as facts surrounded by dimensions, for fast reports.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-data">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 3 · data &amp; database patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="star-schema">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 26.10.26</span><span class="topic">collection · <b>growing</b></span></div>
+  <p class="kicker">a.k.a. “receipts and labels”</p>
+  <h1><span class="hl">Star Schema</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>For analytics, shape data as a <b>fact table</b> of events with numbers (sales lines: quantity, amount) in the middle, surrounded by <b>dimension tables</b> that describe them (date, product, customer, store). Every report is <b>“sum the facts, group by dimension columns”</b>, a one-hop join that warehouses run very fast. Keep it in a <b>separate analytics database</b>, loaded from the app's data.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> analytics modelling</li><li><b>Origin:</b> Ralph Kimball, dimensional modelling (1990s)</li><li><b>Lives in:</b> Snowflake, BigQuery, Redshift, ClickHouse, DuckDB</li><li><b>Pairs with:</b> change data capture, materialized views</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">The app's normalized schema is great for <b>writing</b> orders, and painful for <b>asking questions</b>. “Sales by category, by month, by country” becomes a <span class="hl-pink">twelve-table join</span>, run on the same database that takes payments.</p>
+  <ul>
+    <li>Every analyst rebuilds the same joins, slightly differently, with different answers.</li>
+    <li>Report queries scan huge tables and slow checkout down.</li>
+    <li>History is lost: when a product changes category, last year's report changes too.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of an analyst writing a report on the normalized app database: sales by product category by month by country needs a twelve-table join through orders, order items, products, categories, customers, addresses and countries. It runs for minutes and slows down checkout."><g class="rough"><rect class="d f-paper" x="20" y="30" width="116" height="44" rx="10"/><rect class="d f-paper" x="150" y="30" width="116" height="44" rx="10"/><path class="d d-red" d="M136 52 h14"/><rect class="d f-paper" x="280" y="30" width="116" height="44" rx="10"/><path class="d d-red" d="M266 52 h14"/><rect class="d f-paper" x="410" y="30" width="116" height="44" rx="10"/><path class="d d-red" d="M396 52 h14"/><rect class="d f-paper" x="20" y="120" width="116" height="44" rx="10"/><path class="d d-red" d="M78 74 v46"/><rect class="d f-paper" x="150" y="120" width="116" height="44" rx="10"/><path class="d d-red" d="M136 142 h14"/><path class="d d-red" d="M208 74 v46"/><rect class="d f-paper" x="280" y="120" width="116" height="44" rx="10"/><path class="d d-red" d="M266 142 h14"/><path class="d d-red" d="M338 74 v46"/><rect class="d f-paper" x="410" y="120" width="116" height="44" rx="10"/><path class="d d-red" d="M396 142 h14"/><path class="d d-red" d="M468 74 v46"/></g><text class="t-head" x="78" y="59" text-anchor="middle" font-size="15">orders</text><text class="t-head" x="208" y="59" text-anchor="middle" font-size="15">items</text><text class="t-head" x="338" y="59" text-anchor="middle" font-size="15">products</text><text class="t-head" x="468" y="59" text-anchor="middle" font-size="15">categories</text><text class="t-head" x="78" y="149" text-anchor="middle" font-size="15">customers</text><text class="t-head" x="208" y="149" text-anchor="middle" font-size="15">addresses</text><text class="t-head" x="338" y="149" text-anchor="middle" font-size="15">countries</text><text class="t-head" x="468" y="149" text-anchor="middle" font-size="15">promos</text><text class="t-s t-red" x="640" y="60" text-anchor="middle">12-table join</text><text class="t-s t-red" x="640" y="90" text-anchor="middle">4 minutes</text><text class="t-s t-red" x="640" y="120" text-anchor="middle">checkout slows</text><text class="t-s t-pen" x="280" y="240" text-anchor="middle">“sales by category, by month, by country?”</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Analytics on the app's schema: a 12-table join for every question, fighting checkout for the same database.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">receipts and labels</span></h2>
+  <p>Think of a shop's <b>till receipts</b>. Each line is a <b>fact</b>: this product, this many, this price. Around them are <b>labels</b>: the date, the shop, the product's category, the customer's loyalty card. Any summary you can imagine is just “add up receipt lines, grouped by labels”.</p>
+  <ul>
+    <li>Receipt lines are the <b>fact table</b>; labels are <b>dimensions</b>.</li>
+    <li>Drawn on paper, the fact sits in the middle with dimensions around it: a <b>star</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a till receipt. The receipt lines are the facts: what was bought, how many, for how much. Around it are labels you sort them by: the date, the shop, the product and the customer card. Any summary is just grouping receipt lines by labels."><g class="rough"><g transform="translate(330 70) scale(1.8)"><g class="d"><path class="f-y" d="M6 0 h48 v62 l-8 -6 l-8 6 l-8 -6 l-8 6 l-8 -6 l-8 6 z"/><path d="M14 12 h32 M14 22 h24 M14 32 h32 M14 42 h18"/></g></g><rect class="d f-green" x="90" y="18" width="140" height="44" rx="10"/><rect class="d f-green" x="530" y="18" width="140" height="44" rx="10"/><rect class="d f-green" x="90" y="198" width="140" height="44" rx="10"/><rect class="d f-green" x="530" y="198" width="140" height="44" rx="10"/><path class="d" d="M320 100 L236 50"/><path class="d" d="M248.0 51.0 L236 50 L242.6 60.0"/><path class="d" d="M440 100 L526 50"/><path class="d" d="M519.3 59.9 L526 50 L514.0 50.9"/><path class="d" d="M320 160 L236 210"/><path class="d" d="M242.6 200.0 L236 210 L248.0 209.0"/><path class="d" d="M440 160 L526 210"/><path class="d" d="M514.0 209.1 L526 210 L519.3 200.1"/></g><text class="t-head" x="160" y="47" text-anchor="middle" font-size="17">date</text><text class="t-head" x="600" y="47" text-anchor="middle" font-size="17">shop</text><text class="t-head" x="160" y="227" text-anchor="middle" font-size="17">product</text><text class="t-head" x="600" y="227" text-anchor="middle" font-size="17">customer</text><text class="t-s t-pen" x="385" y="252" text-anchor="middle">sum lines, group by labels</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Receipt lines are facts; date, shop, product and customer are the labels you group them by.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>A receipt line</td><td>A row in <code>fact_sales</code> (one order line)</td></tr>
+      <tr><td>Quantity and price</td><td>Measures: <code>qty</code>, <code>amount</code></td></tr>
+      <tr><td>Date, shop, product, customer</td><td>Dimension tables</td></tr>
+      <tr><td>“Group by category and month”</td><td><code>GROUP BY p.category, d.month</code></td></tr>
+      <tr><td>Last year's labels kept</td><td>Slowly changing dimensions (type 2)</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">facts in the middle, dimensions around</span></h2>
+  <p>Dimensions are deliberately <b>denormalized</b> (category sits right on the product row), so every question is one join away from the fact table, and columnar warehouses scan just the columns they need.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Star schema. A central fact table fact_sales holds one row per order line with foreign keys to dimensions and numeric measures: quantity and amount. Around it four dimension tables: dim_date, dim_product, dim_customer and dim_store, each with descriptive columns like month, category, country and region. Every report is one join from the fact to a few dimensions."><g class="rough"><rect class="d d-thin f-paper" x="270" y="80" width="230" height="110" rx="4"/><path class="d d-thin f-y" d="M270 84 a4 4 0 0 1 4 -4 h222 a4 4 0 0 1 4 4 v28 h-230 z"/><path class="d d-thin d-soft" d="M276 138 h218"/><path class="d d-thin d-soft" d="M276 164 h218"/><rect class="f-hl" x="273" y="166" width="224" height="22" rx="2" style="stroke:none"/><rect class="d d-thin f-paper" x="20" y="10" width="200" height="58" rx="4"/><path class="d d-thin f-green" d="M20 14 a4 4 0 0 1 4 -4 h192 a4 4 0 0 1 4 4 v28 h-200 z"/><rect class="d d-thin f-paper" x="540" y="10" width="200" height="58" rx="4"/><path class="d d-thin f-green" d="M540 14 a4 4 0 0 1 4 -4 h192 a4 4 0 0 1 4 4 v28 h-200 z"/><rect class="d d-thin f-paper" x="20" y="200" width="200" height="58" rx="4"/><path class="d d-thin f-green" d="M20 204 a4 4 0 0 1 4 -4 h192 a4 4 0 0 1 4 4 v28 h-200 z"/><rect class="d d-thin f-paper" x="540" y="200" width="200" height="58" rx="4"/><path class="d d-thin f-green" d="M540 204 a4 4 0 0 1 4 -4 h192 a4 4 0 0 1 4 4 v28 h-200 z"/><path class="d" d="M266 110 L224 60"/><path class="d" d="M234.9 64.9 L224 60 L227.0 71.6"/><path class="d" d="M504 110 L536 60"/><path class="d" d="M534.6 71.9 L536 60 L525.8 66.3"/><path class="d" d="M266 170 L224 210"/><path class="d" d="M228.2 198.8 L224 210 L235.4 206.3"/><path class="d" d="M504 170 L536 210"/><path class="d" d="M525.2 204.8 L536 210 L533.3 198.3"/><g transform="translate(360 220) scale(0.8)"><g class="d"><path class="f-y" d="M30 2 l8 18 l20 2 l-15 13 l5 20 l-18 -11 l-18 11 l5 -20 l-15 -13 l20 -2 z"/></g></g></g><text class="t-head" x="385" y="103" text-anchor="middle" font-size="17">fact_sales</text><text class="t" x="280" y="131" font-size="16">date_key · product_key</text><text class="t" x="280" y="157" font-size="16">customer_key · store_key</text><text class="t" x="280" y="183" font-size="16">qty · amount</text><text class="t-head" x="120" y="33" text-anchor="middle" font-size="17">dim_date</text><text class="t" x="30" y="61" font-size="16">day · month · year</text><text class="t-head" x="640" y="33" text-anchor="middle" font-size="17">dim_product</text><text class="t" x="550" y="61" font-size="16">name · category</text><text class="t-head" x="120" y="223" text-anchor="middle" font-size="17">dim_customer</text><text class="t" x="30" y="251" font-size="16">segment · country</text><text class="t-head" x="640" y="223" text-anchor="middle" font-size="17">dim_store</text><text class="t" x="550" y="251" font-size="16">city · region</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One fact table of numbers in the middle, descriptive dimensions around it: every report is a one-hop join.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Pick the grain</b><p>One fact row = one what? “One order line” is the usual answer; state it explicitly.</p></li>
+    <li><b>List the measures</b><p>The numbers you add up: quantity, amount, discount, cost.</p></li>
+    <li><b>Build dimensions</b><p>Flat, descriptive tables with a surrogate key: date (with month, quarter, holiday), product (with category), customer, store.</p></li>
+    <li><b>Keep history in dimensions</b><p>Type 2: when a product changes category, add a new dimension row with valid dates, so old facts keep the old label.</p></li>
+    <li><b>Load it separately</b><p>ETL/ELT (often with dbt) from the app database or a CDC stream into a warehouse, on a schedule.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Fact table</dt><dd>Events with numeric measures, at a fixed grain.</dd></div>
+    <div><dt>Dimension</dt><dd>Descriptive context you filter and group by.</dd></div>
+    <div><dt>Grain</dt><dd>What exactly one fact row represents.</dd></div>
+    <div><dt>Measure</dt><dd>A number you aggregate (sum, count, avg).</dd></div>
+    <div><dt>Slowly changing dimension</dt><dd>Rules for keeping dimension history (type 1, 2…).</dd></div>
+    <div><dt>OLAP vs OLTP</dt><dd>Analytics workloads vs transactional workloads.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>reports.sql</span><span>any warehouse</span></div>
+<pre><code><span class="k">CREATE</span> <span class="k">TABLE</span> fact_sales (
+  date_key     int    <span class="k">NOT</span> <span class="k">NULL</span> <span class="k">REFERENCES</span> dim_date,
+  product_key  int    <span class="k">NOT</span> <span class="k">NULL</span> <span class="k">REFERENCES</span> dim_product,
+  customer_key int    <span class="k">NOT</span> <span class="k">NULL</span> <span class="k">REFERENCES</span> dim_customer,
+  store_key    int    <span class="k">NOT</span> <span class="k">NULL</span> <span class="k">REFERENCES</span> dim_store,
+  qty          int    <span class="k">NOT</span> <span class="k">NULL</span>,
+  amount       numeric(12, 2) <span class="k">NOT</span> <span class="k">NULL</span>       <span class="c">-- grain: one order line</span>
+);
+
+<span class="c">-- sales by category, month and country: one hop to each dimension</span>
+<span class="k">SELECT</span> p.category, d.month, c.country, sum(f.amount) <span class="k">AS</span> revenue
+<span class="k">FROM</span> fact_sales f
+<span class="k">JOIN</span> dim_product  p <span class="k">ON</span> p.product_key  = f.product_key
+<span class="k">JOIN</span> dim_date     d <span class="k">ON</span> d.date_key     = f.date_key
+<span class="k">JOIN</span> dim_customer c <span class="k">ON</span> c.customer_key = f.customer_key
+<span class="k">WHERE</span> d.year = 2026
+<span class="k">GROUP</span> <span class="k">BY</span> p.category, d.month, c.country
+<span class="k">ORDER</span> <span class="k">BY</span> revenue <span class="k">DESC</span>;</code></pre>
+  </div>
+  <p class="aside">tools: Snowflake, BigQuery, Redshift, ClickHouse, DuckDB, dbt for building facts and dimensions, Fivetran/Airbyte/Debezium for loading, BI tools like Metabase, Looker and Power BI that expect star schemas.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Fast, simple reports</b>: sum facts, group by dimensions.</li><li><b>One shared definition</b> of revenue, customers and products.</li><li><b>History kept</b> with slowly changing dimensions.</li><li><b>Analytics off the app database</b>: checkout stays fast.</li><li><b>BI tools understand it</b> out of the box.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>A pipeline to build and run</b> (ETL/ELT, scheduling).</li><li><b>Data is a little behind</b> the app.</li><li><b>Duplicated, denormalized data</b> in dimensions.</li><li><b>Bad for transactional writes</b>: it's for reading.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Database ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>running analytics on the normalized app database</b> to <b>a star schema in a separate warehouse</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="2" data-after="4"><td>Simplicity<small>easy to reason about?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Reports read like the question; the pipeline is extra.</td></tr>
+      <tr data-before="1" data-after="5"><td>Read speed<small>fast queries?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One-hop joins over columnar storage.</td></tr>
+      <tr data-before="3" data-after="3"><td>Write speed<small>cheap inserts &amp; updates?</small></td><td class="dcell"></td><td class="score"></td><td class="why">App writes are untouched; loads are batch.</td></tr>
+      <tr data-before="3" data-after="4"><td>Integrity<small>data stays correct?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One agreed definition of each metric, with history.</td></tr>
+      <tr data-before="2" data-after="5"><td>Scalability<small>10× more rows?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Warehouses scale to billions of fact rows.</td></tr>
+      <tr data-before="3" data-after="2"><td>Low storage cost<small>cheap to keep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A second copy of the data, denormalized.</td></tr>
+      <tr data-before="2" data-after="5"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Any slice by any dimension is easy.</td></tr>
+      <tr data-before="3" data-after="3"><td>Operability<small>calm to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One more pipeline to monitor.</td></tr>
+      <tr data-before="3" data-after="4"><td>Evolvability<small>easy to change shape?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New dimensions and measures plug in.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Fuzzy grain</h3><p>Some fact rows are orders, some are order lines; totals double. <span class="fix">Fix →</span> write down the grain; one fact table per grain.</p></li>
+    <li><h3>Overwriting dimensions</h3><p>A product moves category and last year's report changes. <span class="fix">Fix →</span> use type 2 slowly changing dimensions where history matters.</p></li>
+    <li><h3>Snowflaking everything</h3><p>Dimensions normalized into sub-tables; joins are back. <span class="fix">Fix →</span> keep dimensions flat unless they're huge.</p></li>
+    <li><h3>Querying the app database directly</h3><p>Analysts run heavy reports on production. <span class="fix">Fix →</span> load into a warehouse (or at least a read replica).</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Dashboards, BI and business reporting.</li><li>Questions that slice numbers by many attributes.</li><li>Teams that need one shared definition of key metrics.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Transactional app tables (keep those normalized).</li><li>Tiny datasets where a few SQL queries are enough.</li><li>Real-time operational views that must be exact right now.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Normalization</b></li><li><b>Materialized views</b></li><li><b>Change data capture</b></li><li><b>CQRS</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What goes in a fact table, and what in a dimension?</summary><p>Facts hold events with numeric measures at a fixed grain; dimensions hold descriptive attributes to filter and group by.</p></details>
+    <details><summary>What is the grain?</summary><p>The precise meaning of one fact row, for example one order line.</p></details>
+    <details><summary>Why denormalize dimensions?</summary><p>So every question is one join from the fact table, which is simpler and faster for analytics.</p></details>
+    <details><summary>What does a type 2 slowly changing dimension do?</summary><p>Adds a new dimension row (with validity dates) when an attribute changes, so old facts keep their old labels.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Receipts in the <span class="hl">middle</span>, labels <span class="hl">around</span>. Every report is “add up, group by”.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/15-star-schema.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Ralph Kimball &amp; Margy Ross, <i>The Data Warehouse Toolkit</i> (3rd ed.).</li><li>Kimball Group, “Dimensional Modeling Techniques”.</li><li>dbt Labs, “Building a Kimball dimensional model with dbt”.</li><li>Microsoft Power BI docs, “Understand star schema and the importance for Power BI”.</li></ul>
+  </div>
+  <p class="folio">15</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="connection-pooling.html"><small>← previous note</small>14 · Connection Pooling</a>
+  <a href="../index.html"><small>back to →</small>Index</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 3 · a student's bullet journal on data &amp; database patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>
