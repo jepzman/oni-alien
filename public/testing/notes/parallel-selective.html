@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Parallel &amp; Selective Runs · Jef’s Notes</title>
+<meta name="description" content="Split the suite across workers and run only the tests a change can affect.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-testing">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 4 · testing patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="parallel-selective">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 22.12.26</span><span class="topic">collection · <b>reliability &amp; speed</b></span></div>
+  <p class="kicker">a.k.a. “more lanes, smaller baskets”</p>
+  <h1><span class="hl">Parallel &amp; Selective Runs</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Two levers for fast feedback: <b>run tests in parallel</b> (workers and CI shards, balanced by past timing) and <b>run only the tests a change can affect</b> (using the dependency graph). Pull requests get answers in minutes, and the <b>full suite still runs</b> on main and nightly as a safety net. Tests must be <b>isolated</b> for either lever to work.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> test speed</li><li><b>Levers:</b> parallel workers, CI sharding, test impact analysis</li><li><b>Tools:</b> Vitest/Playwright shards, Nx, Turborepo, Bazel</li><li><b>Needs:</b> isolated, order-independent tests</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Suites grow linearly with the code, and so does the wait. A <span class="hl-pink">42-minute</span> CI run changes how people work: they context-switch, batch huge PRs and stop running tests locally.</p>
+  <ul>
+    <li>A typo fix in one package runs 6,000 unrelated tests.</li>
+    <li>One CI job uses one core while the machine has eight.</li>
+    <li>Slow suites get skipped: “I'll let CI tell me.”</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a single CI job running six thousand tests one after another for forty-two minutes, for a pull request that only changed a README typo in the billing package. Developers context-switch while they wait, and batch changes into huge pull requests to avoid the wait."><g class="rough"><rect class="d f-blue" x="20" y="80" width="160" height="60" rx="10"/><rect class="d d-thin f-pink" x="200" y="90" width="520" height="40" rx="3"/></g><text class="t-head" x="100" y="117" text-anchor="middle">1 CI job</text><text class="t-s t-red" x="460" y="80" text-anchor="middle">6,000 tests in a row · 42 min</text><text class="t-s t-pen" x="200" y="200" text-anchor="start">PR: fix a typo in billing/README.md</text><text class="t-s t-red" x="200" y="230" text-anchor="start">still runs every test in the repo</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One worker, 6,000 tests, 42 minutes, for a typo fix in one package.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the supermarket checkout</span></h2>
+  <p>A supermarket with one open lane has a long queue. <b>Open eight lanes</b> and it moves eight times faster. And nobody scans items that <b>aren't in their basket</b>.</p>
+  <ul>
+    <li>More lanes = <b>parallel workers and shards</b>.</li>
+    <li>Balancing queues = <b>splitting by past timing</b>.</li>
+    <li>Scanning only your basket = <b>selecting affected tests</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a supermarket with eight open checkout lanes instead of one, so the queue moves eight times faster. Customers with only a few items use the express lane, and nobody scans items that aren&#x27;t in their basket."><g class="rough"><g transform="translate(60 50) scale(2.4)"><g class="d"><path d="M0 0 v60 M30 0 v60 M60 0 v60 M90 0 v60"/><rect class="f-paper" x="6" y="10" width="18" height="12"/><rect class="f-paper" x="36" y="26" width="18" height="12"/><rect class="f-paper" x="66" y="6" width="18" height="12"/></g></g><g transform="translate(470 60) scale(1.6)"><g class="d"><path class="f-y" d="M6 18 h48 l-6 38 h-36 z"/><path d="M6 18 q24 -22 48 0"/><circle class="f-y" cx="22" cy="34" r="5"/><circle class="f-y" cx="36" cy="40" r="5"/><circle class="f-y" cx="28" cy="46" r="5"/></g></g></g><text class="t-s t-green" x="170" y="220" text-anchor="middle">8 lanes in parallel</text><text class="t-s t-green" x="520" y="200" text-anchor="middle">scan only this basket</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Open more checkout lanes, and only scan what's in the basket.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>One open lane</td><td>One CI job running every test in sequence</td></tr>
+      <tr><td>Eight lanes</td><td>Workers on each machine + several CI shards</td></tr>
+      <tr><td>Balanced queues</td><td>Shards split by previous run times</td></tr>
+      <tr><td>Only your basket</td><td>Tests for packages the change affects</td></tr>
+      <tr><td>Stock-take at night</td><td>The full suite on main and nightly</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">select, then split</span></h2>
+  <p>Selection shrinks the work; parallelism shares what's left. Both need tests that don't depend on <b>order or shared state</b>, so isolation comes first.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Parallel and selective runs. First, the build graph works out which packages a change affects: a change in billing affects billing and checkout, but not search or admin. Only those tests are selected. Then the selected tests are split across four shards by previous timing so each finishes in about the same time. The pull request gets feedback in six minutes; the full suite still runs on main and nightly."><g class="rough"><rect class="d f-pink" x="20" y="20" width="150" height="44" rx="10"/><rect class="d f-y" x="20" y="78" width="150" height="44" rx="10"/><rect class="d f-paper" x="20" y="136" width="150" height="44" rx="10"/><rect class="d f-paper" x="20" y="194" width="150" height="44" rx="10"/><path class="d d-red" d="M170 42 Q200 66 170 92"/><path class="d d-red" d="M174.7 81.0 L170 92 L181.6 88.9"/><path class="d" d="M176 66 L280 110"/><path class="d" d="M268.0 110.6 L280 110 L272.1 101.0"/><rect class="d f-y" x="286" y="80" width="150" height="70" rx="10"/><path class="d" d="M442 115 L554 115"/><path class="d" d="M543.2 120.2 L554 115 L543.2 109.8"/><rect class="d f-green" x="560" y="30" width="180" height="36" rx="10"/><rect class="d f-green" x="560" y="76" width="180" height="36" rx="10"/><rect class="d f-green" x="560" y="122" width="180" height="36" rx="10"/><rect class="d f-green" x="560" y="168" width="180" height="36" rx="10"/></g><text class="t-head" x="95" y="49" text-anchor="middle" font-size="16">billing ✎</text><text class="t-head" x="95" y="107" text-anchor="middle" font-size="16">checkout</text><text class="t-head" x="95" y="165" text-anchor="middle" font-size="16">search</text><text class="t-head" x="95" y="223" text-anchor="middle" font-size="16">admin</text><text class="t-s" x="228" y="74" text-anchor="middle">affected</text><text class="t-head" x="361" y="111" text-anchor="middle">selected</text><text class="t" x="361" y="135" text-anchor="middle" font-size="17">billing + checkout</text><text class="t-s" x="498" y="100" text-anchor="middle">split by timing</text><text class="t-head" x="650" y="55" text-anchor="middle" font-size="15">shard 1 · ~90 s</text><text class="t-head" x="650" y="101" text-anchor="middle" font-size="15">shard 2 · ~90 s</text><text class="t-head" x="650" y="147" text-anchor="middle" font-size="15">shard 3 · ~90 s</text><text class="t-head" x="650" y="193" text-anchor="middle" font-size="15">shard 4 · ~90 s</text><text class="t-s t-green" x="380" y="270" text-anchor="middle">PR feedback: 6 min · full suite on main + nightly</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Select only the affected tests, then split them across workers by past timing. Full suite still runs on main.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Make tests isolated</b><p>No shared mutable data, no order dependence; each worker gets its own database schema or container.</p></li>
+    <li><b>Use all cores</b><p>Parallel workers in the runner (Vitest threads, Playwright workers).</p></li>
+    <li><b>Shard in CI</b><p><code>--shard=1/4</code> across machines; balance by timing data.</p></li>
+    <li><b>Select affected tests</b><p>Use the dependency graph (Nx/Turborepo/Bazel affected) or the runner's <code>--changed</code>.</p></li>
+    <li><b>Keep a full run</b><p>On main, before release and nightly, to catch anything selection missed.</p></li>
+    <li><b>Watch the numbers</b><p>Track p50/p95 CI time and the slowest tests; fix the outliers.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Worker</dt><dd>A process running a subset of tests in parallel.</dd></div>
+    <div><dt>Shard</dt><dd>One slice of the suite run on its own CI machine.</dd></div>
+    <div><dt>Timing-based split</dt><dd>Balancing shards using past test durations.</dd></div>
+    <div><dt>Test impact analysis</dt><dd>Choosing tests based on what a change touches.</dd></div>
+    <div><dt>Affected graph</dt><dd>Packages that depend, directly or not, on a change.</dd></div>
+    <div><dt>Remote cache</dt><dd>Reusing results of unchanged tasks across machines.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>.github/workflows/test.yml</span><span>GitHub Actions + Nx + Vitest</span></div>
+<pre><code>jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: { shard: [1, 2, 3, 4] }            <span class="c"># 4 machines in parallel</span>
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - run: npm ci
+      <span class="c"># only projects affected by this PR, split across the 4 shards</span>
+      - run: npx nx affected -t test --base=origin/main --
+             --shard=${{ matrix.shard }}/4
+      <span class="c"># on main and nightly a separate job runs:  npx nx run-many -t test</span></code></pre>
+  </div>
+  <p class="aside">tools: Vitest/Jest workers and <code>--shard</code>, Playwright <code>--shard</code> and <code>fullyParallel</code>, Nx and Turborepo affected + remote cache, Bazel, Gradle test distribution, Knapsack Pro and CircleCI timing-based splitting, Launchable for predictive test selection.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Minutes, not an hour</b> for PR feedback.</li><li><b>Uses the hardware</b> you already pay for.</li><li><b>Smaller, more frequent PRs</b> become practical.</li><li><b>Scales with the repo</b> instead of slowing down.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Needs isolated tests</b>; hidden shared state surfaces as flakes.</li><li><b>Selection can miss</b> indirect effects (config, data files).</li><li><b>More CI machines</b> at once.</li><li><b>More moving parts</b>: graphs, caches, timing data.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Test-suite ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>one CI job running every test in sequence</b> to <b>affected-only selection plus parallel shards</b>, with a full run on main.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to read &amp; write?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Sharding and affected graphs add CI concepts.</td></tr>
+      <tr data-before="1" data-after="5"><td>Fast feedback<small>quick to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">42 minutes becomes about 6.</td></tr>
+      <tr data-before="4" data-after="4"><td>Confidence<small>catches real bugs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The full suite still runs on main and nightly.</td></tr>
+      <tr data-before="3" data-after="4"><td>Reliability<small>no flaky runs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Exposes and forces out shared-state flakes.</td></tr>
+      <tr data-before="3" data-after="4"><td>Isolation<small>pinpoints the fault?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Isolated tests point at one cause.</td></tr>
+      <tr data-before="3" data-after="3"><td>Maintainability<small>survives refactors?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Realism<small>close to production?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Low cost<small>cheap to write &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fewer total test minutes per PR; more machines briefly.</td></tr>
+      <tr data-before="1" data-after="5"><td>Scalability<small>grows with the code?</small></td><td class="dcell"></td><td class="score"></td><td class="why">CI time stays flat as the repo grows.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Parallelising non-isolated tests</h3><p>Shared rows and global state turn into random failures. <span class="fix">Fix →</span> isolate first: per-worker schemas, unique data.</p></li>
+    <li><h3>Trusting selection blindly</h3><p>A config change affects everything, but no tests are selected. <span class="fix">Fix →</span> mark global inputs; always run the full suite on main.</p></li>
+    <li><h3>Unbalanced shards</h3><p>Three shards finish in 2 minutes, one takes 20. <span class="fix">Fix →</span> split by timing data, not by file count.</p></li>
+    <li><h3>Ignoring the slowest tests</h3><p>Five tests take half the time. <span class="fix">Fix →</span> track and fix the slow tail.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Suites slower than about 10 minutes.</li><li>Monorepos with many packages.</li><li>Teams that want small, frequent PRs.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Small suites that already finish in a minute or two.</li><li>Tests that can't be isolated yet (fix that first).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Test pyramid</b></li><li><b>Flaky test quarantine</b></li><li><b>Throwaway containers</b></li><li><b>Competing consumers</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What are the two main levers for faster CI?</summary><p>Run tests in parallel (workers and shards) and run only the tests a change can affect.</p></details>
+    <details><summary>Why must tests be isolated before parallelising?</summary><p>Shared state and order dependence cause random failures when tests run at the same time or in different orders.</p></details>
+    <details><summary>Why split shards by timing rather than file count?</summary><p>Files have very different run times; timing data balances shards so they finish together.</p></details>
+    <details><summary>Why still run the full suite on main?</summary><p>Selection can miss indirect effects; the full run is the safety net.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Open more <span class="hl">lanes</span>, scan only your <span class="hl">basket</span>, and do a full <span class="hl">stock-take</span> at night.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/15-parallel-selective.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Vitest docs, “Improving Performance” and <code>--shard</code>.</li><li>Playwright docs, “Parallelism” and “Sharding”.</li><li>Nx docs, “Run only tasks affected by a PR”.</li><li>Google, “Taming Google-Scale Continuous Testing” (ICSE SEIP 2017).</li></ul>
+  </div>
+  <p class="folio">15</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="flaky-tests.html"><small>← previous note</small>14 · Flaky Test Quarantine</a>
+  <a href="../index.html"><small>back to →</small>Index</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 4 · a student's bullet journal on testing patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

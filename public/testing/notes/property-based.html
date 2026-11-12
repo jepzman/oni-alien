@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Property-Based Testing · Jef’s Notes</title>
+<meta name="description" content="State a rule that must always hold and let the tool hunt for counter-examples.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-testing">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 4 · testing patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="property-based">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 01.12.26</span><span class="topic">collection · <b>smarter techniques</b></span></div>
+  <p class="kicker">a.k.a. “the furniture lab”</p>
+  <h1><span class="hl">Property-Based Testing</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Instead of listing examples, state a <b>property</b>: a rule that must hold for <b>every</b> input (“the parts always add up to the total”). The tool <b>generates hundreds of random inputs</b>, including nasty edge cases, and when one fails it <b>shrinks</b> it to the smallest failing example. Great at finding the bugs nobody thought to write a test for.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> test technique</li><li><b>Origin:</b> QuickCheck (Claessen &amp; Hughes, 2000)</li><li><b>Libraries:</b> fast-check, Hypothesis, jqwik, FsCheck</li><li><b>Pairs with:</b> test data builders, example tests</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Example tests only check the inputs you <span class="hl-pink">thought of</span>. Bugs hide in the ones you didn't: zero, negative numbers, empty lists, rounding, unicode, very large values.</p>
+  <ul>
+    <li>All three examples pass; a cent disappears for 10 ÷ 3.</li>
+    <li>Edge cases depend on how imaginative the author was that day.</li>
+    <li>Writing every combination by hand is impossible.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a function that splits a bill, with three hand-picked example tests: one hundred split by two, ninety by three and zero by four. All pass. In production, ten euros split three ways loses a cent, and an empty name list crashes the function. Nobody thought of those inputs."><g class="rough"><rect class="d f-green" x="20" y="20" width="220" height="48" rx="10"/><rect class="d f-green" x="20" y="84" width="220" height="48" rx="10"/><rect class="d f-green" x="20" y="148" width="220" height="48" rx="10"/></g><text class="t-head" x="130" y="51" text-anchor="middle" font-size="17">split(100, 2) ✓</text><text class="t-head" x="130" y="115" text-anchor="middle" font-size="17">split(90, 3) ✓</text><text class="t-head" x="130" y="179" text-anchor="middle" font-size="17">split(0, 4) ✓</text><text class="t-s t-pen" x="500" y="50" text-anchor="middle">production:</text><text class="t-s t-red" x="500" y="90" text-anchor="middle">split(10, 3) → 3.33 × 3 = 9.99</text><text class="t-s t-red" x="500" y="130" text-anchor="middle">a cent vanished</text><text class="t-s t-red" x="500" y="180" text-anchor="middle">split(10, 0) → crash</text><text class="t-s t-pen" x="500" y="230" text-anchor="middle">nobody wrote those examples</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Three hand-picked examples pass. The bugs live in the inputs nobody thought to write.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the furniture lab</span></h2>
+  <p>A furniture lab doesn't test a chair by having someone sit on it three times. A <b>machine drops thousands of random loads</b> from random angles and checks <b>one rule</b> each time: “it must not break under 150 kg”. When it breaks, they find the <b>smallest load</b> that does it.</p>
+  <ul>
+    <li>Random loads are <b>generated inputs</b>.</li>
+    <li>“Must not break under 150 kg” is the <b>property</b>.</li>
+    <li>Finding the smallest breaking load is <b>shrinking</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a chair being tested in a furniture lab. Instead of a tester sitting on it three times, a machine drops thousands of random weights from random angles, and checks one rule each time: the chair must not break below a hundred and fifty kilograms."><g class="rough"><rect class="d f-y" x="300" y="112" width="120" height="16" rx="3"/><rect class="d f-y" x="404" y="30" width="16" height="82" rx="3"/><path class="d" d="M306 128 v92 M414 128 v92 M306 176 h108"/><path class="d d-dash" d="M240 40 L336 116"/><path class="d" d="M324.3 113.4 L336 116 L330.8 105.2"/><path class="d d-dash" d="M330 20 L348 116"/><path class="d" d="M340.9 106.3 L348 116 L351.1 104.4"/><path class="d d-dash" d="M450 50 L360 116"/><path class="d" d="M365.6 105.4 L360 116 L371.8 113.8"/><path class="d d-dash" d="M260 90 L372 116"/><path class="d" d="M360.3 118.6 L372 116 L362.7 108.5"/><path class="d d-dash" d="M470 100 L384 116"/><path class="d" d="M393.7 108.9 L384 116 L395.6 119.2"/><g transform="translate(100 60) scale(1.2)"><g class="d"><rect class="f-y" x="2" y="2" width="52" height="52" rx="8"/><circle cx="16" cy="16" r="4"/><circle cx="28" cy="28" r="4"/><circle cx="40" cy="40" r="4"/></g></g></g><text class="t-s t-pen" x="130" y="160" text-anchor="middle">random loads</text><text class="t-s t-green" x="600" y="120" text-anchor="middle">rule: no break</text><text class="t-s t-green" x="600" y="146" text-anchor="middle">under 150 kg</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A furniture lab: thousands of random loads, one rule — it must not break under 150 kg.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Random loads and angles</td><td>Generators (<code>fc.integer()</code>, <code>fc.array()</code>)</td></tr>
+      <tr><td>“Must not break under 150 kg”</td><td>A property that must always hold</td></tr>
+      <tr><td>Thousands of drops</td><td>Hundreds of generated runs per test</td></tr>
+      <tr><td>Smallest breaking load</td><td>The shrunk counter-example</td></tr>
+      <tr><td>Lab report with the seed</td><td>A seed to replay the failing run</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">state the rule, let the tool hunt</span></h2>
+  <p>The hard part is finding good properties. Common shapes: <b>round-trips</b> (decode(encode(x)) = x), <b>invariants</b> (sorted output is ordered), <b>conservation</b> (nothing created or lost), and <b>comparing to a simple model</b>.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Property-based test loop. A generator produces hundreds of random inputs, amounts and number of people. Each is run through split, and the property is checked: the parts add up to the total exactly, and no part differs from another by more than one cent. When a failure is found, the tool shrinks it to the smallest failing case, here ten cents split three ways."><g class="rough"><rect class="d f-y" x="20" y="40" width="180" height="80" rx="10"/><path class="d" d="M206 80 L286 80"/><path class="d" d="M275.2 85.2 L286 80 L275.2 74.8"/><rect class="d f-blue" x="292" y="40" width="160" height="80" rx="10"/><path class="d" d="M458 80 L538 80"/><path class="d" d="M527.2 85.2 L538 80 L527.2 74.8"/><rect class="d f-green" x="544" y="30" width="200" height="100" rx="10"/><path class="d d-red" d="M644 134 L644 186"/><path class="d d-red" d="M638.8 175.2 L644 186 L649.2 175.2"/><rect class="d f-pink d-red" x="470" y="190" width="274" height="70" rx="10"/></g><text class="t-head" x="110" y="76" text-anchor="middle">generator</text><text class="t" x="110" y="100" text-anchor="middle" font-size="17">amount, people</text><text class="t-s" x="246" y="66" text-anchor="middle">× 1,000</text><text class="t-head" x="372" y="87" text-anchor="middle">split()</text><text class="t-head" x="644" y="76" text-anchor="middle">property</text><text class="t" x="644" y="100" text-anchor="middle" font-size="17">sum(parts) = total</text><text class="t-s t-red" x="656" y="166" text-anchor="start">fails</text><text class="t-head t-red" x="607" y="232" text-anchor="middle" font-size="17">shrunk: split(0.10, 3)</text><text class="t-s t-pen" x="200" y="220" text-anchor="middle">the tool hunts; you state the rule</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Generate many inputs, check a rule that must always hold, and shrink any failure to the smallest example.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Pick a property</b><p>Round-trip, invariant, conservation, idempotence (f(f(x)) = f(x)) or “same as a simple reference version”.</p></li>
+    <li><b>Describe the inputs</b><p>Generators for amounts, people, strings, lists; constrain to valid domains.</p></li>
+    <li><b>Run many cases</b><p>100–1,000 per test in CI; more in a nightly job.</p></li>
+    <li><b>Read the shrunk example</b><p>It's usually the clearest possible bug report.</p></li>
+    <li><b>Keep the failure</b><p>Add the shrunk case as a regular example test, and record the seed.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Property</dt><dd>A rule that holds for all valid inputs.</dd></div>
+    <div><dt>Generator / arbitrary</dt><dd>Produces random inputs of a given shape.</dd></div>
+    <div><dt>Shrinking</dt><dd>Simplifying a failing input to a minimal one.</dd></div>
+    <div><dt>Seed</dt><dd>Number that makes a random run repeatable.</dd></div>
+    <div><dt>Round-trip property</dt><dd>Encode then decode gives back the original.</dd></div>
+    <div><dt>Oracle</dt><dd>A trusted way to know the right answer.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>split.prop.test.ts</span><span>fast-check + Vitest</span></div>
+<pre><code><span class="k">import</span> fc <span class="k">from</span> <span class="s">"fast-check"</span>;
+
+it(<span class="s">"never loses or creates a cent"</span>, () =&gt; {
+  fc.assert(
+    fc.property(
+      fc.integer({ min: 0, max: 10_000_00 }),     <span class="c">// total in cents</span>
+      fc.integer({ min: 1, max: 50 }),            <span class="c">// people</span>
+      (total, people) =&gt; {
+        <span class="k">const</span> parts = splitBill(total, people);
+
+        expect(parts).toHaveLength(people);
+        expect(parts.reduce((a, b) =&gt; a + b, 0)).toBe(total);
+        expect(Math.max(...parts) - Math.min(...parts)).toBeLessThanOrEqual(1);
+      },
+    ),
+  );
+});
+<span class="c">// on failure: "Counterexample: [10, 3]  Shrunk 6 time(s)  seed: 1593201"</span></code></pre>
+  </div>
+  <p class="aside">tools: fast-check (JS/TS), Hypothesis (Python), jqwik (Java), FsCheck (.NET), proptest (Rust), QuickCheck (Haskell, Erlang). Stateful/model-based testing modes can test whole APIs.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Finds edge cases</b> nobody imagined.</li><li><b>Shrunk failures</b> are minimal, clear bug reports.</li><li><b>One property covers thousands of examples</b>.</li><li><b>Forces you to state the real rule</b>.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Good properties are hard</b> to think of at first.</li><li><b>Slower</b> than one example.</li><li><b>Randomness</b> needs seeds for reproducibility.</li><li><b>Easy to restate the implementation</b> as the property.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Test-suite ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>only hand-written examples</b> to examples <b>plus property-based tests</b> for the core rules.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to read &amp; write?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Properties take more thought to read.</td></tr>
+      <tr data-before="5" data-after="4"><td>Fast feedback<small>quick to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Hundreds of cases still run in well under a second.</td></tr>
+      <tr data-before="3" data-after="5"><td>Confidence<small>catches real bugs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Explores inputs nobody would write by hand.</td></tr>
+      <tr data-before="4" data-after="4"><td>Reliability<small>no flaky runs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Seeded runs are repeatable.</td></tr>
+      <tr data-before="3" data-after="4"><td>Isolation<small>pinpoints the fault?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Shrinking points straight at the minimal failing input.</td></tr>
+      <tr data-before="3" data-after="4"><td>Maintainability<small>survives refactors?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Rules change less often than examples.</td></tr>
+      <tr data-before="2" data-after="4"><td>Realism<small>close to production?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Messy, real-world-shaped inputs.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to write &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More thinking per test, far fewer tests.</td></tr>
+      <tr data-before="3" data-after="4"><td>Scalability<small>grows with the code?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Generators are reused across the suite.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Re-implementing the code in the test</h3><p>The property computes the answer the same way the code does. <span class="fix">Fix →</span> check rules and relations, not the algorithm.</p></li>
+    <li><h3>Generators that are too narrow</h3><p>Only positive integers under 10, so nothing interesting happens. <span class="fix">Fix →</span> include zero, empties, huge and odd values.</p></li>
+    <li><h3>Losing the failing case</h3><p>A random failure in CI can't be reproduced. <span class="fix">Fix →</span> log seeds; add shrunk cases as example tests.</p></li>
+    <li><h3>Replacing all examples</h3><p>Nobody can read what the code should do. <span class="fix">Fix →</span> keep a few examples as documentation.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Pure functions with clear rules: money, parsing, sorting, encoding.</li><li>Serializers and parsers (round-trip properties).</li><li>Data structures and state machines.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>UI layout and copy.</li><li>Logic with no general rule, only special cases.</li><li>Slow, side-effectful operations (unless you can fake them).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Test data builders</b></li><li><b>Mutation testing</b></li><li><b>Controlled time &amp; randomness</b></li><li><b>State machines</b> (Vol. 2)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What is a property?</summary><p>A rule that must hold for every valid input, such as “the parts add up to the total”.</p></details>
+    <details><summary>What does shrinking do?</summary><p>Reduces a failing input to the smallest, simplest example that still fails.</p></details>
+    <details><summary>Name three common property shapes.</summary><p>Round-trip, invariant, conservation (also idempotence and comparing to a reference model).</p></details>
+    <details><summary>How do you reproduce a failing random run?</summary><p>Re-run with the reported seed, then add the shrunk case as an example test.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Don't sit on the chair <span class="hl">three times</span>. State the <span class="hl">rule</span> and drop a thousand <span class="hl">weights</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/09-property-based.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Koen Claessen &amp; John Hughes, “QuickCheck: A Lightweight Tool for Random Testing of Haskell Programs” (2000).</li><li>fast-check documentation (fast-check.dev).</li><li>Hypothesis docs, “What you can generate and how”.</li><li>Scott Wlaschin, “Choosing properties for property-based testing”.</li></ul>
+  </div>
+  <p class="folio">09</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="contract-testing.html"><small>← previous note</small>08 · Contract Testing</a>
+  <a href="snapshot-testing.html"><small>Next note →</small>10 · Snapshot (Approval) Testing</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 4 · a student's bullet journal on testing patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

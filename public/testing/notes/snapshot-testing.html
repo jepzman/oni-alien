@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Snapshot (Approval) Testing · Jef’s Notes</title>
+<meta name="description" content="Save the approved output once; fail when it changes, and review the diff.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-testing">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 4 · testing patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="snapshot-testing">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 04.12.26</span><span class="topic">collection · <b>smarter techniques</b></span></div>
+  <p class="kicker">a.k.a. “the approved photograph”</p>
+  <h1><span class="hl">Snapshot (Approval) Testing</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>For big outputs (rendered HTML, invoices, API responses, generated SQL), save an <b>approved copy</b> once, and have the test <b>compare new output to it</b>. Any difference fails with a <b>diff</b>; a human decides whether it's a <b>bug</b> or an <b>intended change</b> to approve. Keep snapshots <b>small and readable</b>, and review snapshot changes in the PR like code.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> test technique</li><li><b>a.k.a.:</b> approval testing, golden files</li><li><b>Tools:</b> Vitest/Jest snapshots, ApprovalTests, Playwright visual</li><li><b>Pairs with:</b> characterization tests</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Some outputs are <span class="hl-pink">large and detailed</span>: an invoice, an email, a JSON report, a rendered component. Asserting every line by hand is tedious, and most of the output ends up unchecked.</p>
+  <ul>
+    <li>Forty assertions for one invoice, and lines 41–120 never checked.</li>
+    <li>A small intended layout change means an hour of editing asserts.</li>
+    <li>Nobody notices a stray field leaking into an API response.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a test for an invoice PDF generator with forty assertions, each checking one line of the output. The invoice layout changes slightly and the developer spends an hour updating assertions one at a time, while other parts of the output are not checked at all."><g class="rough"><g transform="translate(40 30) scale(2.6)"><g class="d"><path class="f-paper" d="M6 0 h48 v62 l-8 -6 l-8 6 l-8 -6 l-8 6 l-8 -6 l-8 6 z"/><path d="M14 12 h32 M14 22 h24 M14 32 h32 M14 42 h18"/></g></g></g><text class="t-s t-pen" x="260" y="50" text-anchor="start">expect(line[1]).toBe(…)</text><text class="t-s t-pen" x="260" y="80" text-anchor="start">expect(line[2]).toBe(…)</text><text class="t-s t-pen" x="260" y="110" text-anchor="start">… × 40</text><text class="t-s t-red" x="260" y="170" text-anchor="start">small layout change → 1 hour of edits</text><text class="t-s t-red" x="260" y="210" text-anchor="start">lines 41–120: never checked</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>40 hand-written assertions for one big output, and still most of it unchecked.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the conservator's photograph</span></h2>
+  <p>A museum conservator <b>photographs a painting</b> when it's approved. Every month they take a new photo and <b>compare</b>. Any difference is circled: either <b>damage to fix</b>, or an <b>intended restoration</b>, whose photo becomes the new approved one.</p>
+  <ul>
+    <li>The approved photo is the <b>snapshot</b>.</li>
+    <li>Circled differences are the <b>diff</b>.</li>
+    <li>Signing off a restoration is <b>updating the snapshot</b>, consciously.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a museum conservator who photographs a painting when it&#x27;s approved. Every month they take a new photo and compare it to the approved one. Any difference is highlighted; either it&#x27;s damage to fix, or an intended restoration, which becomes the new approved photo."><g class="rough"><g transform="translate(40 60) scale(1.6)"><g class="d"><rect class="f-y" x="0" y="14" width="64" height="40" rx="5"/><path d="M20 14 l6 -8 h12 l6 8"/><circle class="f-y" cx="32" cy="34" r="11"/></g></g><g transform="translate(200 50) scale(1.6)"><g class="d"><rect class="f-green" x="0" y="0" width="64" height="50" rx="2"/><rect x="8" y="8" width="48" height="34"/><path d="M12 38 l14 -14 l10 10 l8 -6 l10 10"/></g></g><g transform="translate(420 50) scale(1.6)"><g class="d"><rect class="f-paper" x="0" y="0" width="64" height="50" rx="2"/><rect x="8" y="8" width="48" height="34"/><path d="M12 38 l14 -14 l10 10 l8 -6 l10 10"/></g></g><circle class="d d-red" cx="480" cy="80" r="16"/></g><text class="t-s t-green" x="250" y="160" text-anchor="middle">approved photo</text><text class="t-s t-pen" x="470" y="160" text-anchor="middle">this month</text><text class="t-s t-red" x="640" y="70" text-anchor="middle">damage?</text><text class="t-s t-red" x="640" y="96" text-anchor="middle">fix it</text><text class="t-s t-green" x="640" y="140" text-anchor="middle">restored?</text><text class="t-s t-green" x="640" y="166" text-anchor="middle">approve it</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Photograph it once when approved; compare each new photo; approve intended changes.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The approved photograph</td><td>The stored snapshot / golden file</td></tr>
+      <tr><td>This month's photo</td><td>The output of the current code</td></tr>
+      <tr><td>Circled differences</td><td>The diff in the failing test</td></tr>
+      <tr><td>Damage</td><td>A regression: fix the code</td></tr>
+      <tr><td>Intended restoration</td><td>Approve: update the snapshot (<code>-u</code>)</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">compare to the approved copy</span></h2>
+  <p>Snapshots turn “is this output right?” into “is this <b>change</b> right?”, which is much easier for a human to judge, as long as the diff is small and readable.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Snapshot testing loop. The test renders the invoice to text. The first run writes the approved snapshot file. Later runs compare the new output to the snapshot. If they match the test passes; if not, the test fails with a diff. A human reviews the diff: a bug gets fixed, an intended change is approved by updating the snapshot, and the snapshot change is reviewed in the pull request."><g class="rough"><rect class="d f-blue" x="20" y="40" width="150" height="70" rx="10"/><path class="d" d="M176 75 L256 75"/><path class="d" d="M245.2 80.2 L256 75 L245.2 69.8"/><rect class="d f-y" x="262" y="30" width="200" height="90" rx="10"/><path class="d d-green" d="M468 60 L560 40"/><path class="d d-green" d="M550.6 47.4 L560 40 L548.3 37.2"/><rect class="d f-green" x="566" y="14" width="120" height="48" rx="10"/><path class="d d-red" d="M468 92 L560 130"/><path class="d d-red" d="M548.0 130.7 L560 130 L552.0 121.1"/><rect class="d f-pink d-red" x="566" y="100" width="180" height="64" rx="10"/><rect class="d f-paper d-red" x="420" y="210" width="150" height="54" rx="10"/><rect class="d f-green" x="590" y="210" width="160" height="54" rx="10"/><path class="d d-dash" d="M620 168 L510 206"/><path class="d" d="M518.5 197.5 L510 206 L521.9 207.4"/><path class="d d-dash" d="M660 168 L670 206"/><path class="d" d="M662.2 196.9 L670 206 L672.3 194.2"/></g><text class="t-head" x="95" y="82" text-anchor="middle">render()</text><text class="t-head" x="362" y="71" text-anchor="middle">compare</text><text class="t" x="362" y="95" text-anchor="middle" font-size="17">with invoice.snap</text><text class="t-s t-green" x="514" y="34" text-anchor="middle">same</text><text class="t-head" x="626" y="45" text-anchor="middle" font-size="17">pass ✓</text><text class="t-s t-red" x="514" y="126" text-anchor="middle">diff ✗</text><text class="t-head t-red" x="656" y="139" text-anchor="middle" font-size="17">human reviews</text><text class="t-head t-red" x="495" y="244" text-anchor="middle" font-size="17">bug → fix</text><text class="t-head" x="670" y="244" text-anchor="middle" font-size="17">approve: -u</text><text class="t-s t-pen" x="170" y="230" text-anchor="middle">snapshot diffs are reviewed in the PR</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Render, compare to the approved file, show a diff. A human decides: bug or approve.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Render to a readable form</b><p>Pretty-printed JSON, normalised HTML or plain text, not binary blobs.</p></li>
+    <li><b>Scrub the noise</b><p>Replace dates, ids and random values with placeholders so snapshots are stable.</p></li>
+    <li><b>Keep snapshots small</b><p>Snapshot the invoice body, not the whole page; inline snapshots for short output.</p></li>
+    <li><b>Review diffs like code</b><p>Snapshot file changes appear in the PR; reviewers read them.</p></li>
+    <li><b>Update deliberately</b><p>Run with <code>-u</code> only after reading the diff, never to “make it green”.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Snapshot / golden file</dt><dd>A stored, approved copy of output.</dd></div>
+    <div><dt>Approval</dt><dd>Accepting a new output as the reference.</dd></div>
+    <div><dt>Scrubber</dt><dd>Replaces unstable values (dates, ids) before comparing.</dd></div>
+    <div><dt>Inline snapshot</dt><dd>A small snapshot stored inside the test file.</dd></div>
+    <div><dt>Visual regression</dt><dd>Comparing screenshots pixel by pixel.</dd></div>
+    <div><dt>Snapshot fatigue</dt><dd>Blindly updating snapshots without reading diffs.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>invoice.test.ts</span><span>Vitest</span></div>
+<pre><code>it(<span class="s">"renders an invoice for a Dutch customer"</span>, () =&gt; {
+  <span class="k">const</span> invoice = anInvoice().<span class="k">for</span>(aCustomer().inNetherlands()).withLines(3).build();
+
+  <span class="k">const</span> text = renderInvoiceText(invoice)
+    .replace(/\d{4}-\d{2}-\d{2}/g, <span class="s">"&lt;date&gt;"</span>)          <span class="c">// scrub unstable values</span>
+    .replace(/INV-\d+/g, <span class="s">"INV-&lt;n&gt;"</span>);
+
+  expect(text).toMatchSnapshot();                     <span class="c">// __snapshots__/invoice.test.ts.snap</span>
+});
+
+it(<span class="s">"formats a small amount"</span>, () =&gt; {
+  expect(formatMoney(1234.5, <span class="s">"EUR"</span>, <span class="s">"nl-NL"</span>)).toMatchInlineSnapshot(<span class="s">`"€ 1.234,50"`</span>);
+});
+<span class="c">// intended change? read the diff, then:  vitest -u</span></code></pre>
+  </div>
+  <p class="aside">tools: Vitest/Jest <code>toMatchSnapshot</code> and inline snapshots, ApprovalTests (many languages), Verify (.NET), syrupy (pytest), insta (Rust), Playwright <code>toHaveScreenshot</code> and Chromatic/Percy for visual snapshots.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Whole output checked</b> with one line.</li><li><b>Easy updates</b> for intended changes.</li><li><b>Readable diffs</b> show exactly what changed.</li><li><b>Catches surprises</b> like leaked fields.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Snapshot fatigue</b>: people approve without reading.</li><li><b>Doesn't say what's right</b>, only what changed.</li><li><b>Huge snapshots</b> are unreviewable.</li><li><b>Unstable values</b> need scrubbing.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Test-suite ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>dozens of hand-written assertions</b> on a large output to <b>one small, scrubbed snapshot</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="4"><td>Simplicity<small>easy to read &amp; write?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One line instead of forty asserts.</td></tr>
+      <tr data-before="4" data-after="4"><td>Fast feedback<small>quick to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Comparing text is fast.</td></tr>
+      <tr data-before="3" data-after="3"><td>Confidence<small>catches real bugs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Checks everything, but only against past output.</td></tr>
+      <tr data-before="3" data-after="3"><td>Reliability<small>no flaky runs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Stable with scrubbing; flaky without.</td></tr>
+      <tr data-before="3" data-after="4"><td>Isolation<small>pinpoints the fault?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The diff shows exactly what changed.</td></tr>
+      <tr data-before="2" data-after="4"><td>Maintainability<small>survives refactors?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Intended changes are one reviewed update.</td></tr>
+      <tr data-before="3" data-after="4"><td>Realism<small>close to production?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Real, complete output is checked.</td></tr>
+      <tr data-before="2" data-after="5"><td>Low cost<small>cheap to write &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Very cheap to write.</td></tr>
+      <tr data-before="3" data-after="3"><td>Scalability<small>grows with the code?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Great until snapshots grow huge.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Blind updates</h3><p>Tests fail, someone runs <code>-u</code>, the bug is now approved. <span class="fix">Fix →</span> read every diff; review snapshot changes in PRs.</p></li>
+    <li><h3>Giant snapshots</h3><p>A 2,000-line snapshot of a whole page. <span class="fix">Fix →</span> snapshot the part that matters; prefer inline for small output.</p></li>
+    <li><h3>Unscrubbed timestamps and ids</h3><p>Snapshots change on every run. <span class="fix">Fix →</span> freeze time, seed ids, or scrub them.</p></li>
+    <li><h3>Snapshots instead of rules</h3><p>The snapshot of a total is “wrong” and nobody knows it. <span class="fix">Fix →</span> assert key rules explicitly too.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Rendered emails, invoices, reports and HTML.</li><li>API response shapes and generated code or SQL.</li><li>Pinning legacy behaviour (see characterization tests).</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Small values where a direct assertion is clearer.</li><li>Output that changes on every run and can't be scrubbed.</li><li>Core business rules (assert them explicitly).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Characterization tests</b></li><li><b>Controlled time &amp; randomness</b></li><li><b>Test data builders</b></li><li><b>Design tokens</b> (Vol. 2)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does a failing snapshot test tell you?</summary><p>That the output changed compared to the approved copy, not whether the new output is right.</p></details>
+    <details><summary>Why scrub dates and ids?</summary><p>So snapshots don't change on every run for reasons that don't matter.</p></details>
+    <details><summary>What's snapshot fatigue?</summary><p>Updating snapshots without reading the diffs, which approves bugs.</p></details>
+    <details><summary>When is an inline snapshot better?</summary><p>For short outputs, so the expected value is visible right in the test.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Photograph it when it's <span class="hl">right</span>; read every <span class="hl">difference</span> before you <span class="hl">approve</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/10-snapshot-testing.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Llewellyn Falco, ApprovalTests (approvaltests.com).</li><li>Jest docs, “Snapshot Testing” and “Best Practices”.</li><li>Vitest docs, “Snapshot”.</li><li>Kent C. Dodds, “Effective Snapshot Testing”.</li></ul>
+  </div>
+  <p class="folio">10</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="property-based.html"><small>← previous note</small>09 · Property-Based Testing</a>
+  <a href="mutation-testing.html"><small>Next note →</small>11 · Mutation Testing</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 4 · a student's bullet journal on testing patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

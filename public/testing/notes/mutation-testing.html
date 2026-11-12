@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mutation Testing · Jef’s Notes</title>
+<meta name="description" content="Plant small bugs in the code and check that the tests notice.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-testing">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 4 · testing patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="mutation-testing">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 08.12.26</span><span class="topic">collection · <b>smarter techniques</b></span></div>
+  <p class="kicker">a.k.a. “the fire drill”</p>
+  <h1><span class="hl">Mutation Testing</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Coverage tells you which lines <b>ran</b>, not whether any test would <b>notice a bug</b> in them. Mutation testing <b>plants small bugs</b> (mutants) in your code, like <code>&gt;</code> → <code>&gt;=</code> or deleting a line, and runs the tests. If a test fails, the mutant is <b>killed</b>; if all pass, it <b>survived</b> and shows you exactly where tests are blind.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> test quality</li><li><b>Origin:</b> Richard Lipton, 1971; DeMillo et al., 1978</li><li><b>Tools:</b> Stryker, PIT, mutmut, cargo-mutants</li><li><b>Measures:</b> mutation score</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Coverage is easy to game, even by accident. A test that calls a function and <span class="hl-pink">asserts nothing</span> still “covers” every line it runs.</p>
+  <ul>
+    <li>94% coverage, yet an off-by-one in the discount rule goes unnoticed.</li>
+    <li>Tests check that no exception was thrown, not that the answer is right.</li>
+    <li>Teams chase a coverage number instead of real confidence.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a coverage report showing ninety-four percent in green. But the tests call the discount function without checking its result, so when the code has greater-than instead of greater-than-or-equal, nothing fails. High coverage, weak tests."><g class="rough"><rect class="d f-green" x="20" y="40" width="220" height="120" rx="10"/></g><text class="t-head" x="130" y="107" text-anchor="middle" font-size="24">coverage 94%</text><text class="t-s t-green" x="130" y="200" text-anchor="middle">looks great…</text><text class="t-s t-red" x="470" y="60" text-anchor="middle">if (total &gt; 100)  ← should be &gt;=</text><text class="t-s t-pen" x="470" y="100" text-anchor="middle">test: discount(100)</text><text class="t-s t-red" x="470" y="130" text-anchor="middle">expect(…) — nothing!</text><text class="t-s t-red" x="470" y="190" text-anchor="middle">line covered ✓  bug caught ✗</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>94% coverage, but the tests run the code without really checking it.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the fire drill</span></h2>
+  <p>Having smoke detectors installed doesn't prove they work. A safety officer runs a <b>drill</b>: <b>fake fires</b> in each room, one at a time. Any detector that <b>stays silent</b> is a gap, even though it's on the ceiling.</p>
+  <ul>
+    <li>Installed detectors are <b>coverage</b>.</li>
+    <li>Each fake fire is a <b>mutant</b>.</li>
+    <li>A silent detector is a <b>surviving mutant</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a fire drill. The safety officer deliberately sets off fake alarms in different rooms to check that the smoke detectors and staff react. A detector that stays silent during the drill is broken, even though it&#x27;s installed."><g class="rough"><rect class="d f-paper" x="60" y="50" width="140" height="100" rx="3"/><g transform="translate(110 60) scale(0.7)"><g class="d d-green"><path class="f-paper" d="M10 44 q0 -30 20 -30 q20 0 20 30 z"/><path d="M4 46 h52 M30 8 v6 M26 50 a4 4 0 0 0 8 0"/></g></g><rect class="d f-paper" x="230" y="50" width="140" height="100" rx="3"/><g transform="translate(280 60) scale(0.7)"><g class="d d-green"><path class="f-paper" d="M10 44 q0 -30 20 -30 q20 0 20 30 z"/><path d="M4 46 h52 M30 8 v6 M26 50 a4 4 0 0 0 8 0"/></g></g><rect class="d f-paper" x="400" y="50" width="140" height="100" rx="3"/><g transform="translate(450 60) scale(0.7)"><g class="d d-red"><path class="f-paper" d="M10 44 q0 -30 20 -30 q20 0 20 30 z"/><path d="M4 46 h52 M30 8 v6 M26 50 a4 4 0 0 0 8 0"/></g></g><rect class="d f-paper" x="570" y="50" width="140" height="100" rx="3"/><g transform="translate(620 60) scale(0.7)"><g class="d d-green"><path class="f-paper" d="M10 44 q0 -30 20 -30 q20 0 20 30 z"/><path d="M4 46 h52 M30 8 v6 M26 50 a4 4 0 0 0 8 0"/></g></g></g><text class="t-s t-pen" x="130" y="140" text-anchor="middle" font-size="16">fake fire</text><text class="t-s t-pen" x="300" y="140" text-anchor="middle" font-size="16">fake fire</text><text class="t-s t-pen" x="470" y="140" text-anchor="middle" font-size="16">fake fire</text><text class="t-s t-pen" x="640" y="140" text-anchor="middle" font-size="16">fake fire</text><text class="t-s t-red" x="410" y="200" text-anchor="middle">room 3: silent detector = a gap in your safety</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A fire drill: set off fake fires on purpose and see which detectors stay silent.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>A detector on the ceiling</td><td>A covered line</td></tr>
+      <tr><td>A fake fire in one room</td><td>One mutant: a small planted bug</td></tr>
+      <tr><td>The alarm goes off</td><td>A test fails: mutant killed</td></tr>
+      <tr><td>Silence</td><td>All tests pass: mutant survived</td></tr>
+      <tr><td>Drill report</td><td>Mutation score and survivor list</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">plant bugs, see who notices</span></h2>
+  <p>Each survivor is a concrete to-do: “if this <code>&gt;</code> were <code>&gt;=</code>, no test would notice”. Add the assertion or case that kills it.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Mutation testing. The tool makes many small copies of the code, each with one planted bug, called a mutant: greater-than becomes greater-or-equal, plus becomes minus, true becomes false, a line is deleted. The test suite runs against each mutant. Killed mutants made a test fail. Surviving mutants show where tests are missing or too weak. The mutation score is killed divided by total."><g class="rough"><rect class="d f-y" x="20" y="20" width="200" height="48" rx="10"/><path class="d" d="M226 44 L330 44"/><path class="d" d="M319.2 49.2 L330 44 L319.2 38.8"/><rect class="d f-green" x="336" y="20" width="160" height="48" rx="10"/><rect class="d f-y" x="20" y="82" width="200" height="48" rx="10"/><path class="d" d="M226 106 L330 106"/><path class="d" d="M319.2 111.2 L330 106 L319.2 100.8"/><rect class="d f-green" x="336" y="82" width="160" height="48" rx="10"/><rect class="d f-y" x="20" y="144" width="200" height="48" rx="10"/><path class="d" d="M226 168 L330 168"/><path class="d" d="M319.2 173.2 L330 168 L319.2 162.8"/><rect class="d f-pink d-red" x="336" y="144" width="160" height="48" rx="10"/><rect class="d f-y" x="20" y="206" width="200" height="48" rx="10"/><path class="d" d="M226 230 L330 230"/><path class="d" d="M319.2 235.2 L330 230 L319.2 224.8"/><rect class="d f-green" x="336" y="206" width="160" height="48" rx="10"/></g><text class="t-head" x="120" y="51" text-anchor="middle" font-size="17">&gt; → &gt;=</text><text class="t-s" x="278" y="34" text-anchor="middle">run tests</text><text class="t-head" x="416" y="51" text-anchor="middle" font-size="17">killed</text><text class="t-head" x="120" y="113" text-anchor="middle" font-size="17">+ → −</text><text class="t-s" x="278" y="96" text-anchor="middle">run tests</text><text class="t-head" x="416" y="113" text-anchor="middle" font-size="17">killed</text><text class="t-head" x="120" y="175" text-anchor="middle" font-size="17">true → false</text><text class="t-s" x="278" y="158" text-anchor="middle">run tests</text><text class="t-head t-red" x="416" y="175" text-anchor="middle" font-size="17">survived</text><text class="t-head" x="120" y="237" text-anchor="middle" font-size="17">delete line</text><text class="t-s" x="278" y="220" text-anchor="middle">run tests</text><text class="t-head" x="416" y="237" text-anchor="middle" font-size="17">killed</text><text class="t-s t-pen" x="630" y="90" text-anchor="middle">score = 3 / 4 = 75%</text><text class="t-s t-red" x="630" y="140" text-anchor="middle">survivor → missing</text><text class="t-s t-red" x="630" y="166" text-anchor="middle">assertion</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Plant one small bug at a time. Tests should fail (kill it). Survivors show where tests are blind.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Run it on core code</b><p>Start with business logic, not the whole repo: it's slow.</p></li>
+    <li><b>Read the survivors</b><p>Each one shows the exact change no test noticed.</p></li>
+    <li><b>Kill them</b><p>Add the missing assertion or boundary case (here: <code>discount(100)</code> must apply).</p></li>
+    <li><b>Ignore equivalent mutants</b><p>Some mutants behave identically to the original; mark and skip them.</p></li>
+    <li><b>Run incrementally</b><p>On changed files in PRs, the full run nightly; set a threshold, not 100%.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Mutant</dt><dd>A copy of the code with one small change.</dd></div>
+    <div><dt>Mutation operator</dt><dd>A rule for making mutants (<code>&gt;</code> → <code>&gt;=</code>).</dd></div>
+    <div><dt>Killed</dt><dd>At least one test failed against the mutant.</dd></div>
+    <div><dt>Survived</dt><dd>All tests passed against the mutant.</dd></div>
+    <div><dt>Equivalent mutant</dt><dd>A change that doesn't alter behaviour.</dd></div>
+    <div><dt>Mutation score</dt><dd>Killed mutants ÷ all (non-equivalent) mutants.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>stryker.config.json + report</span><span>StrykerJS</span></div>
+<pre><code>{
+  <span class="s">"testRunner"</span>: <span class="s">"vitest"</span>,
+  <span class="s">"mutate"</span>: [<span class="s">"src/pricing/**/*.ts"</span>, <span class="s">"!src/**/*.test.ts"</span>],
+  <span class="s">"incremental"</span>: <span class="k">true</span>,
+  <span class="s">"thresholds"</span>: { <span class="s">"high"</span>: 85, <span class="s">"low"</span>: 70, <span class="s">"break"</span>: 65 }
+}
+
+<span class="c">// report excerpt</span>
+<span class="c">// [Survived] EqualityOperator  src/pricing/discount.ts:12</span>
+<span class="c">// -   if (total &gt; 100) return total * 0.9;</span>
+<span class="c">// +   if (total &gt;= 100) return total * 0.9;</span>
+<span class="c">//</span>
+<span class="c">// fix: add the boundary case</span>
+it(<span class="s">"applies the discount from exactly 100"</span>, () =&gt; {
+  expect(discount(100)).toBe(90);
+});</code></pre>
+  </div>
+  <p class="aside">tools: StrykerJS / Stryker.NET / Stryker4s, PIT (Java), mutmut and cosmic-ray (Python), cargo-mutants (Rust), Infection (PHP). Incremental and diff-based modes keep CI time manageable.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Measures test strength</b>, not just reach.</li><li><b>Concrete to-dos</b>: each survivor is a missing check.</li><li><b>Finds weak assertions</b> and untested boundaries.</li><li><b>Raises the bar</b> without chasing coverage.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Slow</b>: the suite runs once per mutant.</li><li><b>Noise</b> from equivalent mutants.</li><li><b>Needs a decent suite</b> to be useful.</li><li><b>Another report</b> to read and act on.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Test-suite ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares a suite judged by <b>line coverage only</b> to the same suite <b>checked with mutation testing</b> on core modules.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to read &amp; write?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A new report and new concepts.</td></tr>
+      <tr data-before="4" data-after="3"><td>Fast feedback<small>quick to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Extra runs; incremental mode helps.</td></tr>
+      <tr data-before="3" data-after="5"><td>Confidence<small>catches real bugs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Proves tests would catch real-looking bugs.</td></tr>
+      <tr data-before="4" data-after="4"><td>Reliability<small>no flaky runs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral; it can expose order-dependent tests.</td></tr>
+      <tr data-before="3" data-after="4"><td>Isolation<small>pinpoints the fault?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Pushes towards precise assertions.</td></tr>
+      <tr data-before="3" data-after="3"><td>Maintainability<small>survives refactors?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Realism<small>close to production?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="4" data-after="2"><td>Low cost<small>cheap to write &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Many extra test runs in CI.</td></tr>
+      <tr data-before="3" data-after="3"><td>Scalability<small>grows with the code?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Scope it to core code as the repo grows.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Running it on everything</h3><p>Six hours for a full run; nobody looks. <span class="fix">Fix →</span> start with core logic; use incremental mode in PRs.</p></li>
+    <li><h3>Chasing 100%</h3><p>Hours spent on equivalent or trivial mutants. <span class="fix">Fix →</span> set a sensible threshold; ignore equivalents.</p></li>
+    <li><h3>Killing mutants with silly tests</h3><p>Tests assert implementation details just to kill mutants. <span class="fix">Fix →</span> add meaningful behaviour checks.</p></li>
+    <li><h3>Using it on a weak suite</h3><p>Hundreds of survivors, overwhelming. <span class="fix">Fix →</span> fix the obvious gaps first, then mutate.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Core business logic: pricing, permissions, money.</li><li>Libraries other teams depend on.</li><li>When coverage is high but bugs still slip through.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Glue code and generated code.</li><li>Very slow suites, until they're faster.</li><li>Early prototypes.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Property-based testing</b></li><li><b>Arrange–Act–Assert</b></li><li><b>Characterization tests</b></li><li><b>Parallel &amp; selective runs</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why isn't high coverage enough?</summary><p>Coverage shows code ran, not that any assertion would fail if the code were wrong.</p></details>
+    <details><summary>What's a surviving mutant?</summary><p>A planted bug that no test noticed: every test still passed.</p></details>
+    <details><summary>What's an equivalent mutant?</summary><p>A change that doesn't alter behaviour, so no test could ever kill it.</p></details>
+    <details><summary>How do you keep mutation testing affordable?</summary><p>Limit it to core code and run it incrementally on changed files.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Detectors on the ceiling aren't <span class="hl">safety</span>. Run the <span class="hl">drill</span> and fix the <span class="hl">silent</span> ones.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/11-mutation-testing.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>DeMillo, Lipton &amp; Sayward, “Hints on Test Data Selection: Help for the Practicing Programmer” (1978).</li><li>Stryker Mutator documentation (stryker-mutator.io).</li><li>PIT mutation testing docs (pitest.org).</li><li>Google, “State of Mutation Testing at Google” (ICSE 2018).</li></ul>
+  </div>
+  <p class="folio">11</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="snapshot-testing.html"><small>← previous note</small>10 · Snapshot (Approval) Testing</a>
+  <a href="characterization-tests.html"><small>Next note →</small>12 · Characterization Tests</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 4 · a student's bullet journal on testing patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

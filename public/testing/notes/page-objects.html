@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Page Objects · Jef’s Notes</title>
+<meta name="description" content="Hide selectors behind a class per page, so UI tests read like user stories.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-testing">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 4 · testing patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="page-objects">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 13.11.26</span><span class="topic">collection · <b>structure</b></span></div>
+  <p class="kicker">a.k.a. “the remote control”</p>
+  <h1><span class="hl">Page Objects</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Give each page or component of your UI a <b>page object</b>: a class with methods in <b>user language</b> (<code>signInAs</code>, <code>addToCart</code>) that hides the selectors and clicks. Tests read like stories, and when the markup changes you fix <b>one page object</b>, not forty tests. Prefer <b>role and label locators</b> so even the page object rarely changes.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> UI test structure</li><li><b>Popularised by:</b> Selenium community, Martin Fowler (2013)</li><li><b>Variants:</b> component objects, screenplay pattern</li><li><b>Pairs with:</b> test pyramid (top layer), headless components</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Browser tests click on things found by selectors. Copy those selectors into every test and the suite becomes <span class="hl-pink">as fragile as your CSS</span>.</p>
+  <ul>
+    <li>A designer renames a class and 40 tests fail with the same error.</li>
+    <li>Tests are full of <code>nth-child(2)</code> and nobody knows what they click.</li>
+    <li>Login steps are repeated, slightly differently, in every file.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of forty browser tests all containing the CSS selector div.form &gt; button.btn-primary nth child two. A designer renames one class and all forty tests fail, each needing the same edit."><g class="rough"><rect class="d f-paper" x="20" y="30" width="230" height="60" rx="3"/><rect class="d f-paper" x="50" y="52" width="230" height="60" rx="3"/><rect class="d f-paper" x="80" y="74" width="230" height="60" rx="3"/><rect class="d f-paper" x="110" y="96" width="230" height="60" rx="3"/><rect class="d f-paper" x="140" y="118" width="230" height="60" rx="3"/><path class="d d-red" d="M420 100 L520 100"/><path class="d d-red" d="M509.2 105.2 L520 100 L509.2 94.8"/></g><text class="t t-red" x="150" y="208" text-anchor="middle" font-size="15">click(&#x27;div.form &gt; .btn-primary&#x27;)</text><text class="t-s t-red" x="150" y="238" text-anchor="middle">× 40 test files</text><text class="t-s t-red" x="470" y="80" text-anchor="middle">designer renames .btn-primary</text><text class="t-s t-red" x="620" y="140" text-anchor="middle">40 red tests</text><text class="t-s t-red" x="620" y="170" text-anchor="middle">40 identical fixes</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The same fragile selector copy-pasted into 40 tests. One CSS change, 40 broken tests.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the TV remote</span></h2>
+  <p>You press <b>Play</b> on a remote without knowing how the TV is wired. The manufacturer can redesign every circuit, and the <b>buttons stay the same</b>.</p>
+  <ul>
+    <li>The buttons are page-object <b>methods</b>.</li>
+    <li>The circuits are <b>selectors and clicks</b>, hidden inside.</li>
+    <li>You read the remote, not the circuit diagram: tests read like <b>user stories</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a TV remote. You press Play and Volume up without knowing anything about the circuits inside the TV. If the manufacturer changes the circuits, the buttons on the remote stay the same."><g class="rough"><g transform="translate(380 40) scale(2.4)"><g class="d"><rect class="f-paper" x="0" y="10" width="70" height="46" rx="5"/><path d="M24 0 l11 10 l11 -10 M14 62 h42"/><path d="M10 20 h40 v28 h-40 z"/></g></g><rect class="d f-y" x="60" y="40" width="120" height="180" rx="16"/><rect class="d f-paper" x="76" y="60" width="88" height="36" rx="10"/><rect class="d f-paper" x="76" y="110" width="88" height="36" rx="10"/><rect class="d f-paper" x="76" y="160" width="88" height="36" rx="10"/><path class="d d-dash" d="M186 120 L370 120"/><path class="d" d="M359.2 125.2 L370 120 L359.2 114.8"/></g><text class="t-head" x="120" y="85" text-anchor="middle" font-size="15">▶ play</text><text class="t-head" x="120" y="135" text-anchor="middle" font-size="15">+ vol</text><text class="t-head" x="120" y="185" text-anchor="middle" font-size="15">– vol</text><text class="t-s t-pen" x="560" y="220" text-anchor="middle">the circuits can change; the buttons don&#x27;t</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A remote control: press “Play”; the wiring behind it can change.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The ▶ Play button</td><td><code>checkout.payWith(card)</code></td></tr>
+      <tr><td>Wiring inside the TV</td><td>Locators and clicks inside the page object</td></tr>
+      <tr><td>New circuits, same buttons</td><td>Markup changes, tests don't</td></tr>
+      <tr><td>One remote per device</td><td>One page object per page or component</td></tr>
+      <tr><td>Pressing buttons in order</td><td>A test reading like a user story</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">tests talk to pages, pages talk to the DOM</span></h2>
+  <p>Page objects are a <b>thin translation layer</b>: user intent above, DOM details below. Keep assertions in the tests and the “how to click” in the page objects.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Page object pattern. Tests call methods like loginPage.signInAs Ana and checkoutPage.payWith card. The page object classes hold the locators, preferably by role and label, and the browser interactions. When the markup changes, only the page object changes."><g class="rough"><rect class="d f-green" x="20" y="30" width="210" height="54" rx="10"/><path class="d" d="M236 57 L320 140"/><path class="d" d="M308.6 136.1 L320 140 L316.0 128.7"/><rect class="d f-green" x="20" y="104" width="210" height="54" rx="10"/><path class="d" d="M236 131 L320 140"/><path class="d" d="M308.7 144.0 L320 140 L309.8 133.7"/><rect class="d f-green" x="20" y="178" width="210" height="54" rx="10"/><path class="d" d="M236 205 L320 140"/><path class="d" d="M314.6 150.7 L320 140 L308.3 142.5"/><rect class="d f-y" x="326" y="90" width="210" height="110" rx="10"/><path class="d" d="M542 145 L620 145"/><path class="d" d="M609.2 150.2 L620 145 L609.2 139.8"/><g transform="translate(626 110) scale(1.0)"><g class="d"><rect class="f-paper" x="0" y="0" width="60" height="70" rx="4"/><path d="M30 0 v70 M0 35 h60"/></g></g></g><text class="t-head" x="125" y="64" text-anchor="middle" font-size="16">signInAs(&#x27;ana&#x27;)</text><text class="t-head" x="125" y="138" text-anchor="middle" font-size="16">addToCart(&#x27;lamp&#x27;)</text><text class="t-head" x="125" y="212" text-anchor="middle" font-size="16">payWith(card)</text><text class="t-s t-green" x="125" y="270" text-anchor="middle">tests: user language</text><text class="t-head" x="431" y="141" text-anchor="middle">Page objects</text><text class="t" x="431" y="165" text-anchor="middle" font-size="17">getByRole · getByLabel</text><text class="t-s t-pen" x="430" y="240" text-anchor="middle">markup changes → edit one file</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Tests speak user language; page objects own the locators. Markup changes stay in one file.</figcaption></figure>
+  <ol class="steps">
+    <li><b>One object per page or component</b><p><code>LoginPage</code>, <code>CartDrawer</code>, <code>CheckoutPage</code>.</p></li>
+    <li><b>Expose user actions</b><p><code>signInAs(user)</code>, <code>addToCart(name)</code>, returning the next page where useful.</p></li>
+    <li><b>Use resilient locators</b><p><code>getByRole("button", { name: "Pay" })</code> or test ids, not CSS paths.</p></li>
+    <li><b>Keep assertions in tests</b><p>Page objects may expose state (<code>cart.count()</code>), tests decide what's right.</p></li>
+    <li><b>Share via fixtures</b><p>Inject page objects with your runner's fixtures so tests stay short.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Page object</dt><dd>Class wrapping one page's locators and actions.</dd></div>
+    <div><dt>Locator</dt><dd>How the test finds an element.</dd></div>
+    <div><dt>Role locator</dt><dd>Finds elements the way assistive tech sees them.</dd></div>
+    <div><dt>Test id</dt><dd>A <code>data-testid</code> attribute just for tests.</dd></div>
+    <div><dt>Component object</dt><dd>A page object for a reusable widget.</dd></div>
+    <div><dt>Screenplay pattern</dt><dd>Actors performing tasks: a more composable variant.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>e2e/pages/login.ts + checkout.spec.ts</span><span>Playwright</span></div>
+<pre><code><span class="k">export</span> <span class="k">class</span> LoginPage {
+  constructor(<span class="k">private</span> page: Page) {}
+  <span class="k">async</span> goto() { <span class="k">await</span> this.page.goto(<span class="s">"/login"</span>); }
+  <span class="k">async</span> signInAs(user: { email: string; password: string }) {
+    <span class="k">await</span> this.page.getByLabel(<span class="s">"Email"</span>).fill(user.email);
+    <span class="k">await</span> this.page.getByLabel(<span class="s">"Password"</span>).fill(user.password);
+    <span class="k">await</span> this.page.getByRole(<span class="s">"button"</span>, { name: <span class="s">"Sign in"</span> }).click();
+  }
+}
+
+<span class="c">// the test reads like a story</span>
+test(<span class="s">"a signed-in user can pay for a lamp"</span>, <span class="k">async</span> ({ page }) =&gt; {
+  <span class="k">const</span> login = <span class="k">new</span> LoginPage(page), shop = <span class="k">new</span> ShopPage(page);
+
+  <span class="k">await</span> login.goto();
+  <span class="k">await</span> login.signInAs(users.ana);
+  <span class="k">await</span> shop.addToCart(<span class="s">"Lamp"</span>);
+  <span class="k">await</span> shop.checkout().payWith(cards.valid);
+
+  <span class="k">await</span> expect(page.getByText(<span class="s">"Thanks for your order"</span>)).toBeVisible();
+});</code></pre>
+  </div>
+  <p class="aside">tools: Playwright (fixtures + <code>getByRole</code>), Cypress (custom commands or page objects), WebdriverIO, Selenium, Testing Library queries (<code>getByRole</code>, <code>getByLabelText</code>) for component tests.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>One place to fix</b> when the markup changes.</li><li><b>Readable tests</b> in user language.</li><li><b>Reusable steps</b> like sign-in.</li><li><b>Accessible locators</b> double as an a11y check.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>An extra layer</b> of classes.</li><li><b>Bloated page objects</b> if they grow every helper.</li><li><b>Assertions can leak in</b> and hide what the test checks.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Test-suite ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>browser tests with selectors inline</b> to the same tests using <b>page objects with role locators</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="2" data-after="4"><td>Simplicity<small>easy to read &amp; write?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tests read like user stories.</td></tr>
+      <tr data-before="3" data-after="3"><td>Fast feedback<small>quick to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Confidence<small>catches real bugs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Role locators check what users actually see.</td></tr>
+      <tr data-before="2" data-after="4"><td>Reliability<small>no flaky runs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Stable locators, one tested wait strategy.</td></tr>
+      <tr data-before="2" data-after="3"><td>Isolation<small>pinpoints the fault?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Failures point to a named step.</td></tr>
+      <tr data-before="1" data-after="5"><td>Maintainability<small>survives refactors?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A markup change is one edit.</td></tr>
+      <tr data-before="4" data-after="4"><td>Realism<small>close to production?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Still a real browser.</td></tr>
+      <tr data-before="2" data-after="4"><td>Low cost<small>cheap to write &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New tests reuse existing steps.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>grows with the code?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Teams share one library of page objects.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Assertions inside page objects</h3><p><code>signInAs</code> secretly expects a welcome banner. <span class="fix">Fix →</span> keep checks in tests; expose state instead.</p></li>
+    <li><h3>God page objects</h3><p>One <code>AppPage</code> with 120 methods. <span class="fix">Fix →</span> one object per page or component.</p></li>
+    <li><h3>CSS paths as locators</h3><p>Page objects still break on every redesign. <span class="fix">Fix →</span> use roles, labels and test ids.</p></li>
+    <li><h3>Wrapping every tiny thing</h3><p><code>clickButton(name)</code> adds nothing over Playwright. <span class="fix">Fix →</span> wrap user intents, not single API calls.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Any suite with more than a handful of UI tests.</li><li>Steps repeated across tests (sign-in, checkout).</li><li>UIs that change often.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Two or three smoke tests.</li><li>Component tests with Testing Library, which already query by role.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Test pyramid</b></li><li><b>Arrange–Act–Assert</b></li><li><b>Headless components</b> (Vol. 2)</li><li><b>Flaky test quarantine</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Where do selectors live in the page object pattern?</summary><p>Inside the page objects, never in the tests.</p></details>
+    <details><summary>Why prefer getByRole over CSS selectors?</summary><p>Roles and accessible names change far less than classes, and they check what users and assistive tech see.</p></details>
+    <details><summary>Should page objects contain assertions?</summary><p>Generally no: they expose actions and state, tests decide what's expected.</p></details>
+    <details><summary>What does a page object method usually represent?</summary><p>One user intent, like signing in or paying.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Press the <span class="hl">buttons</span>; let the remote hide the <span class="hl">wiring</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/04-page-objects.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Martin Fowler, “PageObject” (bliki, 2013).</li><li>Playwright docs, “Page object models” and “Locators”.</li><li>Selenium docs, “Page object models”.</li><li>Testing Library docs, “Which query should I use?”.</li></ul>
+  </div>
+  <p class="folio">04</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="test-data-builders.html"><small>← previous note</small>03 · Test Data Builders</a>
+  <a href="test-doubles.html"><small>Next note →</small>05 · Test Doubles (Stubs, Spies, Mocks)</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 4 · a student's bullet journal on testing patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

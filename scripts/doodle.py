@@ -254,3 +254,15 @@ ICONS.update({
     "bricks": '<rect class="F" x="0" y="0" width="70" height="48"/><path d="M0 16 h70 M0 32 h70 M24 0 v16 M50 0 v16 M12 16 v16 M38 16 v16 M62 16 v16 M24 32 v16 M50 32 v16"/>',
     "camera": '<rect class="F" x="0" y="14" width="64" height="40" rx="5"/><path d="M20 14 l6 -8 h12 l6 8"/><circle class="F" cx="32" cy="34" r="11"/>',
 })
+
+# Icons added for the testing journal (same ~60×60 convention).
+ICONS.update({
+    "flask": '<path class="F" d="M22 2 h16 M24 2 v20 L6 54 a4 4 0 0 0 4 6 h40 a4 4 0 0 0 4 -6 L36 22 v-20"/><path d="M12 44 h36"/>',
+    "magnifier": '<circle class="F" cx="24" cy="24" r="20"/><path d="M38 38 L58 58"/>',
+    "dice": '<rect class="F" x="2" y="2" width="52" height="52" rx="8"/><circle cx="16" cy="16" r="4"/><circle cx="28" cy="28" r="4"/><circle cx="40" cy="40" r="4"/>',
+    "pyramid": '<path class="F" d="M40 2 L78 66 h-76 z"/><path d="M17 40 h46 M28 22 h24"/>',
+    "dummy": '<circle class="F" cx="30" cy="10" r="9"/><rect class="F" x="16" y="22" width="28" height="26" rx="4"/><path d="M16 26 l-12 14 M44 26 l12 14 M22 48 v14 M38 48 v14"/><circle cx="26" cy="9" r="2"/><path d="M34 6 l4 4 M38 6 l-4 4"/>',
+    "mirror": '<ellipse class="F" cx="30" cy="26" rx="22" ry="26"/><path d="M30 52 v10 M18 62 h24 M20 14 l8 -6"/>',
+    "handshake": '<path class="F" d="M0 20 h14 l10 -6 h10 l14 10 l12 0 v20 h-12 l-14 10 h-10 l-10 -6 h-14 z"/><path d="M24 14 l12 12 M30 34 l6 6 M36 30 l6 6"/>',
+    "stopwatch": '<circle class="F" cx="30" cy="34" r="24"/><path d="M24 4 h12 M30 4 v6 M30 34 l10 -10 M50 14 l4 -4"/>',
+})

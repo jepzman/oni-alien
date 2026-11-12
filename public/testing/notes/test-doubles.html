@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Test Doubles (Stubs, Spies, Mocks) · Jef’s Notes</title>
+<meta name="description" content="Stand-ins for slow or unpredictable dependencies, each with its own job.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-testing">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 4 · testing patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="test-doubles">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 17.11.26</span><span class="topic">collection · <b>doubles &amp; boundaries</b></span></div>
+  <p class="kicker">a.k.a. “stunt doubles”</p>
+  <h1><span class="hl">Test Doubles (Stubs, Spies, Mocks)</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Replace slow, costly or unpredictable dependencies with <b>test doubles</b>, and pick the right kind: a <b>stub</b> returns canned answers for things you <i>read</i>, a <b>spy</b> or <b>mock</b> checks things you <i>send</i> (emails, payments), a <b>fake</b> is a simple working version. Double only at <b>boundaries you own</b>, and don't mock the thing you're testing.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> isolation</li><li><b>Names from:</b> Gerard Meszaros, <i>xUnit Test Patterns</i></li><li><b>Kinds:</b> dummy, stub, spy, mock, fake</li><li><b>Pairs with:</b> fakes, contract testing</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Real code talks to payment providers, email services and third-party APIs. If tests call them for real, they're <span class="hl-pink">slow, costly, flaky and sometimes dangerous</span>.</p>
+  <ul>
+    <li>Every test run charges a card or sends an email.</li>
+    <li>A third-party outage turns your build red.</li>
+    <li>You can't easily test “the payment was declined” or “the API timed out”.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a unit test for a signup function that really calls the payment provider, sends a real email and waits for the weather API. It takes eight seconds, costs money, fails when the network is down, and once emailed a real customer."><g class="rough"><rect class="d f-blue" x="20" y="100" width="170" height="60" rx="10"/><rect class="d f-pink d-red" x="420" y="20" width="190" height="50" rx="10"/><path class="d d-red" d="M196 130 L414 45"/><path class="d d-red" d="M405.8 53.8 L414 45 L402.0 44.1"/><rect class="d f-pink d-red" x="420" y="100" width="190" height="50" rx="10"/><path class="d d-red" d="M196 130 L414 125"/><path class="d d-red" d="M403.3 130.5 L414 125 L403.1 120.0"/><rect class="d f-pink d-red" x="420" y="180" width="190" height="50" rx="10"/><path class="d d-red" d="M196 130 L414 205"/><path class="d d-red" d="M402.1 206.4 L414 205 L405.5 196.5"/></g><text class="t-head" x="105" y="137" text-anchor="middle">signup test</text><text class="t-head t-red" x="515" y="52" text-anchor="middle" font-size="17">payments API</text><text class="t-s t-red" x="620" y="52" text-anchor="start">charges €1 · 2 s</text><text class="t-head t-red" x="515" y="132" text-anchor="middle" font-size="17">email service</text><text class="t-s t-red" x="620" y="132" text-anchor="start">emails a real person!</text><text class="t-head t-red" x="515" y="212" text-anchor="middle" font-size="17">weather API</text><text class="t-s t-red" x="620" y="212" text-anchor="start">down today → red</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A “unit” test that charges a card, emails a customer and waits on the network.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">stand-ins on a film set</span></h2>
+  <p>A film set uses <b>different stand-ins for different jobs</b>: a <b>cardboard cut-out</b> while lights are set up, a <b>stunt double</b> for the dangerous fall, a <b>crash-test dummy</b> with sensors to record the impact. Using the wrong one wastes time or misses what you needed to know.</p>
+  <ul>
+    <li>Cut-out = <b>dummy</b> (fills a slot).</li>
+    <li>Stunt double playing the scene = <b>stub/fake</b> (gives answers).</li>
+    <li>Crash dummy with sensors = <b>spy/mock</b> (records what happened to it).</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a film set. A stunt double does the dangerous fall instead of the star, a cardboard cut-out stands in for lighting checks, and a crash-test dummy records the impact. Each stand-in has a different job."><g class="rough"><g transform="translate(60 30) scale(1.8)"><g class="d"><circle class="f-paper" cx="30" cy="10" r="9"/><rect class="f-paper" x="16" y="22" width="28" height="26" rx="4"/><path d="M16 26 l-12 14 M44 26 l12 14 M22 48 v14 M38 48 v14"/><circle cx="26" cy="9" r="2"/><path d="M34 6 l4 4 M38 6 l-4 4"/></g></g><g transform="translate(300 30) scale(1.8)"><g class="d"><circle class="f-y" cx="30" cy="10" r="9"/><rect class="f-y" x="16" y="22" width="28" height="26" rx="4"/><path d="M16 26 l-12 14 M44 26 l12 14 M22 48 v14 M38 48 v14"/><circle cx="26" cy="9" r="2"/><path d="M34 6 l4 4 M38 6 l-4 4"/></g></g><g transform="translate(540 30) scale(1.8)"><g class="d"><circle class="f-green" cx="30" cy="10" r="9"/><rect class="f-green" x="16" y="22" width="28" height="26" rx="4"/><path d="M16 26 l-12 14 M44 26 l12 14 M22 48 v14 M38 48 v14"/><circle cx="26" cy="9" r="2"/><path d="M34 6 l4 4 M38 6 l-4 4"/></g></g></g><text class="t-s t-pen" x="114" y="180" text-anchor="middle">cut-out</text><text class="t-s" x="114" y="206" text-anchor="middle">just stands there</text><text class="t-s t-pen" x="354" y="180" text-anchor="middle">stunt double</text><text class="t-s" x="354" y="206" text-anchor="middle">acts the scene</text><text class="t-s t-pen" x="594" y="180" text-anchor="middle">crash dummy</text><text class="t-s" x="594" y="206" text-anchor="middle">records the hits</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A film set has different stand-ins: a stunt double, a cut-out for lighting, a dummy with sensors.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Cardboard cut-out</td><td>Dummy: passed in, never used</td></tr>
+      <tr><td>Stunt double</td><td>Stub: returns the answers the scene needs</td></tr>
+      <tr><td>Crash dummy with sensors</td><td>Spy: records calls for later checks</td></tr>
+      <tr><td>A dummy that complains if not hit</td><td>Mock: fails if expected calls didn't happen</td></tr>
+      <tr><td>A rehearsal set</td><td>Fake: a simple working version</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">pick the double by its job</span></h2>
+  <p>A good rule: <b>stub queries, verify commands</b>. If a dependency gives you data, stub it and assert on your result. If your code must cause an effect (send, charge, publish), check that the effect was requested.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Kinds of test doubles. A dummy is passed but never used. A stub returns canned answers, for example the price service returns 20. A spy records how it was called so the test can check afterwards. A mock is pre-programmed with expectations and fails if they are not met. A fake is a lightweight working implementation, covered in the next note."><g class="rough"><rect class="d f-paper" x="10" y="60" width="136" height="90" rx="10"/><rect class="d f-y" x="160" y="60" width="136" height="90" rx="10"/><rect class="d f-blue" x="310" y="60" width="136" height="90" rx="10"/><rect class="d f-pink" x="460" y="60" width="136" height="90" rx="10"/><rect class="d f-green" x="610" y="60" width="136" height="90" rx="10"/></g><text class="t-head" x="78" y="101" text-anchor="middle" font-size="20">dummy</text><text class="t" x="78" y="125" text-anchor="middle" font-size="15">fills a slot</text><text class="t-head" x="228" y="101" text-anchor="middle" font-size="20">stub</text><text class="t" x="228" y="125" text-anchor="middle" font-size="15">canned answers</text><text class="t-head" x="378" y="101" text-anchor="middle" font-size="20">spy</text><text class="t" x="378" y="125" text-anchor="middle" font-size="15">records calls</text><text class="t-head" x="528" y="101" text-anchor="middle" font-size="20">mock</text><text class="t" x="528" y="125" text-anchor="middle" font-size="15">expects calls</text><text class="t-head" x="678" y="101" text-anchor="middle" font-size="20">fake</text><text class="t" x="678" y="125" text-anchor="middle" font-size="15">works, simply</text><text class="t-s t-green" x="160" y="200" text-anchor="middle">queries (data in) → stub</text><text class="t-s t-pen" x="530" y="200" text-anchor="middle">commands (effects out) → spy / mock</text><text class="t-s t-red" x="380" y="250" text-anchor="middle">never mock what you don&#x27;t own: wrap it first</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Five kinds of stand-in, each with one job. Stub what you read, spy or mock what you must send.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Find the boundary</b><p>Payments, email, clock, HTTP clients: things that are slow, costly or random.</p></li>
+    <li><b>Wrap third-party APIs</b><p>Put an interface you own (<code>PaymentGateway</code>) in front of the SDK; double your interface, not theirs.</p></li>
+    <li><b>Inject it</b><p>Pass the dependency in (constructor or parameter) so tests can swap it.</p></li>
+    <li><b>Stub queries</b><p><code>prices.get</code> returns 20; assert on your own result.</p></li>
+    <li><b>Verify commands</b><p>Check <code>email.send</code> was called with the right address, once.</p></li>
+    <li><b>Back it with integration tests</b><p>One real-integration test per adapter proves the wrapper actually works.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Test double</dt><dd>Any stand-in for a real dependency in a test.</dd></div>
+    <div><dt>Stub</dt><dd>Returns predetermined answers.</dd></div>
+    <div><dt>Spy</dt><dd>Records how it was called.</dd></div>
+    <div><dt>Mock</dt><dd>Has expectations that must be met.</dd></div>
+    <div><dt>Seam</dt><dd>A place where you can swap behaviour without editing code.</dd></div>
+    <div><dt>Over-mocking</dt><dd>Doubling so much the test only checks the mocks.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>signup.test.ts</span><span>Vitest</span></div>
+<pre><code>it(<span class="s">"sends a welcome email after a successful signup"</span>, <span class="k">async</span> () =&gt; {
+  <span class="k">const</span> payments = { charge: vi.fn().mockResolvedValue({ ok: <span class="k">true</span> }) };   <span class="c">// stub</span>
+  <span class="k">const</span> email = { send: vi.fn() };                                         <span class="c">// spy</span>
+  <span class="k">const</span> signup = makeSignup({ payments, email });
+
+  <span class="k">await</span> signup({ email: <span class="s">"ana@example.com"</span>, plan: <span class="s">"pro"</span> });
+
+  expect(email.send).toHaveBeenCalledOnce();
+  expect(email.send).toHaveBeenCalledWith(
+    expect.objectContaining({ to: <span class="s">"ana@example.com"</span>, template: <span class="s">"welcome"</span> }));
+});
+
+it(<span class="s">"does not email when the card is declined"</span>, <span class="k">async</span> () =&gt; {
+  <span class="k">const</span> payments = { charge: vi.fn().mockResolvedValue({ ok: <span class="k">false</span> }) };
+  <span class="k">const</span> email = { send: vi.fn() };
+
+  <span class="k">await</span> expect(makeSignup({ payments, email })({ email: <span class="s">"a@b.c"</span>, plan: <span class="s">"pro"</span> }))
+    .rejects.toThrow(/declined/);
+  expect(email.send).not.toHaveBeenCalled();
+});</code></pre>
+  </div>
+  <p class="aside">tools: Vitest <code>vi.fn</code>, Jest mocks, Sinon (spies/stubs), MSW (stub HTTP at the network layer), unittest.mock (Python), Mockito (Java), NSubstitute (.NET).</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Fast, free, offline tests</b>.</li><li><b>Hard cases on demand</b>: declines, timeouts, errors.</li><li><b>No side effects</b> on real customers.</li><li><b>Precise failures</b> in your own code.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Doubles can lie</b>: the real API behaves differently.</li><li><b>Over-mocking</b> ties tests to implementation details.</li><li><b>Setup noise</b> when many doubles are needed.</li><li><b>Needs integration tests</b> to cover the real wiring.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Test-suite ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares tests that <b>call real third-party services</b> to tests using <b>stubs and spies at owned boundaries</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to read &amp; write?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Doubles add setup but remove network noise.</td></tr>
+      <tr data-before="1" data-after="5"><td>Fast feedback<small>quick to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Milliseconds instead of network round trips.</td></tr>
+      <tr data-before="4" data-after="3"><td>Confidence<small>catches real bugs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Doubles can drift from the real API.</td></tr>
+      <tr data-before="1" data-after="5"><td>Reliability<small>no flaky runs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No outages, rate limits or shared accounts.</td></tr>
+      <tr data-before="2" data-after="5"><td>Isolation<small>pinpoints the fault?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A red test points at your code, not theirs.</td></tr>
+      <tr data-before="3" data-after="3"><td>Maintainability<small>survives refactors?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Good with wrappers; brittle with over-mocking.</td></tr>
+      <tr data-before="5" data-after="2"><td>Realism<small>close to production?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Stand-ins aren't the real thing.</td></tr>
+      <tr data-before="2" data-after="5"><td>Low cost<small>cheap to write &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No API bills or test accounts per run.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>grows with the code?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Thousands of tests can run in parallel.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Mocking the thing under test</h3><p>Half the class is mocked, so the test checks your mocks. <span class="fix">Fix →</span> double only collaborators at boundaries.</p></li>
+    <li><h3>Mocking libraries you don't own</h3><p>A mocked SDK call passes; the real SDK needs a different argument. <span class="fix">Fix →</span> wrap it in your interface and integration-test the wrapper.</p></li>
+    <li><h3>Verifying every call</h3><p>Tests assert exact call order of internal helpers and break on every refactor. <span class="fix">Fix →</span> verify only commands with real effects.</p></li>
+    <li><h3>Mocks for everything</h3><p>Five mocks per test, 40 lines of setup. <span class="fix">Fix →</span> prefer a fake (note 06) or a real dependency in a container.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Payments, email, SMS, third-party APIs.</li><li>Simulating failures that are hard to trigger for real.</li><li>Fast unit tests of logic around side effects.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Your own database queries (use a real database in a container).</li><li>Pure functions with no dependencies.</li><li>When a simple fake would be clearer than many mocks.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Fakes</b></li><li><b>Contract testing</b></li><li><b>Controlled time &amp; randomness</b></li><li><b>Circuit breaker</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Stub or spy for a price lookup?</summary><p>A stub: it's a query, so return a canned price and assert on your own result.</p></details>
+    <details><summary>Stub or spy for sending an email?</summary><p>A spy or mock: it's a command, so check the email was requested correctly.</p></details>
+    <details><summary>Why wrap third-party SDKs before doubling them?</summary><p>So you double an interface you own and can prove the wrapper against the real SDK in an integration test.</p></details>
+    <details><summary>What's the danger of over-mocking?</summary><p>Tests become coupled to implementation details and pass even when the real system is broken.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p><span class="hl">Stub</span> what you read, <span class="hl">spy</span> on what you send, and only double what you <span class="hl">own</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/05-test-doubles.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Gerard Meszaros, <i>xUnit Test Patterns</i>, “Test Double”.</li><li>Martin Fowler, “Mocks Aren't Stubs”.</li><li>Steve Freeman et al., “Mock Roles, not Objects” (OOPSLA 2004).</li><li>Vladimir Khorikov, <i>Unit Testing Principles, Practices, and Patterns</i>, ch. 5.</li></ul>
+  </div>
+  <p class="folio">05</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="page-objects.html"><small>← previous note</small>04 · Page Objects</a>
+  <a href="fakes.html"><small>Next note →</small>06 · Fakes</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 4 · a student's bullet journal on testing patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>
