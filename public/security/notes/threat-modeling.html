@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Threat Modelling · Jef’s Notes</title>
+<meta name="description" content="Ask “what can go wrong?” on a diagram before you build, and plan the defences.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-security">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 5 · security patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="threat-modeling">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 10.12.26</span><span class="topic">collection · <b>building &amp; running</b></span></div>
+  <p class="kicker">a.k.a. “what could go wrong while we're away?”</p>
+  <h1><span class="hl">Threat Modelling</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Before (and while) you build, sit down with a <b>diagram of how data flows</b>, mark the <b>trust boundaries</b>, and ask <b>“what can go wrong?”</b> for each part, using a checklist like <b>STRIDE</b>. Write down <b>threats, mitigations and owners</b>, turn them into tickets and tests, and revisit when the design changes. Design flaws are cheapest to fix on the whiteboard.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> secure design</li><li><b>Frameworks:</b> STRIDE, LINDDUN (privacy), attack trees</li><li><b>Four questions:</b> Adam Shostack</li><li><b>Pairs with:</b> defence in depth, least privilege</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Security is often checked <span class="hl-pink">at the end</span>: a pen test just before launch. By then, the worst problems are <b>design flaws</b>, not bugs, and fixing them means rework and delays.</p>
+  <ul>
+    <li>“Anyone can read anyone's files” is a storage design problem.</li>
+    <li>Nobody thought about what happens if the webhook sender is spoofed.</li>
+    <li>Security reviews become a gate people try to dodge.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a project timeline: design, build, test, launch, and only then a penetration test two days before launch, which finds that the file upload feature lets anyone read anyone&#x27;s files. Fixing it now means redesigning storage and delaying launch."><g class="rough"><rect class="d f-paper" x="20" y="60" width="128" height="54" rx="10"/><rect class="d f-paper" x="166" y="60" width="128" height="54" rx="10"/><path class="d" d="M150 87 L164 87"/><path class="d" d="M153.2 92.2 L164 87 L153.2 81.8"/><rect class="d f-paper" x="312" y="60" width="128" height="54" rx="10"/><path class="d" d="M296 87 L310 87"/><path class="d" d="M299.2 92.2 L310 87 L299.2 81.8"/><rect class="d f-pink d-red" x="458" y="60" width="128" height="54" rx="10"/><path class="d" d="M442 87 L456 87"/><path class="d" d="M445.2 92.2 L456 87 L445.2 81.8"/><rect class="d f-paper" x="604" y="60" width="128" height="54" rx="10"/><path class="d" d="M588 87 L602 87"/><path class="d" d="M591.2 92.2 L602 87 L591.2 81.8"/></g><text class="t-head" x="84" y="94" text-anchor="middle" font-size="17">design</text><text class="t-head" x="230" y="94" text-anchor="middle" font-size="17">build</text><text class="t-head" x="376" y="94" text-anchor="middle" font-size="17">test</text><text class="t-head t-red" x="522" y="94" text-anchor="middle" font-size="17">pen test</text><text class="t-head" x="668" y="94" text-anchor="middle" font-size="17">launch</text><text class="t-s t-red" x="458" y="150" text-anchor="middle">“anyone can read anyone&#x27;s files”</text><text class="t-s t-red" x="458" y="180" text-anchor="middle">→ redesign storage, slip launch</text><text class="t-s t-green" x="84" y="150" text-anchor="middle">↑ cheapest to fix here</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Security checked two days before launch: the design flaw is found when it's most expensive to fix.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">planning for a holiday</span></h2>
+  <p>Before a family goes away, they look at the <b>house plan</b> and ask <b>“what could go wrong?”</b>: a burst pipe, a burglar through the back window, the cat. For each, they decide a <b>fix</b>: water off, lock the window, ask the neighbour. One afternoon, far cheaper than coming home to a flood.</p>
+  <ul>
+    <li>The house plan is a <b>data-flow diagram</b>.</li>
+    <li>Doors and windows are <b>trust boundaries</b>.</li>
+    <li>The list of fixes is your <b>mitigations</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a family planning a holiday with the house plans on the table, asking what could go wrong: a burst pipe, a burglar through the back window, the cat. For each, they decide a fix: turn off the water, lock the window, ask the neighbour."><g class="rough"><g transform="translate(40 60) scale(1.8)"><g class="d"><path class="f-y" d="M0 8 l20 -6 l20 6 l20 -6 v50 l-20 6 l-20 -6 l-20 6 z"/><path d="M20 2 v50 M40 8 v50"/></g></g><path class="d" d="M450 64 L500 64"/><path class="d" d="M489.2 69.2 L500 64 L489.2 58.8"/><path class="d" d="M450 114 L500 114"/><path class="d" d="M489.2 119.2 L500 114 L489.2 108.8"/><path class="d" d="M450 164 L500 164"/><path class="d" d="M489.2 169.2 L500 164 L489.2 158.8"/></g><text class="t-s t-pen" x="100" y="200" text-anchor="middle">the house plan</text><text class="t-s t-red" x="300" y="70" text-anchor="start">burst pipe</text><text class="t-s t-green" x="510" y="70" text-anchor="start">water off</text><text class="t-s t-red" x="300" y="120" text-anchor="start">back window</text><text class="t-s t-green" x="510" y="120" text-anchor="start">lock it</text><text class="t-s t-red" x="300" y="170" text-anchor="start">the cat</text><text class="t-s t-green" x="510" y="170" text-anchor="start">ask neighbour</text><text class="t-s t-pen" x="450" y="230" text-anchor="middle">four questions, one afternoon</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Before a holiday: look at the house plan, ask “what could go wrong?”, and decide a fix for each.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The house plan</td><td>A data-flow diagram</td></tr>
+      <tr><td>Doors and windows</td><td>Trust boundaries (internet → API, API → DB)</td></tr>
+      <tr><td>“What could go wrong?”</td><td>Walking each element with STRIDE</td></tr>
+      <tr><td>Water off, window locked</td><td>Mitigations, turned into tickets and tests</td></tr>
+      <tr><td>Re-plan when you extend the house</td><td>Revisit when the design changes</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">four questions, on a diagram</span></h2>
+  <p>Shostack's four questions: <b>What are we working on? What can go wrong? What are we going to do about it? Did we do a good job?</b> An hour with the team beats a perfect document nobody reads.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Threat modelling session. Draw a data-flow diagram: browser, API, database, file storage, with a trust boundary between the internet and the API. Walk each element with STRIDE: spoofing, tampering, repudiation, information disclosure, denial of service, elevation of privilege. Record threats and mitigations in a table, for example information disclosure on file storage mitigated by per-user signed URLs."><g class="rough"><rect class="d f-blue" x="20" y="50" width="120" height="54" rx="10"/><path class="d d-red d-dash" d="M170 30 v120"/><path class="d" d="M146 77 L216 77"/><path class="d" d="M205.2 82.2 L216 77 L205.2 71.8"/><rect class="d f-y" x="222" y="50" width="110" height="54" rx="10"/><path class="d" d="M338 70 L398 50"/><path class="d" d="M389.4 58.4 L398 50 L386.1 48.5"/><path class="d" d="M338 90 L398 120"/><path class="d" d="M386.0 119.8 L398 120 L390.7 110.5"/><path class="d d-thin f-paper" d="M405 30 v36 a45 9 0 0 0 90 0 v-36"/><ellipse class="d d-thin f-paper" cx="450" cy="30" rx="45" ry="9"/><rect class="d f-pink" x="400" y="104" width="110" height="46" rx="10"/><rect class="d f-paper" x="560" y="20" width="190" height="190" rx="10"/></g><text class="t-head" x="80" y="84" text-anchor="middle" font-size="17">browser</text><text class="t-s t-red" x="170" y="170" text-anchor="middle">trust boundary</text><text class="t-head" x="277" y="84" text-anchor="middle" font-size="17">API</text><text class="t-head" x="455" y="134" text-anchor="middle" font-size="16">files</text><text class="t" x="576" y="48" text-anchor="start" font-size="16">S · spoofing</text><text class="t" x="576" y="76" text-anchor="start" font-size="16">T · tampering</text><text class="t" x="576" y="104" text-anchor="start" font-size="16">R · repudiation</text><text class="t t-red" x="576" y="132" text-anchor="start" font-size="16">I · info disclosure</text><text class="t" x="576" y="160" text-anchor="start" font-size="16">D · denial of service</text><text class="t" x="576" y="188" text-anchor="start" font-size="16">E · elevation</text><text class="t-s t-green" x="300" y="240" text-anchor="middle">I on files → per-user signed URLs, 5 min expiry</text><text class="t-s t-pen" x="300" y="272" text-anchor="middle">ticket it · re-check when the design changes</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Draw the data flow, mark trust boundaries, walk it with STRIDE, and write down mitigations.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Draw it</b><p>Users, services, data stores, external systems and the flows between them.</p></li>
+    <li><b>Mark trust boundaries</b><p>Where data crosses from less trusted to more trusted.</p></li>
+    <li><b>Walk STRIDE per element</b><p>Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege.</p></li>
+    <li><b>Decide and record</b><p>Mitigate, accept, transfer or avoid; owner and ticket per threat.</p></li>
+    <li><b>Verify</b><p>Turn mitigations into tests and review checks.</p></li>
+    <li><b>Keep it alive</b><p>Update with each significant design change; keep it in the repo next to the code.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Threat</dt><dd>Something that could go wrong, caused by someone or something.</dd></div>
+    <div><dt>Data-flow diagram</dt><dd>Picture of processes, stores and flows.</dd></div>
+    <div><dt>Trust boundary</dt><dd>Where the level of trust changes.</dd></div>
+    <div><dt>STRIDE</dt><dd>Mnemonic for six threat categories.</dd></div>
+    <div><dt>Mitigation</dt><dd>A control that reduces a threat.</dd></div>
+    <div><dt>Residual risk</dt><dd>Risk left after mitigations, accepted on purpose.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>docs/threat-model/file-uploads.md</span><span>kept in the repo</span></div>
+<pre><code>#<span class="c"># File uploads — threat model (v3, 2026-11)</span>
+
+Flow: browser → API → object storage (<span class="k">private</span> bucket) → thumbnail worker
+
+| <span class="c"># | STRIDE | Threat                                   | Mitigation                                   | Owner | Status |</span>
+|---|--------|------------------------------------------|----------------------------------------------|-------|--------|
+| 1 | I      | User reads another user's files          | Per-user prefix + signed URLs, 5 min expiry  | ana   | done   |
+| 2 | T      | Malicious file exploits the thumbnailer  | Sandbox worker, allow-list types, size limit | ben   | doing  |
+| 3 | D      | 10 GB uploads exhaust storage            | 25 MB limit, per-user quota, rate limit       | cho   | done   |
+| 4 | R      | “I never deleted that file”              | Audit log <span class="k">of</span> upload/delete with user id      | ana   | todo   |
+
+Accepted risk: EXIF metadata kept on originals (owner-only access).</code></pre>
+  </div>
+  <p class="aside">tools: whiteboards and plain Markdown, OWASP Threat Dragon, Microsoft Threat Modeling Tool, threagile (threat models as code), the Elevation of Privilege card game, Adam Shostack's “Threat Modeling: Designing for Security”.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Design flaws found early</b>, when cheap.</li><li><b>Shared understanding</b> of risks across the team.</li><li><b>Focused effort</b>: fix what matters most.</li><li><b>Documented decisions</b> for audits and newcomers.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Meeting time</b>.</li><li><b>Can become paperwork</b> if over-formalised.</li><li><b>Goes stale</b> without updates.</li><li><b>Depends on who's in the room</b>.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Security ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>only a pen test before launch</b> to <b>lightweight threat modelling during design</b>, kept in the repo.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to get right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A habit and a diagram, not a tool.</td></tr>
+      <tr data-before="3" data-after="4"><td>Usability<small>little friction?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fewer last-minute security blockers.</td></tr>
+      <tr data-before="2" data-after="4"><td>Confidentiality<small>secrets stay secret?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Disclosure paths found before building.</td></tr>
+      <tr data-before="2" data-after="4"><td>Integrity<small>can't be tampered with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tampering and spoofing considered per flow.</td></tr>
+      <tr data-before="2" data-after="4"><td>Availability<small>stays up under attack?</small></td><td class="dcell"></td><td class="score"></td><td class="why">DoS threats get limits and quotas early.</td></tr>
+      <tr data-before="2" data-after="4"><td>Containment<small>small blast radius?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Trust boundaries drive isolation decisions.</td></tr>
+      <tr data-before="2" data-after="4"><td>Auditability<small>can we tell what happened?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Decisions and accepted risks are written down.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">An hour now, weeks saved later.</td></tr>
+      <tr data-before="3" data-after="4"><td>Developer experience<small>easy to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Teams learn to spot threats themselves.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>A 60-page document</h3><p>Nobody reads or updates it. <span class="fix">Fix →</span> a diagram and a table in the repo.</p></li>
+    <li><h3>Only security people attend</h3><p>Developers don't own the outcome. <span class="fix">Fix →</span> the building team runs it; security coaches.</p></li>
+    <li><h3>Once per project</h3><p>The design changes; the model doesn't. <span class="fix">Fix →</span> revisit with each significant change.</p></li>
+    <li><h3>Threats without owners</h3><p>A long list that never turns into work. <span class="fix">Fix →</span> owner + ticket per mitigation.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>New features handling sensitive data, money or uploads.</li><li>New services, integrations and trust boundaries.</li><li>Before big architecture changes.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Tiny UI tweaks with no new data flows.</li><li>Don't model everything at once; start with the riskiest flow.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Defence in depth</b></li><li><b>Least privilege</b></li><li><b>Validate at the boundary</b></li><li><b>Saga</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does STRIDE stand for?</summary><p>Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege.</p></details>
+    <details><summary>What is a trust boundary?</summary><p>A place in the system where data or control passes between parts with different trust levels.</p></details>
+    <details><summary>Name Shostack's four questions.</summary><p>What are we working on? What can go wrong? What are we going to do about it? Did we do a good job?</p></details>
+    <details><summary>When should you update a threat model?</summary><p>Whenever the design changes significantly, such as a new data flow, store or integration.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Look at the <span class="hl">house plan</span>, ask what could go <span class="hl">wrong</span>, and decide the <span class="hl">fix</span> before you leave.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/12-threat-modeling.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Adam Shostack, <i>Threat Modeling: Designing for Security</i> (2014).</li><li>Threat Modeling Manifesto (threatmodelingmanifesto.org).</li><li>OWASP, “Threat Modeling Cheat Sheet”.</li><li>Microsoft, “The STRIDE Threat Model”.</li></ul>
+  </div>
+  <p class="folio">12</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="csrf-protection.html"><small>← previous note</small>11 · CSRF Protection</a>
+  <a href="audit-logging.html"><small>Next note →</small>13 · Audit Logging</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 5 · a student's bullet journal on security patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

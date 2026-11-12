@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Parameterized Queries · Jef’s Notes</title>
+<meta name="description" content="Send SQL and values separately, so data can never be run as code.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-security">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 5 · security patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="parameterized-queries">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 30.11.26</span><span class="topic">collection · <b>untrusted input</b></span></div>
+  <p class="kicker">a.k.a. “the printed form”</p>
+  <h1><span class="hl">Parameterized Queries</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Never build SQL (or shell commands, or LDAP/NoSQL queries) by <b>gluing strings</b>. Send the <b>query text with placeholders</b> and the <b>values separately</b>; the database parses the query first and binds values as <b>pure data</b>, so input can never change the command. Use your driver's parameters or a query builder/ORM, and allow-list anything that can't be a parameter (column names, sort order).</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> injection prevention</li><li><b>Prevents:</b> SQL injection (OWASP A03)</li><li><b>Also for:</b> shell, NoSQL, LDAP, XPath queries</li><li><b>Pairs with:</b> input validation, least privilege</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">When a query is built by <span class="hl-pink">concatenating input</span>, data and code share one string. A single quote in the input can end the value and turn the rest into SQL. Injection has been in the OWASP Top 10 for over twenty years.</p>
+  <ul>
+    <li>Login forms, search boxes and filters are the classic entry points.</li>
+    <li>Escaping by hand misses edge cases (encodings, numeric contexts).</li>
+    <li>The impact is whatever the database user can do.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a SQL query built by gluing strings: select star from users where email equals quote plus the input plus quote. When the input contains a quote character, the input stops being data and becomes part of the SQL command, changing what the query does."><g class="rough"><rect class="d f-paper" x="20" y="40" width="720" height="60" rx="4"/><path class="d d-red" d="M380 106 L380 150"/><path class="d d-red" d="M374.8 139.2 L380 150 L385.2 139.2"/><rect class="d f-pink d-red" x="150" y="154" width="460" height="54" rx="10"/></g><text class="t" x="36" y="78" text-anchor="start" font-size="17">&quot;SELECT * FROM users WHERE email = &#x27;&quot; + input + &quot;&#x27;&quot;</text><text class="t-head t-red" x="380" y="188" text-anchor="middle" font-size="18">input with a &#x27; → becomes SQL</text><text class="t-s t-red" x="380" y="236" text-anchor="middle">data and code mixed in one string</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Gluing input into SQL: a single quote turns data into code.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the printed form</span></h2>
+  <p>A bank transfer form has <b>printed wording</b> and <b>labelled boxes</b>. Whatever you write in the amount box is read as an <b>amount</b>, even if you write instructions there. The wording of the form can't be changed by what you put in the boxes.</p>
+  <ul>
+    <li>The printed wording is the <b>SQL text</b>.</li>
+    <li>The boxes are <b>placeholders</b> (<code>$1</code>, <code>?</code>).</li>
+    <li>What you write is always just a <b>value</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a printed bank form with labelled boxes: pay to, amount, date. Whatever you write in the amount box is read as an amount, even if you write instructions there. The form&#x27;s wording can&#x27;t be changed by what you write in the boxes."><g class="rough"><rect class="d f-paper" x="160" y="30" width="440" height="190" rx="4"/><rect class="d f-y" x="290" y="84" width="290" height="30" rx="2"/><rect class="d f-y" x="290" y="124" width="290" height="30" rx="2"/><rect class="d f-y" x="290" y="164" width="290" height="30" rx="2"/></g><text class="t-head" x="380" y="62" text-anchor="middle" font-size="18">TRANSFER FORM</text><text class="t-head" x="180" y="106" text-anchor="start" font-size="16">pay to:</text><text class="t-head" x="180" y="146" text-anchor="start" font-size="16">amount:</text><text class="t-head" x="180" y="186" text-anchor="start" font-size="16">date:</text><text class="t t-red" x="300" y="145" text-anchor="start" font-size="14">€20 and also empty the account</text><text class="t-s t-green" x="380" y="244" text-anchor="middle">still just a strange amount, not an order</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A printed form: whatever you write in the box is read as a value, never as new instructions.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The printed form</td><td>SQL with placeholders</td></tr>
+      <tr><td>Labelled boxes</td><td><code>$1</code>, <code>$2</code> / <code>?</code></td></tr>
+      <tr><td>Writing in a box</td><td>Binding a value</td></tr>
+      <tr><td>Instructions in the amount box</td><td>Malicious input, treated as data</td></tr>
+      <tr><td>Bank reads the form first</td><td>Database parses the query before binding values</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">code and data never meet</span></h2>
+  <p>Parameters work because the database <b>knows the structure</b> before it sees the values. Escaping tries to make data look harmless; parameters make it impossible for data to be code.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Parameterized query. The application sends the SQL text with placeholders, select star from users where email equals dollar one, separately from the values. The database parses and plans the SQL first, then binds the values as pure data. A value full of quotes is just a strange email address that matches nobody."><g class="rough"><rect class="d f-green" x="20" y="40" width="380" height="60" rx="10"/><rect class="d f-y" x="20" y="130" width="380" height="60" rx="10"/><path class="d" d="M406 70 L520 110"/><path class="d" d="M508.1 111.3 L520 110 L511.5 101.5"/><path class="d" d="M406 160 L520 130"/><path class="d" d="M510.9 137.8 L520 130 L508.2 127.7"/><path class="d d-thin f-paper" d="M545 90 v60 a55 9 0 0 0 110 0 v-60"/><ellipse class="d d-thin f-paper" cx="600" cy="90" rx="55" ry="9"/></g><text class="t" x="34" y="76" text-anchor="start" font-size="16">SELECT * FROM users WHERE email = $1</text><text class="t" x="34" y="166" text-anchor="start" font-size="16">values: [ &quot;x&#x27; OR &#x27;1&#x27;=&#x27;1&quot; ]</text><text class="t-s" x="470" y="72" text-anchor="middle">1 · parse + plan</text><text class="t-s" x="470" y="170" text-anchor="middle">2 · bind as data</text><text class="t t-soft" x="600" y="180" text-anchor="middle" font-size="16">database</text><text class="t-s t-green" x="380" y="250" text-anchor="middle">result: no user with that strange email</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>SQL text and values travel separately. The database parses the SQL first; values can only ever be data.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Use placeholders everywhere</b><p><code>db.query("… WHERE email = $1", [email])</code>, including LIMIT and numeric values.</p></li>
+    <li><b>Prefer a query builder or ORM</b><p>They parameterize by default (Prisma, Drizzle, Kysely, SQLAlchemy).</p></li>
+    <li><b>Watch the raw escape hatches</b><p><code>$queryRawUnsafe</code>, string-built <code>sql</code> fragments, <code>.raw()</code>.</p></li>
+    <li><b>Allow-list identifiers</b><p>Column names and sort directions can't be parameters: map user choices to known values.</p></li>
+    <li><b>Same rule for shells</b><p>Use argument arrays (<code>execFile</code>), never shell strings with input.</p></li>
+    <li><b>Limit the damage</b><p>Run the app with a least-privilege database role.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Injection</dt><dd>Input interpreted as part of a command.</dd></div>
+    <div><dt>Placeholder</dt><dd>A marker in the query for a value.</dd></div>
+    <div><dt>Bind parameter</dt><dd>A value sent separately from the query text.</dd></div>
+    <div><dt>Prepared statement</dt><dd>A query parsed once and run with different values.</dd></div>
+    <div><dt>Identifier</dt><dd>A table or column name (can't be bound).</dd></div>
+    <div><dt>Second-order injection</dt><dd>Stored input later used unsafely in a query.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>users.repo.ts</span><span>node-postgres</span></div>
+<pre><code><span class="c">// ✗ string building: data can become code</span>
+<span class="c">// db.query(`SELECT * FROM users WHERE email = '${email}'`)</span>
+
+<span class="c">// ✓ placeholders: values are always data</span>
+<span class="k">const</span> { rows } = <span class="k">await</span> db.query(
+  <span class="s">"SELECT id, name FROM users WHERE email = $1 AND tenant_id = $2"</span>,
+  [email, tenantId],
+);
+
+<span class="c">// identifiers can't be parameters: allow-list them</span>
+<span class="k">const</span> SORTS = { newest: <span class="s">"created_at DESC"</span>, name: <span class="s">"name ASC"</span> } as <span class="k">const</span>;
+<span class="k">const</span> order = SORTS[req.query.sort as keyof typeof SORTS] ?? SORTS.newest;
+<span class="k">await</span> db.query(<span class="s">`SELECT * FROM posts WHERE author_id = $1 ORDER BY ${order} LIMIT $2`</span>,
+  [authorId, 20]);
+
+<span class="c">// shells too: arguments as an array, no shell string</span>
+execFile(<span class="s">"convert"</span>, [inputPath, <span class="s">"-resize"</span>, <span class="s">"800x"</span>, outputPath]);</code></pre>
+  </div>
+  <p class="aside">tools: every database driver's parameters, ORMs and query builders (Prisma, Drizzle, Kysely, TypeORM, SQLAlchemy, jOOQ), linters (eslint-plugin-security, Semgrep rules, CodeQL) to flag string-built queries.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Injection becomes impossible</b> for bound values.</li><li><b>Simpler code</b> than manual escaping.</li><li><b>Prepared statements</b> can be faster.</li><li><b>Easy to enforce</b> with linters.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Identifiers need allow-lists</b>.</li><li><b>Dynamic queries</b> take a little more care.</li><li><b>Raw escape hatches</b> remain a risk.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Security ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>queries built by string concatenation</b> to <b>parameterized queries with allow-listed identifiers</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="5"><td>Simplicity<small>easy to get right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Placeholders are simpler than escaping.</td></tr>
+      <tr data-before="3" data-after="3"><td>Usability<small>little friction?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="1" data-after="5"><td>Confidentiality<small>secrets stay secret?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Input can't change the query.</td></tr>
+      <tr data-before="1" data-after="5"><td>Integrity<small>can't be tampered with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No attacker-controlled writes via injection.</td></tr>
+      <tr data-before="3" data-after="4"><td>Availability<small>stays up under attack?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No injection-based data dumps or drops.</td></tr>
+      <tr data-before="1" data-after="4"><td>Containment<small>small blast radius?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Injection was a direct path to the whole database.</td></tr>
+      <tr data-before="3" data-after="3"><td>Auditability<small>can we tell what happened?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="4" data-after="5"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Free: it's how drivers work.</td></tr>
+      <tr data-before="3" data-after="5"><td>Developer experience<small>easy to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">ORMs and linters make it the default.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Raw-query escape hatches</h3><p><code>queryRawUnsafe(`… ${input}`)</code> in one admin report. <span class="fix">Fix →</span> ban unsafe APIs with a linter; review raw SQL.</p></li>
+    <li><h3>User-chosen column names</h3><p><code>ORDER BY ${req.query.sort}</code>. <span class="fix">Fix →</span> map choices to a fixed allow-list.</p></li>
+    <li><h3>Second-order injection</h3><p>A stored value is later glued into a query. <span class="fix">Fix →</span> parameterize everywhere, not just at input time.</p></li>
+    <li><h3>Shell commands with input</h3><p><code>exec(`convert ${file}`)</code>. <span class="fix">Fix →</span> argument arrays (<code>execFile</code>) and validated paths.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Every database query that includes any variable.</li><li>Shell commands, NoSQL filters, LDAP and XPath queries.</li><li>Stored procedures that build dynamic SQL.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Never; there's no good reason to concatenate input into a query.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Validate at the boundary</b></li><li><b>Least privilege</b></li><li><b>Output encoding &amp; CSP</b></li><li><b>Indexing</b> (Vol. 3)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why do parameters prevent SQL injection?</summary><p>The database parses the query before seeing values, and binds them as data only.</p></details>
+    <details><summary>Can table or column names be parameters?</summary><p>No. Map user choices to an allow-list of known identifiers.</p></details>
+    <details><summary>What's second-order injection?</summary><p>Input stored safely, later read and concatenated into another query.</p></details>
+    <details><summary>How do you run an external program safely with user input?</summary><p>Pass arguments as an array (e.g. execFile), never through a shell string.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Print the <span class="hl">form</span> first; whatever's in the <span class="hl">box</span> is just a <span class="hl">value</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/09-parameterized-queries.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>OWASP, “SQL Injection Prevention Cheat Sheet”.</li><li>OWASP, “Query Parameterization Cheat Sheet”.</li><li>OWASP Top 10 (2021), A03 “Injection”.</li><li>PostgreSQL docs, “PREPARE” and libpq parameterized queries.</li></ul>
+  </div>
+  <p class="folio">09</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="input-validation.html"><small>← previous note</small>08 · Validate at the Boundary</a>
+  <a href="output-encoding.html"><small>Next note →</small>10 · Output Encoding &amp; CSP</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 5 · a student's bullet journal on security patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

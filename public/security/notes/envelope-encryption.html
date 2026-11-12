@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Envelope Encryption · Jef’s Notes</title>
+<meta name="description" content="Encrypt data with a data key, and encrypt that key with a master key you never export.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-security">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 5 · security patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="envelope-encryption">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 19.11.26</span><span class="topic">collection · <b>secrets &amp; data</b></span></div>
+  <p class="kicker">a.k.a. “room safes and a master vault”</p>
+  <h1><span class="hl">Envelope Encryption</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Encrypt each piece of data with its own <b>data key</b>, then encrypt (“wrap”) that data key with a <b>master key</b> that lives in a <b>KMS or HSM</b> and <b>never leaves it</b>. Store the wrapped key next to the data. Stealing the disk gets <b>ciphertext and wrapped keys only</b>; every unwrap is <b>authorised and logged</b>; and rotating the master key means <b>re-wrapping small keys</b>, not re-encrypting terabytes.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> encryption at rest</li><li><b>Services:</b> AWS KMS, Google Cloud KMS, Azure Key Vault, HSMs</li><li><b>Algorithms:</b> AES-256-GCM data keys</li><li><b>Pairs with:</b> secrets management, least privilege</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">“We encrypt everything” often means one key, <span class="hl-pink">stored next to the data</span>. Whoever gets the server or the backup gets the key too, and changing the key means re-encrypting everything.</p>
+  <ul>
+    <li>The AES key sits in a config file on the same machine.</li>
+    <li>Backups contain both encrypted data and the key.</li>
+    <li>Nobody can tell who decrypted what.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of an app that encrypts every customer file with one AES key stored in its config. The key sits next to the data on the same server. Anyone who steals the server gets both. Rotating the key means re-encrypting ten terabytes."><g class="rough"><path class="d d-thin f-paper" d="M50 80 v70 a60 9 0 0 0 120 0 v-70"/><ellipse class="d d-thin f-paper" cx="110" cy="80" rx="60" ry="9"/><g transform="translate(280 90) scale(1.2)"><g class="d"><circle class="f-pink" cx="14" cy="30" r="11"/><path d="M25 30 h32 M48 30 v9 M55 30 v6"/></g></g><rect class="d d-dash d-red" x="20" y="40" width="420" height="170" rx="8" style="fill:none"/></g><text class="t t-soft" x="110" y="180" text-anchor="middle" font-size="16">10 TB files</text><text class="t-s t-red" x="320" y="180" text-anchor="middle">AES key in config.ts</text><text class="t-s t-red" x="230" y="236" text-anchor="middle">same server</text><text class="t-s t-red" x="600" y="80" text-anchor="middle">server stolen →</text><text class="t-s t-red" x="600" y="106" text-anchor="middle">data + key</text><text class="t-s t-red" x="600" y="160" text-anchor="middle">rotate key →</text><text class="t-s t-red" x="600" y="186" text-anchor="middle">re-encrypt 10 TB</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One encryption key, in the config, next to the data. Steal the server, get both.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">room safes and a master vault</span></h2>
+  <p>A hotel room has a <b>small safe</b> with its own code. The hotel doesn't write codes on the doors; they're kept in a <b>master vault</b> that <b>never leaves the building</b>, and only authorised staff can look one up, with a log entry.</p>
+  <ul>
+    <li>Each room safe's code is a <b>data key</b>.</li>
+    <li>The master vault is the <b>KMS</b>.</li>
+    <li>Changing the vault's lock doesn't mean opening every room safe: <b>cheap master-key rotation</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a hotel safe inside each room. Your valuables are locked with your own small safe code. The codes themselves are kept in the hotel&#x27;s master vault, which never leaves the building and only the manager can open. Changing the master vault lock doesn&#x27;t require opening every room safe."><g class="rough"><g transform="translate(40 60) scale(1.0)"><g class="d"><rect class="f-y" x="8" y="26" width="44" height="32" rx="4"/><path d="M18 26 v-8 a12 12 0 0 1 24 0 v8 M30 38 v8"/></g></g><g transform="translate(130 60) scale(1.0)"><g class="d"><rect class="f-y" x="8" y="26" width="44" height="32" rx="4"/><path d="M18 26 v-8 a12 12 0 0 1 24 0 v8 M30 38 v8"/></g></g><g transform="translate(220 60) scale(1.0)"><g class="d"><rect class="f-y" x="8" y="26" width="44" height="32" rx="4"/><path d="M18 26 v-8 a12 12 0 0 1 24 0 v8 M30 38 v8"/></g></g><path class="d d-dash" d="M320 100 L450 100"/><path class="d" d="M439.2 105.2 L450 100 L439.2 94.8"/><g transform="translate(470 50) scale(1.6)"><g class="d"><rect class="f-green" x="2" y="2" width="58" height="58" rx="4"/><circle class="f-green" cx="31" cy="31" r="16"/><path d="M31 15 v32 M15 31 h32 M2 18 h-2 M2 44 h-2"/></g></g></g><text class="t-s t-pen" x="170" y="160" text-anchor="middle">room safes (data keys)</text><text class="t-s" x="385" y="86" text-anchor="middle">codes kept in</text><text class="t-s t-green" x="530" y="190" text-anchor="middle">master vault (KMS)</text><text class="t-s t-pen" x="530" y="216" text-anchor="middle">never leaves the building</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Room safes with their own codes; the codes live in a master vault that never leaves the building.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>A room safe's code</td><td>A data key (one per file or record)</td></tr>
+      <tr><td>Codes kept in the master vault</td><td>Data keys stored wrapped by the master key</td></tr>
+      <tr><td>Vault never leaves the building</td><td>Master key never leaves the KMS/HSM</td></tr>
+      <tr><td>Staff log to look up a code</td><td>IAM-checked, logged Decrypt calls</td></tr>
+      <tr><td>Re-keying the vault, not the rooms</td><td>Rotating the master key re-wraps small keys</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">wrap the key that wraps the data</span></h2>
+  <p>Big data is encrypted locally and fast with the data key; only the tiny data key travels to the KMS. That's how cloud storage encryption works under the hood.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Envelope encryption. For each file the app asks the key management service for a new data key. The service returns the plaintext data key and the same key encrypted under the master key. The app encrypts the file with the plaintext data key, discards it, and stores the encrypted data key next to the file. To read, the app sends the encrypted data key to the service, which decrypts it if the app is allowed and logs the request."><g class="rough"><rect class="d f-blue" x="20" y="40" width="150" height="70" rx="10"/><path class="d" d="M176 60 L456 60"/><path class="d" d="M445.2 65.2 L456 60 L445.2 54.8"/><rect class="d f-y" x="462" y="30" width="180" height="90" rx="10"/><path class="d d-green" d="M456 100 L176 100"/><path class="d d-green" d="M186.8 94.8 L176 100 L186.8 105.2"/><rect class="d f-paper" x="20" y="170" width="300" height="90" rx="10"/></g><text class="t-head" x="95" y="82" text-anchor="middle">app</text><text class="t-s" x="316" y="46" text-anchor="middle">① GenerateDataKey</text><text class="t-head" x="552" y="71" text-anchor="middle">KMS</text><text class="t" x="552" y="95" text-anchor="middle" font-size="17">master key stays here</text><text class="t-s t-green" x="316" y="124" text-anchor="middle">② key + wrapped key</text><text class="t" x="36" y="200" text-anchor="start" font-size="16">file.enc  (AES-256-GCM)</text><text class="t" x="36" y="230" text-anchor="start" font-size="16">+ wrapped data key</text><text class="t-s t-pen" x="170" y="286" text-anchor="middle">③ encrypt, discard plaintext key</text><text class="t-s t-green" x="560" y="200" text-anchor="middle">④ read: KMS unwraps</text><text class="t-s t-green" x="560" y="226" text-anchor="middle">if allowed · logged</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A fresh data key per file; store it wrapped by a master key that never leaves the KMS.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Create a master key in KMS</b><p>Non-exportable, with a key policy naming who may encrypt and decrypt.</p></li>
+    <li><b>Generate a data key per object</b><p><code>GenerateDataKey</code> returns plaintext + wrapped copies.</p></li>
+    <li><b>Encrypt locally</b><p>AES-256-GCM with a fresh nonce; then wipe the plaintext key from memory.</p></li>
+    <li><b>Store the wrapped key with the data</b><p>In the file header or a column next to the ciphertext.</p></li>
+    <li><b>Decrypt via KMS</b><p>Send the wrapped key to <code>Decrypt</code>; permission checked, call logged.</p></li>
+    <li><b>Rotate and shred</b><p>Rotate master keys yearly; destroying a tenant's key makes their data unreadable (crypto-shredding).</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Data key (DEK)</dt><dd>Key that encrypts the actual data.</dd></div>
+    <div><dt>Key-encryption key (KEK)</dt><dd>Key that encrypts other keys.</dd></div>
+    <div><dt>KMS</dt><dd>Key Management Service holding master keys.</dd></div>
+    <div><dt>HSM</dt><dd>Tamper-resistant hardware that holds keys.</dd></div>
+    <div><dt>Wrapping</dt><dd>Encrypting a key with another key.</dd></div>
+    <div><dt>Crypto-shredding</dt><dd>Deleting data by destroying its key.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>vault-files.ts</span><span>AWS KMS + Node crypto</span></div>
+<pre><code><span class="k">import</span> { KMSClient, GenerateDataKeyCommand, DecryptCommand } <span class="k">from</span> <span class="s">"@aws-sdk/client-kms"</span>;
+<span class="k">import</span> { createCipheriv, randomBytes } <span class="k">from</span> <span class="s">"node:crypto"</span>;
+
+<span class="k">const</span> kms = <span class="k">new</span> KMSClient({});
+
+<span class="k">export</span> <span class="k">async</span> <span class="k">function</span> encryptFile(plain: Buffer, tenantKeyId: string) {
+  <span class="k">const</span> { Plaintext, CiphertextBlob } = <span class="k">await</span> kms.send(
+    <span class="k">new</span> GenerateDataKeyCommand({ KeyId: tenantKeyId, KeySpec: <span class="s">"AES_256"</span> }));
+  <span class="k">const</span> iv = randomBytes(12);
+  <span class="k">const</span> c = createCipheriv(<span class="s">"aes-256-gcm"</span>, Plaintext!, iv);
+  <span class="k">const</span> body = Buffer.concat([c.update(plain), c.final()]);
+  Plaintext!.fill(0);                                  <span class="c">// drop the plaintext key</span>
+  <span class="k">return</span> { wrappedKey: CiphertextBlob, iv, tag: c.getAuthTag(), body };
+}
+
+<span class="k">export</span> <span class="k">async</span> <span class="k">function</span> unwrap(wrappedKey: Uint8Array) {
+  <span class="k">return</span> (<span class="k">await</span> kms.send(<span class="k">new</span> DecryptCommand({ CiphertextBlob: wrappedKey }))).Plaintext!;
+}</code></pre>
+  </div>
+  <p class="aside">tools: AWS KMS + Encryption SDK, Google Cloud KMS + Tink, Azure Key Vault, HashiCorp Vault Transit, cloud HSMs, database TDE and column encryption that use the same model.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Keys never sit next to data</b>.</li><li><b>Every decrypt is authorised and logged</b>.</li><li><b>Cheap master-key rotation</b>.</li><li><b>Per-tenant keys</b> and crypto-shredding.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>KMS calls</b> add latency and cost.</li><li><b>KMS availability</b> becomes critical.</li><li><b>Crypto details</b> (nonces, modes) are easy to get wrong by hand.</li><li><b>Doesn't protect data in use</b> by a compromised app.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Security ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>one static encryption key in app config</b> to <b>envelope encryption with per-object data keys and a KMS master key</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="2"><td>Simplicity<small>easy to get right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Two kinds of keys and a KMS to understand.</td></tr>
+      <tr data-before="3" data-after="3"><td>Usability<small>little friction?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Invisible to users.</td></tr>
+      <tr data-before="2" data-after="5"><td>Confidentiality<small>secrets stay secret?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Stolen disks and backups hold only ciphertext.</td></tr>
+      <tr data-before="3" data-after="4"><td>Integrity<small>can't be tampered with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Authenticated encryption (GCM) detects tampering.</td></tr>
+      <tr data-before="4" data-after="3"><td>Availability<small>stays up under attack?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Reads depend on KMS; cache data keys briefly.</td></tr>
+      <tr data-before="1" data-after="5"><td>Containment<small>small blast radius?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Per-object and per-tenant keys limit exposure.</td></tr>
+      <tr data-before="1" data-after="5"><td>Auditability<small>can we tell what happened?</small></td><td class="dcell"></td><td class="score"></td><td class="why">KMS logs every decrypt with the caller.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">KMS fees per key and per call.</td></tr>
+      <tr data-before="2" data-after="4"><td>Developer experience<small>easy to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">SDKs (Encryption SDK, Tink) hide the hard parts.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Rolling your own crypto</h3><p>Reused nonces, ECB mode, no auth tag. <span class="fix">Fix →</span> use the Encryption SDK or Tink.</p></li>
+    <li><h3>Keeping plaintext data keys</h3><p>Cached forever in memory or logged. <span class="fix">Fix →</span> wipe after use; short, bounded caches only.</p></li>
+    <li><h3>Over-broad key policies</h3><p>Every role can call Decrypt on every key. <span class="fix">Fix →</span> least privilege on key policies; per-tenant keys.</p></li>
+    <li><h3>Calling KMS per tiny record</h3><p>Thousands of KMS calls per second. <span class="fix">Fix →</span> data-key caching with limits, or encrypt batches.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Files and blobs with sensitive data.</li><li>Per-tenant encryption and crypto-shredding.</li><li>Field-level encryption of personal data.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>When managed storage encryption already meets your needs.</li><li>Data that's public anyway.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Secrets management</b></li><li><b>Least privilege</b></li><li><b>Multitenancy</b> (Vol. 3)</li><li><b>Audit logging</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why not store the encryption key next to the data?</summary><p>Whoever steals the data (server, backup) gets the key too.</p></details>
+    <details><summary>What does the KMS return from GenerateDataKey?</summary><p>A plaintext data key to use now, and the same key encrypted under the master key to store.</p></details>
+    <details><summary>Why is master-key rotation cheap?</summary><p>Only the small wrapped data keys need re-wrapping, not the data itself.</p></details>
+    <details><summary>What is crypto-shredding?</summary><p>Making data unreadable by destroying the key that protects it.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>A <span class="hl">safe</span> per room, codes in the <span class="hl">master vault</span>, and the vault never <span class="hl">leaves</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/06-envelope-encryption.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>AWS docs, “Envelope encryption” (AWS KMS concepts).</li><li>Google Cloud docs, “Envelope encryption”.</li><li>NIST SP 800-57, “Recommendation for Key Management”.</li><li>Google Tink documentation.</li></ul>
+  </div>
+  <p class="folio">06</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="secrets-management.html"><small>← previous note</small>05 · Secrets Management</a>
+  <a href="password-hashing.html"><small>Next note →</small>07 · Password Hashing</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 5 · a student's bullet journal on security patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

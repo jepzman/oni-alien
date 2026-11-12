@@ -10,6 +10,7 @@ Live site: https://jepzman.github.io/oni-alien/
 | 2 | Frontend Design Patterns (`/frontend/`) | 15 | square grid, lavender / teal / coral | frontend qualities (simplicity, reusability, testability, maintainability, performance, bundle size, accessibility, developer experience, team scalability) |
 | 3 | Data & Database Patterns (`/data/`) | 15 | ledger paper (ruled lines, double red margin), ledger green / burnt orange / sky blue | database qualities (simplicity, read speed, write speed, integrity, scalability, storage cost, query flexibility, operability, evolvability) |
 | 4 | Testing Patterns (`/testing/`) | 15 | lab notebook ("+" cross grid, PASS stamp), raspberry / pass green / amber | test-suite qualities (simplicity, fast feedback, confidence, reliability, isolation, maintainability, realism, cost, scalability) |
+| 5 | Security Patterns (`/security/`) | 15 | field dossier (manila, security-envelope crosshatch, redaction-bar titles, CONFIDENTIAL stamp), steel blue / crimson / khaki | security qualities (simplicity, usability, confidentiality, integrity, availability, containment, auditability, cost, developer experience) |
 
 The landing page (`/`) shows the shelf, planned volumes and a “future log” of upcoming work.
 

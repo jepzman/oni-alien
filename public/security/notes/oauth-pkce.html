@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OAuth 2.0 with PKCE · Jef’s Notes</title>
+<meta name="description" content="Let users sign in through a trusted provider without your app ever seeing their password.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-security">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 5 · security patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="oauth-pkce">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 09.11.26</span><span class="topic">collection · <b>identity &amp; access</b></span></div>
+  <p class="kicker">a.k.a. “the valet key”</p>
+  <h1><span class="hl">OAuth 2.0 with PKCE</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Never ask users for their password to another service. With <b>OAuth 2.0</b>, the user signs in <b>at the provider</b> and approves a <b>narrow scope</b>; your app gets a <b>one-time code</b> and swaps it for <b>tokens</b>. <b>PKCE</b> ties the code to a secret only your app knows, so an intercepted code is useless. Use the <b>authorization code flow + PKCE</b> for every client type, and <b>OpenID Connect</b> on top for sign-in.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> delegated authorization</li><li><b>Specs:</b> OAuth 2.0 (RFC 6749), PKCE (RFC 7636), OAuth 2.1 draft</li><li><b>Sign-in layer:</b> OpenID Connect</li><li><b>Pairs with:</b> short-lived tokens, least privilege</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Apps used to ask for your <span class="hl-pink">actual password</span> to another service to get your data. That hands over <b>everything</b>, forever, with no way to revoke one app. And rolling your own sign-in is where most auth bugs come from.</p>
+  <ul>
+    <li>The app can read all your mail when it only needed your calendar.</li>
+    <li>Revoking it means changing your password everywhere.</li>
+    <li>Old “implicit” flows leaked tokens in browser URLs and history.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a third-party app that asks for the user&#x27;s email password so it can read their calendar. The app now holds the full password, can read all mail, and the user can&#x27;t revoke just that app without changing their password everywhere."><g class="rough"><rect class="d f-blue" x="20" y="80" width="200" height="80" rx="10"/><rect class="d f-pink d-red" x="20" y="180" width="200" height="50" rx="10"/><path class="d d-red" d="M226 120 L420 120"/><path class="d d-red" d="M409.2 125.2 L420 120 L409.2 114.8"/><rect class="d f-pink d-red" x="426" y="60" width="300" height="120" rx="10"/></g><text class="t-head" x="120" y="127" text-anchor="middle" font-size="17">Cool Calendar App</text><text class="t-head t-red" x="120" y="212" text-anchor="middle" font-size="16">password: ●●●●●●</text><text class="t-s t-red" x="323" y="106" text-anchor="middle">logs in as you</text><text class="t t-red" x="440" y="92" text-anchor="start" font-size="16">read all mail</text><text class="t t-red" x="440" y="124" text-anchor="start" font-size="16">delete files</text><text class="t t-red" x="440" y="156" text-anchor="start" font-size="16">change password</text><text class="t-s t-red" x="500" y="220" text-anchor="middle">revoke? change your password</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>“Give us your Google password and we'll read your calendar.” Now the app can do anything, forever.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the valet key</span></h2>
+  <p>Some cars come with a <b>valet key</b>: it starts the car and opens the driver's door, but <b>not the boot or glovebox</b>. You hand that to the attendant, never your house keys, and you can <b>cancel</b> it any time.</p>
+  <ul>
+    <li>The valet key is an <b>access token</b> with a <b>scope</b>.</li>
+    <li>The car maker issuing it is the <b>authorization server</b>.</li>
+    <li>Your house keys (password) never leave your pocket.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a valet key. You give the parking attendant a special valet key that starts the car and opens the driver&#x27;s door, but not the boot or the glovebox. You never hand over your house keys, and you can cancel the valet key at any time."><g class="rough"><g transform="translate(40 60) scale(1.8)"><g class="d"><circle class="f-y" cx="14" cy="30" r="11"/><path d="M25 30 h32 M48 30 v9 M55 30 v6"/></g></g><g transform="translate(260 60) scale(1.6)"><g class="d"><rect class="f-paper" x="0" y="10" width="40" height="30" rx="3"/><path class="f-paper" d="M40 20 h12 l8 10 v10 h-20 z"/><circle class="f-paper" cx="12" cy="44" r="6"/><circle class="f-paper" cx="48" cy="44" r="6"/></g></g></g><text class="t-s t-pen" x="110" y="170" text-anchor="middle">valet key</text><text class="t-s t-green" x="560" y="70" text-anchor="start">✓ start the car</text><text class="t-s t-red" x="560" y="110" text-anchor="start">✗ open the boot</text><text class="t-s t-red" x="560" y="150" text-anchor="start">✗ your house keys</text><text class="t-s t-pen" x="560" y="200" text-anchor="start">cancel it any time</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A valet key: it drives the car, but can't open the boot. You keep your real keys.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Your real car and house keys</td><td>The user's password, only typed at the provider</td></tr>
+      <tr><td>The valet key</td><td>An access token</td></tr>
+      <tr><td>“Drive only, no boot”</td><td>Scopes like <code>calendar.read</code></td></tr>
+      <tr><td>Ticket you swap for the key</td><td>The one-time authorization code</td></tr>
+      <tr><td>Only you know the ticket's secret word</td><td>PKCE code verifier</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">code flow + PKCE</span></h2>
+  <p>PKCE (“pixy”) is small: hash a random secret, send the hash first, prove you know the secret later. It protects mobile apps, SPAs and server apps alike, which is why OAuth 2.1 makes it mandatory.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Authorization code flow with PKCE. Step one, the app makes a random code verifier and sends its hash, the code challenge, when redirecting the user to the identity provider. Step two, the user signs in and approves the scope calendar read, at the provider. Step three, the provider redirects back with a one-time code. Step four, the app exchanges the code plus the original verifier for tokens. An attacker who steals the code can&#x27;t use it without the verifier."><g class="rough"><rect class="d f-blue" x="20" y="40" width="160" height="70" rx="10"/><rect class="d f-y" x="580" y="40" width="160" height="70" rx="10"/><path class="d" d="M186 60 L574 60"/><path class="d" d="M563.2 65.2 L574 60 L563.2 54.8"/><g transform="translate(650 116) scale(0.9)"><g class="d"><rect class="f-paper" x="4" y="6" width="52" height="56" rx="4"/><circle cx="30" cy="26" r="9"/><path d="M16 50 q14 -16 28 0 M22 6 v-4 h16 v4"/></g></g><path class="d d-green" d="M574 96 L186 96"/><path class="d d-green" d="M196.8 90.8 L186 96 L196.8 101.2"/><path class="d" d="M100 116 L560 250"/><path class="d" d="M548.2 252.0 L560 250 L551.1 242.0"/><rect class="d f-green" x="566" y="236" width="180" height="50" rx="10"/></g><text class="t-head" x="100" y="82" text-anchor="middle">your app</text><text class="t-head" x="660" y="82" text-anchor="middle" font-size="16">identity provider</text><text class="t-s" x="380" y="46" text-anchor="middle">① redirect + challenge = hash(verifier)</text><text class="t-s t-pen" x="630" y="150" text-anchor="end">② user signs in, approves “calendar.read”</text><text class="t-s t-green" x="380" y="88" text-anchor="middle">③ back with a one-time code</text><text class="t-s" x="280" y="200" text-anchor="end">④ code + verifier →</text><text class="t-head" x="656" y="268" text-anchor="middle" font-size="17">scoped tokens</text><text class="t-s t-green" x="160" y="266" text-anchor="middle">stolen code alone is useless</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The user signs in at the provider; the app gets a code, then trades it plus a secret verifier for scoped tokens.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Use a provider and a library</b><p>Don't hand-roll: use your identity provider's SDK or a certified OIDC client.</p></li>
+    <li><b>Generate verifier + challenge</b><p>A random <code>code_verifier</code>; send <code>S256</code> hash as <code>code_challenge</code>, plus a random <code>state</code>.</p></li>
+    <li><b>Redirect to the provider</b><p>The user signs in and consents to narrow scopes; your app never sees the password.</p></li>
+    <li><b>Exchange the code</b><p>Back-channel POST with the code and the verifier; check <code>state</code>.</p></li>
+    <li><b>Validate tokens</b><p>Check signature, issuer, audience and expiry of the ID token; store tokens safely (server side or secure cookies).</p></li>
+    <li><b>Avoid old flows</b><p>No implicit flow, no password grant.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>OAuth 2.0</dt><dd>A framework for delegated access with tokens.</dd></div>
+    <div><dt>OpenID Connect</dt><dd>A sign-in layer on OAuth that adds an ID token.</dd></div>
+    <div><dt>Authorization code</dt><dd>A one-time code swapped for tokens.</dd></div>
+    <div><dt>PKCE</dt><dd>Proof Key for Code Exchange: binds the code to the client.</dd></div>
+    <div><dt>Scope</dt><dd>What a token may do (<code>calendar.read</code>).</dd></div>
+    <div><dt>Redirect URI</dt><dd>Pre-registered address the provider sends users back to.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>login.ts</span><span>oauth4webapi-style, server side</span></div>
+<pre><code><span class="c">// ① start sign-in</span>
+<span class="k">const</span> verifier = generateRandomCodeVerifier();
+<span class="k">const</span> challenge = <span class="k">await</span> calculatePKCECodeChallenge(verifier);   <span class="c">// S256</span>
+<span class="k">const</span> state = generateRandomState();
+session.set({ verifier, state });
+
+redirect(<span class="s">`${issuer}/authorize?`</span> + <span class="k">new</span> URLSearchParams({
+  response_type: <span class="s">"code"</span>, client_id, redirect_uri,
+  scope: <span class="s">"openid email calendar.read"</span>,
+  code_challenge: challenge, code_challenge_method: <span class="s">"S256"</span>, state,
+}));
+
+<span class="c">// ③ callback: check state, swap code + verifier for tokens</span>
+<span class="k">const</span> params = validateAuthResponse(as, client, callbackUrl, session.state);
+<span class="k">const</span> res = <span class="k">await</span> authorizationCodeGrantRequest(as, client, params, redirect_uri, session.verifier);
+<span class="k">const</span> { id_token, access_token } = <span class="k">await</span> processAuthorizationCodeOpenIDResponse(as, client, res);</code></pre>
+  </div>
+  <p class="aside">tools: identity providers (Auth0, Okta, Entra ID, Keycloak, Cognito, Google), libraries like oauth4webapi, openid-client, Auth.js, Spring Security, AppAuth for mobile.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>No password sharing</b> with third-party apps.</li><li><b>Narrow, revocable access</b> via scopes and tokens.</li><li><b>Intercepted codes are useless</b> thanks to PKCE.</li><li><b>Sign-in handled by experts</b> (MFA, passkeys, lockouts).</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More concepts</b>: flows, tokens, scopes, redirects.</li><li><b>Dependency</b> on an identity provider.</li><li><b>Misconfiguration risks</b>: redirect URIs, token validation.</li><li><b>Extra redirects</b> in the user journey.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Security ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>collecting and storing users' passwords for other services</b> (or hand-rolled login) to <b>authorization code flow + PKCE with an identity provider</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="2"><td>Simplicity<small>easy to get right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More moving parts; libraries hide most of it.</td></tr>
+      <tr data-before="3" data-after="4"><td>Usability<small>little friction?</small></td><td class="dcell"></td><td class="score"></td><td class="why">“Sign in with…” and SSO are familiar and quick.</td></tr>
+      <tr data-before="1" data-after="5"><td>Confidentiality<small>secrets stay secret?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Passwords never reach your app.</td></tr>
+      <tr data-before="2" data-after="4"><td>Integrity<small>can't be tampered with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Signed tokens, state checks, PKCE binding.</td></tr>
+      <tr data-before="3" data-after="3"><td>Availability<small>stays up under attack?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Depends on the provider's uptime.</td></tr>
+      <tr data-before="1" data-after="4"><td>Containment<small>small blast radius?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A leaked token is scoped and expires.</td></tr>
+      <tr data-before="2" data-after="4"><td>Auditability<small>can we tell what happened?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Consents and sign-ins are logged by the provider.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Provider costs, less custom auth code.</td></tr>
+      <tr data-before="3" data-after="4"><td>Developer experience<small>easy to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Good SDKs make the safe path easy.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Implicit flow or password grant</h3><p>Tokens in URLs or apps handling passwords. <span class="fix">Fix →</span> use authorization code + PKCE everywhere.</p></li>
+    <li><h3>Loose redirect URIs</h3><p>Wildcards let attackers receive codes. <span class="fix">Fix →</span> register exact redirect URIs.</p></li>
+    <li><h3>Not validating ID tokens</h3><p>Accepting any token that parses. <span class="fix">Fix →</span> check signature, issuer, audience, expiry, nonce.</p></li>
+    <li><h3>Huge scopes</h3><p>Asking for “full access” when you need one calendar. <span class="fix">Fix →</span> request the narrowest scopes, incrementally.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Any “sign in with…” or SSO.</li><li>Third-party access to user data (APIs, integrations).</li><li>SPAs, mobile and desktop apps (PKCE is essential).</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Machine-to-machine calls with no user (use client credentials or workload identity).</li><li>Internal tools already behind an identity-aware proxy.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Short-lived tokens</b></li><li><b>Zero trust</b></li><li><b>Least privilege</b></li><li><b>API gateway</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What problem does OAuth solve?</summary><p>Delegated access: an app gets limited, revocable access to a user's data without ever seeing their password.</p></details>
+    <details><summary>What does PKCE protect against?</summary><p>An intercepted authorization code being exchanged by someone else: they don't have the code verifier.</p></details>
+    <details><summary>What does OpenID Connect add?</summary><p>Sign-in: an ID token that tells the app who the user is.</p></details>
+    <details><summary>Which flows should you avoid?</summary><p>The implicit flow and the resource-owner password grant.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Hand over a <span class="hl">valet key</span>, never your <span class="hl">house keys</span>, and bind the ticket with a <span class="hl">secret word</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/03-oauth-pkce.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>RFC 6749, “The OAuth 2.0 Authorization Framework”.</li><li>RFC 7636, “Proof Key for Code Exchange by OAuth Public Clients”.</li><li>RFC 9700, “Best Current Practice for OAuth 2.0 Security”.</li><li>OpenID Connect Core 1.0.</li></ul>
+  </div>
+  <p class="folio">03</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="least-privilege.html"><small>← previous note</small>02 · Least Privilege</a>
+  <a href="short-lived-tokens.html"><small>Next note →</small>04 · Short-Lived Tokens</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 5 · a student's bullet journal on security patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

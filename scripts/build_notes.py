@@ -69,6 +69,17 @@ TESTING_ATTRS = [
     ("Low cost", "cheap to write &amp; run?", "Authoring time, CI minutes and infrastructure. High = cheap."),
     ("Scalability", "grows with the code?", "Still fast and useful at 10× the code and 10× the team."),
 ]
+SECURITY_ATTRS = [
+    ("Simplicity", "easy to get right?", "Few moving parts, so the secure path is also the obvious one."),
+    ("Usability", "little friction?", "Users and admins aren't pushed to work around it. High = smooth."),
+    ("Confidentiality", "secrets stay secret?", "Data and credentials are only seen by those allowed to see them."),
+    ("Integrity", "can't be tampered with?", "Data and actions can't be changed or forged without detection."),
+    ("Availability", "stays up under attack?", "Keeps serving real users, even when someone is trying to break it."),
+    ("Containment", "small blast radius?", "One stolen key or broken part only exposes a little. High = small."),
+    ("Auditability", "can we tell what happened?", "Who did what, when and from where can be answered afterwards."),
+    ("Low cost", "cheap to build &amp; run?", "Tools, infrastructure and people time. High = cheap."),
+    ("Developer experience", "easy to build with?", "Developers can follow it without being security experts."),
+]
 
 # ---------------------------------------------------------------- journals
 JOURNALS = [
@@ -204,18 +215,49 @@ JOURNALS = [
             (15, "parallel-selective", "Parallel & Selective Runs", "reliability", "Split the suite across workers and run only the tests a change can affect."),
         ],
     ),
+    dict(
+        key="security", vol=5, title="Security Patterns", short="security patterns",
+        theme="theme-security", subject="application security", term="Winter term · 2026", weekdays=(0, 3), start=date(2026, 11, 2),
+        kicker="field dossier · handle with care",
+        lead="My dossier on <span class=\"hl\">security patterns</span> for people who build things: who gets in, where secrets live, how to treat input from strangers, and how to notice and contain the day something goes wrong. {n} patterns in {c} collections, with the same eight sections as the other volumes, rated on nine <b>security</b> qualities like confidentiality, integrity, containment and usability. Examples use TypeScript, SQL and cloud config, but the ideas work everywhere. Defensive only: nothing here teaches you to break in.",
+        blurb="Identity and access, secrets and data, untrusted input, and running securely: the patterns that keep attackers out and mistakes small.",
+        attrs=SECURITY_ATTRS, attrs_title="The nine security ratings", attrs_side="confidentiality, integrity, availability and friends", ratings_h2="Security ratings",
+        handmade=set(),
+        collections=[
+            ("identity", "Identity &amp; access", "who are you, and what may you do?"),
+            ("secrets", "Secrets &amp; data", "keep keys, passwords and personal data safe"),
+            ("input", "Untrusted input", "treat everything from outside as hostile"),
+            ("operations", "Building &amp; running", "design for attacks, notice them, contain them"),
+        ],
+        catalogue=[
+            (1, "zero-trust", "Zero Trust", "identity", "Never trust a request because of where it comes from; verify every one."),
+            (2, "least-privilege", "Least Privilege", "identity", "Give every person, service and key only the access it needs, for as long as it needs it."),
+            (3, "oauth-pkce", "OAuth 2.0 with PKCE", "identity", "Let users sign in through a trusted provider without your app ever seeing their password."),
+            (4, "short-lived-tokens", "Short-Lived Tokens", "identity", "Credentials that expire in minutes, refreshed safely, so a stolen one is soon useless."),
+            (5, "secrets-management", "Secrets Management", "secrets", "Keep keys and passwords in a vault, not in code, and rotate them automatically."),
+            (6, "envelope-encryption", "Envelope Encryption", "secrets", "Encrypt data with a data key, and encrypt that key with a master key you never export."),
+            (7, "password-hashing", "Password Hashing", "secrets", "Store passwords as slow, salted hashes, so a leaked table doesn't leak passwords."),
+            (8, "input-validation", "Validate at the Boundary", "input", "Check every input against an allow-list schema as it enters, and reject the rest."),
+            (9, "parameterized-queries", "Parameterized Queries", "input", "Send SQL and values separately, so data can never be run as code."),
+            (10, "output-encoding", "Output Encoding & CSP", "input", "Escape data for where it's shown, and let the browser block anything you didn't send."),
+            (11, "csrf-protection", "CSRF Protection", "input", "Make sure a state-changing request really came from your own page, not another site."),
+            (12, "threat-modeling", "Threat Modelling", "operations", "Ask “what can go wrong?” on a diagram before you build, and plan the defences."),
+            (13, "audit-logging", "Audit Logging", "operations", "Record who did what, when and from where, in a log attackers can't quietly edit."),
+            (14, "supply-chain", "Supply-Chain Hygiene", "operations", "Pin, scan and verify the packages and images you depend on."),
+            (15, "defense-in-depth", "Defence in Depth", "operations", "Stack independent layers so one failure doesn't mean a breach."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
 PLANNED = [
-    (5, "Security Patterns", "Zero trust, secrets handling, OAuth flows, input validation and threat modelling for builders."),
     (6, "Cloud &amp; DevOps Patterns", "Blue–green and canary releases, infrastructure as code, GitOps, observability and cost control."),
     (7, "AI App Patterns", "Retrieval-augmented generation, agents and tools, evaluation, guardrails and cost-aware LLM apps."),
 ]
 FUTURE_LOG = [
-    ("Dec 2026", [("•", "Vol. 5 · Security Patterns: first notes"), ("•", "Vol. 2 extra notes: Debounce &amp; Throttle, Progressive Enhancement")]),
-    ("Jan 2027", [("•", "Vol. 6 · Cloud &amp; DevOps Patterns"), ("•", "Search across every journal")]),
-    ("Feb 2027", [("•", "Vol. 7 · AI App Patterns"), ("•", "One-page printable cheat sheet per collection")]),
+    ("Dec 2026", [("•", "Vol. 6 · Cloud &amp; DevOps Patterns: first notes"), ("•", "Vol. 2 extra notes: Debounce &amp; Throttle, Progressive Enhancement")]),
+    ("Jan 2027", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
+    ("Feb 2027", [("•", "Vol. 5 extra notes: Passkeys, Signed Webhooks, Secure File Uploads"), ("•", "One-page printable cheat sheet per collection")]),
     ("Mar 2027", [("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes"), ("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
     ("Apr 2027", [("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments"), ("•", "Quiz mode that remembers your score")]),
     ("Someday", [("•", "Static Generation &amp; ISR, Offline-first, Feature Flags (Vol. 2)"), ("•", "A “compare two patterns” page")]),
