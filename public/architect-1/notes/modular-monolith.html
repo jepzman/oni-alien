@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Modular Monolith First · Jef’s Notes</title>
+<meta name="description" content="Start as one deployable app with strict internal modules; split out a service only when you must.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Architects+Daughter&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-architect">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>architect's notebook · vol. 1</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="modular-monolith">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+<div class="sheet-doodles" aria-hidden="true"><svg class="sd sd-coffee" viewBox="0 0 120 120"><g class="rough"><circle cx="60" cy="60" r="44" fill="none" style="stroke:var(--mustard);stroke-opacity:.35;stroke-width:7"/><circle cx="60" cy="60" r="38" fill="none" style="stroke:var(--mustard);stroke-opacity:.22;stroke-width:2"/><path d="M100 74 q8 6 4 14" fill="none" style="stroke:var(--mustard);stroke-opacity:.3;stroke-width:4;stroke-linecap:round"/></g></svg><svg class="sd sd-compass" viewBox="0 0 70 110"><g class="rough"><path class="d" d="M33 4 v8"/><circle class="d f-y" cx="35" cy="18" r="8"/><path class="d" d="M31 25 L14 98 M39 25 L56 98 M20 70 Q35 62 50 70"/><path class="d d-pen" d="M56 98 l3 9"/><path class="d" d="M14 98 l-2 8"/><path class="d d-thin d-dash" d="M12 106 Q35 120 59 107"/></g></svg><svg class="sd sd-pencil" viewBox="0 0 240 80"><g class="rough"><rect class="d d-thin f-green" x="6" y="44" width="228" height="26" rx="3"/><path class="d d-thin" d="M26 44 v10 M46 44 v6 M66 44 v10 M86 44 v6 M106 44 v10 M126 44 v6 M146 44 v10 M166 44 v6 M186 44 v10 M206 44 v6"/><path class="d f-y" d="M40 30 L190 6 L196 18 L46 42 Z"/><path class="d f-pink" d="M190 6 l14 -2 l-8 14 z"/><path class="d f-paper" d="M40 30 l-14 4 l20 8 z"/><path class="d d-thin" d="M58 27 l2 12"/></g></svg></div>
+  <div class="page-meta"><span class="day">Thu · 04.02.27</span><span class="topic">collection · <b>first shapes</b></span></div>
+  <p class="kicker">a.k.a. “the bento box”</p>
+  <h1><span class="hl">Modular Monolith First</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Start as <b>one deployable application</b>, but split it inside into <b>business modules</b> with hard rules: each module <b>owns its data</b>, others reach it only through a small <b>public API</b>, and a <b>CI check</b> fails the build when someone breaks a boundary. You get most of the structure of microservices without the network, the eight pipelines and the eight on-call rotas. When one module really needs to be separate, it's ready to <b>lift out</b>.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> first shapes</li><li><b>Origin:</b> Simon Brown, “modular monoliths” (2015); Martin Fowler, “MonolithFirst” (2015)</li><li><b>Lives in:</b> one repo and one deploy, folders per module</li><li><b>Pairs with:</b> bounded contexts, fitness functions, strangler fig</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The situation <span class="side">Larder, two bad options</span></h2>
+  <p class="lead">Larder Core is one Django app where every part reads every table. Last month a change to pricing <span class="hl-pink">broke the picking export</span>. Ben's answer is to split it into <b>eight microservices</b>. But Larder has <b>14 engineers</b>: under two per service, each needing its own pipeline, monitoring and on-call. And the event storming was three weeks ago: <b>nobody is sure yet where the boundaries are</b>.</p>
+  <ul>
+    <li>A tangled monolith makes every change risky.</li>
+    <li>Microservices fix the tangle but add a network, distributed data and heavy operations.</li>
+    <li>Cutting services along wrong boundaries is the most expensive mistake to undo.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Two bad options for Larder Core. On the left, today: one Django app where every part reads every table, so changing pricing broke the picking export. On the right, the proposal: split into eight microservices with fourteen engineers, under two engineers per service, and boundaries nobody is sure of yet."><g class="rough"><rect class="d f-paper" x="20" y="20" width="330" height="200" rx="10"/><rect class="d f-blue" x="27" y="74" width="96" height="32" rx="6"/><rect class="d f-blue" x="137" y="64" width="96" height="32" rx="6"/><rect class="d f-blue" x="242" y="84" width="96" height="32" rx="6"/><rect class="d f-blue" x="37" y="156" width="96" height="32" rx="6"/><rect class="d f-blue" x="142" y="144" width="96" height="32" rx="6"/><rect class="d f-blue" x="247" y="166" width="96" height="32" rx="6"/><path class="d d-red d-thin" d="M75 106 L185 64"/><path class="d d-red d-thin" d="M75 106 L290 84"/><path class="d d-red d-thin" d="M75 106 L190 144"/><path class="d d-red d-thin" d="M185 96 L290 84"/><path class="d d-red d-thin" d="M185 96 L85 156"/><path class="d d-red d-thin" d="M185 96 L295 166"/><path class="d d-red d-thin" d="M290 116 L85 156"/><path class="d d-red d-thin" d="M290 116 L190 144"/><path class="d d-red d-thin" d="M85 188 L190 144"/><path class="d d-red d-thin" d="M85 188 L295 166"/><path class="d d-red d-thin" d="M190 176 L295 166"/><rect class="d f-paper d-dash" x="410" y="20" width="330" height="200" rx="10"/><rect class="d f-y" x="430" y="70" width="64" height="44" rx="6"/><rect class="d f-y" x="506" y="70" width="64" height="44" rx="6"/><rect class="d f-y" x="582" y="70" width="64" height="44" rx="6"/><rect class="d f-y" x="658" y="70" width="64" height="44" rx="6"/><rect class="d f-y" x="430" y="130" width="64" height="44" rx="6"/><rect class="d f-y" x="506" y="130" width="64" height="44" rx="6"/><rect class="d f-y" x="582" y="130" width="64" height="44" rx="6"/><rect class="d f-y" x="658" y="130" width="64" height="44" rx="6"/></g><text class="t-head" x="185" y="48" text-anchor="middle" font-size="17">Larder Core today</text><text class="t-head" x="75" y="97" text-anchor="middle" font-size="13">shop</text><text class="t-head" x="185" y="87" text-anchor="middle" font-size="13">pricing</text><text class="t-head" x="290" y="107" text-anchor="middle" font-size="13">orders</text><text class="t-head" x="85" y="179" text-anchor="middle" font-size="13">picking</text><text class="t-head" x="190" y="167" text-anchor="middle" font-size="13">stock</text><text class="t-head" x="295" y="189" text-anchor="middle" font-size="13">support</text><text class="t-s t-red" x="185" y="250" text-anchor="middle">pricing change broke picking</text><text class="t-head" x="575" y="48" text-anchor="middle" font-size="17">proposal: 8 services</text><text class="t" x="575" y="206" text-anchor="middle" font-size="15">14 engineers · 8 pipelines · 8 on-calls</text><text class="t-s t-red" x="575" y="250" text-anchor="middle">and the boundaries are guesses</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Today: a ball of mud. The proposal: eight services for fourteen people, cut along guesses.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the bento box</span></h2>
+  <p>A <b>bento box</b> is carried as one thing, but rice, fish, salad and fruit each have their <b>own compartment</b> and nothing leaks between them. If the fruit one day needs to stay cold, you lift that compartment out into its own container. Compare a <b>pot of stew</b>, where everything has mixed, or <b>eight separate takeaway boxes</b>, which are a lot to carry for one lunch.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a bento box: one box you carry as a whole, with separate compartments that don&#x27;t mix. Rice, fish, salad and fruit each have their own space. If one day the fruit needs to be cold, you lift that compartment out into its own container."><g class="rough"><g transform="translate(40 40) scale(2.4)"><g class="d"><rect class="f-paper" x="0" y="8" width="70" height="48" rx="4"/><path d="M34 8 v48 M34 30 h36"/><circle cx="17" cy="32" r="8"/><path d="M42 18 h20 M42 42 h20"/></g></g><path class="d d-dash" d="M250 110 L330 110"/><path class="d" d="M319.2 115.2 L330 110 L319.2 104.8"/><rect class="d f-green" x="340" y="70" width="150" height="80" rx="10"/><rect class="d f-pink d-red" x="530" y="40" width="210" height="140" rx="10"/></g><text class="t-s t-pen" x="124" y="222" text-anchor="middle">one box, separate compartments</text><text class="t-s" x="290" y="96" text-anchor="middle">later</text><text class="t-head" x="415" y="106" text-anchor="middle" font-size="18">fruit</text><text class="t" x="415" y="130" text-anchor="middle" font-size="14">own cold box</text><text class="t-head t-red" x="635" y="70" text-anchor="middle" font-size="17">one big pot</text><text class="t" x="635" y="104" text-anchor="middle" font-size="15">everything mixed:</text><text class="t" x="635" y="128" text-anchor="middle" font-size="15">the ball of mud</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A bento box: carried as one, but nothing leaks between compartments. One can be lifted out later.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to the job</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">On the project</th></tr></thead>
+    <tbody>
+      <tr><td>One box you carry</td><td>One deployable application, one pipeline</td></tr>
+      <tr><td>Compartments</td><td>Business modules: Ordering, Payments, Fulfilment…</td></tr>
+      <tr><td>Nothing leaks between them</td><td>Each module owns its tables; others use its public API</td></tr>
+      <tr><td>Lifting one compartment out</td><td>Extracting a module as a service when it needs to be separate</td></tr>
+      <tr><td>A pot of stew</td><td>The big ball of mud you're trying to avoid</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">one deploy, hard walls inside</span></h2>
+  <p>The value is in the <b>rules</b>, not the folders. Without enforcement, a modular monolith decays back into mud within months. With it, the boundaries can be <b>moved cheaply</b> while you learn: moving code between folders is a refactor; moving it between services is a migration.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 360" role="img" aria-label="Larder&#x27;s target shape. One deployable app, Larder Core, contains modules: Catalogue, Pricing, Ordering, Payments, Stock, Fulfilment and Customer Care. Each module owns its own tables and exposes a small public API; modules may only call each other&#x27;s public APIs, never each other&#x27;s tables. A CI check enforces the rules. Dispatch runs outside as a separate service because it is real-time and scales differently, and Ordering talks to it through events."><g class="rough"><rect class="d f-paper" x="14" y="14" width="560" height="300" rx="10"/><rect class="d f-blue" x="30" y="66" width="122" height="96" rx="10"/><path class="d d-thin f-paper" d="M71 126 v14 a20 9 0 0 0 40 0 v-14"/><ellipse class="d d-thin f-paper" cx="91" cy="126" rx="20" ry="9"/><rect class="d f-green" x="70" y="58" width="42" height="14" rx="3"/><rect class="d f-blue" x="166" y="66" width="122" height="96" rx="10"/><path class="d d-thin f-paper" d="M207 126 v14 a20 9 0 0 0 40 0 v-14"/><ellipse class="d d-thin f-paper" cx="227" cy="126" rx="20" ry="9"/><rect class="d f-green" x="206" y="58" width="42" height="14" rx="3"/><rect class="d f-y" x="302" y="66" width="122" height="96" rx="10"/><path class="d d-thin f-paper" d="M343 126 v14 a20 9 0 0 0 40 0 v-14"/><ellipse class="d d-thin f-paper" cx="363" cy="126" rx="20" ry="9"/><rect class="d f-green" x="342" y="58" width="42" height="14" rx="3"/><rect class="d f-blue" x="438" y="66" width="122" height="96" rx="10"/><path class="d d-thin f-paper" d="M479 126 v14 a20 9 0 0 0 40 0 v-14"/><ellipse class="d d-thin f-paper" cx="499" cy="126" rx="20" ry="9"/><rect class="d f-green" x="478" y="58" width="42" height="14" rx="3"/><rect class="d f-blue" x="30" y="186" width="122" height="96" rx="10"/><path class="d d-thin f-paper" d="M71 246 v14 a20 9 0 0 0 40 0 v-14"/><ellipse class="d d-thin f-paper" cx="91" cy="246" rx="20" ry="9"/><rect class="d f-green" x="70" y="178" width="42" height="14" rx="3"/><rect class="d f-blue" x="166" y="186" width="122" height="96" rx="10"/><path class="d d-thin f-paper" d="M207 246 v14 a20 9 0 0 0 40 0 v-14"/><ellipse class="d d-thin f-paper" cx="227" cy="246" rx="20" ry="9"/><rect class="d f-green" x="206" y="178" width="42" height="14" rx="3"/><rect class="d f-blue" x="302" y="186" width="122" height="96" rx="10"/><path class="d d-thin f-paper" d="M343 246 v14 a20 9 0 0 0 40 0 v-14"/><ellipse class="d d-thin f-paper" cx="363" cy="246" rx="20" ry="9"/><rect class="d f-green" x="342" y="178" width="42" height="14" rx="3"/><rect class="d f-green" x="438" y="186" width="122" height="96" rx="10"/><path class="d d-dash" d="M580 120 L640 120"/><path class="d" d="M629.2 125.2 L640 120 L629.2 114.8"/><rect class="d f-y" x="644" y="74" width="104" height="100" rx="10"/></g><text class="t-head" x="294" y="42" text-anchor="middle" font-size="18">Larder Core · one deploy</text><text class="t-head" x="91" y="106" text-anchor="middle" font-size="16">Catalogue</text><text class="t-head" x="227" y="106" text-anchor="middle" font-size="16">Pricing</text><text class="t-head" x="363" y="106" text-anchor="middle" font-size="16">Ordering</text><text class="t-head" x="499" y="106" text-anchor="middle" font-size="16">Payments</text><text class="t-head" x="91" y="226" text-anchor="middle" font-size="16">Stock</text><text class="t-head" x="227" y="226" text-anchor="middle" font-size="16">Fulfilment</text><text class="t-head" x="363" y="226" text-anchor="middle" font-size="16">Care</text><text class="t-head" x="499" y="230" text-anchor="middle" font-size="15">api ports</text><text class="t" x="499" y="254" text-anchor="middle" font-size="13">the only door</text><text class="t-s" x="610" y="106" text-anchor="middle">events</text><text class="t-head" x="696" y="120" text-anchor="middle" font-size="17">Dispatch</text><text class="t" x="696" y="144" text-anchor="middle" font-size="13">own service</text><text class="t-s t-pen" x="696" y="200" text-anchor="middle" font-size="17">real-time</text><text class="t-s t-pen" x="696" y="224" text-anchor="middle" font-size="17">scales apart</text><text class="t-s t-pen" x="294" y="344" text-anchor="middle" font-size="17">rules: own your tables · call only public APIs · CI check fails if broken</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One deployable, strict modules that own their data, and one service extracted for a reason.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Draw modules from the domain</b><p>Use bounded contexts from the event storming, not technical layers.</p></li>
+    <li><b>Give each module its data</b><p>Its own schema or table prefix. No other module reads or writes it.</p></li>
+    <li><b>Expose a small public API</b><p>One interface per module (functions or events). Everything else is internal.</p></li>
+    <li><b>Enforce it in CI</b><p>An import or architecture test fails the build on a forbidden dependency.</p></li>
+    <li><b>Communicate by events where possible</b><p>In-process events today become messages tomorrow, if a module moves out.</p></li>
+    <li><b>Extract only with a reason</b><p>Different scaling, availability, release pace or team: write an ADR for each extraction.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Modular monolith</dt><dd>One deployable app made of strictly separated business modules.</dd></div>
+    <div><dt>Module</dt><dd>A business area with its own code, data and public API.</dd></div>
+    <div><dt>Public API (of a module)</dt><dd>The only way other modules may use it.</dd></div>
+    <div><dt>Big ball of mud</dt><dd>A system with no clear structure; everything depends on everything.</dd></div>
+    <div><dt>Extraction</dt><dd>Moving a module out into its own service.</dd></div>
+    <div><dt>Distributed monolith</dt><dd>Microservices that must all be deployed together: the worst of both.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>larder_core/ (layout) + README</span><span>module layout and the three rules</span></div>
+<pre><code>larder_core/
+  catalogue/      api.py   events.py   models.py   _internal/...
+  pricing/        api.py   events.py   models.py   _internal/...
+  ordering/       api.py   events.py   models.py   _internal/...
+  payments/       api.py   events.py   models.py   _internal/...
+  stock/          api.py   events.py   models.py   _internal/...
+  fulfilment/     api.py   events.py   models.py   _internal/...
+  care/           api.py   events.py   models.py   _internal/...
+  shared/         money.py   ids.py   clock.py        (tiny, no business logic)
+
+Rules (ADR 0002), checked by CI (see .importlinter):
+ 1. A module&#x27;s tables are its own. Table names start with the module name.
+ 2. Other modules import only &lt;module&gt;.api and &lt;module&gt;.events.
+ 3. No module imports another&#x27;s _internal, models or tables.
+
+Dispatch is a separate service (repo: dispatch/). Ordering publishes
+OrderReadyForDispatch; Dispatch publishes CourierAssigned and OrderDelivered.</code></pre>
+  </div>
+  <p class="aside">tools: import-linter (Python), ArchUnit (Java), dependency-cruiser (JS/TS), Spring Modulith, Packwerk (Ruby), .NET NetArchTest. Each turns the module rules into a failing test.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Simple to run</b>: one deploy, one database, one on-call.</li><li><b>Clear ownership</b>: each module has an owner and its own data.</li><li><b>Cheap to fix boundaries</b>: moving code between modules is a refactor.</li><li><b>Ready to extract</b>: a well-kept module can become a service later.</li><li><b>Fast local calls</b>: no network between modules.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>One deploy for all</b>: a bad change in one module ships with the rest.</li><li><b>Scaling together</b>: you can't scale one module alone (until you extract it).</li><li><b>Discipline needed</b>: without CI rules, it decays into mud.</li><li><b>One tech stack</b>: every module uses the same language and runtime.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Architect ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>Larder Core as a tangled monolith</b> to <b>a modular monolith with module-owned data, public APIs and CI-enforced rules, plus Dispatch as one extracted service</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="2" data-after="4"><td>Clarity<small>easy to understand?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Each module's job and data are obvious from the layout.</td></tr>
+      <tr data-before="3" data-after="3"><td>Stakeholder alignment<small>everyone agrees?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Mostly an engineering matter; sponsors see faster delivery.</td></tr>
+      <tr data-before="2" data-after="4"><td>Decision speed<small>decide &amp; move on?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Teams decide inside their module without a cross-team meeting.</td></tr>
+      <tr data-before="2" data-after="4"><td>Risk reduction<small>unknowns found early?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A change in pricing can no longer silently break picking.</td></tr>
+      <tr data-before="2" data-after="5"><td>Adaptability<small>easy to change course?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Boundaries can move cheaply while the domain is still being learned.</td></tr>
+      <tr data-before="2" data-after="4"><td>Traceability<small>why did we do that?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Module rules and extractions are recorded in ADRs.</td></tr>
+      <tr data-before="3" data-after="5"><td>Cost awareness<small>cost visible when choosing?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One deploy and one database cost far less than eight.</td></tr>
+      <tr data-before="3" data-after="4"><td>Low overhead<small>light to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One pipeline and on-call; a few CI rules to maintain.</td></tr>
+      <tr data-before="2" data-after="4"><td>Team autonomy<small>teams can act alone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Each team owns a module end to end.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Folders without rules</h3><p>Modules exist on paper; imports cross everywhere. <span class="fix">Fix →</span> enforce boundaries with a failing CI check from day one.</p></li>
+    <li><h3>Shared tables</h3><p>Two modules write the same orders table. <span class="fix">Fix →</span> one owner per table; others go through the owner's API or events.</p></li>
+    <li><h3>Technical modules</h3><p>Modules named controllers, services, repositories. <span class="fix">Fix →</span> split by business area (bounded contexts), not by layer.</p></li>
+    <li><h3>Extracting for fashion</h3><p>A module becomes a service because services are “better”. <span class="fix">Fix →</span> extract only for a written reason: scaling, availability, team, release pace.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>New systems or rebuilds with teams under about 30 engineers.</li><li>When the domain boundaries aren't settled yet.</li><li>Untangling a ball-of-mud monolith step by step.</li><li>When operations capacity is small.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Parts with very different scaling or availability needs: extract those.</li><li>Large organisations where many teams need fully independent releases.</li><li>When parts must use different languages or runtimes.</li></ul>
+    </div>
+  </div>
+  <h3>Related notes</h3>
+  <ul class="related"><li><b>Architecture styles compared</b> (this volume)</li><li><b>Bounded contexts</b> (this volume)</li><li><b>Fitness functions</b> (this volume)</li><li><b>Strangler fig migration</b> (Vol. 4)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What are the three rules of a modular monolith?</summary><p>Each module owns its data; others use only its public API; the rules are enforced by an automated check.</p></details>
+    <details><summary>Why is it cheaper to fix boundaries in a modular monolith than between services?</summary><p>Moving code between modules is a refactor in one repo; moving it between services is a data and network migration.</p></details>
+    <details><summary>What's a distributed monolith?</summary><p>Services that must be deployed together because they're tightly coupled: all the costs of both styles.</p></details>
+    <details><summary>Why did Larder extract Dispatch?</summary><p>It's real-time (courier locations every 5 s) and scales differently from the rest.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Pick two areas in your codebase that should be separate (for example, billing and notifications). Count how many places one reaches into the other's tables or internals. Write the one rule that would stop it, and find the tool that could check it in CI.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p><span class="hl">One box</span>, <span class="hl">hard walls</span>. Lift a compartment out only when you have a reason.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/10-modular-monolith.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Simon Brown, “Modular Monoliths” (talk, 2015) and <i>Software Architecture for Developers</i>.</li><li>Martin Fowler, “MonolithFirst” (martinfowler.com, 2015).</li><li>Kamil Grzybek, “Modular Monolith: A Primer” (kamilgrzybek.com, 2019).</li><li>Sam Newman, <i>Monolith to Microservices</i> (2019).</li></ul>
+  </div>
+  <div class="titleblock" aria-label="Sheet details"><span class="tb-k">book</span><span class="tb-v">The Solution Architect's Notebook</span><span class="tb-k">vol.</span><span class="tb-v">1</span><span class="tb-k">sheet</span><span class="tb-v">10 / 15</span><span class="tb-k">rev.</span><span class="tb-v">A</span><span class="tb-k">drawn by</span><span class="tb-v">Jefrey</span></div>
+  <p class="folio">10</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="architecture-styles.html"><small>← previous note</small>09 · Architecture Styles Compared</a>
+  <a href="bounded-contexts.html"><small>Next note →</small>11 · Bounded Contexts</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · The Solution Architect's Notebook · vol. 1</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

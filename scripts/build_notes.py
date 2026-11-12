@@ -80,6 +80,17 @@ SECURITY_ATTRS = [
     ("Low cost", "cheap to build &amp; run?", "Tools, infrastructure and people time. High = cheap."),
     ("Developer experience", "easy to build with?", "Developers can follow it without being security experts."),
 ]
+ARCHITECT_ATTRS = [
+    ("Clarity", "easy to understand?", "A newcomer can understand the system and the reasoning behind it."),
+    ("Stakeholder alignment", "everyone agrees?", "Business, product and engineering share the same what and why."),
+    ("Decision speed", "decide &amp; move on?", "How quickly the team can choose and get back to building."),
+    ("Risk reduction", "unknowns found early?", "The big risks are surfaced and handled before they bite."),
+    ("Adaptability", "easy to change course?", "How cheaply the direction can change later."),
+    ("Traceability", "why did we do that?", "Months later, anyone can find why something was done."),
+    ("Cost awareness", "cost visible when choosing?", "Money and effort are part of the decision, not a surprise."),
+    ("Low overhead", "light to run?", "Time and ceremony it takes. High = light."),
+    ("Team autonomy", "teams can act alone?", "Teams can decide and act without waiting for the architect."),
+]
 CLOUD_ATTRS = [
     ("Simplicity", "easy to run &amp; explain?", "Few moving parts; the on-call person can understand it at 3 a.m."),
     ("Delivery speed", "fast from commit to prod?", "Short lead time and frequent, small releases."),
@@ -290,18 +301,81 @@ JOURNALS = [
             (15, "finops", "Cost Visibility (FinOps)", "resilience", "Tag, measure and own cloud spend, so cost is a design input, not a surprise."),
         ],
     ),
+    # ---- Series 2 · The Solution Architect's Notebook ----
+    # Plan and handoff: docs/HANDOFF-solution-architect.md. Case study facts: docs/larder-casebook.md.
+    dict(
+        key="architect-1", vol=1, title="From Requirements to Architecture", short="from requirements to architecture",
+        series=2, book="The Solution Architect's Notebook", title_block=True, sheet_doodles=True,
+        theme="theme-architect", fonts="Architects+Daughter", subject="solution architecture",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Winter term · 2027", weekdays=(0, 3), start=date(2027, 1, 4),
+        kicker="the solution architect's notebook · book 1 · vol. 1",
+        lead="Volume 1 of <span class=\"hl\">The Solution Architect's Notebook</span>: how an architect gets from a vague business plan to a first architecture people can build, without guessing. {n} notes in {c} collections: understand the problem and the people, find the requirements that really shape the system, choose the first shapes, and test the riskiest ideas before they're expensive. Every note follows <b>Larder</b>, a grocery delivery start-up growing from one city to six, and ends with a <b>try it</b> exercise for your own project.",
+        blurb="Stakeholders, drivers, context, the requirements that shape a system, first architecture shapes, and testing risky ideas early.",
+        attrs=ARCHITECT_ATTRS, attrs_title="The nine architect ratings", attrs_side="what a good architecture practice is judged on", ratings_h2="Architect ratings",
+        handmade=set(),
+        collections=[
+            ("understanding", "Understanding the problem", "who cares, what they want, and where the system ends"),
+            ("requirements", "Requirements that shape architecture", "find the few needs that decide the design"),
+            ("shapes", "First shapes", "pick a starting structure you can grow"),
+            ("validating", "Validating early", "test the risky ideas while they're still cheap"),
+        ],
+        catalogue=[
+            (1, "stakeholder-map", "Stakeholder Map", "understanding", "List everyone who can affect or is affected by the system, and plan how to work with each."),
+            (2, "business-drivers", "Business Drivers & Goals", "understanding", "Turn the business plan into a few measurable goals that every design choice can be checked against."),
+            (3, "system-context", "System Context Diagram", "understanding", "One picture of the system as a box, with the people and systems around it, so everyone agrees where it ends."),
+            (4, "event-storming", "Domain Discovery (Event Storming)", "understanding", "Map the business as a timeline of events on sticky notes with the people who do the work."),
+            (5, "asr", "Architecturally Significant Requirements", "requirements", "Find the few requirements that would change the architecture, and design for those first."),
+            (6, "quality-attribute-scenarios", "Quality Attribute Scenarios", "requirements", "Turn “fast” and “reliable” into testable sentences: a stimulus, a context and a measurable response."),
+            (7, "constraints-assumptions", "Constraints vs Assumptions", "requirements", "Separate the fixed rules you must obey from the beliefs you still have to check."),
+            (8, "nfr-checklist", "NFR Checklist", "requirements", "A short list of quality questions to ask on every project, so nothing important is forgotten."),
+            (9, "architecture-styles", "Architecture Styles Compared", "shapes", "Compare monolith, modular monolith, microservices, event-driven and serverless against your drivers."),
+            (10, "modular-monolith", "Modular Monolith First", "shapes", "Start as one deployable app with strict internal modules; split out a service only when you must."),
+            (11, "bounded-contexts", "Bounded Contexts", "shapes", "Draw boundaries where a word changes meaning, and give each area its own model and owner."),
+            (12, "walking-skeleton", "Walking Skeleton", "shapes", "Build the thinnest end-to-end slice through every part first, then add flesh."),
+            (13, "spike-prototype-poc", "Spike vs Prototype vs PoC", "validating", "Pick the right small experiment: a spike answers a question, a prototype tests an idea, a PoC proves it works."),
+            (14, "fitness-functions", "Fitness Functions", "validating", "Turn architecture rules into automated checks that run in CI, so the design can't quietly decay."),
+            (15, "risk-storming", "Risk-Storming", "validating", "The team marks risks on the architecture diagram together, then decides what to do about the biggest."),
+        ],
+    ),
+    dict(
+        key="architect-2", vol=2, title="Decisions & Trade-offs", short="decisions &amp; trade-offs",
+        series=2, book="The Solution Architect's Notebook", in_progress=True, title_block=True, sheet_doodles=True,
+        theme="theme-architect", fonts="Architects+Daughter", subject="solution architecture",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Spring term · 2027", weekdays=(1, 3), start=date(2027, 3, 2),
+        kicker="the solution architect's notebook · book 1 · vol. 2 · in progress",
+        lead="Volume 2 of <span class=\"hl\">The Solution Architect's Notebook</span>: how architects choose between options, record why, and live with the consequences. This volume is <b>in progress</b>: the first note is here, the other fourteen follow (see the future log on the shelf). Same format as Vol. 1, following Larder from March 2026. {n} note so far.",
+        blurb="How architects choose between options, record why, and live with the consequences.",
+        attrs=ARCHITECT_ATTRS, attrs_title="The nine architect ratings", attrs_side="what a good architecture practice is judged on", ratings_h2="Architect ratings",
+        handmade=set(),
+        collections=[
+            ("recording", "Recording decisions", "write down what was decided, and why"),
+        ],
+        catalogue=[
+            (1, "adr", "Architecture Decision Records", "recording", "One short file per significant decision: context, options, the choice and its consequences."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
 PLANNED = [
     (7, "AI App Patterns", "Retrieval-augmented generation, agents and tools, evaluation, guardrails and cost-aware LLM apps."),
 ]
+# Planned volumes of Series 2, book 1 (see docs/HANDOFF-solution-architect.md).
+PLANNED_2 = [
+    (3, "Communicating Architecture", "C4 and other views, one-pagers, docs as code, presenting to executives, explaining trade-offs."),
+    (4, "Integration & the Enterprise", "Integration styles, anti-corruption layers, capability maps, portfolios and strangler-fig migrations."),
+    (5, "Designing for Qualities", "Back-of-the-envelope estimates, availability maths, security reviews and total cost of ownership."),
+    (6, "Delivery, Governance & Influence", "Just-enough design, principles, guardrails, risk, go-live, and influencing without authority."),
+]
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
-    ("Jan 2027", [("★", "New series, book 1 · <b>The Solution Architect's Notebook</b>: turning requirements into architecture, trade-off records, quality attributes, diagrams for every audience"), ("•", "One-page printable cheat sheet per collection")]),
+    ("Jan 2027", [("★", "Book 1, vol. 2 · <b>Decisions &amp; Trade-offs</b>, complete: options analysis, one-way doors, build vs buy, technical debt"), ("•", "One-page printable cheat sheet per collection")]),
     ("Feb 2027", [("★", "Book 2 · <b>Product Management</b>: discovery, problem framing, prioritisation, roadmaps, metrics that matter"), ("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
     ("Mar 2027", [("★", "Book 3 · <b>Project Management</b>: planning, estimation, risks and dependencies, delivery rhythms, status that tells the truth"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
     ("Apr 2027", [("★", "Book 4 · <b>Client Management</b>: expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
+    ("Mid 2027", [("★", "Book 1, vols. 3–6 · communicating architecture, integration, designing for qualities, governance and influence")]),
     ("Someday", [("•", "Extra notes for Vols. 2, 5 and 6: Debounce &amp; Throttle, Passkeys, Signed Webhooks, Chaos Engineering, Service Catalogues"), ("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
 
@@ -343,6 +417,26 @@ ROUGH = ('<svg width="0" height="0" style="position:absolute" aria-hidden="true"
          '<filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" '
          'baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" '
          'scale="3.2"/></filter></svg>')
+# Desk doodles drawn around an architect sheet (journals with sheet_doodles=True): a coffee ring,
+# a drafting compass, and a pencil resting on a ruler. Decorative only; hidden on small screens.
+SHEET_DOODLES = (
+    '<div class="sheet-doodles" aria-hidden="true">'
+    '<svg class="sd sd-coffee" viewBox="0 0 120 120"><g class="rough">'
+    '<circle cx="60" cy="60" r="44" fill="none" style="stroke:var(--mustard);stroke-opacity:.35;stroke-width:7"/>'
+    '<circle cx="60" cy="60" r="38" fill="none" style="stroke:var(--mustard);stroke-opacity:.22;stroke-width:2"/>'
+    '<path d="M100 74 q8 6 4 14" fill="none" style="stroke:var(--mustard);stroke-opacity:.3;stroke-width:4;stroke-linecap:round"/></g></svg>'
+    '<svg class="sd sd-compass" viewBox="0 0 70 110"><g class="rough">'
+    '<path class="d" d="M33 4 v8"/><circle class="d f-y" cx="35" cy="18" r="8"/>'
+    '<path class="d" d="M31 25 L14 98 M39 25 L56 98 M20 70 Q35 62 50 70"/>'
+    '<path class="d d-pen" d="M56 98 l3 9"/><path class="d" d="M14 98 l-2 8"/>'
+    '<path class="d d-thin d-dash" d="M12 106 Q35 120 59 107"/></g></svg>'
+    '<svg class="sd sd-pencil" viewBox="0 0 240 80"><g class="rough">'
+    '<rect class="d d-thin f-green" x="6" y="44" width="228" height="26" rx="3"/>'
+    '<path class="d d-thin" d="M26 44 v10 M46 44 v6 M66 44 v10 M86 44 v6 M106 44 v10 M126 44 v6 M146 44 v10 M166 44 v6 M186 44 v10 M206 44 v6"/>'
+    '<path class="d f-y" d="M40 30 L190 6 L196 18 L46 42 Z"/><path class="d f-pink" d="M190 6 l14 -2 l-8 14 z"/>'
+    '<path class="d f-paper" d="M40 30 l-14 4 l20 8 z"/><path class="d d-thin" d="M58 27 l2 12"/></g></svg>'
+    '</div>'
+)
 KEY = '''  <aside class="key" aria-label="Key to the signifiers on this page">
     <h3>Key</h3>
     <ul>
@@ -358,12 +452,15 @@ KEY = '''  <aside class="key" aria-label="Key to the signifiers on this page">
 
 
 def foot(j=None):
-    what = f"Vol. {j['vol']} · a student's bullet journal on {j['short']}" if j else "a shelf of student bullet journals on software design"
+    what = (f"{j['book']} · vol. {j['vol']}" if j and j.get("book") else
+            f"Vol. {j['vol']} · a student's bullet journal on {j['short']}") if j else "a shelf of student bullet journals on software design"
     return f'<footer class="foot"><span>Jef’s Notes · {what}</span><span>by {AUTHOR}</span></footer>'
 
 
-def head(title, desc, depth):
+def head(title, desc, depth, fonts=None):
+    """fonts: an optional extra Google Fonts family query for a journal's own heading font."""
     a = "../" * depth
+    extra = (f'\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={fonts}&display=swap">' if fonts else "")
     return f'''<!doctype html>
 <html lang="en">
 <head>
@@ -372,7 +469,7 @@ def head(title, desc, depth):
 <title>{esc(title)}</title>
 <meta name="description" content="{esc(desc)}">
 <meta name="theme-color" content="#E6E3DC">
-{FONTS}
+{FONTS}{extra}
 <link rel="stylesheet" href="{a}assets/notebook.css">
 <link rel="stylesheet" href="{a}assets/bujo.css">
 <link rel="icon" href="{a}assets/favicon.svg" type="image/svg+xml">
@@ -392,14 +489,14 @@ def bar(j, depth, current=None, print_button=True, disabled=False):
     if j is None:
         nav = (f'<a href="{root}index.html#shelf"{cur("shelf")}>Journals</a>\n'
                f'      <a class="hide-sm" href="{root}index.html#future">Future log</a>')
-        brand_small = "a shelf of design-pattern journals"
+        brand_small = "a shelf of design notebooks"
         btn = ""
     else:
         jp = "" if depth == 1 else "../"
         nav = (f'<a href="{root}index.html#shelf">Shelf</a>\n'
                f'      <a href="{jp}index.html#index"{cur("index")}>Index</a>\n'
                f'      <a class="hide-sm" href="{jp}all.html"{cur("all")}>Whole journal</a>')
-        brand_small = f"vol. {j['vol']} · {j['short']}"
+        brand_small = (f"architect's notebook · vol. {j['vol']}" if j.get("book") else f"vol. {j['vol']} · {j['short']}")
         if print_button:
             btn = f'\n      <button class="btn" type="button" data-print{" disabled" if disabled else ""}>{DL}Export as PDF</button>'
         else:
@@ -451,6 +548,16 @@ def pager(j, num):
     return f'<nav class="pager" aria-label="Notes">\n  {a}\n  {b}\n</nav>'
 
 
+def title_block(j, num, n):
+    """The engineer's title block in the corner of a sheet (journals with title_block=True)."""
+    if not j.get("title_block"):
+        return ""
+    rows = [("book", j.get("book", "")), ("vol.", j["vol"]), ("sheet", f"{num:02d} / {len(j['catalogue']):02d}"),
+            ("rev.", n.get("rev", "A")), ("drawn by", AUTHOR.split()[0])]
+    cells = "".join(f'<span class="tb-k">{k}</span><span class="tb-v">{v}</span>' for k, v in rows)
+    return f'  <div class="titleblock" aria-label="Sheet details">{cells}</div>'
+
+
 def render_note(j, n):
     num, slug, title, ckey, summary = entry(j, n["slug"])
     cname = coll(j, ckey)[1]
@@ -465,7 +572,7 @@ def render_note(j, n):
     code = n["code"]
     figs = lambda key: "\n".join(f.html() for f in n.get(key, []))
     parts = [
-        head(f"{title} · Jef’s Notes", summary, 2),
+        head(f"{title} · Jef’s Notes", summary, 2, j.get("fonts")),
         body_open(j),
         '<a class="skip-link" href="#main">Skip to the notes</a>',
         bar(j, 2),
@@ -473,20 +580,21 @@ def render_note(j, n):
         '<main id="main" class="desk">',
         f'<article class="sheet" id="{slug}">',
         f'  {ROUGH}',
+        SHEET_DOODLES if j.get("sheet_doodles") else "",
         f'  <div class="page-meta"><span class="day">{day_label(j, num)}</span><span class="topic">collection · <b>{cname.lower()}</b></span></div>',
         f'  <p class="kicker">{n["kicker"]}</p>',
         f'  <h1><span class="hl">{esc(title)}</span></h1>',
         f'  <div class="tldr">\n    <span class="tag">TL;DR</span>\n    <p>{n["tldr"]}</p>\n  </div>',
         f'  <ul class="chips" aria-label="At a glance">{chips}</ul>',
         KEY,
-        h2(1, "problem", "The problem", n.get("problem_side", "why do we even need this?")),
+        h2(1, "problem", j.get("problem_h2", "The problem"), n.get("problem_side", "why do we even need this?")),
         n["problem"], figs("problem_figs"), n.get("problem_after", ""),
         h2(2, "analogy", "Real-life analogy", n["analogy_side"]),
         n["analogy"], figs("analogy_figs"),
         f'''  <div class="table-scroll">
   <table class="map">
-    <caption>Translating it to software</caption>
-    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <caption>{j.get("map_caption", "Translating it to software")}</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">{j.get("map_col", "In your code")}</th></tr></thead>
     <tbody>
 {maprows}
     </tbody>
@@ -500,7 +608,7 @@ def render_note(j, n):
         f'  <h3>Vocabulary for the exam</h3>\n  <dl class="vocab">\n{vocab}\n  </dl>',
         f'''  <div class="card">
     <div class="card-head"><span>{esc(code["file"])}</span><span>{esc(code["note"])}</span></div>
-<pre><code>{highlight(code["src"].strip(chr(10)))}</code></pre>
+<pre><code>{esc(code["src"].strip(chr(10))) if code.get("plain") else highlight(code["src"].strip(chr(10)))}</code></pre>
   </div>''',
         f'  <p class="aside">{n["tools"]}</p>' if n.get("tools") else "",
         h2(4, "tradeoffs", "Gains vs losses", "nothing is free"),
@@ -530,16 +638,18 @@ def render_note(j, n):
       {li(n["skip"], "check no")}
     </div>
   </div>''',
-        f'  <h3>Related patterns</h3>\n  <ul class="related">{related}</ul>',
+        f'  <h3>{j.get("related_h3", "Related patterns")}</h3>\n  <ul class="related">{related}</ul>',
         h2(8, "quiz", "Self-check quiz", ""),
         f'  <div class="quiz">\n{quiz}\n  </div>',
+        f'  <div class="tryit">\n    <span class="tag">try it</span>\n    <p>{n["try_it"]}</p>\n  </div>' if n.get("try_it") else "",
         f'  <div class="remember">\n    <span class="tag">remember!!</span>\n    <p>{n["remember"]}</p>\n  </div>',
         f'''  <div class="export no-print">
     <button class="btn" type="button" data-print>{DL}Export this note as PDF</button>
-    <a class="btn btn--ghost" href="../pdf/{pdf_name(num, slug)}">Download ready-made PDF</a>
+    {"" if j.get("draft") else f'<a class="btn btn--ghost" href="../pdf/{pdf_name(num, slug)}">Download ready-made PDF</a>'}
     <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
   </div>''',
         f'  <div class="sources">\n    <h3>Further reading</h3>\n    <ul>{sources}</ul>\n  </div>',
+        title_block(j, num, n),
         f'  <p class="folio">{num:02d}</p>',
         '</article>',
         '',
@@ -581,7 +691,7 @@ def counts(j):
 
 def render_index(j):
     return "\n".join([
-        head(f"{j['title']} · Jef’s Notes", j["blurb"], 1),
+        head(f"{j['title']} · Jef’s Notes", j["blurb"], 1, j.get("fonts")),
         body_open(j),
         '<a class="skip-link" href="#main">Skip to the index</a>',
         bar(j, 1, "index", print_button=False),
@@ -595,10 +705,10 @@ def render_index(j):
         '  <h2 id="index"><span class="num">✎</span>Index <span class="side">tap a note to open it</span></h2>',
         index_list(j),
         '  <h2 id="how-to-read"><span class="num">?</span>How every note is laid out <span class="side">same eight sections, every time</span></h2>',
-        '''  <ol class="how-to">
-    <li><b>The problem</b>: what breaks without the pattern, with a doodle.</li>
-    <li><b>Real-life analogy</b>: an everyday version, plus a “translate to code” table.</li>
-    <li><b>How it solves it</b>: diagrams, steps, vocabulary and a code card.</li>
+        f'''  <ol class="how-to">
+    <li><b>{j.get("problem_h2", "The problem")}</b>: {"a scene from the case study where it goes wrong" if j.get("book") else "what breaks without the pattern"}, with a doodle.</li>
+    <li><b>Real-life analogy</b>: an everyday version, plus a “{j.get("map_caption", "translate to code").lower()}” table.</li>
+    <li><b>How it solves it</b>: diagrams, steps, vocabulary and a {"template" if j.get("book") else "code"} card.</li>
     <li><b>Gains vs losses</b>: the trade-off spread.</li>
     <li><b>Ratings</b>: nine qualities, before → after.</li>
     <li><b>Common pitfalls</b>: each with its fix.</li>
@@ -614,7 +724,7 @@ def render_index(j):
   </div>''',
         f'''  <div class="export no-print">
     <a class="btn" href="all.html?print">{DL}Export the whole journal as PDF</a>
-    <a class="btn btn--ghost" href="pdf/{journal_pdf(j)}">Download ready-made PDF</a>
+    {"" if j.get("draft") else f'<a class="btn btn--ghost" href="pdf/{journal_pdf(j)}">Download ready-made PDF</a>'}
     <span class="hint">On a phone, the ready-made PDF is the easiest way to save or share.</span>
   </div>''',
         '  <p class="folio">i</p>',
@@ -630,7 +740,7 @@ def render_index(j):
 def render_all(j):
     collect = " ".join(f"notes/{c[1]}.html" for c in j["catalogue"])
     return "\n".join([
-        head(f"{j['title']} · Whole journal", "Every note on one page, ready to export as PDF.", 1),
+        head(f"{j['title']} · Whole journal", "Every note on one page, ready to export as PDF.", 1, j.get("fonts")),
         body_open(j),
         '<a class="skip-link" href="#main">Skip to the notes</a>',
         bar(j, 1, "all", print_button=True, disabled=True),
@@ -672,32 +782,48 @@ AUTHOR_NOTE = """  <h2 id="author"><span class="num">✎</span>A note from the a
   </aside>"""
 
 
-def render_landing():
+def shelf():
+    """Journals shown on the landing page and built into PDFs (drafts are rendered but unlisted)."""
+    return [j for j in JOURNALS if not j.get("draft")]
+
+
+def book_items(journals, planned, series=1):
     books = []
-    for j in JOURNALS:
+    for j in journals:
         k = j["key"]
+        vol = f"book 1 · vol. {j['vol']}" if series == 2 else f"vol. {j['vol']}"
+        n = len(j["catalogue"])
+        count = (f"{n} note{'s' if n != 1 else ''} · in progress" if j.get("in_progress")
+                 else f"{n} notes · {len(j['collections'])} collections")
         books.append(f'''    <li class="book book--{k}">
-      <a class="book-cover" href="{k}/index.html" aria-label="Open Vol. {j['vol']}: {esc(j['title'])}">
+      <a class="book-cover" href="{k}/index.html" aria-label="Open {vol}: {esc(j['title'])}">
         <span class="book-band" aria-hidden="true"></span>
-        <span class="book-label"><small>vol. {j['vol']}</small><b>{esc(j['title'])}</b><i>{len(j['catalogue'])} notes · {len(j['collections'])} collections</i></span>
+        <span class="book-label"><small>{vol}</small><b>{esc(j['title'])}</b><i>{count}</i></span>
       </a>
       <div class="book-meta">
         <p>{j['blurb']}</p>
         <p class="book-actions"><a class="btn" href="{k}/index.html">Open journal</a><a class="btn btn--ghost" href="{k}/pdf/{journal_pdf(j)}">{DL}PDF</a></p>
       </div>
     </li>''')
-    for vol, title, blurb in PLANNED:
+    for vol, title, blurb in planned:
+        label = f"book 1 · vol. {vol}" if series == 2 else f"vol. {vol}"
         books.append(f'''    <li class="book book--planned">
-      <div class="book-cover" aria-hidden="true"><span class="book-label"><small>vol. {vol}</small><b>{title}</b><i>planned</i></span></div>
-      <div class="book-meta"><p><b>Vol. {vol} · {title}.</b> {blurb}</p></div>
+      <div class="book-cover" aria-hidden="true"><span class="book-label"><small>{label}</small><b>{title}</b><i>planned</i></span></div>
+      <div class="book-meta"><p><b>{label[0].upper() + label[1:]} · {title}.</b> {blurb}</p></div>
     </li>''')
+    return "\n".join(books)
+
+
+def render_landing():
+    series1 = [j for j in shelf() if j.get("series", 1) == 1]
+    series2 = [j for j in shelf() if j.get("series", 1) == 2]
     months = []
     for month, items in FUTURE_LOG:
         lis = "".join(f'<li><span class="sig">{s}</span> {t}</li>' for s, t in items)
         months.append(f'    <div class="month"><h3>{month}</h3><ul>{lis}</ul></div>')
-    total = sum(len(j["catalogue"]) for j in JOURNALS)
+    total = sum(len(j["catalogue"]) for j in shelf())
     return "\n".join([
-        head("Jef’s Notes", "A shelf of student bullet journals on software design patterns, with doodles, analogies, trade-offs and ratings.", 0),
+        head("Jef’s Notes", "A shelf of student bullet journals on software design patterns and the work around the code, with doodles, analogies, trade-offs and ratings.", 0, "Architects+Daughter"),
         body_open(),
         '<a class="skip-link" href="#main">Skip to the shelf</a>',
         bar(None, 0, "shelf"),
@@ -706,13 +832,16 @@ def render_landing():
         '  <div class="page-meta"><span class="day">The shelf · 2026</span><span class="topic">series · <b>software design</b></span></div>',
         '  <p class="kicker">hand-written field journals, one subject per volume</p>',
         '  <h1 class="cover-title"><span class="hl">Jef’s Notes</span></h1>',
-        f'  <p class="lead">A student\'s bullet journals on software design patterns: what problem each pattern solves, an everyday analogy with doodles, how it works, what it costs, how it rates, and how people get it wrong. <b>{len(JOURNALS)} volumes, {total} notes</b> so far, more on the way.</p>',
-        '  <h2 id="shelf"><span class="num">✎</span>The shelf <span class="side">pick a journal</span></h2>',
-        f'  <ul class="shelf">\n{chr(10).join(books)}\n  </ul>',
+        f'  <p class="lead">A student\'s bullet journals on software design patterns, and now on the work around the code: what problem each idea solves, an everyday analogy with doodles, how it works, what it costs, how it rates, and how people get it wrong. <b>{len(shelf())} volumes, {total} notes</b> in two series so far, more on the way.</p>',
+        '  <h2 id="shelf"><span class="num">✎</span>The shelf <span class="side">series 1 · design patterns</span></h2>',
+        f'  <ul class="shelf">\n{book_items(series1, PLANNED)}\n  </ul>',
+        '  <h2 id="series-2"><span class="num">✎</span>Series 2 · The Practitioner\'s Notebooks <span class="side">book 1 · the solution architect</span></h2>',
+        '  <p>The second series is about the work <b>around</b> the code. Book 1, <b>The Solution Architect\'s Notebook</b>, follows one company, <b>Larder</b>, a grocery delivery start-up growing from one city to six, from a vague business plan to a running architecture. Same eight sections, a template to copy in every note, and a <b>try it</b> exercise for your own project.</p>',
+        f'  <ul class="shelf shelf-series">\n{book_items(series2, PLANNED_2, series=2)}\n  </ul>',
         AUTHOR_NOTE,
         '  <h2 id="future"><span class="num">→</span>Future log <span class="side">plans, not promises</span></h2>',
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
-        '  <p class="aside">after the design-pattern volumes, a <b>new series</b> begins (★): four notebooks on the work around the code, for solution architects, product managers, project managers and anyone who manages clients. Same format: the problem, an analogy, how it works, trade-offs, pitfalls and a quiz.</p>',
+        '  <p class="aside">series 2 (★) has begun with the solution architect\'s notebook. Next come notebooks for product managers, project managers and anyone who manages clients. Same format: the problem, an analogy, how it works, trade-offs, pitfalls and a quiz.</p>',
         f'  <div class="future">\n{chr(10).join(months)}\n  </div>',
         '  <h2 id="inside"><span class="num">?</span>What\'s inside every note <span class="side">same eight sections</span></h2>',
         '''  <ol class="how-to">
@@ -769,6 +898,9 @@ def main():
         (out / "index.html").write_text(render_index(j), encoding="utf-8")
         (out / "all.html").write_text(render_all(j), encoding="utf-8")
         ready = [c for c in j["catalogue"] if c[1] in notes or c[1] in j["handmade"]]
+        if j.get("draft"):
+            print(f"[{key}] draft: unlisted, no PDFs")
+            continue
         listing.append(dict(key=key, title=j["title"], all=f"{key}/all.html", pdf=f"{key}/pdf/{journal_pdf(j)}",
                             notes=[dict(num=c[0], slug=c[1], title=c[2], page=f"{key}/notes/{c[1]}.html",
                                         pdf=f"{key}/pdf/{pdf_name(c[0], c[1])}") for c in ready]))

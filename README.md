@@ -13,7 +13,14 @@ Live site: https://jepzman.github.io/oni-alien/
 | 5 | Security Patterns (`/security/`) | 15 | field dossier (manila, security-envelope crosshatch, redaction-bar titles, CONFIDENTIAL stamp), steel blue / crimson / khaki | security qualities (simplicity, usability, confidentiality, integrity, availability, containment, auditability, cost, developer experience) |
 | 6 | Cloud & DevOps Patterns (`/cloud/`) | 15 | isometric grid paper (dimension-line titles, status pill), cobalt / sky / signal yellow | operations qualities (simplicity, delivery speed, release safety, reliability, scalability, recoverability, observability, cost, developer experience) |
 
-The landing page (`/`) shows the shelf, planned volumes and a “future log” of upcoming work. The future log also announces a second series (solution architect, product management, project management and client management notebooks).
+**Series 2 · The Practitioner's Notebooks.** Book 1 is *The Solution Architect's Notebook* (drafting-sheet skin `theme-architect`: blueprint grid, Architects Daughter, orange / teal / cobalt, a title block on every sheet). Every note follows one case study, Larder, whose facts live in `docs/larder-casebook.md`; the plan for the book is `docs/HANDOFF-solution-architect.md`.
+
+| Book · vol. | Journal | Notes | Ratings |
+|---|---|---|---|
+| 1 · 1 | From Requirements to Architecture (`/architect-1/`) | 15 | architect ratings (clarity, stakeholder alignment, decision speed, risk reduction, adaptability, traceability, cost awareness, low overhead, team autonomy) |
+| 1 · 2 | Decisions & Trade-offs (`/architect-2/`) | 1 of 15 (in progress) | architect ratings |
+
+The landing page (`/`) shows two shelves (Series 1: design patterns; Series 2: practitioner's notebooks, with `series=2` in `JOURNALS`), planned volumes (`PLANNED`, `PLANNED_2`) and a “future log” of upcoming work.
 
 ## Layout
 
