@@ -10,8 +10,10 @@ everything for the PDF script, and a few redirect pages keep old links working.
 
 Usage: python3 scripts/build_notes.py
 """
+import hashlib
 import importlib.util
 import json
+import re
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -533,6 +535,22 @@ def foot(j=None):
     return f'<footer class="foot"><span>Jef’s Notes · {what}</span><span>by {AUTHOR}</span></footer>'
 
 
+def asset(name):
+    """assets/<name>?v=<content hash>: a new version tag whenever the file changes, so browsers and the Cloudflare
+    mirror never keep serving an old stylesheet or script after a deploy."""
+    digest = hashlib.sha256((PUBLIC / "assets" / name).read_bytes()).hexdigest()[:10]
+    return f"assets/{name}?v={digest}"
+
+
+def stamp_handmade(path):
+    """Hand-made notes link the assets directly; give them the same version tags."""
+    html = path.read_text(encoding="utf-8")
+    new = re.sub(r'(href|src)="((?:\.\./)*)assets/(notebook\.css|bujo\.css|notebook\.js)(?:\?v=[0-9a-f]+)?"',
+                 lambda m: f'{m.group(1)}="{m.group(2)}{asset(m.group(3))}"', html)
+    if new != html:
+        path.write_text(new, encoding="utf-8")
+
+
 def head(title, desc, depth, fonts=None):
     """fonts: an optional extra Google Fonts family query for a journal's own heading font."""
     a = "../" * depth
@@ -546,10 +564,10 @@ def head(title, desc, depth, fonts=None):
 <meta name="description" content="{esc(desc)}">
 <meta name="theme-color" content="#E6E3DC">
 {FONTS}{extra}
-<link rel="stylesheet" href="{a}assets/notebook.css">
-<link rel="stylesheet" href="{a}assets/bujo.css">
+<link rel="stylesheet" href="{a}{asset("notebook.css")}">
+<link rel="stylesheet" href="{a}{asset("bujo.css")}">
 <link rel="icon" href="{a}assets/favicon.svg" type="image/svg+xml">
-<script src="{a}assets/notebook.js" defer></script>
+<script src="{a}{asset("notebook.js")}" defer></script>
 </head>'''
 
 
@@ -1105,6 +1123,8 @@ def main():
             print(f"[{key}] no content yet for:", ", ".join(missing))
         for slug, n in notes.items():
             (out / "notes" / f"{slug}.html").write_text(render_note(j, n, back.get((key, slug), [])), encoding="utf-8")
+        for slug in j["handmade"]:
+            stamp_handmade(out / "notes" / f"{slug}.html")
         print(f"[{key}] wrote {len(notes)} notes")
         (out / "index.html").write_text(render_index(j), encoding="utf-8")
         (out / "all.html").write_text(render_all(j), encoding="utf-8")
