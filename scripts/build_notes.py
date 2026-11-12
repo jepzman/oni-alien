@@ -91,6 +91,17 @@ ARCHITECT_ATTRS = [
     ("Low overhead", "light to run?", "Time and ceremony it takes. High = light."),
     ("Team autonomy", "teams can act alone?", "Teams can decide and act without waiting for the architect."),
 ]
+PRODUCT_ATTRS = [
+    ("Customer value", "solves a real problem?", "Customers would notice it, and miss it if it went."),
+    ("Business impact", "moves a driver?", "It shows up in a number the business already tracks."),
+    ("Evidence", "based on facts?", "Decided on what we learned, not on opinion or rank."),
+    ("Learning speed", "find out fast?", "How soon we know if we're wrong."),
+    ("Focus", "fewer, better things?", "The team works on a few things at once, and knows which matter most."),
+    ("Shared understanding", "team knows why?", "Everyone can explain what we're building, for whom and why."),
+    ("Stakeholder trust", "they believe us?", "Leaders and partners trust the plan and the updates."),
+    ("Flow", "small steps to customers?", "Value reaches customers in small, frequent steps."),
+    ("Low overhead", "light to run?", "Time and ceremony it takes. High = light."),
+]
 CLOUD_ATTRS = [
     ("Simplicity", "easy to run &amp; explain?", "Few moving parts; the on-call person can understand it at 3 a.m."),
     ("Delivery speed", "fast from commit to prod?", "Short lead time and frequent, small releases."),
@@ -305,7 +316,7 @@ JOURNALS = [
     # Plan and handoff: docs/HANDOFF-solution-architect.md. Case study facts: docs/larder-casebook.md.
     dict(
         key="architect-1", vol=1, title="From Requirements to Architecture", short="from requirements to architecture",
-        series=2, book="The Solution Architect's Notebook", title_block=True, sheet_doodles=True,
+        series=2, book="The Solution Architect's Notebook", narrator="Ana", brand="architect's notebook", title_block=True, sheet_doodles=True,
         theme="theme-architect", fonts="Architects+Daughter", subject="solution architecture",
         problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
         term="Winter term · 2027", weekdays=(0, 3), start=date(2027, 1, 4),
@@ -341,7 +352,7 @@ JOURNALS = [
     ),
     dict(
         key="architect-2", vol=2, title="Decisions & Trade-offs", short="decisions &amp; trade-offs",
-        series=2, book="The Solution Architect's Notebook", in_progress=True, title_block=True, sheet_doodles=True,
+        series=2, book="The Solution Architect's Notebook", narrator="Ana", brand="architect's notebook", in_progress=True, title_block=True, sheet_doodles=True,
         theme="theme-architect", fonts="Architects+Daughter", subject="solution architecture",
         problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
         term="Spring term · 2027", weekdays=(1, 3), start=date(2027, 3, 2),
@@ -358,6 +369,44 @@ JOURNALS = [
             (1, "adr", "Architecture Decision Records", "recording", "One short file per significant decision: context, options, the choice and its consequences."),
         ],
     ),
+    # ---- Series 2 · Book 2 · The Product Owner's Notebook (Grace). Plan: docs/HANDOFF-product-owner.md ----
+    dict(
+        key="product-1", vol=1, title="Discovering the Problem", short="discovering the problem",
+        series=2, book="The Product Owner's Notebook", narrator="Grace", brand="product owner's notebook", book_no=2,
+        title_block=True, sheet_doodles="product",
+        theme="theme-product", fonts="Permanent+Marker", subject="product ownership",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the product",
+        term="Winter term · 2027", weekdays=(1, 4), start=date(2027, 1, 5),
+        kicker="the product owner's notebook · book 2 · vol. 1",
+        story="<b>October 2025.</b> Larder delivers groceries in Amsterdam and has promised its investors six cities by the end of 2027. Grace joins as product owner for ordering and the customer apps, a week after Ana joins as architect. Six percent of orders end in a refund ticket and nobody owns the problem. This volume follows Grace's first four months: finding out what customers really need before anyone builds anything.",
+        lead="Volume 1 of <span class=\"hl\">The Product Owner's Notebook</span>: how a product owner finds the right problem before the team builds a solution. {n} notes in {c} collections: listen to customers, frame the problem, decide what to measure, and test ideas while they're still cheap. Every note follows <b>Grace</b> at <b>Larder</b>, in the same months and meetings as Ana's notebook, and ends with a <b>try it</b> exercise for your own product.",
+        blurb="Customer interviews, jobs to be done, opportunity trees, the right metrics and cheap tests: finding the problem worth solving.",
+        attrs=PRODUCT_ATTRS, attrs_title="The nine product ratings", attrs_side="what a good product practice is judged on", ratings_h2="Product ratings",
+        handmade=set(),
+        collections=[
+            ("customers", "Understanding customers", "listen before you decide anything"),
+            ("framing", "Framing the problem", "pick the problem worth solving, and say it clearly"),
+            ("measuring", "Measuring what matters", "know what “better” means before you build"),
+            ("testing", "Testing ideas cheaply", "find out if you're wrong in days, not months"),
+        ],
+        catalogue=[
+            (1, "customer-interviews", "Customer Interviews", "customers", "Ask customers about what they did last time, not what they'd like, and listen for the pain."),
+            (2, "jobs-to-be-done", "Jobs to Be Done", "customers", "Find the progress customers are trying to make; the product is just something they hire for the job."),
+            (3, "proto-personas", "Proto-Personas", "customers", "Quick, evidence-based sketches of the main kinds of customer, kept honest and kept few."),
+            (4, "journey-map", "Customer Journey Map", "customers", "Draw every step a customer takes, what they feel at each one, and where it breaks."),
+            (5, "problem-statements", "Problem Statements", "framing", "Write the problem in one sentence, from the customer's side, before anyone proposes a fix."),
+            (6, "opportunity-solution-tree", "Opportunity Solution Tree", "framing", "Link one outcome to the customer needs behind it, then to ideas, then to tests."),
+            (7, "assumption-mapping", "Assumption Mapping", "framing", "List what must be true for an idea to work, and test the riskiest first."),
+            (8, "outcomes-over-outputs", "Outcomes over Outputs", "framing", "Judge work by the change it makes for customers, not by the features shipped."),
+            (9, "north-star-metric", "North Star Metric", "measuring", "One number that captures the value customers get, so every team pulls the same way."),
+            (10, "leading-lagging", "Leading vs Lagging Indicators", "measuring", "Pair the slow result you care about with fast signals you can move this week."),
+            (11, "baseline", "Baseline Before You Build", "measuring", "Measure today properly first, or you'll never know if the change worked."),
+            (12, "hypotheses", "Testable Hypotheses", "testing", "Write each idea as a bet: we believe, so we'll, and we'll know when."),
+            (13, "fake-door", "Fake Door Test", "testing", "Show the button before building the feature, and count who knocks."),
+            (14, "concierge-mvp", "Concierge & Wizard-of-Oz MVP", "testing", "Deliver the value by hand first; build the software only once it's proven."),
+            (15, "prototype-testing", "Prototype Testing with Users", "testing", "Put a clickable fake in front of five real users and watch where they stumble."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
@@ -371,10 +420,17 @@ PLANNED_2 = [
     (5, "Designing for Qualities", "Back-of-the-envelope estimates, availability maths, security reviews and total cost of ownership."),
     (6, "Delivery, Governance & Influence", "Just-enough design, principles, guardrails, risk, go-live, and influencing without authority."),
 ]
+PLANNED_PRODUCT = [
+    (2, "Deciding What to Build", "Prioritising, saying no, strategy on a page and now / next / later roadmaps."),
+    (3, "From Idea to Backlog", "Story maps, thin slices, example mapping, tech-debt talks and the Rotterdam launch."),
+    (4, "Measuring & Learning", "Tracking plans, funnels, A/B tests, guardrails and OKRs."),
+    (5, "Stakeholders & Influence", "Updates, demos, pitching to the CEO, and working with operations, legal and the architect."),
+    (6, "Growing the Product", "New cities, Antwerp, the Korenwolf account and growing as a product owner."),
+]
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
     ("Jan 2027", [("★", "Book 1, vol. 2 · <b>Decisions &amp; Trade-offs</b>, complete: options analysis, one-way doors, build vs buy, technical debt"), ("•", "One-page printable cheat sheet per collection")]),
-    ("Feb 2027", [("★", "Book 2 · <b>The Product Owner's Notebook</b>: Grace's side of the Larder story: discovery, problem framing, prioritisation, saying no, metrics that matter"), ("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
+    ("Feb 2027", [("★", "Book 2, vol. 2 · <b>Deciding What to Build</b> (Grace): prioritising, saying no, strategy on a page, now / next / later roadmaps"), ("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
     ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b> (Sanne, the Rotterdam launch): planning, estimation, risks and dependencies, delivery rhythms, status that tells the truth"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
     ("Mid 2027", [("★", "Book 1, vols. 3–6 · communicating architecture, integration, designing for qualities, governance and influence")]),
@@ -439,6 +495,24 @@ SHEET_DOODLES = (
     '<path class="d f-paper" d="M40 30 l-14 4 l20 8 z"/><path class="d d-thin" d="M58 27 l2 12"/></g></svg>'
     '</div>'
 )
+# Desk doodles around a product owner's sheet: a pad of sticky notes, a marker, and a pinned photo of the team wall.
+PRODUCT_DOODLES = (
+    '<div class="sheet-doodles" aria-hidden="true">'
+    '<svg class="sd sd-coffee" viewBox="0 0 120 120"><g class="rough">'
+    '<rect class="d d-thin f-y" x="14" y="20" width="84" height="84" rx="2" transform="rotate(8 56 62)"/>'
+    '<rect class="d d-thin f-pink" x="22" y="12" width="84" height="84" rx="2" transform="rotate(-6 64 54)"/>'
+    '<path class="d d-thin" d="M36 40 h44 M36 56 h36 M36 72 h40" transform="rotate(-6 64 54)"/></g></svg>'
+    '<svg class="sd sd-compass" viewBox="0 0 70 110"><g class="rough">'
+    '<rect class="d f-red" x="24" y="6" width="22" height="22" rx="4"/><rect class="d f-paper" x="22" y="26" width="26" height="62" rx="5"/>'
+    '<path class="d" d="M22 46 h26"/><path class="d f-ink" d="M27 88 h16 l-5 14 h-6 z"/></g></svg>'
+    '<svg class="sd sd-pencil" viewBox="0 0 240 80"><g class="rough">'
+    '<rect class="d d-thin f-paper" x="20" y="8" width="200" height="66" rx="3"/>'
+    '<path class="d d-thin d-soft" d="M40 30 h48 M100 30 h48 M160 30 h40"/>'
+    '<rect class="d d-thin f-y" x="40" y="38" width="30" height="24"/><rect class="d d-thin f-green" x="100" y="38" width="30" height="24"/>'
+    '<rect class="d d-thin f-blue" x="160" y="38" width="30" height="24"/><circle class="d f-red" cx="120" cy="10" r="6"/></g></svg>'
+    '</div>'
+)
+DESK_DOODLES = {True: SHEET_DOODLES, "architect": SHEET_DOODLES, "product": PRODUCT_DOODLES}
 KEY = '''  <aside class="key" aria-label="Key to the signifiers on this page">
     <h3>Key</h3>
     <ul>
@@ -498,7 +572,7 @@ def bar(j, depth, current=None, print_button=True, disabled=False):
         nav = (f'<a href="{root}index.html#shelf">Shelf</a>\n'
                f'      <a href="{jp}index.html#index"{cur("index")}>Index</a>\n'
                f'      <a class="hide-sm" href="{jp}all.html"{cur("all")}>Whole journal</a>')
-        brand_small = (f"architect's notebook · vol. {j['vol']}" if j.get("book") else f"vol. {j['vol']} · {j['short']}")
+        brand_small = (f"{j.get('brand', 'notebook')} · vol. {j['vol']}" if j.get("book") else f"vol. {j['vol']} · {j['short']}")
         if print_button:
             btn = f'\n      <button class="btn" type="button" data-print{" disabled" if disabled else ""}>{DL}Export as PDF</button>'
         else:
@@ -560,7 +634,30 @@ def title_block(j, num, n):
     return f'  <div class="titleblock" aria-label="Sheet details">{cells}</div>'
 
 
-def render_note(j, n):
+def meanwhile_box(j, n, back):
+    """“Meanwhile, in X's notebook”: links between books that tell the same scene (note field `meanwhile`, plus
+    the reverse links other books' notes made to this one)."""
+    items = []
+    for key, slug, here, *_ in n.get("meanwhile", []):
+        o = journal(key)
+        num, _, title, *_ = entry(o, slug)
+        items.append((o, slug, title, here))
+    for o, slug, title, line in back:
+        items.append((o, slug, title, line))
+    if not items:
+        return ""
+    lis = "".join(f'<li><a href="../../{o["key"]}/notes/{slug}.html"><b>{esc(title)}</b></a> <small>({o.get("narrator", "")}, '
+                  f'vol. {o["vol"]})</small>: {line}</li>' for o, slug, title, line in items)
+    who = sorted({o.get("narrator", "") for o, *_ in items})
+    return (f'  <aside class="meanwhile" aria-label="Meanwhile, in another notebook">\n    <span class="tag">meanwhile, in '
+            f'{" &amp; ".join(w + "\u2019s" for w in who)} notebook</span>\n    <ul>{lis}</ul>\n  </aside>')
+
+
+def journal(key):
+    return next(x for x in JOURNALS if x["key"] == key)
+
+
+def render_note(j, n, back=()):
     num, slug, title, ckey, summary = entry(j, n["slug"])
     cname = coll(j, ckey)[1]
     vocab = "\n".join(f"    <div><dt>{t}</dt><dd>{d}</dd></div>" for t, d in n["vocab"])
@@ -582,7 +679,7 @@ def render_note(j, n):
         '<main id="main" class="desk">',
         f'<article class="sheet" id="{slug}">',
         f'  {ROUGH}',
-        SHEET_DOODLES if j.get("sheet_doodles") else "",
+        DESK_DOODLES.get(j.get("sheet_doodles"), "") if j.get("sheet_doodles") else "",
         f'  <div class="page-meta"><span class="day">{day_label(j, num)}</span><span class="topic">collection · <b>{cname.lower()}</b></span></div>',
         f'  <p class="kicker">{n["kicker"]}</p>',
         f'  <h1><span class="hl">{esc(title)}</span></h1>',
@@ -590,7 +687,7 @@ def render_note(j, n):
         f'  <ul class="chips" aria-label="At a glance">{chips}</ul>',
         KEY,
         h2(1, "problem", j.get("problem_h2", "The problem"), n.get("problem_side", "why do we even need this?")),
-        n["problem"], figs("problem_figs"), n.get("problem_after", ""),
+        n["problem"], figs("problem_figs"), n.get("problem_after", ""), meanwhile_box(j, n, back),
         h2(2, "analogy", "Real-life analogy", n["analogy_side"]),
         n["analogy"], figs("analogy_figs"),
         f'''  <div class="table-scroll">
@@ -811,11 +908,11 @@ CASEFILE_ITEM = '''    <li class="book book--casefile">
     </li>'''
 
 
-def book_items(journals, planned, series=1):
-    books = [CASEFILE_ITEM] if series == 2 else []
+def book_items(journals, planned, series=1, book=1, casefile=False):
+    books = [CASEFILE_ITEM] if casefile else []
     for j in journals:
         k = j["key"]
-        vol = f"book 1 · vol. {j['vol']}" if series == 2 else f"vol. {j['vol']}"
+        vol = f"book {book} · vol. {j['vol']}" if series == 2 else f"vol. {j['vol']}"
         n = len(j["catalogue"])
         count = (f"{n} note{'s' if n != 1 else ''} · in progress" if j.get("in_progress")
                  else f"{n} notes · {len(j['collections'])} collections")
@@ -830,7 +927,7 @@ def book_items(journals, planned, series=1):
       </div>
     </li>''')
     for vol, title, blurb in planned:
-        label = f"book 1 · vol. {vol}" if series == 2 else f"vol. {vol}"
+        label = f"book {book} · vol. {vol}" if series == 2 else f"vol. {vol}"
         books.append(f'''    <li class="book book--planned">
       <div class="book-cover" aria-hidden="true"><span class="book-label"><small>{label}</small><b>{title}</b><i>planned</i></span></div>
       <div class="book-meta"><p><b>{label[0].upper() + label[1:]} · {title}.</b> {blurb}</p></div>
@@ -847,7 +944,7 @@ def render_landing():
         months.append(f'    <div class="month"><h3>{month}</h3><ul>{lis}</ul></div>')
     total = sum(len(j["catalogue"]) for j in shelf())
     return "\n".join([
-        head("Jef’s Notes", "A shelf of student bullet journals on software design patterns and the work around the code, with doodles, analogies, trade-offs and ratings.", 0, "Architects+Daughter"),
+        head("Jef’s Notes", "A shelf of student bullet journals on software design patterns and the work around the code, with doodles, analogies, trade-offs and ratings.", 0, "Architects+Daughter&family=Permanent+Marker"),
         body_open(),
         '<a class="skip-link" href="#main">Skip to the shelf</a>',
         bar(None, 0, "shelf"),
@@ -861,7 +958,10 @@ def render_landing():
         f'  <ul class="shelf">\n{book_items(series1, PLANNED)}\n  </ul>',
         '  <h2 id="series-2"><span class="num">✎</span>Series 2 · The Practitioner\'s Notebooks <span class="side">book 1 · the solution architect</span></h2>',
         '  <p>The second series is about the work <b>around</b> the code. Book 1, <b>The Solution Architect\'s Notebook</b>, follows one company, <b>Larder</b>, a grocery delivery start-up growing from one city to six, from a vague business plan to a running architecture. Same eight sections, a template to copy in every note, and a <b>try it</b> exercise for your own project.</p>',
-        f'  <ul class="shelf shelf-series">\n{book_items(series2, PLANNED_2, series=2)}\n  </ul>',
+        '  <h3 class="shelf-book">Book 1 · The Solution Architect\'s Notebook <span>narrated by Ana</span></h3>',
+        f'  <ul class="shelf shelf-series">\n{book_items([j for j in series2 if j.get("book_no", 1) == 1], PLANNED_2, series=2, book=1, casefile=True)}\n  </ul>',
+        '  <h3 class="shelf-book">Book 2 · The Product Owner\'s Notebook <span>narrated by Grace</span></h3>',
+        f'  <ul class="shelf shelf-series">\n{book_items([j for j in series2 if j.get("book_no", 1) == 2], PLANNED_PRODUCT, series=2, book=2)}\n  </ul>',
         AUTHOR_NOTE,
         '  <h2 id="future"><span class="num">→</span>Future log <span class="side">plans, not promises</span></h2>',
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
@@ -955,7 +1055,7 @@ def render_casefile():
         c.two_books.html(),
         f'  <ul class="bookcards">\n{books}\n  </ul>',
         '  <h2 id="timeline"><span class="num">7</span>The story timeline <span class="side">every note, pinned to its date</span></h2>',
-        '  <p>Read one book from start to end, or follow the story in date order across books. <span class="sig-inline">★</span> marks story events, <span class="sig-inline">✎</span> a note.</p>',
+        '  <p>Read one book from start to end, or follow the story in date order across books. <span class="sig-inline">★</span> story events · <span class="sig-inline">✎</span> Ana’s notebook · <span class="sig-inline sig-2">✎</span> Grace’s notebook.</p>',
         f'  <div class="future timeline">\n{chr(10).join(months)}\n  </div>',
         '  <p class="aside">the facts on this page are the source of truth for every note. If a note and this page disagree, this page wins (and the note gets fixed).</p>',
         '  <p class="folio">✦</p>',
@@ -988,16 +1088,23 @@ def load_content(key):
 
 def main():
     listing = []
+    loaded = {j["key"]: load_content(j["key"]) for j in JOURNALS}
+    back = {}
+    for j in JOURNALS:
+        for slug, n in loaded[j["key"]].items():
+            num, _, title, *_ = entry(j, slug)
+            for key, oslug, here, *there in n.get("meanwhile", []):
+                back.setdefault((key, oslug), []).append((j, slug, title, there[0] if there else here))
     for j in JOURNALS:
         key = j["key"]
         out = PUBLIC / key
         (out / "notes").mkdir(parents=True, exist_ok=True)
-        notes = load_content(key)
+        notes = loaded[key]
         missing = [c[1] for c in j["catalogue"] if c[1] not in notes and c[1] not in j["handmade"]]
         if missing:
             print(f"[{key}] no content yet for:", ", ".join(missing))
         for slug, n in notes.items():
-            (out / "notes" / f"{slug}.html").write_text(render_note(j, n), encoding="utf-8")
+            (out / "notes" / f"{slug}.html").write_text(render_note(j, n, back.get((key, slug), [])), encoding="utf-8")
         print(f"[{key}] wrote {len(notes)} notes")
         (out / "index.html").write_text(render_index(j), encoding="utf-8")
         (out / "all.html").write_text(render_all(j), encoding="utf-8")

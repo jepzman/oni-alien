@@ -147,3 +147,28 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
 | 0005 | Cache StockPilot stock per store, sync by events | 2026-01-26 | Accepted |
 | 0006 | Introduce one managed Kafka cluster | 2026-02-23 | Accepted |
 | 0007 | Send orders to delivery via a transactional outbox (Vol. 2 sample) | 2026-03-14 | Accepted |
+
+## Book 2, Vol. 1: Grace's facts (October 2025 → January 2026)
+
+- **Interviews** (14–24 Oct): 12 customers (6 express, 4 slots, 2 lapsed). Pattern: they don't mind substitutes, they
+  mind not being asked (12/12); they find out at the door (10/12); allergies make some swaps unsafe (4/12). “Rik”, 38,
+  two kids, one with a dairy allergy: “I don't mind a swap. I mind finding out on the doormat.”
+- **Jobs**: J1 express “dinner tonight” (~70 % of orders); J2 slots “the week's shop” (~30 %); J3 emerging “the office
+  pantry” (2 of 12 interviews).
+- **Proto-personas**: the tonight-dinner parent (6 interviews, high), the Sunday planner (4, medium), the office stocker (2, low).
+- **Journey**: express order 17:20 → item out of stock 17:31 → swap without asking 17:33 → door 17:48. Moment of truth: 17:31.
+- **Problem statement** (7 Nov) and **outcome**: substitution refund tickets 6 % → 2 % of orders by end Q2 2026; costs
+  ≈ €45,000/month; customers with 2+ refund tickets order 30 % less the next month.
+- **Opportunity tree** (10 Nov): O1 “let me say yes or no” (chosen solution: approve in app, 2-minute window),
+  O2 “tell me before the courier”, O3 “never swap this”, O4 “it should be in stock” (Ana's StockPilot cache).
+  Parked: ML recipe ideas (Femke, an investor's suggestion); faster picking screen (Joost's roadmap).
+- **North star** (19 Nov): perfect orders per week (complete or accepted swap, on time, no ticket within 7 days):
+  ≈ 23,000/week = 82 % (express 79 %, slots 88 %). Inputs: orders/week 28,000; % complete 91 %; % on time 88 %; % no refund 94 %.
+- **Baseline** (26 Nov): 400 tickets re-tagged: 6.2 % of October's 124,000 orders (express 7.4 %, slots 3.5 %;
+  Noord 6.5 %, Zuid 5.9 %); the helpdesk tag was wrong 38 % of the time. New tag rule live 1 Dec.
+- **Fake door** (3–17 Dec): “Larder for your office?”: 21,000 sessions, 140 clicks (0.67 %), 38 left details,
+  9 offices with 40+ staff. Femke takes the numbers to the January trade fair (where she meets Korenwolf).
+- **Concierge test** (Noord, 8–19 Dec, 17:00–20:00): 412 swaps on 1,960 express orders; 81 % answered < 2 min,
+  74 % accepted, 15 % chose no swap, 11 % no answer; swap refund tickets 1.1 % (Zuid 6.8 %); picking +40 s. ≈ 60 agent-hours.
+- **Prototype test** (13–22 Jan 2026): 6 customers, 3 pickers. Fixes: big countdown, price difference shown,
+  glove-friendly buttons, pickers continue (answer applied at packing), inline “never swap this”.
