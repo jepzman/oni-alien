@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Controlled Time &amp; Randomness · Jef’s Notes</title>
+<meta name="description" content="Inject the clock, the random seed and the ids, so every run is the same.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-testing">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 4 · testing patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="deterministic-tests">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 15.12.26</span><span class="topic">collection · <b>reliability &amp; speed</b></span></div>
+  <p class="kicker">a.k.a. “a film, not a live broadcast”</p>
+  <h1><span class="hl">Controlled Time &amp; Randomness</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Anything that changes between runs (<b>the clock</b>, <b>time zones</b>, <b>random numbers</b>, <b>generated ids</b>) makes tests pass today and fail tomorrow. <b>Inject</b> them as dependencies: production gets the real ones, tests get a <b>fixed clock</b>, a <b>seeded random</b> and <b>predictable ids</b>. Then test the scary moments (month end, midnight, leap day) <b>on purpose</b>.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> test reliability</li><li><b>Sources of chaos:</b> now(), time zones, Math.random(), UUIDs, ordering</li><li><b>Tools:</b> fake timers, seeded RNGs, TZ pinning</li><li><b>Pairs with:</b> flaky test quarantine, property-based testing</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Code that calls <code>new Date()</code> or <code>Math.random()</code> directly behaves <span class="hl-pink">differently every run</span>. Its tests pass on most days and fail on a few, which is the worst kind of test.</p>
+  <ul>
+    <li>“Renews next month” fails on 31 January.</li>
+    <li>Passes on laptops in Amsterdam, fails on CI in UTC.</li>
+    <li>One random value in a hundred triggers an untested path.</li>
+    <li>Tests <code>sleep(2000)</code> waiting for time to pass, and are slow and still flaky.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a calendar showing the 31st of the month and a clock at 23:59. A test that checks a subscription renews next month passes all month, then fails on the 31st, at midnight, in a different time zone on the CI server, and when the random coupon code happens to start with a zero."><g class="rough"><g transform="translate(30 40) scale(1.8)"><g class="d"><rect class="f-y" x="0" y="8" width="56" height="50" rx="4"/><path d="M0 22 h56 M14 2 v12 M42 2 v12"/><path d="M10 32 h8 M24 32 h8 M38 32 h8 M10 44 h8 M24 44 h8"/></g></g><g transform="translate(190 50) scale(1.6)"><g class="d d-red"><circle class="f-paper" cx="30" cy="30" r="26"/><path d="M30 14 V30 H42"/></g></g></g><text class="t-head" x="80" y="186" text-anchor="middle" font-size="30">31</text><text class="t-s t-red" x="240" y="170" text-anchor="middle">23:59 UTC</text><text class="t-s t-green" x="560" y="50" text-anchor="middle">passes on the 12th ✓</text><text class="t-s t-red" x="560" y="90" text-anchor="middle">fails on the 31st ✗</text><text class="t-s t-red" x="560" y="130" text-anchor="middle">fails on CI (other time zone) ✗</text><text class="t-s t-red" x="560" y="170" text-anchor="middle">fails if Math.random() &lt; 0.01 ✗</text><text class="t-s t-pen" x="560" y="220" text-anchor="middle">“works on my machine”</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Tests that read the real clock and real randomness pass most days, and fail on the 31st at 23:59.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">a film, not a live broadcast</span></h2>
+  <p>A <b>live broadcast</b> is never the same twice. A <b>film</b> plays the same frames in the same order every showing, and you can <b>pause</b>, <b>rewind</b> and <b>jump to minute 87</b>. Good tests are films.</p>
+  <ul>
+    <li>The projector's frame counter is an injected <b>clock</b>.</li>
+    <li>Jumping to a scene is <b>setting or advancing time</b>.</li>
+    <li>The same print every showing is a <b>seeded</b> random generator.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a cinema projector playing a film. Unlike a live sports broadcast, the film is identical every time: the same frames in the same order, whatever the weather or the time of day. You can pause it, rewind it, and jump to any minute."><g class="rough"><g transform="translate(40 50) scale(1.8)"><g class="d"><rect class="f-paper" x="0" y="10" width="70" height="46" rx="5"/><path d="M24 0 l11 10 l11 -10 M14 62 h42"/><path d="M10 20 h40 v28 h-40 z"/></g></g><g transform="translate(360 60) scale(1.6)"><g class="d"><rect class="f-y" x="0" y="14" width="64" height="40" rx="5"/><path d="M20 14 l6 -8 h12 l6 8"/><circle class="f-y" cx="32" cy="34" r="11"/></g></g><path class="d d-dash" d="M470 110 h240"/><rect class="d f-paper" x="480" y="90" width="36" height="40" rx="2"/><rect class="d f-paper" x="526" y="90" width="36" height="40" rx="2"/><rect class="d f-paper" x="572" y="90" width="36" height="40" rx="2"/><rect class="d f-paper" x="618" y="90" width="36" height="40" rx="2"/><rect class="d f-paper" x="664" y="90" width="36" height="40" rx="2"/></g><text class="t-s t-red" x="105" y="200" text-anchor="middle">live: never the same</text><text class="t-s t-green" x="590" y="200" text-anchor="middle">film: same frames, any minute</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A film, not a live broadcast: identical every showing, and you can jump to any minute.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Live broadcast</td><td>Code reading the real clock and randomness</td></tr>
+      <tr><td>A film print</td><td>Injected clock, seeded random, predictable ids</td></tr>
+      <tr><td>Jump to minute 87</td><td>Set the clock to 2027-01-31 23:59Z</td></tr>
+      <tr><td>Fast-forward</td><td><code>clock.advance(minutes(1))</code> instead of sleep</td></tr>
+      <tr><td>Same print every showing</td><td>Same seed, same results</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">make time and chance inputs</span></h2>
+  <p>Treat time, randomness and ids as <b>inputs</b>, like any other argument. Then the edge cases become ordinary test cases you choose deliberately.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Controlled time and randomness. Production code receives a clock, a random generator and an id generator as dependencies. Production uses the system clock and crypto random. Tests pass a fixed clock set to 31 January at 23:59 UTC, a seeded random generator and sequential ids, and can advance the clock by one minute to test the renewal."><g class="rough"><rect class="d f-blue" x="260" y="20" width="240" height="70" rx="10"/><rect class="d f-y" x="20" y="140" width="220" height="56" rx="10"/><path class="d" d="M130 136 L380 94"/><path class="d" d="M370.2 100.9 L380 94 L368.5 90.6"/><rect class="d f-y" x="270" y="140" width="220" height="56" rx="10"/><path class="d" d="M380 136 L380 94"/><path class="d" d="M385.2 104.8 L380 94 L374.8 104.8"/><rect class="d f-y" x="520" y="140" width="220" height="56" rx="10"/><path class="d" d="M630 136 L380 94"/><path class="d" d="M391.5 90.6 L380 94 L389.8 100.9"/></g><text class="t-head" x="380" y="62" text-anchor="middle" font-size="17">renewSubscription()</text><text class="t-head" x="130" y="164" text-anchor="middle" font-size="17">clock</text><text class="t" x="130" y="188" text-anchor="middle" font-size="17">now()</text><text class="t-head" x="380" y="164" text-anchor="middle" font-size="17">random</text><text class="t" x="380" y="188" text-anchor="middle" font-size="17">next()</text><text class="t-head" x="630" y="164" text-anchor="middle" font-size="17">ids</text><text class="t" x="630" y="188" text-anchor="middle" font-size="17">newId()</text><text class="t-s t-green" x="130" y="230" text-anchor="middle">test: fixed 2027-01-31 23:59Z</text><text class="t-s t-green" x="380" y="230" text-anchor="middle">test: seed 42</text><text class="t-s t-green" x="630" y="230" text-anchor="middle">test: id-1, id-2…</text><text class="t-s t-pen" x="380" y="270" text-anchor="middle">clock.advance(1 min) → test the boundary on purpose</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Inject the clock, randomness and ids. Production gets real ones; tests get fixed, seeded, steppable ones.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Find the hidden inputs</b><p>Search for <code>Date.now</code>, <code>new Date()</code>, <code>Math.random</code>, <code>randomUUID</code>, <code>setTimeout</code>.</p></li>
+    <li><b>Inject them</b><p>A <code>Clock</code>, <code>Random</code> and <code>IdGenerator</code> passed in, with real defaults in production.</p></li>
+    <li><b>Pin the environment</b><p>Run tests with <code>TZ=UTC</code> and a fixed locale.</p></li>
+    <li><b>Use fake timers</b><p>Advance time instead of sleeping (<code>vi.useFakeTimers()</code>, <code>vi.setSystemTime</code>).</p></li>
+    <li><b>Test the edges on purpose</b><p>Month ends, leap days, DST switches, midnight, year boundaries.</p></li>
+    <li><b>Log seeds</b><p>When randomness is part of the test, print the seed so failures can be replayed.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Deterministic</dt><dd>Same inputs, same result, every time.</dd></div>
+    <div><dt>Injected clock</dt><dd>A time source passed in rather than read globally.</dd></div>
+    <div><dt>Fake timers</dt><dd>Test helpers that control timers and the date.</dd></div>
+    <div><dt>Seed</dt><dd>Starting value that makes random output repeatable.</dd></div>
+    <div><dt>DST</dt><dd>Daylight saving time: days with 23 or 25 hours.</dd></div>
+    <div><dt>Hidden input</dt><dd>Something code reads that the test doesn't control.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>renewal.ts + renewal.test.ts</span><span>Vitest</span></div>
+<pre><code><span class="k">export</span> <span class="k">const</span> systemClock = { now: () =&gt; <span class="k">new</span> Date() };
+
+<span class="k">export</span> <span class="k">function</span> nextRenewal(sub: Subscription, clock = systemClock) {
+  <span class="k">return</span> addMonthsClamped(sub.renewsOn ?? clock.now(), 1);    <span class="c">// 31 Jan → 28 Feb</span>
+}
+
+<span class="c">// test: choose the scary moment on purpose</span>
+<span class="k">const</span> fixed = (iso: string) =&gt; ({ now: () =&gt; <span class="k">new</span> Date(iso) });
+
+it(<span class="s">"renews on the last day of February from 31 January"</span>, () =&gt; {
+  <span class="k">const</span> clock = fixed(<span class="s">"2027-01-31T23:59:00Z"</span>);
+
+  <span class="k">const</span> next = nextRenewal(aSubscription().build(), clock);
+
+  expect(next.toISOString()).toBe(<span class="s">"2027-02-28T23:59:00.000Z"</span>);
+});
+
+it(<span class="s">"expires a trial exactly 14 days later"</span>, () =&gt; {
+  vi.useFakeTimers({ now: <span class="k">new</span> Date(<span class="s">"2027-03-01T00:00:00Z"</span>) });
+  <span class="k">const</span> trial = startTrial();
+  vi.advanceTimersByTime(days(14));            <span class="c">// no sleeping</span>
+  expect(trial.isExpired()).toBe(<span class="k">true</span>);
+});</code></pre>
+  </div>
+  <p class="aside">tools: Vitest/Jest fake timers and <code>setSystemTime</code>, Sinon fake timers, freezegun and time-machine (Python), <code>java.time.Clock</code>, seedable RNGs (seedrandom, pure-rand), <code>TZ=UTC</code> in the test script.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Same result every run</b>, on every machine.</li><li><b>Edge cases on demand</b>: month end, DST, leap years.</li><li><b>No sleeping</b>: time-based tests run instantly.</li><li><b>Replayable</b> failures with seeds.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Extra parameters</b> (clock, random, ids) to pass around.</li><li><b>Fake timers can surprise</b> async code and libraries.</li><li><b>Real-time bugs</b> can hide if you never test real clocks.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Test-suite ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares tests of code that <b>reads the real clock and randomness</b> to the same tests with <b>injected, controlled</b> time, randomness and ids.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to read &amp; write?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A few extra parameters; clearer intent.</td></tr>
+      <tr data-before="2" data-after="5"><td>Fast feedback<small>quick to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No sleeps: advance time instantly.</td></tr>
+      <tr data-before="2" data-after="4"><td>Confidence<small>catches real bugs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Time edge cases are tested deliberately.</td></tr>
+      <tr data-before="1" data-after="5"><td>Reliability<small>no flaky runs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No more “fails on the 31st”.</td></tr>
+      <tr data-before="3" data-after="4"><td>Isolation<small>pinpoints the fault?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A failing date test names the exact moment.</td></tr>
+      <tr data-before="3" data-after="4"><td>Maintainability<small>survives refactors?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tests don't break as the calendar moves on.</td></tr>
+      <tr data-before="3" data-after="3"><td>Realism<small>close to production?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Controlled, not real, time.</td></tr>
+      <tr data-before="3" data-after="4"><td>Low cost<small>cheap to write &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Cheap once the seams exist.</td></tr>
+      <tr data-before="3" data-after="4"><td>Scalability<small>grows with the code?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Safe to run anywhere, in parallel.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Fixing one test, not the code</h3><p>Mocking <code>Date</code> globally in one test file. <span class="fix">Fix →</span> inject a clock into the code itself.</p></li>
+    <li><h3>Forgetting time zones</h3><p>Green locally, red on UTC CI. <span class="fix">Fix →</span> set <code>TZ=UTC</code> for tests; test other zones deliberately.</p></li>
+    <li><h3>sleep() in tests</h3><p>Slow and still racy. <span class="fix">Fix →</span> fake timers or polling with a deadline.</p></li>
+    <li><h3>Unseeded randomness</h3><p>A random failure nobody can reproduce. <span class="fix">Fix →</span> seed it and log the seed.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Anything involving dates: billing, trials, expiry, scheduling.</li><li>Code that generates ids, tokens or random choices.</li><li>Timers, retries and debouncing.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Truly time-independent pure logic.</li><li>A small set of real-clock smoke tests that verify the wiring.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Flaky test quarantine</b></li><li><b>Property-based testing</b></li><li><b>Test doubles</b></li><li><b>Retry with backoff</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why is calling new Date() inside business logic a testing problem?</summary><p>It's a hidden input that changes every run, so results depend on when and where tests run.</p></details>
+    <details><summary>How do you test that a trial expires after 14 days without waiting?</summary><p>Use fake timers or an injected clock and advance it by 14 days.</p></details>
+    <details><summary>Why set TZ=UTC for tests?</summary><p>So date results don't depend on the machine's time zone.</p></details>
+    <details><summary>Name three date edge cases worth testing deliberately.</summary><p>Month end (31st), leap day, daylight-saving switches (also midnight and year boundaries).</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Show a <span class="hl">film</span>, not a <span class="hl">live broadcast</span>, and jump to the <span class="hl">31st</span> on purpose.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/13-deterministic-tests.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Vitest docs, “Mocking: Dates and Timers”.</li><li>Martin Fowler, “Eradicating Non-Determinism in Tests”.</li><li>Oracle docs, <code>java.time.Clock</code>.</li><li>Zach Holman, “UTC is enough for everyone… right?”.</li></ul>
+  </div>
+  <p class="folio">13</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="characterization-tests.html"><small>← previous note</small>12 · Characterization Tests</a>
+  <a href="flaky-tests.html"><small>Next note →</small>14 · Flaky Test Quarantine</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 4 · a student's bullet journal on testing patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

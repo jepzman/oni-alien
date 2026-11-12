@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Test Data Builders · Jef’s Notes</title>
+<meta name="description" content="Build valid test objects with sensible defaults; spell out only what matters.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-testing">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 4 · testing patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="test-data-builders">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 10.11.26</span><span class="topic">collection · <b>structure</b></span></div>
+  <p class="kicker">a.k.a. “the usual, but no tomato”</p>
+  <h1><span class="hl">Test Data Builders</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Create test objects through <b>builders</b> that start from a <b>complete, valid default</b> and let each test override <b>only the detail it cares about</b>: <code>anOrder()</code> <code>.dueOn(yesterday)</code> <code>.build()</code>. Tests get shorter and say what matters, and when a type gains a field you change <b>one default</b>, not 200 tests.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> test setup</li><li><b>Origin:</b> Nat Pryce; <i>Growing Object-Oriented Software</i> (2009)</li><li><b>Cousins:</b> object mother, factories (factory_bot, Fishery)</li><li><b>Pairs with:</b> arrange–act–assert, property-based testing</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Real objects have many required fields. If every test builds them by hand, the <span class="hl-pink">noise drowns the signal</span>: you can't see which of 15 fields the test is actually about.</p>
+  <ul>
+    <li>A test about overdue orders spells out addresses and card numbers.</li>
+    <li>A new required field breaks hundreds of tests that don't care about it.</li>
+    <li>People copy-paste setup and slightly different “valid” objects spread everywhere.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a test that only cares whether an order is overdue, but has to build a user, an address, a payment method, three line items and a shipping option with fifteen fields. When the Order type gets a new required field, two hundred tests stop compiling."><g class="rough"><rect class="d f-paper" x="20" y="20" width="330" height="220" rx="4"/><path class="d d-red" d="M560 96 L560 140"/><path class="d d-red" d="M554.8 129.2 L560 140 L565.2 129.2"/></g><text class="t" x="32" y="46" text-anchor="start" font-size="15">new Order({</text><text class="t" x="32" y="71" text-anchor="start" font-size="15">  id: 1, user: { id: 7, name, email,</text><text class="t" x="32" y="96" text-anchor="start" font-size="15">    address: { street, city, zip } },</text><text class="t" x="32" y="121" text-anchor="start" font-size="15">  items: [ … 3 items … ],</text><text class="t" x="32" y="146" text-anchor="start" font-size="15">  payment: { card, expiry },</text><text class="t" x="32" y="171" text-anchor="start" font-size="15">  shipping: &#x27;express&#x27;,</text><text class="t t-red" x="32" y="196" text-anchor="start" font-size="15">  dueDate: &#x27;2026-01-01&#x27;, // ← the only</text><text class="t" x="32" y="221" text-anchor="start" font-size="15">})                     //  thing we test</text><text class="t-s t-red" x="560" y="80" text-anchor="middle">+1 required field</text><text class="t-s t-red" x="560" y="166" text-anchor="middle">200 tests break</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>To test one rule, every test spells out 15 fields. Add a field, fix 200 tests.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the regular sandwich</span></h2>
+  <p>At your usual sandwich shop you don't list twelve ingredients. You say <b>“the usual, but no tomato”</b>. The shop knows the sensible defaults; you speak only the <b>difference</b>.</p>
+  <ul>
+    <li>“The usual” is the builder's <b>default</b>.</li>
+    <li>“No tomato” is the <b>override</b> the test cares about.</li>
+    <li>When the shop adds a new sauce to the usual, nobody re-orders: <b>one place changes</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a sandwich shop order. The regular sandwich comes with sensible defaults: bread, butter, cheese, tomato. You only say what&#x27;s different: no tomato, extra pickles. Nobody lists all twelve ingredients every time."><g class="rough"><g transform="translate(40 60) scale(2.2)"><g class="d"><ellipse class="f-y" cx="34" cy="40" rx="32" ry="12"/><ellipse cx="34" cy="38" rx="20" ry="6"/><path d="M22 34 q6 -14 12 -4 q6 -12 12 2"/></g></g><rect class="d f-y" x="300" y="60" width="420" height="70" rx="10"/></g><text class="t-s" x="115" y="225" text-anchor="middle">the usual (defaults)</text><text class="t-head" x="510" y="102" text-anchor="middle" font-size="20">“the usual, but no tomato”</text><text class="t-s t-green" x="510" y="170" text-anchor="middle">only the difference is spoken</text><text class="t-s t-red" x="510" y="210" text-anchor="middle">✗ listing all 12 ingredients</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>“The usual, but no tomato.” You only say what's different.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>“The usual”</td><td>A builder with valid defaults: <code>anOrder()</code></td></tr>
+      <tr><td>“…but no tomato”</td><td>An override: <code>.dueOn(yesterday)</code></td></tr>
+      <tr><td>Handing over the sandwich</td><td><code>.build()</code></td></tr>
+      <tr><td>Shop adds a sauce</td><td>Type gains a field; only the default changes</td></tr>
+      <tr><td>Listing all 12 ingredients</td><td>Hand-built objects in every test</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">valid defaults + named overrides</span></h2>
+  <p>A builder is a tiny fluent API for your tests. Its method names become the <b>domain vocabulary</b> of your test suite.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="Test data builder. A function anOrder returns a builder holding a complete, valid default order. The test calls anOrder, then dueOn yesterday, then build. Only the relevant detail appears in the test; when Order gets a new field, only the builder&#x27;s defaults change."><g class="rough"><rect class="d f-y" x="20" y="40" width="230" height="150" rx="10"/><path class="d" d="M256 115 L296 115"/><path class="d" d="M285.2 120.2 L296 115 L285.2 109.8"/><rect class="d f-green" x="302" y="80" width="200" height="70" rx="10"/><path class="d" d="M508 115 L600 115"/><path class="d" d="M589.2 120.2 L600 115 L589.2 109.8"/><rect class="d f-blue" x="606" y="80" width="140" height="70" rx="10"/></g><text class="t-head" x="135" y="111" text-anchor="middle" font-size="20">anOrder()</text><text class="t" x="135" y="135" text-anchor="middle" font-size="17">valid defaults: 15 fields</text><text class="t-head" x="402" y="111" text-anchor="middle" font-size="16">.dueOn(yesterday)</text><text class="t" x="402" y="135" text-anchor="middle" font-size="14">only this detail</text><text class="t-s" x="554" y="100" text-anchor="middle">.build()</text><text class="t-head" x="676" y="122" text-anchor="middle" font-size="18">Order</text><text class="t-s t-green" x="140" y="240" text-anchor="middle">new field → change 1 default</text><text class="t-s t-pen" x="500" y="240" text-anchor="middle">test reads: an order due yesterday</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A builder holds a valid default; each test names only the detail it cares about.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Start from a valid default</b><p>Every field filled with a believable value that passes validation.</p></li>
+    <li><b>Add intention-revealing methods</b><p><code>.overdue()</code>, <code>.paidBy(card)</code>, <code>.withItems(3)</code>, not just raw setters.</p></li>
+    <li><b>Make defaults unique</b><p>Generate ids and emails so tests don't collide.</p></li>
+    <li><b>Compose builders</b><p>Pass one builder into another: <code>anOrder().for(</code> <code>aUser().inSpain())</code>.</p></li>
+    <li><b>Keep builders in one place</b><p><code>test/builders/</code>, shared by all tests.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Test data builder</dt><dd>Fluent helper that builds valid test objects.</dd></div>
+    <div><dt>Object mother</dt><dd>Named ready-made objects (<code>Orders.overdue()</code>).</dd></div>
+    <div><dt>Default</dt><dd>The value used when a test doesn't care.</dd></div>
+    <div><dt>Override</dt><dd>The detail a test deliberately sets.</dd></div>
+    <div><dt>Fixture</dt><dd>Any data or state a test needs before it runs.</dd></div>
+    <div><dt>Irrelevant detail</dt><dd>Setup noise that hides the test's intent.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>test/builders/order.ts</span><span>TypeScript</span></div>
+<pre><code><span class="k">let</span> seq = 0;
+
+<span class="k">export</span> <span class="k">function</span> anOrder(overrides: Partial&lt;Order&gt; = {}) {
+  <span class="k">const</span> order: Order = {
+    id: ++seq,
+    user: aUser().build(),
+    items: [anItem().build()],
+    shipping: <span class="s">"standard"</span>,
+    dueDate: daysFromNow(14),
+    ...overrides,
+  };
+  <span class="k">return</span> {
+    dueOn: (d: Date) =&gt; anOrder({ ...order, dueDate: d }),
+    overdue: () =&gt; anOrder({ ...order, dueDate: daysFromNow(-1) }),
+    build: () =&gt; order,
+  };
+}
+
+<span class="c">// the test says only what matters</span>
+it(<span class="s">"flags orders past their due date"</span>, () =&gt; {
+  <span class="k">const</span> order = anOrder().overdue().build();
+
+  expect(isOverdue(order, today())).toBe(<span class="k">true</span>);
+});</code></pre>
+  </div>
+  <p class="aside">tools: hand-written builders, Fishery and @faker-js/faker (TypeScript), factory_bot (Ruby), factory_boy (Python), Instancio and Lombok @Builder (Java), AutoFixture (.NET).</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Short tests</b> that show only what matters.</li><li><b>One place to change</b> when types grow.</li><li><b>Valid by default</b>: fewer accidental validation failures.</li><li><b>A shared domain vocabulary</b> for tests.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Builder code to maintain</b>.</li><li><b>Hidden defaults</b> can matter without anyone noticing.</li><li><b>Over-clever builders</b> become their own little framework.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Test-suite ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>hand-built objects in every test</b> to the same tests using <b>shared test data builders</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="2" data-after="5"><td>Simplicity<small>easy to read &amp; write?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tests show the one detail that matters.</td></tr>
+      <tr data-before="3" data-after="3"><td>Fast feedback<small>quick to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Confidence<small>catches real bugs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Defaults are always valid, so tests check real cases.</td></tr>
+      <tr data-before="3" data-after="4"><td>Reliability<small>no flaky runs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Unique ids avoid collisions between tests.</td></tr>
+      <tr data-before="3" data-after="4"><td>Isolation<small>pinpoints the fault?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Less setup noise between cause and effect.</td></tr>
+      <tr data-before="1" data-after="5"><td>Maintainability<small>survives refactors?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A new field changes one default, not 200 tests.</td></tr>
+      <tr data-before="3" data-after="3"><td>Realism<small>close to production?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Low cost<small>cheap to write &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New tests are a line or two of setup.</td></tr>
+      <tr data-before="2" data-after="5"><td>Scalability<small>grows with the code?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The whole team reuses the same builders.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>A test relies on a hidden default</h3><p>It passes only because the default country happens to be “NL”. <span class="fix">Fix →</span> if a value matters to the assertion, set it explicitly.</p></li>
+    <li><h3>Builders with logic</h3><p>The builder computes totals the same way the code does, so bugs hide in both. <span class="fix">Fix →</span> keep builders dumb; set values, don't compute them.</p></li>
+    <li><h3>A builder per test file</h3><p>Five slightly different <code>makeOrder</code> helpers. <span class="fix">Fix →</span> one shared builder per type.</p></li>
+    <li><h3>Shared mutable objects</h3><p>Tests reuse one built object and change it. <span class="fix">Fix →</span> build a fresh object per test.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Domain objects with many required fields.</li><li>Any type built in more than a handful of tests.</li><li>Integration tests that insert rows (pair with a persist helper).</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Tiny value types (<code>new Money(5, "EUR")</code> is fine).</li><li>One-off tests of trivial functions.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Arrange–Act–Assert</b></li><li><b>Property-based testing</b></li><li><b>Fakes</b></li><li><b>Normalization</b> (Vol. 3)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does a builder's default have to be?</summary><p>A complete, valid object, so tests only override what they care about.</p></details>
+    <details><summary>Why do builders make type changes cheaper?</summary><p>Only the builder's default has to change when a field is added.</p></details>
+    <details><summary>When should a test set a value explicitly?</summary><p>Whenever the assertion depends on that value.</p></details>
+    <details><summary>Builder vs object mother?</summary><p>An object mother offers fixed named objects; a builder offers defaults plus flexible overrides.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Order <span class="hl">“the usual”</span> and name only the <span class="hl">difference</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/03-test-data-builders.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Nat Pryce, “Test Data Builders: an alternative to the Object Mother pattern”.</li><li>Steve Freeman &amp; Nat Pryce, <i>Growing Object-Oriented Software, Guided by Tests</i>, ch. 22.</li><li>Martin Fowler, “ObjectMother” (bliki).</li><li>Fishery documentation (thoughtbot).</li></ul>
+  </div>
+  <p class="folio">03</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="arrange-act-assert.html"><small>← previous note</small>02 · Arrange–Act–Assert</a>
+  <a href="page-objects.html"><small>Next note →</small>04 · Page Objects</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 4 · a student's bullet journal on testing patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

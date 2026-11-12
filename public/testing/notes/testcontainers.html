@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Throwaway Containers · Jef’s Notes</title>
+<meta name="description" content="Test against the real database or broker, started fresh in a container.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-testing">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 4 · testing patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="testcontainers">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 24.11.26</span><span class="topic">collection · <b>doubles &amp; boundaries</b></span></div>
+  <p class="kicker">a.k.a. “a fresh hotel room”</p>
+  <h1><span class="hl">Throwaway Containers</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>For integration tests, don't share a test database or swap in SQLite. <b>Start the real dependency</b> (the same Postgres, Redis or Kafka version as production) <b>in a container</b> for the test run, run the migrations, <b>isolate each test</b> (rollback or a fresh schema), and <b>throw it away</b> afterwards. Real behaviour, no collisions, identical everywhere.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> integration testing</li><li><b>Library:</b> Testcontainers (Java, Go, .NET, Node, Python…)</li><li><b>Needs:</b> Docker or a compatible runtime</li><li><b>Pairs with:</b> test pyramid (middle layer), fakes</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Database code needs a real database to test. A <span class="hl-pink">shared test server</span> means runs trample each other; an <span class="hl-pink">in-memory substitute</span> means you're not testing what production runs.</p>
+  <ul>
+    <li>Two CI runs insert the same user and both fail.</li>
+    <li>The shared database is on an old schema; tests fail for no reason.</li>
+    <li>Queries using JSONB, upserts or row locks pass on SQLite and fail in production.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a shared test database on a server called test-db-01. Two CI runs write to it at the same time and break each other&#x27;s data, one developer has an old schema version, and a test passes locally on SQLite but the real Postgres query fails in production."><g class="rough"><rect class="d f-blue" x="20" y="20" width="170" height="54" rx="10"/><path class="d d-red" d="M196 47 L380 120"/><path class="d d-red" d="M368.0 120.9 L380 120 L371.9 111.2"/><rect class="d f-blue" x="20" y="96" width="170" height="54" rx="10"/><path class="d d-red" d="M196 123 L380 120"/><path class="d d-red" d="M369.3 125.4 L380 120 L369.1 115.0"/><rect class="d f-blue" x="20" y="172" width="170" height="54" rx="10"/><path class="d d-red" d="M196 199 L380 120"/><path class="d d-red" d="M372.1 129.1 L380 120 L368.0 119.5"/><path class="d d-thin f-paper" d="M395 90 v60 a55 9 0 0 0 110 0 v-60"/><ellipse class="d d-thin f-paper" cx="450" cy="90" rx="55" ry="9"/></g><text class="t-head" x="105" y="54" text-anchor="middle" font-size="17">CI run #1</text><text class="t-head" x="105" y="130" text-anchor="middle" font-size="17">CI run #2</text><text class="t-head" x="105" y="206" text-anchor="middle" font-size="17">Ana&#x27;s laptop</text><text class="t t-soft" x="450" y="180" text-anchor="middle" font-size="16">test-db-01 (shared)</text><text class="t-s t-red" x="640" y="60" text-anchor="middle">data collisions</text><text class="t-s t-red" x="640" y="100" text-anchor="middle">old schema</text><text class="t-s t-red" x="640" y="140" text-anchor="middle">SQLite ≠ Postgres</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One shared test database: runs collide, schemas drift, and “works on SQLite” isn't “works on Postgres”.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the hotel room</span></h2>
+  <p>Every hotel guest gets a <b>freshly made room</b>, identical to the others, <b>theirs alone</b>, and it's <b>cleaned when they leave</b>. You never inherit the last guest's mess.</p>
+  <ul>
+    <li>The room is a <b>container</b> started for your run.</li>
+    <li>Identical rooms are the <b>same image version</b> everywhere.</li>
+    <li>Cleaning up is <b>removing the container</b>, automatically.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a hotel room. Each guest gets a freshly made room with clean sheets, identical to every other room, and it&#x27;s cleaned when they leave. Nobody inherits the last guest&#x27;s mess, and nobody shares a room with a stranger."><g class="rough"><g transform="translate(60 40) scale(1.4)"><g class="d"><rect class="f-green" x="6" y="0" width="44" height="64" rx="2"/><circle cx="40" cy="34" r="3"/></g></g><g transform="translate(170 40) scale(1.4)"><g class="d"><rect class="f-y" x="6" y="0" width="44" height="64" rx="2"/><circle cx="40" cy="34" r="3"/></g></g><g transform="translate(280 40) scale(1.4)"><g class="d"><rect class="f-green" x="6" y="0" width="44" height="64" rx="2"/><circle cx="40" cy="34" r="3"/></g></g></g><text class="t-s t-green" x="220" y="190" text-anchor="middle">a fresh room per guest</text><text class="t-s t-pen" x="560" y="70" text-anchor="middle">clean sheets every time</text><text class="t-s t-pen" x="560" y="120" text-anchor="middle">no stranger&#x27;s luggage</text><text class="t-s t-pen" x="560" y="170" text-anchor="middle">cleaned when you leave</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A hotel room: fresh, identical, yours alone, and cleaned up when you leave.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>A fresh room per guest</td><td>A new database container per test run</td></tr>
+      <tr><td>Identical rooms</td><td>Pinned image: <code>postgres:16.4</code>, same as prod</td></tr>
+      <tr><td>Making the bed</td><td>Running migrations at start-up</td></tr>
+      <tr><td>Not sharing with strangers</td><td>Per-test isolation (rollback or schema)</td></tr>
+      <tr><td>Cleaning after check-out</td><td>Container removed when tests finish</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">start, migrate, isolate, discard</span></h2>
+  <p>Containers start in a few seconds. Start <b>one per test run</b> (not per test) and isolate tests inside it, so you keep realism without paying start-up time a thousand times.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Throwaway containers in a test run. The test suite starts a Postgres 16 container with the same version as production, runs the migrations, and each test runs inside a transaction that is rolled back, or gets its own schema. When the suite ends the container is removed. Every run and every developer gets an identical fresh database."><g class="rough"><rect class="d f-blue" x="20" y="100" width="150" height="70" rx="10"/><path class="d" d="M176 135 L256 135"/><path class="d" d="M245.2 140.2 L256 135 L245.2 129.8"/><g transform="translate(262 90) scale(1.5)"><g class="d"><path class="f-y" d="M4 18 l26 -12 l26 12 v32 l-26 12 l-26 -12 z"/><path d="M4 18 l26 12 l26 -12 M30 30 v32"/></g></g><path class="d" d="M356 135 L436 135"/><path class="d" d="M425.2 140.2 L436 135 L425.2 129.8"/><rect class="d f-green" x="442" y="100" width="160" height="70" rx="10"/><path class="d" d="M608 135 L680 135"/><path class="d" d="M669.2 140.2 L680 135 L669.2 129.8"/><g transform="translate(684 110) scale(1.0)"><g class="d"><path class="f-paper" d="M8 14 h44 l-5 46 h-34 z"/><path d="M2 14 h56 M22 14 v-8 h16 v8 M22 24 v28 M38 24 v28"/></g></g></g><text class="t-head" x="95" y="142" text-anchor="middle">test suite</text><text class="t-s" x="216" y="121" text-anchor="middle">start</text><text class="t-s t-pen" x="307" y="200" text-anchor="middle">postgres:16 (= prod)</text><text class="t-s" x="396" y="121" text-anchor="middle">migrate</text><text class="t-head" x="522" y="131" text-anchor="middle">tests</text><text class="t" x="522" y="155" text-anchor="middle" font-size="17">tx rolled back each</text><text class="t-s" x="644" y="121" text-anchor="middle">stop</text><text class="t-s t-green" x="380" y="260" text-anchor="middle">same on every laptop and every CI run</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Start the real database in a container, migrate, test, throw it away. Every run is identical and isolated.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Pin the production version</b><p><code>postgres:16.4</code>, not <code>latest</code>.</p></li>
+    <li><b>Start once per run</b><p>A global setup starts the container and exports its connection string.</p></li>
+    <li><b>Migrate</b><p>Run the same migrations production runs.</p></li>
+    <li><b>Isolate each test</b><p>Wrap each test in a transaction and roll back, or give each worker its own schema or database.</p></li>
+    <li><b>Clean up automatically</b><p>Testcontainers' reaper removes containers even if the run crashes.</p></li>
+    <li><b>Keep it in the middle layer</b><p>Use it for repositories and adapters, not every unit test.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Container</dt><dd>An isolated process with its own filesystem image.</dd></div>
+    <div><dt>Image tag</dt><dd>The exact version of the software in the container.</dd></div>
+    <div><dt>Global setup</dt><dd>Code that runs once before all tests.</dd></div>
+    <div><dt>Transaction rollback</dt><dd>Undoing a test's writes at the end.</dd></div>
+    <div><dt>Ryuk / reaper</dt><dd>Testcontainers' cleanup helper.</dd></div>
+    <div><dt>Environment parity</dt><dd>Tests run against what production runs.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>test/global-setup.ts + users.int.test.ts</span><span>Testcontainers + Vitest</span></div>
+<pre><code><span class="k">import</span> { PostgreSqlContainer } <span class="k">from</span> <span class="s">"@testcontainers/postgresql"</span>;
+
+<span class="k">export</span> <span class="k">async</span> <span class="k">function</span> setup() {
+  <span class="k">const</span> pg = <span class="k">await</span> <span class="k">new</span> PostgreSqlContainer(<span class="s">"postgres:16.4"</span>).start();   <span class="c">// ~3 s</span>
+  process.env.DATABASE_URL = pg.getConnectionUri();
+  <span class="k">await</span> runMigrations(process.env.DATABASE_URL);
+  <span class="k">return</span> () =&gt; pg.stop();                                              <span class="c">// teardown</span>
+}
+
+<span class="c">// each test runs in a transaction that is always rolled back</span>
+beforeEach(<span class="k">async</span> () =&gt; { tx = <span class="k">await</span> db.begin(); });
+afterEach(<span class="k">async</span> () =&gt; { <span class="k">await</span> tx.rollback(); });
+
+it(<span class="s">"upserts by email"</span>, <span class="k">async</span> () =&gt; {
+  <span class="k">const</span> repo = <span class="k">new</span> PostgresUserRepo(tx);
+
+  <span class="k">await</span> repo.upsert(aUser({ email: <span class="s">"ana@x.io"</span>, name: <span class="s">"Ana"</span> }));
+  <span class="k">await</span> repo.upsert(aUser({ email: <span class="s">"ana@x.io"</span>, name: <span class="s">"Ana T."</span> }));
+
+  expect(<span class="k">await</span> repo.countByEmail(<span class="s">"ana@x.io"</span>)).toBe(1);
+});</code></pre>
+  </div>
+  <p class="aside">tools: Testcontainers (Node, Java, Go, .NET, Python, Rust), Docker Compose for local stacks, GitHub Actions service containers, pg_tmp, Neon/Supabase branching for preview databases.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Real behaviour</b>: the same engine and version as production.</li><li><b>No collisions</b>: every run gets its own database.</li><li><b>Identical everywhere</b>: laptops and CI match.</li><li><b>Self-cleaning</b>: nothing left behind.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Slower than in-memory</b>: seconds to start.</li><li><b>Needs Docker</b> on laptops and CI.</li><li><b>More CI resources</b> (memory, image pulls).</li><li><b>Still not production</b>: no real data volume or network.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Test-suite ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares integration tests against a <b>shared test database or SQLite</b> to tests against a <b>throwaway container</b> of the production engine.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="4"><td>Simplicity<small>easy to read &amp; write?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One setup file; tests look normal.</td></tr>
+      <tr data-before="4" data-after="3"><td>Fast feedback<small>quick to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A few seconds of start-up per run.</td></tr>
+      <tr data-before="2" data-after="5"><td>Confidence<small>catches real bugs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Real SQL, constraints and locking are exercised.</td></tr>
+      <tr data-before="2" data-after="5"><td>Reliability<small>no flaky runs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No shared state between runs or people.</td></tr>
+      <tr data-before="3" data-after="4"><td>Isolation<small>pinpoints the fault?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Each test starts from a known state.</td></tr>
+      <tr data-before="3" data-after="4"><td>Maintainability<small>survives refactors?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Schema changes come from the real migrations.</td></tr>
+      <tr data-before="2" data-after="5"><td>Realism<small>close to production?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Same engine and version as production.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low cost<small>cheap to write &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Docker and CI minutes cost a little.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>grows with the code?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Parallel workers get their own schemas.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>A container per test</h3><p>1,000 tests × 3 s start-up. <span class="fix">Fix →</span> one container per run; isolate inside it.</p></li>
+    <li><h3>Using <code>latest</code></h3><p>A new major version breaks tests overnight. <span class="fix">Fix →</span> pin the exact production version.</p></li>
+    <li><h3>Tests depending on each other's data</h3><p>Test B passes only after test A inserted a row. <span class="fix">Fix →</span> roll back or reset per test; build data in each test.</p></li>
+    <li><h3>Everything becomes an integration test</h3><p>The suite slows to 20 minutes. <span class="fix">Fix →</span> keep logic in fast unit tests; containers for adapters.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Repositories, SQL queries and migrations.</li><li>Message consumers (Kafka, RabbitMQ) and caches (Redis).</li><li>Anything where an in-memory substitute behaves differently.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Pure business logic (unit tests with fakes).</li><li>Managed cloud services with no faithful container image.</li><li>Environments where Docker is unavailable (use a CI service container instead).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Fakes</b></li><li><b>Test pyramid</b></li><li><b>Parallel &amp; selective runs</b></li><li><b>Expand &amp; contract</b> (Vol. 3)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why not test Postgres code against SQLite?</summary><p>They differ in SQL features, types, locking and constraints, so passing tests don't prove production behaviour.</p></details>
+    <details><summary>Why start one container per run rather than per test?</summary><p>Start-up takes seconds; isolating tests inside one container keeps the suite fast.</p></details>
+    <details><summary>How do you isolate tests inside one database?</summary><p>Wrap each test in a transaction and roll back, or give each worker its own schema.</p></details>
+    <details><summary>Why pin the image version?</summary><p>So tests match production and don't break when a new version is released.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Every run gets a <span class="hl">fresh room</span>, the <span class="hl">same</span> as production, cleaned on <span class="hl">check-out</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/07-testcontainers.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Testcontainers documentation (testcontainers.com).</li><li>Martin Fowler / Ham Vocke, “The Practical Test Pyramid”, integration tests.</li><li>AtomicJar, “Testcontainers best practices”.</li><li>PostgreSQL docs, “Transactions”.</li></ul>
+  </div>
+  <p class="folio">07</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="fakes.html"><small>← previous note</small>06 · Fakes</a>
+  <a href="contract-testing.html"><small>Next note →</small>08 · Contract Testing</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 4 · a student's bullet journal on testing patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

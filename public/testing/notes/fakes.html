@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fakes · Jef’s Notes</title>
+<meta name="description" content="A small working version of a dependency, like an in-memory repository.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-testing">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 4 · testing patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="fakes">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 20.11.26</span><span class="topic">collection · <b>doubles &amp; boundaries</b></span></div>
+  <p class="kicker">a.k.a. “the flight simulator”</p>
+  <h1><span class="hl">Fakes</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>A fake is a <b>small, working implementation</b> of a dependency, like an <b>in-memory repository</b> backed by a Map, or a fake payment gateway that remembers charges. Tests use it like the real thing: <b>save, then find</b>. No scripting of every call. Run one <b>shared contract test</b> against both the fake and the real implementation so the fake can't quietly drift.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> isolation</li><li><b>Examples:</b> in-memory repo, fake clock, fake mail outbox</li><li><b>Kept honest by:</b> shared contract tests</li><li><b>Pairs with:</b> test doubles, throwaway containers</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Mocks script a conversation call by call. For anything with state, like a repository or a cart service, the script grows long and <span class="hl-pink">re-implements the dependency badly</span>, and tests break when you refactor harmless details.</p>
+  <ul>
+    <li>Thirty lines of <code>mockReturnValueOnce</code> per test.</li>
+    <li>Calling <code>find()</code> twice in the code breaks 40 tests.</li>
+    <li>The mock says save succeeded, but nothing is actually stored for the next step.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a test with five mocks set up line by line: when find user with id 7 return Ana, when save is called return true, when find again return Ana with the new email. The mocks repeat the database&#x27;s behaviour badly, and a refactor that calls find twice breaks every test."><g class="rough"><rect class="d f-paper" x="20" y="20" width="400" height="220" rx="4"/><path class="d d-red" d="M590 96 L590 140"/><path class="d d-red" d="M584.8 129.2 L590 140 L595.2 129.2"/></g><text class="t" x="34" y="50" text-anchor="start" font-size="15">repo.find.mockReturnValueOnce(ana)</text><text class="t" x="34" y="82" text-anchor="start" font-size="15">repo.save.mockResolvedValue(true)</text><text class="t" x="34" y="114" text-anchor="start" font-size="15">repo.find.mockReturnValueOnce(ana2)</text><text class="t" x="34" y="146" text-anchor="start" font-size="15">repo.list.mockReturnValue([ana])</text><text class="t" x="34" y="178" text-anchor="start" font-size="15">repo.exists.mockReturnValue(false)</text><text class="t" x="34" y="210" text-anchor="start" font-size="15">… 25 more lines …</text><text class="t-s t-red" x="590" y="80" text-anchor="middle">refactor: call find() twice</text><text class="t-s t-red" x="590" y="166" text-anchor="middle">40 tests fail, code is fine</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Mocks that script every call: 30 lines of setup, broken by harmless refactors.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the flight simulator</span></h2>
+  <p>Pilots don't train in a real plane, and they don't train with a <b>script</b> (“press A, the screen shows B”). They use a <b>simulator</b>: simplified insides, but it <b>really responds</b> to whatever they do, in any order.</p>
+  <ul>
+    <li>The simulator is the <b>fake</b>: real behaviour, simple insides.</li>
+    <li>The script is a <b>mock</b>: only works if you follow it exactly.</li>
+    <li>Simulators are certified against real planes: the <b>contract test</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a flight simulator. Pilots train in a simulator that really responds to the controls, with simplified physics, instead of a real plane or a script that says press button A, then the screen shows B."><g class="rough"><g transform="translate(60 50) scale(2.4)"><g class="d"><rect class="f-y" x="0" y="0" width="64" height="44" rx="4"/><path d="M24 44 l-4 12 h24 l-4 -12"/><path d="M14 30 l10 -10 l8 8 l14 -14"/></g></g></g><text class="t-s t-green" x="140" y="210" text-anchor="middle">responds like a plane</text><text class="t-s t-red" x="470" y="80" text-anchor="start">✗ the real plane: costly, risky</text><text class="t-s t-red" x="470" y="130" text-anchor="start">✗ a script: “press A, see B”</text><text class="t-s t-green" x="470" y="180" text-anchor="start">✓ simulator: simple but real</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A flight simulator: it really responds to the controls, with simpler insides than a plane.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The simulator</td><td><code>InMemoryUserRepository</code></td></tr>
+      <tr><td>Responds to any input order</td><td>Save, find, list in any order just works</td></tr>
+      <tr><td>Simplified physics</td><td>A Map instead of SQL</td></tr>
+      <tr><td>Certified against the real plane</td><td>Shared contract tests on fake and real</td></tr>
+      <tr><td>A scripted training video</td><td>A mock with call-by-call expectations</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">one interface, two implementations</span></h2>
+  <p>Fakes shine for <b>stateful</b> dependencies. Write them once, share them across the suite, and prove them with the same tests the real implementation passes.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Fake repository. Production code depends on a UserRepository interface. The real implementation talks to PostgreSQL. An InMemoryUserRepository keeps users in a Map and behaves the same way. The same contract test suite runs against both, so the fake can&#x27;t drift from the real one."><g class="rough"><rect class="d f-y" x="260" y="20" width="240" height="60" rx="10"/><path class="d" d="M330 84 L170 130"/><path class="d" d="M178.9 122.0 L170 130 L181.8 132.0"/><path class="d" d="M430 84 L590 130"/><path class="d" d="M578.2 132.0 L590 130 L581.1 122.0"/><rect class="d f-blue" x="40" y="134" width="260" height="70" rx="10"/><rect class="d f-green" x="460" y="134" width="260" height="70" rx="10"/><rect class="d f-paper d-green" x="200" y="230" width="360" height="50" rx="10"/><path class="d d-green d-dash" d="M300 226 L200 208"/><path class="d d-green" d="M211.6 204.8 L200 208 L209.7 215.1"/><path class="d d-green d-dash" d="M460 226 L560 208"/><path class="d d-green" d="M550.3 215.1 L560 208 L548.4 204.8"/></g><text class="t-head" x="380" y="57" text-anchor="middle" font-size="19">UserRepository</text><text class="t-head" x="170" y="165" text-anchor="middle" font-size="17">PostgresUserRepo</text><text class="t" x="170" y="189" text-anchor="middle" font-size="17">real database</text><text class="t-head" x="590" y="165" text-anchor="middle" font-size="17">InMemoryUserRepo</text><text class="t" x="590" y="189" text-anchor="middle" font-size="17">a Map, in memory</text><text class="t-head t-green" x="380" y="262" text-anchor="middle" font-size="17">same contract tests run on both</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One interface, two implementations, one shared contract test that keeps the fake honest.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Define the port</b><p>An interface your code depends on: <code>save</code>, <code>findById</code>, <code>findByEmail</code>.</p></li>
+    <li><b>Write the fake</b><p>A Map or array; keep it small and obviously correct.</p></li>
+    <li><b>Write contract tests</b><p>One suite, parameterised by implementation: “save then find returns it”, “email is unique”.</p></li>
+    <li><b>Run them on both</b><p>The fake in unit runs; the real one against a database container.</p></li>
+    <li><b>Use the fake everywhere</b><p>Services, handlers and use-case tests get fast, realistic behaviour.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Fake</dt><dd>A working, simplified implementation.</dd></div>
+    <div><dt>Port</dt><dd>An interface the domain depends on.</dd></div>
+    <div><dt>Adapter</dt><dd>A real implementation of a port (Postgres, Stripe).</dd></div>
+    <div><dt>Contract test</dt><dd>Tests every implementation of a port must pass.</dd></div>
+    <div><dt>Stateful dependency</dt><dd>One whose answers depend on earlier calls.</dd></div>
+    <div><dt>Drift</dt><dd>When the fake stops behaving like the real thing.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>users.fake.ts + users.contract.ts</span><span>Vitest</span></div>
+<pre><code><span class="k">export</span> <span class="k">class</span> InMemoryUserRepository implements UserRepository {
+  <span class="k">private</span> rows = <span class="k">new</span> Map&lt;string, User&gt;();
+  <span class="k">async</span> save(u: User) {
+    <span class="k">const</span> clash = [...this.rows.values()].find((x) =&gt; x.email === u.email &amp;&amp; x.id !== u.id);
+    <span class="k">if</span> (clash) <span class="k">throw</span> <span class="k">new</span> DuplicateEmail(u.email);          <span class="c">// same rule as the DB</span>
+    this.rows.set(u.id, structuredClone(u));
+  }
+  <span class="k">async</span> findById(id: string) { <span class="k">return</span> structuredClone(this.rows.get(id)) ?? <span class="k">null</span>; }
+}
+
+<span class="c">// one suite, every implementation</span>
+<span class="k">export</span> <span class="k">function</span> userRepositoryContract(make: () =&gt; Promise&lt;UserRepository&gt;) {
+  it(<span class="s">"finds what it saved"</span>, <span class="k">async</span> () =&gt; {
+    <span class="k">const</span> repo = <span class="k">await</span> make();
+    <span class="k">await</span> repo.save(aUser({ id: <span class="s">"7"</span> }));
+    expect(<span class="k">await</span> repo.findById(<span class="s">"7"</span>)).toMatchObject({ id: <span class="s">"7"</span> });
+  });
+  it(<span class="s">"rejects duplicate emails"</span>, <span class="k">async</span> () =&gt; { /* … */ });
+}
+describe(<span class="s">"in-memory"</span>, () =&gt; userRepositoryContract(<span class="k">async</span> () =&gt; <span class="k">new</span> InMemoryUserRepository()));
+describe(<span class="s">"postgres"</span>, () =&gt; userRepositoryContract(() =&gt; pgRepoInContainer()));</code></pre>
+  </div>
+  <p class="aside">tools: hand-written fakes, MSW handlers with in-memory state, <code>localstack</code> (AWS), fake SMTP servers like MailHog/Mailpit, Firebase and Azurite emulators, SQLite in-memory (careful: it isn't Postgres).</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Natural tests</b>: save, then find. No call scripts.</li><li><b>Refactor-friendly</b>: tests check behaviour, not calls.</li><li><b>Fast</b>: in-memory and in-process.</li><li><b>Reusable</b> across the whole suite.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Code to write and maintain</b>.</li><li><b>Can drift</b> from the real thing without contract tests.</li><li><b>Not the real engine</b>: SQL quirks, transactions and locks aren't covered.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Test-suite ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares tests using <b>call-by-call mocks</b> for a repository to tests using an <b>in-memory fake</b> kept honest by contract tests.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="2" data-after="4"><td>Simplicity<small>easy to read &amp; write?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tests read like normal usage.</td></tr>
+      <tr data-before="5" data-after="5"><td>Fast feedback<small>quick to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Both run in memory.</td></tr>
+      <tr data-before="3" data-after="4"><td>Confidence<small>catches real bugs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">State flows between steps like the real thing.</td></tr>
+      <tr data-before="4" data-after="4"><td>Reliability<small>no flaky runs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral to slightly better: less fragile setup.</td></tr>
+      <tr data-before="4" data-after="4"><td>Isolation<small>pinpoints the fault?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Failures still point at your code.</td></tr>
+      <tr data-before="1" data-after="5"><td>Maintainability<small>survives refactors?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Refactors don't break call scripts.</td></tr>
+      <tr data-before="2" data-after="3"><td>Realism<small>close to production?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Real behaviour, but not the real engine.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to write &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Writing the fake costs up front, saves later.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>grows with the code?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One fake serves hundreds of tests.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Fakes without contract tests</h3><p>The fake allows duplicate emails; production doesn't. <span class="fix">Fix →</span> run the same contract suite on fake and real.</p></li>
+    <li><h3>Over-smart fakes</h3><p>The fake re-implements half of PostgreSQL. <span class="fix">Fix →</span> keep it tiny; test SQL-specific behaviour against a real database.</p></li>
+    <li><h3>Returning shared references</h3><p>A test mutates a found object and changes the fake's state. <span class="fix">Fix →</span> return copies (<code>structuredClone</code>).</p></li>
+    <li><h3>SQLite as a fake for Postgres</h3><p>Tests pass; real queries fail on JSONB or locking. <span class="fix">Fix →</span> use a real Postgres container for data-layer tests.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Repositories, caches, queues, file stores.</li><li>Use-case and service tests with stateful collaborators.</li><li>Replacing long mock setups.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Simple one-call queries (a stub is enough).</li><li>Testing SQL itself (use the real database).</li><li>Dependencies whose behaviour is too complex to fake honestly.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Test doubles</b></li><li><b>Throwaway containers</b></li><li><b>Contract testing</b></li><li><b>Surrogate keys</b> (Vol. 3)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>How is a fake different from a stub?</summary><p>A stub returns canned answers; a fake actually works, keeping state so calls in any order behave sensibly.</p></details>
+    <details><summary>How do you stop a fake drifting from the real implementation?</summary><p>Run one shared contract test suite against both.</p></details>
+    <details><summary>Why return copies from an in-memory fake?</summary><p>So tests can't change stored state by mutating returned objects, just like a real database.</p></details>
+    <details><summary>When is a real database better than a fake?</summary><p>When you're testing queries, constraints, transactions or engine-specific features.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Train in a <span class="hl">simulator</span>, not from a <span class="hl">script</span>, and certify it against the real thing.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/06-fakes.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Martin Fowler, “Mocks Aren't Stubs” and “InMemoryTestDatabase”.</li><li>Google Testing Blog, “Know Your Test Doubles” and “Testing on the Toilet: Fake Your Way to Better Tests”.</li><li>Alistair Cockburn, “Hexagonal Architecture” (ports and adapters).</li><li>Software Engineering at Google, ch. 13 “Test Doubles”.</li></ul>
+  </div>
+  <p class="folio">06</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="test-doubles.html"><small>← previous note</small>05 · Test Doubles (Stubs, Spies, Mocks)</a>
+  <a href="testcontainers.html"><small>Next note →</small>07 · Throwaway Containers</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 4 · a student's bullet journal on testing patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

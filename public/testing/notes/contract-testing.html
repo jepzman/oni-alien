@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Contract Testing · Jef’s Notes</title>
+<meta name="description" content="Check that a service and its clients still agree on the API, without a full deploy.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-testing">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 4 · testing patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="contract-testing">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 27.11.26</span><span class="topic">collection · <b>doubles &amp; boundaries</b></span></div>
+  <p class="kicker">a.k.a. “plug and socket”</p>
+  <h1><span class="hl">Contract Testing</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>When a service and its clients are built by different teams, each side's tests can pass against <b>its own idea of the API</b> while production breaks. With <b>consumer-driven contracts</b>, each client records <b>exactly what it needs</b> (request and response shape) into a contract, and the provider <b>replays every contract in its CI</b>. Breaking changes fail the provider's build, <b>before deploy</b>, without a shared staging environment.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> integration between teams</li><li><b>Tools:</b> Pact, Spring Cloud Contract, schema checks</li><li><b>Style:</b> consumer-driven (CDC)</li><li><b>Pairs with:</b> API gateway (Vol. 1), micro-frontends (Vol. 2)</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Each team mocks the other side. The mocks are written once and <span class="hl-pink">never updated</span>, so both suites stay green while the real services drift apart.</p>
+  <ul>
+    <li>A field is renamed; every client breaks in production.</li>
+    <li>The only real check is a slow, shared staging environment that's always half broken.</li>
+    <li>Providers are afraid to change anything because they don't know who uses what.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of two teams. The orders service renames the field price to amount and all its tests pass. The mobile app&#x27;s tests also pass, because they use an old mock of the orders API. In production the app shows a price of undefined. The only way to catch it was a slow shared staging environment."><g class="rough"><rect class="d f-blue" x="20" y="40" width="200" height="70" rx="10"/><rect class="d f-green" x="540" y="40" width="200" height="70" rx="10"/><path class="d d-red" d="M226 75 L534 75"/><path class="d d-red" d="M523.2 80.2 L534 75 L523.2 69.8"/><path class="d d-red" d="M236.8 69.8 L226 75 L236.8 80.2"/><rect class="d f-pink d-red" x="260" y="160" width="240" height="60" rx="10"/></g><text class="t-head" x="120" y="71" text-anchor="middle">orders API</text><text class="t" x="120" y="95" text-anchor="middle" font-size="17">price → amount ✓</text><text class="t-head" x="640" y="71" text-anchor="middle">mobile app</text><text class="t" x="640" y="95" text-anchor="middle" font-size="17">mocked old API ✓</text><text class="t-s t-red" x="380" y="60" text-anchor="middle">nobody checks the gap</text><text class="t-head t-red" x="380" y="197" text-anchor="middle" font-size="18">“Price: undefined”</text><text class="t-s t-red" x="380" y="248" text-anchor="middle">found by customers, not tests</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Both sides green, production broken: each team tested against its own idea of the API.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">plug and socket</span></h2>
+  <p>The company that makes your kettle and the electrician who wired your kitchen <b>never meet</b>. Both build to the <b>same written standard</b>, and each checks their own side against it. So the plug fits, every time.</p>
+  <ul>
+    <li>The standard is the <b>contract</b>.</li>
+    <li>Each side tests <b>alone</b>, against the contract, not against each other.</li>
+    <li>With consumer-driven contracts, the plug makers write down what they need, and the socket maker checks every one.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a plug and a socket. The appliance maker and the electrician never meet, but both build to the same written standard. Each checks their own side against the standard, so the plug always fits."><g class="rough"><g transform="translate(60 50) scale(2.0)"><g class="d"><rect class="f-y" x="8" y="18" width="30" height="24" rx="4"/><path d="M16 18 v-10 M30 18 v-10 M23 42 v8 q0 10 20 10 h14"/></g></g><g transform="translate(340 40) scale(1.6)"><g class="d"><rect class="f-green" x="4" y="0" width="52" height="60" rx="3"/><path d="M14 12 h32 M14 22 h32 M14 32 h32 M14 42 h22"/></g></g><rect class="d f-paper" x="560" y="60" width="120" height="90" rx="8"/><path class="d" d="M600 90 v20 M640 90 v20"/><path class="d d-dash" d="M200 100 L330 100"/><path class="d" d="M319.2 105.2 L330 100 L319.2 94.8"/><path class="d d-dash" d="M550 100 L440 100"/><path class="d" d="M450.8 94.8 L440 100 L450.8 105.2"/></g><text class="t-s" x="110" y="200" text-anchor="middle">appliance maker</text><text class="t-s t-green" x="385" y="160" text-anchor="middle">the standard</text><text class="t-s" x="620" y="200" text-anchor="middle">socket maker</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Plug and socket makers never meet; both test against the same written standard.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The written plug standard</td><td>The contract file (requests + expected responses)</td></tr>
+      <tr><td>Kettle maker</td><td>The consumer (mobile app, frontend, other service)</td></tr>
+      <tr><td>Socket maker</td><td>The provider (orders API)</td></tr>
+      <tr><td>Each checks their own side</td><td>Consumer tests record; provider CI verifies</td></tr>
+      <tr><td>“Is it safe to sell?”</td><td><code>can-i-deploy</code> against the broker</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">record on one side, replay on the other</span></h2>
+  <p>A contract captures only what the consumer <b>actually uses</b>, so providers can freely change everything else and know immediately when they'd break someone.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Consumer-driven contract testing. The mobile app&#x27;s tests run against a mock provider and record a contract file saying: GET orders 42 returns id, status and price as a number. The contract is published to a broker. The orders service&#x27;s CI replays every consumer contract against the real service. Can-I-deploy checks the broker before release."><g class="rough"><rect class="d f-green" x="20" y="40" width="180" height="70" rx="10"/><path class="d" d="M206 75 L290 75"/><path class="d" d="M279.2 80.2 L290 75 L279.2 69.8"/><g transform="translate(296 30) scale(1.2)"><g class="d"><rect class="f-y" x="4" y="0" width="52" height="60" rx="3"/><path d="M14 12 h32 M14 22 h32 M14 32 h32 M14 42 h22"/></g></g><path class="d" d="M380 75 L460 75"/><path class="d" d="M449.2 80.2 L460 75 L449.2 69.8"/><rect class="d f-y" x="466" y="40" width="140" height="70" rx="10"/><path class="d" d="M536 114 L536 170"/><path class="d" d="M530.8 159.2 L536 170 L541.2 159.2"/><rect class="d f-blue" x="436" y="176" width="200" height="70" rx="10"/></g><text class="t-head" x="110" y="82" text-anchor="middle" font-size="17">mobile app tests</text><text class="t-s" x="248" y="61" text-anchor="middle">records</text><text class="t-s t-pen" x="332" y="120" text-anchor="middle">contract.json</text><text class="t-s" x="420" y="61" text-anchor="middle">publish</text><text class="t-head" x="536" y="82" text-anchor="middle" font-size="18">broker</text><text class="t-s" x="550" y="146" text-anchor="start">replay</text><text class="t-head" x="536" y="207" text-anchor="middle" font-size="17">orders API CI</text><text class="t" x="536" y="231" text-anchor="middle" font-size="17">verifies ✓ / ✗</text><text class="t-s t-pen" x="200" y="200" text-anchor="middle">GET /orders/42 → { id, status, price: number }</text><text class="t-s t-green" x="380" y="280" text-anchor="middle">can-i-deploy? asks the broker before release</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Consumers record what they need; the provider replays those needs in its own CI. No shared staging needed.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Write consumer tests</b><p>Against a mock provider generated by the tool; the interactions are saved as a contract.</p></li>
+    <li><b>Publish the contract</b><p>To a broker (Pact Broker / PactFlow), tagged with the consumer's version and branch.</p></li>
+    <li><b>Verify on the provider</b><p>The provider's CI starts the real service and replays every consumer's contract.</p></li>
+    <li><b>Use provider states</b><p>“Given order 42 exists” sets up data for each interaction.</p></li>
+    <li><b>Gate deploys</b><p><code>can-i-deploy</code> checks that the versions about to meet in production have verified contracts.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Consumer</dt><dd>The side that calls an API.</dd></div>
+    <div><dt>Provider</dt><dd>The side that serves the API.</dd></div>
+    <div><dt>Contract</dt><dd>Recorded interactions the consumer relies on.</dd></div>
+    <div><dt>Broker</dt><dd>Server that stores contracts and verification results.</dd></div>
+    <div><dt>Provider state</dt><dd>Named setup data for an interaction.</dd></div>
+    <div><dt>Schema test</dt><dd>Checking responses against OpenAPI/JSON Schema only.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>orders.pact.test.ts</span><span>Pact JS (consumer side)</span></div>
+<pre><code><span class="k">const</span> provider = <span class="k">new</span> PactV3({ consumer: <span class="s">"mobile-app"</span>, provider: <span class="s">"orders-api"</span> });
+
+it(<span class="s">"shows an order's price"</span>, <span class="k">async</span> () =&gt; {
+  provider
+    .given(<span class="s">"order 42 exists"</span>)
+    .uponReceiving(<span class="s">"a request for order 42"</span>)
+    .withRequest({ method: <span class="s">"GET"</span>, path: <span class="s">"/orders/42"</span> })
+    .willRespondWith({
+      status: 200,
+      body: { id: like(42), status: like(<span class="s">"paid"</span>), price: decimal(19.99) },
+    });
+
+  <span class="k">await</span> provider.executeTest(<span class="k">async</span> (mock) =&gt; {
+    <span class="k">const</span> order = <span class="k">await</span> ordersClient(mock.url).get(42);
+    expect(order.price).toBe(19.99);
+  });
+});
+<span class="c">// provider CI:  pact verify --provider orders-api   →  fails if "price" disappears</span></code></pre>
+  </div>
+  <p class="aside">tools: Pact and PactFlow (many languages), Spring Cloud Contract, Specmatic, OpenAPI diff tools (oasdiff) for breaking-change checks, GraphQL schema checks (Apollo GraphOS, graphql-inspector).</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Catches breaking API changes</b> before deploy.</li><li><b>No shared staging</b> needed to test integration.</li><li><b>Providers know who uses what</b>, so they can change safely.</li><li><b>Fast</b>: runs in each team's normal CI.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Tooling and a broker</b> to set up and run.</li><li><b>Learning curve</b>: provider states, matchers, versions.</li><li><b>Checks shape, not meaning</b>: business behaviour still needs tests.</li><li><b>Needs buy-in</b> from both teams.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Test-suite ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>each team mocking the other plus a shared staging environment</b> to <b>consumer-driven contract tests</b> with a broker.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="2"><td>Simplicity<small>easy to read &amp; write?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New tools and concepts to learn.</td></tr>
+      <tr data-before="1" data-after="4"><td>Fast feedback<small>quick to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Minutes in each team's CI instead of a staging cycle.</td></tr>
+      <tr data-before="2" data-after="4"><td>Confidence<small>catches real bugs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Breaking changes to used fields are caught.</td></tr>
+      <tr data-before="1" data-after="4"><td>Reliability<small>no flaky runs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No shared, half-broken environment.</td></tr>
+      <tr data-before="1" data-after="5"><td>Isolation<small>pinpoints the fault?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A failure names the consumer, interaction and field.</td></tr>
+      <tr data-before="2" data-after="4"><td>Maintainability<small>survives refactors?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Providers can change unused fields freely.</td></tr>
+      <tr data-before="3" data-after="3"><td>Realism<small>close to production?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Real provider, but only the recorded interactions.</td></tr>
+      <tr data-before="2" data-after="3"><td>Low cost<small>cheap to write &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Broker and setup cost; staging costs drop.</td></tr>
+      <tr data-before="1" data-after="5"><td>Scalability<small>grows with the code?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Works across many teams and services.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Contracts that test business logic</h3><p>Every pricing rule is encoded in the contract. <span class="fix">Fix →</span> contracts check shape and key interactions; logic stays in provider tests.</p></li>
+    <li><h3>Over-specified responses</h3><p>Exact values everywhere; any data change breaks it. <span class="fix">Fix →</span> use type matchers (<code>like</code>, <code>decimal</code>).</p></li>
+    <li><h3>Skipping can-i-deploy</h3><p>Contracts are verified but deploys don't check them. <span class="fix">Fix →</span> gate every deploy on the broker.</p></li>
+    <li><h3>Only the provider writes contracts</h3><p>The “contract” is whatever the provider says. <span class="fix">Fix →</span> let consumers record what they actually use.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Services and clients owned by different teams.</li><li>Many consumers of one API (web, mobile, partners).</li><li>Replacing slow shared staging environments.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>A frontend and backend in one repo, deployed together.</li><li>Public APIs with unknown consumers (use schema diff + versioning).</li><li>One team owning both sides with good integration tests.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Test doubles</b></li><li><b>Fakes</b></li><li><b>API gateway</b> (Vol. 1)</li><li><b>Micro-frontends</b> (Vol. 2)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why can both teams' tests pass while production breaks?</summary><p>Each tests against its own mock of the other side, and those mocks drift from reality.</p></details>
+    <details><summary>Who writes the contract in consumer-driven contract testing?</summary><p>The consumer, by recording the interactions it actually relies on.</p></details>
+    <details><summary>What does the provider do with contracts?</summary><p>Replays them against the real service in its CI and fails if any expectation is broken.</p></details>
+    <details><summary>What does can-i-deploy answer?</summary><p>Whether the version you're about to deploy has verified contracts with the versions of its partners in that environment.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Build to the <span class="hl">standard</span>, and let every <span class="hl">plug</span> tell the socket what it needs.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/08-contract-testing.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Ian Robinson, “Consumer-Driven Contracts: A Service Evolution Pattern” (martinfowler.com).</li><li>Pact documentation (docs.pact.io).</li><li>Spring Cloud Contract reference.</li><li>Sam Newman, <i>Building Microservices</i> (2nd ed.), ch. 9.</li></ul>
+  </div>
+  <p class="folio">08</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="testcontainers.html"><small>← previous note</small>07 · Throwaway Containers</a>
+  <a href="property-based.html"><small>Next note →</small>09 · Property-Based Testing</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 4 · a student's bullet journal on testing patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

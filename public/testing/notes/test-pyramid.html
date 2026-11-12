@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Test Pyramid · Jef’s Notes</title>
+<meta name="description" content="Many fast unit tests, fewer integration tests, a handful of end-to-end tests.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-testing">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 4 · testing patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="test-pyramid">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 03.11.26</span><span class="topic">collection · <b>structure</b></span></div>
+  <p class="kicker">a.k.a. “bench, rig, test drive”</p>
+  <h1><span class="hl">Test Pyramid</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Write <b>lots of small, fast unit tests</b>, <b>fewer integration tests</b> that touch real boundaries (database, HTTP), and <b>only a handful of end-to-end tests</b> for the critical journeys. Push each check to the <b>lowest layer that can catch it</b>. You get a suite that runs in minutes, fails precisely, and still proves the whole thing works.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> test strategy</li><li><b>Origin:</b> Mike Cohn, <i>Succeeding with Agile</i> (2009)</li><li><b>Variants:</b> testing trophy, honeycomb</li><li><b>Anti-pattern:</b> the ice-cream cone</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Browser tests feel like the most honest tests: they click what users click. So teams write <span class="hl-pink">hundreds of them</span>, and the suite turns into an <b>ice-cream cone</b>: slow, flaky, and vague about what broke.</p>
+  <ul>
+    <li>CI takes an hour, so people batch changes and merge without waiting.</li>
+    <li>A failing end-to-end test could mean any of fifty causes.</li>
+    <li>Random timeouts teach everyone to press “re-run”.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of an upside-down pyramid, an ice-cream cone. A huge scoop of slow end-to-end browser tests sits on top of a few integration tests and almost no unit tests. The suite takes 55 minutes and fails randomly, so developers merge without waiting."><g class="rough"><path class="d f-pink" d="M60 40 h360 l-180 200 z"/><path class="d d-thin" d="M105 90 h270 M150 140 h180 M195 190 h90"/><g transform="translate(500 40) scale(1.1)"><g class="d d-red"><circle class="f-paper" cx="30" cy="34" r="24"/><path d="M24 4 h12 M30 4 v6 M30 34 l10 -10 M50 14 l4 -4"/></g></g></g><text class="t-head" x="240" y="72" text-anchor="middle" font-size="19">end-to-end: 600</text><text class="t" x="240" y="122" text-anchor="middle" font-size="17">integration: 80</text><text class="t" x="240" y="172" text-anchor="middle" font-size="17">unit: 30</text><text class="t-s t-red" x="600" y="70" text-anchor="start">55 min per run</text><text class="t-s t-red" x="480" y="150" text-anchor="start">random failures → “re-run it”</text><text class="t-s t-red" x="480" y="190" text-anchor="start">red = “something, somewhere”</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The ice-cream cone: mostly slow browser tests, few fast ones. 55 minutes and flaky.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the car factory</span></h2>
+  <p>A car factory checks <b>every bolt on a bench</b> in seconds, checks <b>assembled sections on a rig</b>, and sends only <b>a few finished cars</b> on a full test drive. If a test drive finds a problem, they add a bench check so it's caught earlier next time.</p>
+  <ul>
+    <li>Bench checks are <b>unit tests</b>: cheap, fast, precise.</li>
+    <li>The rig is <b>integration tests</b>: real joints, fewer of them.</li>
+    <li>The test drive is <b>end-to-end</b>: proof it all works together.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a car factory. Every bolt and part is checked on a bench in seconds, assembled sections are checked on a rig, and only a few finished cars go on a full test drive. Nobody test-drives a car to find a faulty bolt."><g class="rough"><g transform="translate(40 40) scale(2.6)"><g class="d"><path class="f-y" d="M40 2 L78 66 h-76 z"/><path d="M17 40 h46 M28 22 h24"/></g></g></g><text class="t-s t-pen" x="330" y="70" text-anchor="start">1 · a few test drives (slow, real)</text><text class="t-s t-pen" x="330" y="130" text-anchor="start">2 · sections on a test rig</text><text class="t-s t-green" x="330" y="190" text-anchor="start">3 · every bolt on the bench (seconds)</text><text class="t-s t-pen" x="330" y="240" text-anchor="start">nobody test-drives to find a bad bolt</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A car factory: check every bolt on the bench, sections on a rig, and test-drive only a few finished cars.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>A bolt on the bench</td><td>A unit test of one function or class</td></tr>
+      <tr><td>A section on a rig</td><td>An integration test with a real database or HTTP layer</td></tr>
+      <tr><td>A full test drive</td><td>An end-to-end browser test of a user journey</td></tr>
+      <tr><td>Finding a bad bolt on a drive</td><td>Pushing that check down to a unit test</td></tr>
+      <tr><td>Most checks on the bench</td><td>Most tests at the bottom of the pyramid</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">the right test at the right layer</span></h2>
+  <p>The shape matters more than exact percentages. Each layer exists to catch what the cheaper layer below <b>can't</b>, never to repeat it.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="The test pyramid. A wide base of unit tests, about seventy percent, running in seconds. A middle band of integration tests that touch a real database or HTTP layer. A small top of end-to-end tests covering only the critical user journeys. Arrows show that higher layers are slower, costlier and more realistic, lower layers are faster and pinpoint failures."><g class="rough"><path class="d f-green" d="M60 270 h420 l-60 -80 h-300 z"/><path class="d f-y" d="M120 190 h300 l-60 -80 h-180 z"/><path class="d f-pink" d="M180 110 h180 l-90 -100 z"/><path class="d" d="M530 260 L530 30"/><path class="d" d="M535.2 40.8 L530 30 L524.8 40.8"/></g><text class="t-head" x="270" y="240" text-anchor="middle" font-size="18">unit · ~70% · ms each</text><text class="t-head" x="270" y="158" text-anchor="middle" font-size="17">integration · ~20%</text><text class="t-head" x="270" y="92" text-anchor="middle" font-size="16">e2e · few</text><text class="t-s t-red" x="548" y="60" text-anchor="start">slower, costlier,</text><text class="t-s t-red" x="548" y="86" text-anchor="start">more realistic</text><text class="t-s t-green" x="548" y="230" text-anchor="start">faster, pinpoints</text><text class="t-s t-green" x="548" y="256" text-anchor="start">the fault</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Lots of fast tests at the bottom, a few slow realistic ones at the top. Each layer catches what the one below can't.</figcaption></figure>
+  <ol class="steps">
+    <li><b>List the risks</b><p>Business rules, data access, wiring, the critical user journeys.</p></li>
+    <li><b>Rules → unit tests</b><p>Pricing, validation, state changes: pure functions and small classes, tested in milliseconds.</p></li>
+    <li><b>Boundaries → integration tests</b><p>Queries against a real database, HTTP handlers, message consumers.</p></li>
+    <li><b>Journeys → a few end-to-end tests</b><p>Sign up, checkout, payment: the paths that must never break.</p></li>
+    <li><b>Push bugs down</b><p>When an e2e test catches a bug, add a lower-level test that would have caught it.</p></li>
+    <li><b>Watch the shape</b><p>Track counts and run time per layer; a growing top is a smell.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Unit test</dt><dd>Tests one small piece in isolation, in milliseconds.</dd></div>
+    <div><dt>Integration test</dt><dd>Tests a piece together with a real boundary.</dd></div>
+    <div><dt>End-to-end (e2e)</dt><dd>Drives the whole running system like a user.</dd></div>
+    <div><dt>Ice-cream cone</dt><dd>Inverted pyramid: mostly slow e2e tests.</dd></div>
+    <div><dt>Testing trophy</dt><dd>A variant that favours integration tests.</dd></div>
+    <div><dt>Feedback loop</dt><dd>Time from a change to knowing if it broke something.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>package.json</span><span>one script per layer</span></div>
+<pre><code>{
+  <span class="s">"scripts"</span>: {
+    <span class="s">"test:unit"</span>:  <span class="s">"vitest run src --project unit"</span>,              <span class="c">// ~2,000 tests · 20 s</span>
+    <span class="s">"test:int"</span>:   <span class="s">"vitest run src --project integration"</span>,       <span class="c">// ~300 tests · 2 min</span>
+    <span class="s">"test:e2e"</span>:   <span class="s">"playwright test e2e/critical"</span>,               <span class="c">// ~25 tests · 6 min</span>
+    <span class="s">"test"</span>:       <span class="s">"npm run test:unit &amp;&amp; npm run test:int"</span>       <span class="c">// every push</span>
+  }
+}
+<span class="c">// CI: unit + integration on every push, e2e on merge to main and nightly</span></code></pre>
+  </div>
+  <p class="aside">tools: Vitest and Jest (unit), Testcontainers and Supertest (integration), Playwright and Cypress (e2e). Kent C. Dodds's “testing trophy” and Spotify's “honeycomb” are variants for UI-heavy and microservice code.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Fast feedback</b>: most failures show up in seconds.</li><li><b>Precise failures</b>: a red unit test points at one function.</li><li><b>Cheap to run</b> on every push.</li><li><b>Still realistic</b>: the top layer proves the journeys work.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Unit tests can miss wiring bugs</b>: things pass alone, fail together.</li><li><b>Over-mocking temptation</b> to keep things “unit”.</li><li><b>Needs judgement</b> about which layer each test belongs to.</li><li><b>Several tools</b> and test setups to maintain.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Test-suite ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares an <b>ice-cream cone</b> (mostly e2e tests) to a <b>pyramid-shaped suite</b> covering the same features.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="4"><td>Simplicity<small>easy to read &amp; write?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Small tests are easy to read; e2e tests are long.</td></tr>
+      <tr data-before="1" data-after="5"><td>Fast feedback<small>quick to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Most checks run in milliseconds.</td></tr>
+      <tr data-before="4" data-after="4"><td>Confidence<small>catches real bugs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The few e2e tests still prove the journeys.</td></tr>
+      <tr data-before="1" data-after="4"><td>Reliability<small>no flaky runs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Far fewer timing-sensitive browser tests.</td></tr>
+      <tr data-before="1" data-after="5"><td>Isolation<small>pinpoints the fault?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A red unit test points at one place.</td></tr>
+      <tr data-before="2" data-after="4"><td>Maintainability<small>survives refactors?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fewer brittle UI selectors to fix.</td></tr>
+      <tr data-before="5" data-after="3"><td>Realism<small>close to production?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Most tests no longer touch a real browser.</td></tr>
+      <tr data-before="2" data-after="4"><td>Low cost<small>cheap to write &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">CI minutes drop dramatically.</td></tr>
+      <tr data-before="1" data-after="4"><td>Scalability<small>grows with the code?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Unit tests scale with the codebase; e2e count stays small.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Mocking everything to stay “unit”</h3><p>Every collaborator is mocked; tests pass while the real wiring is broken. <span class="fix">Fix →</span> test boundaries with real integrations at the middle layer.</p></li>
+    <li><h3>Duplicating checks at every layer</h3><p>The same validation is tested in unit, API and e2e tests. <span class="fix">Fix →</span> test each rule once, at the lowest layer that can see it.</p></li>
+    <li><h3>Chasing percentages</h3><p>“We need exactly 70% unit tests.” <span class="fix">Fix →</span> aim for the shape, judge by speed and confidence.</p></li>
+    <li><h3>No e2e at all</h3><p>Everything passes, but the login page is blank. <span class="fix">Fix →</span> keep a small set of critical-path journeys.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Almost any product with a growing codebase.</li><li>Teams whose CI is slow or flaky.</li><li>Business logic that can be tested without the UI.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Thin UI glue with no logic (prefer integration tests, the “trophy”).</li><li>Tiny scripts where a couple of end-to-end checks are enough.</li><li>Exploratory prototypes you'll throw away.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Arrange–Act–Assert</b></li><li><b>Test doubles</b></li><li><b>Throwaway containers</b></li><li><b>Parallel &amp; selective runs</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What's the ice-cream cone anti-pattern?</summary><p>A suite with mostly slow end-to-end tests and few unit tests: the pyramid upside down.</p></details>
+    <details><summary>Where should a pricing rule be tested?</summary><p>In fast unit tests; the e2e layer only needs to show checkout works overall.</p></details>
+    <details><summary>What should you do when an e2e test catches a bug?</summary><p>Add a lower-level test that would have caught it, so the next one fails faster and more precisely.</p></details>
+    <details><summary>Why keep any e2e tests?</summary><p>They're the only layer that proves the whole system works together for real users.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Check every <span class="hl">bolt</span> on the bench, and take only a <span class="hl">few test drives</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/01-test-pyramid.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Mike Cohn, <i>Succeeding with Agile</i>, ch. 16 (2009).</li><li>Ham Vocke, “The Practical Test Pyramid” (martinfowler.com).</li><li>Kent C. Dodds, “The Testing Trophy and Testing Classifications”.</li><li>Google Testing Blog, “Just Say No to More End-to-End Tests”.</li></ul>
+  </div>
+  <p class="folio">01</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="../index.html"><small>← back to</small>Index</a>
+  <a href="arrange-act-assert.html"><small>Next note →</small>02 · Arrange–Act–Assert</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 4 · a student's bullet journal on testing patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

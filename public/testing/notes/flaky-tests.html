@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flaky Test Quarantine · Jef’s Notes</title>
+<meta name="description" content="Detect tests that pass and fail at random, isolate them and fix the cause.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-testing">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 4 · testing patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="flaky-tests">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 18.12.26</span><span class="topic">collection · <b>reliability &amp; speed</b></span></div>
+  <p class="kicker">a.k.a. “the alarm that beeps at random”</p>
+  <h1><span class="hl">Flaky Test Quarantine</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>A <b>flaky test</b> passes and fails on the <b>same code</b>. Left alone, flakes teach everyone to press “re-run” and ignore red. <b>Detect</b> them automatically (fail then pass on retry), <b>quarantine</b> them into a non-blocking job so the main suite stays trusted, give each an <b>owner and a deadline</b>, and <b>fix the root cause</b>: shared state, timing, order or the outside world.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> test reliability</li><li><b>Usual causes:</b> async timing, shared state, order, time, network</li><li><b>Tools:</b> retries with reporting, flaky dashboards</li><li><b>Pairs with:</b> controlled time &amp; randomness, throwaway containers</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">One flaky test costs a re-run. A hundred flaky tests cost the team's <span class="hl-pink">trust in red builds</span>, and then real failures get merged.</p>
+  <ul>
+    <li>“Just re-run it” becomes the team's reflex.</li>
+    <li>Merges wait for green by luck; CI time doubles.</li>
+    <li>A genuine regression is dismissed as “probably flaky”.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a CI history for one test showing green, green, red, green, red, green with no code changes. Developers&#x27; reaction is to press re-run. Over time everyone ignores red builds, and a real failure gets merged because people assumed it was just flaky again."><g class="rough"><circle class="d f-green" cx="40" cy="70" r="20"/><circle class="d f-green" cx="100" cy="70" r="20"/><circle class="d f-pink d-red" cx="160" cy="70" r="20"/><circle class="d f-green" cx="220" cy="70" r="20"/><circle class="d f-pink d-red" cx="280" cy="70" r="20"/><circle class="d f-green" cx="340" cy="70" r="20"/><circle class="d f-green" cx="400" cy="70" r="20"/><circle class="d f-pink d-red" cx="460" cy="70" r="20"/><rect class="d f-y" x="560" y="40" width="170" height="60" rx="10"/></g><text class="t-s t-pen" x="250" y="130" text-anchor="middle">same commit, 8 runs</text><text class="t-head" x="645" y="77" text-anchor="middle" font-size="20">↻ re-run</text><text class="t-s t-red" x="380" y="190" text-anchor="middle">“it&#x27;s just flaky” → a real bug gets merged</text><text class="t-s t-red" x="380" y="230" text-anchor="middle">trust in the suite: gone</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Same code, random results. Everyone learns to press “re-run”, then a real failure slips through.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the smoke alarm that beeps at random</span></h2>
+  <p>If one smoke alarm beeps for no reason, people start <b>pulling batteries</b>, and soon nobody reacts to <i>any</i> alarm. The right move: <b>take that alarm to the workbench</b>, keep the others working, repair it, test it and <b>put it back</b>.</p>
+  <ul>
+    <li>Pulling batteries is <b>“just re-run it”</b>.</li>
+    <li>The workbench is <b>quarantine</b>.</li>
+    <li>Putting it back is <b>returning the test to the blocking suite</b> once fixed.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a smoke alarm that goes off randomly, even with no smoke. People start taking out the battery. The right move is to move the faulty alarm to a workbench, put a temporary replacement up, and repair it, rather than ignoring every alarm in the house."><g class="rough"><g transform="translate(60 50) scale(1.8)"><g class="d d-red"><path class="f-paper" d="M10 44 q0 -30 20 -30 q20 0 20 30 z"/><path d="M4 46 h52 M30 8 v6 M26 50 a4 4 0 0 0 8 0"/></g></g><path class="d d-red" d="M200 100 L330 100"/><path class="d d-red" d="M319.2 105.2 L330 100 L319.2 94.8"/><path class="d d-green" d="M200 160 L330 200"/><path class="d d-green" d="M318.1 201.8 L330 200 L321.2 191.8"/><g transform="translate(340 170) scale(1.0)"><g class="d"><rect class="f-paper" x="0" y="20" width="70" height="36" rx="3"/><path d="M14 20 v-8 h14 v8 M42 20 v-12 h12 v12 M8 34 h54"/></g></g></g><text class="t-s t-red" x="115" y="180" text-anchor="middle">beeps for no reason</text><text class="t-s t-red" x="265" y="86" text-anchor="middle">✗ pull the battery</text><text class="t-s t-red" x="390" y="106" text-anchor="start">all alarms ignored</text><text class="t-s t-green" x="250" y="236" text-anchor="middle">✓ to the workbench</text><text class="t-s t-green" x="440" y="210" text-anchor="start">repair, test, put back</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A smoke alarm that beeps at random: take it to the workbench and fix it, don't pull every battery.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>An alarm beeping for no reason</td><td>A test failing on unchanged code</td></tr>
+      <tr><td>Pulling every battery</td><td>Ignoring red builds / blind re-runs</td></tr>
+      <tr><td>The workbench</td><td>A quarantined, non-blocking test job</td></tr>
+      <tr><td>A repair ticket</td><td>An owner and a deadline for the flaky test</td></tr>
+      <tr><td>Back on the ceiling</td><td>The fixed test rejoins the blocking suite</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">detect, isolate, own, fix</span></h2>
+  <p>Quarantine is a <b>hospital, not a graveyard</b>: tests go in with an owner and come back out fixed, or get deleted on purpose.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Flaky test quarantine workflow. CI detects a flaky test when it fails and then passes on retry with the same commit. The test is automatically tagged as quarantined and moved to a separate non-blocking job, and a ticket is opened with an owner and a deadline. The owner finds the root cause, such as shared state, timing or order dependence, fixes it, and the test returns to the blocking suite."><g class="rough"><rect class="d f-y" x="10" y="60" width="172" height="84" rx="10"/><rect class="d f-pink" x="198" y="60" width="172" height="84" rx="10"/><path class="d" d="M184 102 L196 102"/><path class="d" d="M185.2 107.2 L196 102 L185.2 96.8"/><rect class="d f-blue" x="386" y="60" width="172" height="84" rx="10"/><path class="d" d="M372 102 L384 102"/><path class="d" d="M373.2 107.2 L384 102 L373.2 96.8"/><rect class="d f-green" x="574" y="60" width="172" height="84" rx="10"/><path class="d" d="M560 102 L572 102"/><path class="d" d="M561.2 107.2 L572 102 L561.2 96.8"/><path class="d d-green d-dash" d="M660 150 Q380 260 100 150"/><path class="d d-green" d="M112.0 149.1 L100 150 L108.1 158.8"/></g><text class="t-head" x="96" y="98" text-anchor="middle" font-size="19">detect</text><text class="t" x="96" y="122" text-anchor="middle" font-size="15">fail → pass on retry</text><text class="t-head" x="284" y="98" text-anchor="middle" font-size="19">quarantine</text><text class="t" x="284" y="122" text-anchor="middle" font-size="15">non-blocking job</text><text class="t-head" x="472" y="98" text-anchor="middle" font-size="19">ticket</text><text class="t" x="472" y="122" text-anchor="middle" font-size="15">owner + deadline</text><text class="t-head" x="660" y="98" text-anchor="middle" font-size="19">fix cause</text><text class="t" x="660" y="122" text-anchor="middle" font-size="15">state · timing · order</text><text class="t-s t-green" x="380" y="232" text-anchor="middle">back in the main suite</text><text class="t-s t-pen" x="380" y="30" text-anchor="middle">the blocking suite only holds tests you trust</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Detect, quarantine (non-blocking), assign an owner, fix the root cause, bring it back. The main suite stays trusted.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Detect automatically</b><p>Retry failed tests once; if a retry passes on the same commit, record it as flaky (don't hide it).</p></li>
+    <li><b>Quarantine</b><p>Tag it (<code>@flaky</code>) and run it in a separate, non-blocking job that still reports.</p></li>
+    <li><b>Assign an owner and deadline</b><p>A ticket per flaky test; a cap on how many can be quarantined.</p></li>
+    <li><b>Find the cause</b><p>Run it 100× locally, in random order, in parallel; check timing, shared data, test order, real clock, network.</p></li>
+    <li><b>Fix and return</b><p>Fix the cause (not with a sleep), then move it back. Delete tests nobody will fix.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Flaky test</dt><dd>Passes and fails on the same code.</dd></div>
+    <div><dt>Quarantine</dt><dd>Running a test without letting it block merges.</dd></div>
+    <div><dt>Retry-on-failure</dt><dd>Re-running a failed test to detect flakiness.</dd></div>
+    <div><dt>Order dependence</dt><dd>A test that only passes after (or before) another.</dd></div>
+    <div><dt>Race condition</dt><dd>Result depends on which async step finishes first.</dd></div>
+    <div><dt>Auto-waiting</dt><dd>Assertions that retry until a condition holds or time runs out.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>playwright.config.ts + checkout.spec.ts</span><span>Playwright</span></div>
+<pre><code><span class="k">export</span> <span class="k">default</span> defineConfig({
+  retries: process.env.CI ? 1 : 0,        <span class="c">// a pass on retry is reported as "flaky"</span>
+  reporter: [[<span class="s">"html"</span>], [<span class="s">"json"</span>, { outputFile: <span class="s">"results.json"</span> }]],
+  projects: [
+    { name: <span class="s">"blocking"</span>,    grepInvert: /@quarantine/ },
+    { name: <span class="s">"quarantine"</span>,  grep: /@quarantine/ },     <span class="c">// CI: continue-on-error</span>
+  ],
+});
+
+<span class="c">// ✗ the usual cause: a fixed sleep racing the app</span>
+<span class="k">await</span> page.waitForTimeout(2000);
+expect(<span class="k">await</span> page.locator(<span class="s">".total"</span>).textContent()).toBe(<span class="s">"€16"</span>);
+
+<span class="c">// ✓ auto-waiting assertion: retries until true or timeout</span>
+<span class="k">await</span> expect(page.getByTestId(<span class="s">"total"</span>)).toHaveText(<span class="s">"€16"</span>);
+
+test(<span class="s">"applies coupon @quarantine  JIRA-482 owner:ana due:2026-11-30"</span>, <span class="k">async</span> () =&gt; { /* … */ });</code></pre>
+  </div>
+  <p class="aside">tools: Playwright retries + flaky reporting, Jest/Vitest <code>--retry</code>, BuildPulse, Trunk Flaky Tests, Datadog Test Visibility, Gradle Develocity flaky detection, <code>--sequence.shuffle</code> to expose order dependence.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>A trusted main suite</b>: red means broken.</li><li><b>No blind re-runs</b>; faster merges.</li><li><b>Visible flakiness</b> with owners and trends.</li><li><b>Root causes fixed</b>, not hidden.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Quarantined tests don't protect you</b> while quarantined.</li><li><b>Process overhead</b>: tickets, owners, dashboards.</li><li><b>Retries can hide flakiness</b> if not reported.</li><li><b>Risk of a quarantine graveyard</b>.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Test-suite ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares a suite where <b>flaky tests block and people re-run</b> to one with <b>detection, quarantine and owned fixes</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to read &amp; write?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tags and a second job to understand.</td></tr>
+      <tr data-before="2" data-after="4"><td>Fast feedback<small>quick to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No more re-run loops.</td></tr>
+      <tr data-before="2" data-after="3"><td>Confidence<small>catches real bugs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Main suite trusted; quarantined tests temporarily don't protect.</td></tr>
+      <tr data-before="1" data-after="5"><td>Reliability<small>no flaky runs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Red builds mean something again.</td></tr>
+      <tr data-before="3" data-after="4"><td>Isolation<small>pinpoints the fault?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Real failures stand out from noise.</td></tr>
+      <tr data-before="2" data-after="4"><td>Maintainability<small>survives refactors?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Root causes fixed instead of sleeps added.</td></tr>
+      <tr data-before="3" data-after="3"><td>Realism<small>close to production?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="3"><td>Low cost<small>cheap to write &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fewer wasted CI minutes; some process cost.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>grows with the code?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Works as the suite and team grow.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Retries without reporting</h3><p>Retries quietly turn flaky tests green forever. <span class="fix">Fix →</span> report every pass-on-retry as flaky.</p></li>
+    <li><h3>A quarantine graveyard</h3><p>200 quarantined tests, none being fixed. <span class="fix">Fix →</span> owner, deadline and a cap; delete tests nobody will fix.</p></li>
+    <li><h3>Fixing with sleep</h3><p><code>waitForTimeout(5000)</code> makes it slower and still racy. <span class="fix">Fix →</span> wait for a condition (auto-waiting assertions).</p></li>
+    <li><h3>Blaming the test runner</h3><p>“CI is just slow.” <span class="fix">Fix →</span> reproduce: run 100×, shuffle order, run in parallel.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Any suite with UI, async or integration tests.</li><li>Teams where “re-run” has become a habit.</li><li>Large monorepos with shared CI.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Tiny suites where you can fix a flake on the spot.</li><li>As an excuse not to fix: quarantine is temporary.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Controlled time &amp; randomness</b></li><li><b>Throwaway containers</b></li><li><b>Page objects</b></li><li><b>Parallel &amp; selective runs</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What makes a test flaky?</summary><p>It passes and fails on the same code, because of timing, shared state, order, time or external systems.</p></details>
+    <details><summary>Why are flaky tests worse than no tests?</summary><p>They teach people to ignore red builds, so real failures get dismissed and merged.</p></details>
+    <details><summary>What does quarantine mean?</summary><p>The test still runs and reports, but in a non-blocking job, with an owner and deadline to fix it.</p></details>
+    <details><summary>What's the right fix for a test that sleeps 2 seconds?</summary><p>Wait for the actual condition with an auto-waiting assertion or polling, not a fixed delay.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Don't pull every <span class="hl">battery</span>. Take the beeping alarm to the <span class="hl">workbench</span>, and bring it <span class="hl">back</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/14-flaky-tests.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Martin Fowler, “Eradicating Non-Determinism in Tests”.</li><li>Google Testing Blog, “Flaky Tests at Google and How We Mitigate Them”.</li><li>Luo et al., “An Empirical Analysis of Flaky Tests” (FSE 2014).</li><li>Playwright docs, “Retries” and “Auto-waiting”.</li></ul>
+  </div>
+  <p class="folio">14</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="deterministic-tests.html"><small>← previous note</small>13 · Controlled Time &amp; Randomness</a>
+  <a href="parallel-selective.html"><small>Next note →</small>15 · Parallel &amp; Selective Runs</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 4 · a student's bullet journal on testing patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

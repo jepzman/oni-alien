@@ -58,6 +58,17 @@ DATA_ATTRS = [
     ("Operability", "calm to run?", "Backups, migrations, monitoring and on-call stay boring."),
     ("Evolvability", "easy to change shape?", "Adding columns, tables and features without big rewrites."),
 ]
+TESTING_ATTRS = [
+    ("Simplicity", "easy to read &amp; write?", "A teammate can read a test and know what it checks and why."),
+    ("Fast feedback", "quick to run?", "How soon you learn something broke: seconds, not an hour."),
+    ("Confidence", "catches real bugs?", "A green run really means the feature works."),
+    ("Reliability", "no flaky runs?", "Same code, same result, every time, on every machine."),
+    ("Isolation", "pinpoints the fault?", "A red test points at one cause instead of fifty."),
+    ("Maintainability", "survives refactors?", "Tests change when behaviour changes, not when internals move."),
+    ("Realism", "close to production?", "Real databases, browsers, networks and data shapes."),
+    ("Low cost", "cheap to write &amp; run?", "Authoring time, CI minutes and infrastructure. High = cheap."),
+    ("Scalability", "grows with the code?", "Still fast and useful at 10× the code and 10× the team."),
+]
 
 # ---------------------------------------------------------------- journals
 JOURNALS = [
@@ -161,21 +172,52 @@ JOURNALS = [
             (15, "star-schema", "Star Schema", "growing", "Shape analytics data as facts surrounded by dimensions, for fast reports."),
         ],
     ),
+    dict(
+        key="testing", vol=4, title="Testing Patterns", short="testing patterns",
+        theme="theme-testing", subject="software testing", term="Winter term · 2026", weekdays=(1, 4), start=date(2026, 11, 3),
+        kicker="lab notebook · results recorded as observed",
+        lead="My lab notebook on <span class=\"hl\">testing patterns</span>: how to shape a test suite you can trust, isolate the slow and scary parts, catch the bugs example tests miss, and keep it all fast and boring. {n} patterns in {c} collections, with the same eight sections as the other volumes, rated on nine <b>testing</b> qualities like fast feedback, confidence, reliability and realism. Examples use TypeScript with Vitest and Playwright, but the ideas work in any language.",
+        blurb="Structure, test doubles, smarter techniques and reliability: the patterns behind a test suite that is fast, honest and calm to keep green.",
+        attrs=TESTING_ATTRS, attrs_title="The nine testing ratings", attrs_side="what a good test suite is judged on", ratings_h2="Test-suite ratings",
+        handmade=set(),
+        collections=[
+            ("structure", "Structure", "shape the suite and every test in it"),
+            ("doubles", "Doubles &amp; boundaries", "deal with databases, networks and other teams"),
+            ("techniques", "Smarter techniques", "find the bugs example tests miss"),
+            ("reliability", "Reliability &amp; speed", "keep the suite fast, green and trusted"),
+        ],
+        catalogue=[
+            (1, "test-pyramid", "Test Pyramid", "structure", "Many fast unit tests, fewer integration tests, a handful of end-to-end tests."),
+            (2, "arrange-act-assert", "Arrange–Act–Assert", "structure", "Every test in three clear blocks: set up, do one thing, check the result."),
+            (3, "test-data-builders", "Test Data Builders", "structure", "Build valid test objects with sensible defaults; spell out only what matters."),
+            (4, "page-objects", "Page Objects", "structure", "Hide selectors behind a class per page, so UI tests read like user stories."),
+            (5, "test-doubles", "Test Doubles (Stubs, Spies, Mocks)", "doubles", "Stand-ins for slow or unpredictable dependencies, each with its own job."),
+            (6, "fakes", "Fakes", "doubles", "A small working version of a dependency, like an in-memory repository."),
+            (7, "testcontainers", "Throwaway Containers", "doubles", "Test against the real database or broker, started fresh in a container."),
+            (8, "contract-testing", "Contract Testing", "doubles", "Check that a service and its clients still agree on the API, without a full deploy."),
+            (9, "property-based", "Property-Based Testing", "techniques", "State a rule that must always hold and let the tool hunt for counter-examples."),
+            (10, "snapshot-testing", "Snapshot (Approval) Testing", "techniques", "Save the approved output once; fail when it changes, and review the diff."),
+            (11, "mutation-testing", "Mutation Testing", "techniques", "Plant small bugs in the code and check that the tests notice."),
+            (12, "characterization-tests", "Characterization Tests", "techniques", "Pin down what legacy code does today before you dare to change it."),
+            (13, "deterministic-tests", "Controlled Time & Randomness", "reliability", "Inject the clock, the random seed and the ids, so every run is the same."),
+            (14, "flaky-tests", "Flaky Test Quarantine", "reliability", "Detect tests that pass and fail at random, isolate them and fix the cause."),
+            (15, "parallel-selective", "Parallel & Selective Runs", "reliability", "Split the suite across workers and run only the tests a change can affect."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
 PLANNED = [
-    (4, "Testing Patterns", "Test doubles, contract tests, property-based tests, test pyramids and flaky-test hunting."),
     (5, "Security Patterns", "Zero trust, secrets handling, OAuth flows, input validation and threat modelling for builders."),
     (6, "Cloud &amp; DevOps Patterns", "Blue–green and canary releases, infrastructure as code, GitOps, observability and cost control."),
     (7, "AI App Patterns", "Retrieval-augmented generation, agents and tools, evaluation, guardrails and cost-aware LLM apps."),
 ]
 FUTURE_LOG = [
-    ("Dec 2026", [("•", "Vol. 4 · Testing Patterns: first notes"), ("•", "Vol. 2 extra notes: Debounce &amp; Throttle, Progressive Enhancement")]),
-    ("Jan 2027", [("•", "Vol. 5 · Security Patterns"), ("•", "Search across every journal")]),
-    ("Feb 2027", [("•", "Vol. 6 · Cloud &amp; DevOps Patterns"), ("•", "One-page printable cheat sheet per collection")]),
+    ("Dec 2026", [("•", "Vol. 5 · Security Patterns: first notes"), ("•", "Vol. 2 extra notes: Debounce &amp; Throttle, Progressive Enhancement")]),
+    ("Jan 2027", [("•", "Vol. 6 · Cloud &amp; DevOps Patterns"), ("•", "Search across every journal")]),
+    ("Feb 2027", [("•", "Vol. 7 · AI App Patterns"), ("•", "One-page printable cheat sheet per collection")]),
     ("Mar 2027", [("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes"), ("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
-    ("Apr 2027", [("•", "Vol. 7 · AI App Patterns"), ("•", "Quiz mode that remembers your score")]),
+    ("Apr 2027", [("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments"), ("•", "Quiz mode that remembers your score")]),
     ("Someday", [("•", "Static Generation &amp; ISR, Offline-first, Feature Flags (Vol. 2)"), ("•", "A “compare two patterns” page")]),
 ]
 
