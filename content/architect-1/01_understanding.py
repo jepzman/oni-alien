@@ -88,17 +88,24 @@ STAKEHOLDER_MAP = dict(
            ("Keep informed", "Low power, high interest: demos, notes, ask for feedback."),
            ("Engagement plan", "How and how often you work with each stakeholder.")],
     code=dict(file="docs/stakeholders.md", note="stakeholder register, Larder, week one", plain=True, src="""
-# Stakeholders: six-city platform            last reviewed: 2025-10-27
+# Stakeholders: six-city platform                  last reviewed: 2025-10-27
 
-| Who            | Role              | Power | Interest | Cares about / fears             | How we engage          |
-|----------------|-------------------|-------|----------|---------------------------------|------------------------|
-| Femke          | CEO               | high  | high     | six cities by 2027 / investors  | weekly 30-min review   |
-| Marco          | CFO               | high  | high     | €/order, cloud bill             | weekly review + costs  |
-| Joost          | Head of Ops       | high  | high     | on-time %, picking speed        | weekly review, store visits |
-| Lena           | DPO / legal       | high  | low→high | GDPR, Belgian rules             | monthly 1:1, early drafts |
-| Tomás + pickers| Dark store Noord  | low   | high     | picker app, gloves, Wi-Fi       | demo every 2 weeks     |
-| Sam            | Support lead      | low   | high     | refunds by hand                 | demo, ticket review    |
-| StockPilot     | WMS vendor        | med   | low      | contract to June 2027           | ticket, quarterly call |
+| Who        | Role        | Power | Interest | How we engage              |
+|------------|-------------|-------|----------|----------------------------|
+| Femke      | CEO         | high  | high     | weekly 30-min review       |
+| Marco      | CFO         | high  | high     | weekly review + cost sheet |
+| Joost      | Head of Ops | high  | high     | weekly review, store visits|
+| Lena       | DPO / legal | high  | low→high | monthly 1:1, early drafts  |
+| Tomás      | Store Noord | low   | high     | demo every 2 weeks         |
+| Sam        | Support     | low   | high     | demo, ticket review        |
+| StockPilot | WMS vendor  | med   | low      | ticket, quarterly call     |
+
+Cares about / fears
+  Femke   six cities by 2027 / losing the investors' trust
+  Marco   cost per order, the cloud bill / a surprise invoice
+  Joost   on-time %, picking speed / a slower picking line
+  Lena    GDPR, Belgian rules / a data breach or an unsigned contract
+  Tomás   picker app, gloves, Wi-Fi / pickers standing idle
 
 Open: who signs off Antwerp VAT? (ask Lena)
 """),
@@ -230,12 +237,14 @@ BUSINESS_DRIVERS = dict(
 # Business drivers: six-city platform
 Goal: six cities by end 2027 (Series B condition). Sponsors: Femke, Marco, Joost.
 
-| # | Driver                  | Measure                    | Today    | Target    | By       | Owner |
-|---|-------------------------|----------------------------|----------|-----------|----------|-------|
-| 1 | Open cities fast        | weeks from lease to launch | 20       | ≤ 8       | Q3 2026  | Joost |
-| 2 | Keep the promise        | express orders on time     | 88 %     | 95 %      | Q4 2026  | Joost |
-| 3 | Unit economics          | cost per order             | €4.10    | €2.80     | Q4 2027  | Marco |
-| 4 | Stay trusted            | lost / double-charged      | ~3/month | 0         | always   | Priya |
+| # | Driver            | Measure                   | Today    | Target | By      |
+|---|-------------------|---------------------------|----------|--------|---------|
+| 1 | Open cities fast  | weeks, lease to launch    | 20       | ≤ 8    | Q3 2026 |
+| 2 | Keep the promise  | express orders on time    | 88 %     | 95 %   | Q4 2026 |
+| 3 | Unit economics    | cost per order            | €4.10    | €2.80  | Q4 2027 |
+| 4 | Stay trusted      | lost / double-charged     | ~3/month | 0      | always  |
+
+Owners: 1–2 Joost · 3 Marco · 4 Priya
 
 What each means for the architecture
 1 → a new city is configuration, not code (stores, zones, hours, prices, VAT)
@@ -378,10 +387,10 @@ workspace "Larder" {
 
     larder   = softwareSystem "Larder platform" "Shop, orders, picking, dispatch"
 
-    psp        = softwareSystem "Payment provider" "Cards, iDEAL, Bancontact"   { tags "External" }
-    stockpilot = softwareSystem "StockPilot"       "Warehouse stock (SaaS)"     { tags "External" }
-    helpdesk   = softwareSystem "Helpdesk tool"    "Support tickets (SaaS)"     { tags "External" }
-    messaging  = softwareSystem "SMS & email"      "Order updates"              { tags "External" }
+    psp        = softwareSystem "Payment provider" "Cards, iDEAL, Bancontact"
+    stockpilot = softwareSystem "StockPilot"       "Warehouse stock (SaaS)"
+    helpdesk   = softwareSystem "Helpdesk tool"    "Support tickets (SaaS)"
+    messaging  = softwareSystem "SMS & email"      "Order updates"
 
     customer -> larder     "Orders, tracks delivery"
     picker   -> larder     "Picks, packs, reports out-of-stock"
@@ -542,7 +551,7 @@ Harvest
 - Top hot spot: substitutions (no owner; 6 % of orders → refund ticket)
 - Policy agreed: offer a substitute within 2 minutes of “item out of stock”
 - Owner: Joost (process) + Priya (app flow) · next: design-level session, 4 Nov
-- Boundary hints: shop/catalogue · ordering · payments · in-store fulfilment · dispatch · care
+- Boundary hints: catalogue · ordering · payments · fulfilment · dispatch · care
 """),
     tools="tools: a paper roll and stickies in a room beats any tool. For remote teams: Miro or FigJam event storming templates. Photograph the wall before anyone takes it down.",
     gains=["<b>A shared picture</b> of the whole process in hours, not weeks of interviews.",

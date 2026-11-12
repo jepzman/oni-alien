@@ -85,19 +85,31 @@ ASR = dict(
            ("Traceability", "Linking each ASR to its source, decision and test."),
            ("Utility tree", "A ranked tree of quality goals and scenarios, from ATAM.")],
     code=dict(file="docs/architecture/02-asrs.md", note="Larder's significant requirements, v1", plain=True, src="""
-# Architecturally significant requirements                  v1 · 2025-11-03
+# Architecturally significant requirements              v1 · 2025-11-03
 
-| ID    | Requirement                                   | Source                 | Why significant            | Owner |
-|-------|-----------------------------------------------|------------------------|----------------------------|-------|
-| ASR-1 | A new city is configuration, not code:        | Driver 1; Noord store  | touches every module       | Joost |
-|       | stores, zones, hours, prices, VAT             | took 5 months          |                            |       |
-| ASR-2 | Picker app keeps working 30 min offline        | ticket #4127, Tomás    | changes app + sync design  | Tomás |
-| ASR-3 | Checkout p95 < 800 ms at 5× normal peak        | King's Day 2025 outage | datastore, caching, scale  | Priya |
-| ASR-4 | No order lost or charged twice, even on crash  | Driver 4; support data | integration + transactions | Ben   |
-| ASR-5 | Customer data stays in the EU; Belgian VAT     | Lena (DPO), Antwerp    | hosting, vendors, invoices | Lena  |
+ASR-1  A new city is configuration, not code:                     owner: Joost
+       stores, zones, hours, prices, VAT
+       source: driver 1; the Noord store took 5 months
+       why:    touches every module
 
-Considered, not significant: wishlists, recipe pages, dark mode, new search filters.
-Each ASR → a quality attribute scenario (docs/architecture/03-scenarios.md) → an ADR.
+ASR-2  Picker app keeps working 30 min offline                    owner: Tomás
+       source: ticket #4127 (Noord Wi-Fi drops weekly)
+       why:    changes the app and the sync design
+
+ASR-3  Checkout p95 < 800 ms at 5× normal peak                    owner: Priya
+       source: King's Day 2025 outage (40 min)
+       why:    datastore, caching, scaling
+
+ASR-4  No order lost or charged twice, even on a crash            owner: Ben
+       source: driver 4; support data
+       why:    integration and transactions
+
+ASR-5  Customer data stays in the EU; Belgian VAT invoices        owner: Lena
+       source: Lena (DPO); the Antwerp launch
+       why:    hosting, vendors, invoicing
+
+Considered, not significant: wishlists, recipe pages, dark mode, search filters.
+Each ASR → a quality attribute scenario (03-scenarios.md) → an ADR.
 """),
     tools="tools: a short Markdown list is enough. Requirements tools (Jira, Azure DevOps) can tag ASRs with a label so they stand out; Structurizr and arc42 both have a place for them.",
     gains=["<b>Focus</b>: design effort goes to the few requirements that shape the system.",
@@ -371,22 +383,29 @@ CONSTRAINTS = dict(
            ("Validated assumption", "Checked and confirmed: now a fact."),
            ("RAID log", "Risks, Assumptions, Issues, Dependencies: a common project log.")],
     code=dict(file="docs/architecture/04-constraints-assumptions.md", note="log, as of 2025-11-24", plain=True, src="""
-# Constraints
-| ID  | Constraint                                  | Source               | Could change it   |
-|-----|---------------------------------------------|----------------------|-------------------|
-| C-1 | Rotterdam opens 27 April 2026               | store lease signed   | Femke (costly)    |
-| C-2 | StockPilot is the WMS until June 2027       | contract             | Marco (penalty)   |
-| C-3 | ≤ 4 new engineering hires in 2026           | budget               | Marco, board      |
-| C-4 | Customer data stays in the EU               | GDPR, Lena           | nobody            |
-| C-5 | Team skills: Python, Postgres, React Native | today's team         | hiring, training  |
+# Constraints                                         as of 2025-11-24
+| ID  | Constraint                             | Source       | Could change it |
+|-----|----------------------------------------|--------------|-----------------|
+| C-1 | Rotterdam opens 27 April 2026          | lease signed | Femke (costly)  |
+| C-2 | StockPilot is the WMS until June 2027  | contract     | Marco (penalty) |
+| C-3 | ≤ 4 new engineering hires in 2026      | budget       | Marco, board    |
+| C-4 | Customer data stays in the EU          | GDPR, Lena   | nobody          |
+| C-5 | Skills: Python, Postgres, React Native | today's team | hiring, training|
 
 # Assumptions
-| ID  | We believe…                              | Impact if wrong | Owner | Test                    | By     | Status        |
-|-----|------------------------------------------|-----------------|-------|-------------------------|--------|---------------|
-| A-1 | StockPilot API can serve six cities      | high            | Ben   | spike: load its API     | 21 Nov | ✗ 10 req/s → ADR 0005 |
-| A-2 | Rotterdam orders look like Amsterdam's   | medium          | Priya | compare first 4 weeks   | May    | open          |
-| A-3 | Couriers' phones have data all shift     | medium          | Joost | survey + 1-week logs    | 12 Dec | ✓ 97 % of time |
-| A-4 | Bancontact works via our current PSP     | high (Antwerp)  | Cho   | ask PSP, test account   | 15 Jan | open          |
+A-1 StockPilot's API can serve six cities         impact: high      owner: Ben
+    test: spike, load its sandbox API              by: 21 Nov
+    ✗ hard limit 10 req/s per account → ADR 0005 (cache stock per store)
+
+A-2 Rotterdam orders look like Amsterdam's        impact: medium    owner: Priya
+    test: compare the first 4 weeks of orders      by: May 2026      open
+
+A-3 Couriers' phones have data all shift          impact: medium    owner: Joost
+    test: courier survey + one week of app logs    by: 12 Dec
+    ✓ connected 97 % of the time
+
+A-4 Bancontact works through our current PSP      impact: high      owner: Cho
+    test: ask the PSP, open a test account         by: 15 Jan        open
 """),
     tools="tools: a table in the repo or wiki; many teams keep it in a RAID log alongside risks, issues and dependencies. arc42 has a “constraints” section; assumptions often sit in the risk register.",
     gains=["<b>Beliefs get checked</b> before the plan depends on them.",
@@ -508,27 +527,28 @@ NFR_CHECKLIST = dict(
            ("RPO / RTO", "How much data you can lose / how long recovery may take."),
            ("Retention", "How long data and logs are kept before deletion.")],
     code=dict(file="templates/nfr-checklist.md", note="Larder's checklist, kick-off copy", plain=True, src="""
-# NFR checklist · six-city platform · kick-off 2025-11-10      ✓ answered  ? open  – n/a
+# NFR checklist · six-city platform · kick-off 2025-11-10
+# ✓ answered   ? open   – not relevant
 
 RUN
- ✓ Availability   What uptime per month? Planned maintenance windows?    99.9 % · none at peak
- ✓ Performance    p95 for key journeys, normal and peak?                QAS-1 (800 ms at 5×)
- ? Capacity       Peak load in 2 years? Campaign days?                  owner: Eli · 1 Dec
+ ✓ Availability   Uptime per month? Maintenance windows?  99.9 % · none at peak
+ ✓ Performance    p95 for key journeys, normal and peak?  QAS-1 (800 ms at 5×)
+ ? Capacity       Peak load in 2 years? Campaign days?    owner: Eli · 1 Dec
 PROTECT
- ? Security       Threat model done? Who reviews auth changes?          owner: Cho
- ✓ Privacy        What personal data, kept how long, where?             EU only · logs 30 days
- ? Compliance     PCI scope? Belgian VAT invoices?                      owner: Lena · Antwerp
+ ? Security       Threat model done? Who reviews auth?    owner: Cho
+ ✓ Privacy        Personal data: what, how long, where?   EU only · logs 30 days
+ ? Compliance     PCI scope? Belgian VAT invoices?        owner: Lena · Antwerp
 CHANGE
- ✓ Deployability  How often, how safely, who can deploy?                daily, canary
- ? Testability    Can each module be tested alone?                      fitness function, Q1
+ ✓ Deployability  How often, how safely, who can deploy?  daily, canary
+ ? Testability    Can each module be tested alone?        fitness function, Q1
 OPERATE
- ? Observability  Who is paged when checkout fails? Dashboards?         owner: Eli
- ? Backup & DR    RPO / RTO? Last test restore?                         never → task, Dec
+ ? Observability  Who is paged if checkout fails?         owner: Eli
+ ? Backup & DR    RPO / RTO? Last test restore?           never → task, Dec
 PEOPLE
- ? Accessibility  WCAG 2.2 AA for the apps?                             owner: Dee
- ✓ Languages      Dutch, English; French for Antwerp?                   NL + EN now, FR in 2027
+ ? Accessibility  WCAG 2.2 AA for the apps?               owner: Dee
+ ✓ Languages      Dutch, English; French for Antwerp?     NL + EN now, FR in 2027
 COST
- ? Run cost       Cloud cost per order, alert on drift?                 owner: Marco + Eli
+ ? Run cost       Cloud cost per order, alert on drift?   owner: Marco + Eli
 """),
     tools="tools: a Markdown template in a shared repo works best. ISO/IEC 25010 and the arc42 quality tree are good starting lists; the AWS, Azure and Google Cloud Well-Architected frameworks have long question sets to borrow from.",
     gains=["<b>Fewer forgotten basics</b>: backups, alerting, retention, accessibility.",
