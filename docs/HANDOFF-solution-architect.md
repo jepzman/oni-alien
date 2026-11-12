@@ -111,3 +111,15 @@ Drafting sheet, vibrant version (owner asked for more colour and depth):
 - Doodle text width in this skin: headings ≈ 0.65 × font size per character, body ≈ 0.5 ×, scribbles ≈ 0.45 ×.
   Budget box widths with that, and check every figure on a contact sheet.
 - Next: the other 14 notes of Vol. 2 (catalogue in section 2), then move Vol. 2 off `in_progress`.
+
+## 8. The case file and book 2 (2026-11-12)
+
+- **Case file** (`/larder/`, “Meet Larder”, first on the Series 2 shelf): premise, history, October 2025 numbers, goals and
+  drivers, Larder for Business, the cast, the four books with summaries, and a story timeline with every note pinned to its
+  date. Data: `content/larder/casefile.py` (add each new note to `TIMELINE`). Rendered by `render_casefile()`.
+- **“The story so far”** box on each Series 2 book index: the journal's `story` field.
+- **Book 2 narrator: Grace**, product owner for ordering and the customer apps, joins 13 October 2025 (Ana: 6 October).
+  Same meetings as Ana, other side: “should we, and for whom?”. Book 3: Sanne (delivery manager, Jan 2026, Rotterdam
+  launch). Book 4: Mo (key account manager, Mar 2026) and the client **Korenwolf Group** (Hanna, Ruben). All in the casebook.
+- Fixed: template-card headers no longer overlap on phones; wide templates fit the card; the gains/losses divider is
+  hidden when stacked and joins the underlines on wide screens (all journals).
