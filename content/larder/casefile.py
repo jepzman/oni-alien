@@ -60,7 +60,7 @@ CAST = [
 
 # (book, title, narrator, period, status, summary, link or None)
 BOOKS = [
-    ("Book 1", "The Solution Architect's Notebook", "Ana", "Oct 2025 →", "vol. 1 out",
+    ("Book 1", "The Solution Architect's Notebook", "Ana", "Oct 2025 →", "vols. 1–2 out",
      "How Ana turns a one-line brief into an architecture that can grow to six cities: understanding the problem, finding the "
      "requirements that matter, choosing first shapes, testing risky ideas early, then recording decisions and living with them.",
      "../architect-1/index.html"),
@@ -120,10 +120,24 @@ TIMELINE = [
                              ("Prototype test, 13–22 Jan", "../product-1/notes/prototype-testing.html", "2"),
                              ("Walking skeleton, 15 Jan", "../architect-1/notes/walking-skeleton.html", "1"),
                              ("Fitness functions", "../architect-1/notes/fitness-functions.html", "1")]),
-    ("2026-03", "Mar 2026", [("Mo joins", None, "s"), ("ADR 0007: the outbox, 14 Mar", "../architect-2/notes/adr.html", "1")]),
-    ("2026-04", "Apr 2026", [("Rotterdam opens, 27 Apr", None, "s")]),
-    ("2026-05", "May 2026", [("Korenwolf pilot, Amsterdam office", None, "s")]),
-    ("2026-09", "Sep 2026", [("Korenwolf signs for three offices", None, "s")]),
+    ("2026-03", "Mar 2026", [("Mo joins", None, "s"), ("ADR 0007: the outbox, 14 Mar", "../architect-2/notes/adr.html", "1"),
+                             ("Decision log, 16 Mar", "../architect-2/notes/decision-log.html", "1"),
+                             ("RFC-003: Dispatch as a service, 18–27 Mar", "../architect-2/notes/rfcs-design-docs.html", "1"),
+                             ("DACI for a second PSP, 23 Mar", "../architect-2/notes/decision-rights.html", "1"),
+                             ("Rotterdam trade-off sliders, 31 Mar", "../architect-2/notes/trade-off-sliders.html", "1")]),
+    ("2026-04", "Apr 2026", [("Dispatch on managed containers, ADR 0010, 8 Apr", "../architect-2/notes/cloud-service-model.html", "1"),
+                             ("31 decisions sorted into doors, 9 Apr", "../architect-2/notes/one-way-two-way-doors.html", "1"),
+                             ("Korenwolf pilot options, ADR 0011, 13 Apr", "../architect-2/notes/options-analysis.html", "1"),
+                             ("Antwerp decision calendar, 20 Apr", "../architect-2/notes/last-responsible-moment.html", "1"),
+                             ("Rotterdam opens, 27 Apr", None, "s")]),
+    ("2026-05", "May 2026", [("Korenwolf pilot, Amsterdam office, from 4 May", None, "s"),
+                             ("Routing engine bake-off, 11–22 May", "../architect-2/notes/technology-evaluation.html", "1")]),
+    ("2026-06", "Jun 2026", [("Buy business billing, ADR 0013, 8 Jun", "../architect-2/notes/build-vs-buy.html", "1"),
+                             ("Technical debt register, 15 Jun", "../architect-2/notes/tech-debt-register.html", "1"),
+                             ("First Larder tech radar, 22 Jun", "../architect-2/notes/technology-radar.html", "1")]),
+    ("2026-07", "Jul 2026", [("StockPilot exit plan, 6 Jul", "../architect-2/notes/exit-plans.html", "1")]),
+    ("2026-09", "Sep 2026", [("Korenwolf signs for three offices", None, "s"),
+                             ("Decision review, ADR 0014 proposed, 21 Sep", "../architect-2/notes/revisiting-decisions.html", "1")]),
     ("2027", "2027", [("Utrecht, The Hague, Eindhoven", None, "s"), ("Antwerp: the first city abroad", None, "s"), ("Korenwolf renewal", None, "s")]),
 ]
 

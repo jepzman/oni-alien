@@ -1,7 +1,7 @@
 # Handoff: Jef's Notes (start here)
 
-Status as of **2026-11-12, 14:20 UTC**. Everything below is merged to `main` and deployed (last deploy: PR #8).
-Working branch: `claude/design-patterns-notebook-site-6p22em` (even with `main` apart from this file).
+Status as of **2026-11-12**. Book 1 Vol. 2 (Ana, 14 new notes) is written on the working branch
+`claude/design-patterns-notebook-site-6p22em`, **not yet merged or deployed**. Everything before it is on `main` (last deploy: PR #8).
 
 Read in this order:
 1. This file: state, next steps, how to build/verify/deploy, gotchas.
@@ -17,7 +17,7 @@ Read in this order:
 | Series 1 (patterns) | `distributed`, `frontend`, `data`, `testing`, `security`, `cloud` | Vols. 1–6 | 93 |
 | Series 2 · case file | `/larder/` (not a journal) | Meet Larder | history, cast, books, story timeline |
 | Series 2 · Book 1 (Ana) | `architect-1` | From Requirements to Architecture | 15 |
-| Series 2 · Book 1 (Ana) | `architect-2` | Decisions & Trade-offs | **1 of 15** (ADR), `in_progress=True` |
+| Series 2 · Book 1 (Ana) | `architect-2` | Decisions & Trade-offs | 15 (Mar → Sep 2026) |
 | Series 2 · Book 2 (Grace) | `product-1` | Discovering the Problem | 15 |
 
 Planned: Book 1 vols. 3–6 (`PLANNED_2`), Book 2 vols. 2–6 (`PLANNED_PRODUCT`), Series 1 Vol. 7 AI App Patterns
@@ -28,9 +28,9 @@ Planned: Book 1 vols. 3–6 (`PLANNED_2`), Book 2 vols. 2–6 (`PLANNED_PRODUCT`
 1. **Open item:** the owner reported Grace's cover and pages looked broken right after PR #7. Locally they render
    fine; the likely cause was a stale cached `bujo.css`, fixed in PR #8 (content-hash `?v=` on assets). **Ask the owner
    to confirm** it now looks right; if not, ask for a screenshot (the sandbox can't open github.io).
-2. **Alternate volumes between the books.** Next: **Ana's Vol. 2, Decisions & Trade-offs**: write the other 14 notes
-   (catalogue in `docs/HANDOFF-solution-architect.md` §2), March 2026 onward in the story; then drop `in_progress`.
-3. Then **Grace's Vol. 2, Deciding What to Build** (`product-2`; topics in `docs/HANDOFF-product-owner.md` §2).
+2. **Alternate volumes between the books.** Ana's Vol. 2 is done (see `docs/HANDOFF-solution-architect.md` §9).
+   Open a PR and deploy when the owner asks.
+3. Next: **Grace's Vol. 2, Deciding What to Build** (`product-2`; topics in `docs/HANDOFF-product-owner.md` §2).
    Seeds already planted: the parked ML recipe idea (Femke) → “Saying No”; Korenwolf pilot (May 2026).
 4. For each new volume: add every note to the case file `TIMELINE` (`content/larder/casefile.py`, tag `"1"` or `"2"`),
    add `meanwhile` links where the two books share a scene, record new facts in the casebook, update the future log.
@@ -83,3 +83,4 @@ Planned: Book 1 vols. 3–6 (`PLANNED_2`), Book 2 vols. 2–6 (`PLANNED_PRODUCT`
 | #6 | Case file, Grace/Sanne/Mo/Korenwolf, template-card and T-chart fixes |
 | #7 | Book 2 Vol. 1 (Grace), product skin, Meanwhile links |
 | #8 | Content-hash version tags on assets (stale stylesheet after deploys) |
+| (next) | Book 1 Vol. 2 (Ana): 14 notes, timeline, casebook ADRs 0008–0014 |

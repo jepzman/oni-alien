@@ -18,7 +18,7 @@ Live site: https://jepzman.github.io/oni-alien/
 | Book · vol. | Journal | Notes | Ratings |
 |---|---|---|---|
 | 1 · 1 | From Requirements to Architecture (`/architect-1/`) | 15 | architect ratings (clarity, stakeholder alignment, decision speed, risk reduction, adaptability, traceability, cost awareness, low overhead, team autonomy) |
-| 1 · 2 | Decisions & Trade-offs (`/architect-2/`) | 1 of 15 (in progress) | architect ratings |
+| 1 · 2 | Decisions & Trade-offs (`/architect-2/`) | 15 | architect ratings |
 
 The landing page (`/`) shows two shelves (Series 1: design patterns; Series 2: practitioner's notebooks, with `series=2` in `JOURNALS`), planned volumes (`PLANNED`, `PLANNED_2`) and a “future log” of upcoming work.
 
