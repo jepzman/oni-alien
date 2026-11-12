@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Incident Response &amp; Postmortems · Jef’s Notes</title>
+<meta name="description" content="Handle incidents with clear roles, then learn from them without blame.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-cloud">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 6 · cloud &amp; devops patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="postmortems">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 18.12.26</span><span class="topic">collection · <b>resilience &amp; cost</b></span></div>
+  <p class="kicker">a.k.a. “the cockpit and the crash investigation”</p>
+  <h1><span class="hl">Incident Response &amp; Postmortems</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Treat incidents as a practised routine: <b>declare</b> them early with a <b>severity</b>, assign <b>clear roles</b> (incident commander, operations, communications), <b>mitigate first</b> (roll back, fail over) and diagnose after. Then run a <b>blameless postmortem</b>: a timeline, the <b>contributing factors in the system</b>, and <b>action items with owners</b>, shared widely so everyone learns.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> operations culture</li><li><b>Roles:</b> incident commander, ops, comms, scribe</li><li><b>Influences:</b> aviation, fire services (ICS), Google SRE</li><li><b>Pairs with:</b> SLOs, observability, disaster recovery</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Without a routine, incidents become <span class="hl-pink">chaos</span>: everyone debugging at once, nobody coordinating or updating customers. And if the review hunts for <span class="hl-pink">who to blame</span>, people hide details and the same failure returns.</p>
+  <ul>
+    <li>Two engineers make conflicting fixes at the same time.</li>
+    <li>Customers learn about the outage from social media.</li>
+    <li>The “root cause” is “human error”, and nothing changes.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a chaotic incident channel. Twenty people are posting theories at once, two engineers restart the same service at the same time, nobody is talking to customers, and afterwards the review is about finding who pushed the bad change, so people hide details next time."><g class="rough"><circle class="d f-paper" cx="40" cy="60" r="16"/><circle class="d f-paper" cx="90" cy="60" r="16"/><circle class="d f-paper" cx="140" cy="60" r="16"/><circle class="d f-paper" cx="190" cy="60" r="16"/><circle class="d f-paper" cx="40" cy="120" r="16"/><circle class="d f-paper" cx="90" cy="120" r="16"/><circle class="d f-paper" cx="140" cy="120" r="16"/><circle class="d f-paper" cx="190" cy="120" r="16"/></g><text class="t-s t-red" x="110" y="200" text-anchor="middle">20 people, 20 theories</text><text class="t-s t-red" x="470" y="60" text-anchor="middle">two restarts at once</text><text class="t-s t-red" x="470" y="100" text-anchor="middle">customers: silence</text><text class="t-s t-red" x="470" y="150" text-anchor="middle">afterwards: “who did it?”</text><text class="t-s t-red" x="470" y="180" text-anchor="middle">→ details hidden next time</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Twenty people, no roles, nobody updating customers, and a blame hunt afterwards.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the cockpit and the crash investigation</span></h2>
+  <p>In a cockpit, the <b>captain flies</b> and the <b>first officer handles the radio and checklists</b>: clear roles, especially in an emergency. Afterwards, air-crash investigators ask <b>how the system allowed</b> the error, not who to punish, and <b>publish lessons</b> so every airline gets safer.</p>
+  <ul>
+    <li>Captain = <b>incident commander</b>; radio = <b>comms lead</b>.</li>
+    <li>Checklists = <b>runbooks</b>.</li>
+    <li>The investigation = a <b>blameless postmortem</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of an air crash investigation and a cockpit. In the cockpit, the captain flies and the first officer handles the radio and checklists, with clear roles. Afterwards, investigators look for how the system allowed the error, not who to punish, and publish lessons so every airline improves."><g class="rough"><rect class="d f-blue" x="40" y="50" width="200" height="120" rx="10"/><path class="d" d="M250 110 L370 110"/><path class="d" d="M359.2 115.2 L370 110 L359.2 104.8"/><g transform="translate(380 70) scale(1.2)"><g class="d"><circle class="f-paper" cx="24" cy="24" r="20"/><path d="M38 38 L58 58"/></g></g></g><text class="t-s t-pen" x="140" y="90" text-anchor="middle">captain: flies</text><text class="t-s t-pen" x="140" y="120" text-anchor="middle">first officer: radio,</text><text class="t-s t-pen" x="140" y="146" text-anchor="middle">checklists</text><text class="t-s" x="310" y="96" text-anchor="middle">afterwards</text><text class="t-s t-green" x="600" y="90" text-anchor="middle">how did the system</text><text class="t-s t-green" x="600" y="116" text-anchor="middle">allow it?</text><text class="t-s t-green" x="600" y="170" text-anchor="middle">lessons shared with all</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>In the cockpit: clear roles and checklists. Afterwards: find how the system allowed it, not who to blame.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Captain flies the plane</td><td>Incident commander coordinates (doesn't debug)</td></tr>
+      <tr><td>First officer on the radio</td><td>Comms lead updates status page and stakeholders</td></tr>
+      <tr><td>Emergency checklists</td><td>Runbooks and rollback procedures</td></tr>
+      <tr><td>Land first, investigate later</td><td>Mitigate first, then root-cause</td></tr>
+      <tr><td>Investigators publish lessons</td><td>Blameless postmortem, shared widely</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">practised roles, then learning</span></h2>
+  <p>“Human error” is where an investigation <b>starts</b>, not where it ends: what made the mistake easy, and the damage large?</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Incident lifecycle. Detect through an SLO burn alert. Declare an incident with a severity. Assign roles: an incident commander who coordinates, operations people who investigate and fix, and a communications lead who updates the status page. Mitigate first, for example roll back, then fix. Afterwards, hold a blameless postmortem with a timeline, contributing factors and action items with owners, and share it."><g class="rough"><rect class="d f-y" x="10" y="30" width="136" height="76" rx="10"/><rect class="d f-pink" x="160" y="30" width="136" height="76" rx="10"/><path class="d" d="M148 68 L158 68"/><path class="d" d="M147.2 73.2 L158 68 L147.2 62.8"/><rect class="d f-green" x="310" y="30" width="136" height="76" rx="10"/><path class="d" d="M298 68 L308 68"/><path class="d" d="M297.2 73.2 L308 68 L297.2 62.8"/><rect class="d f-blue" x="460" y="30" width="136" height="76" rx="10"/><path class="d" d="M448 68 L458 68"/><path class="d" d="M447.2 73.2 L458 68 L447.2 62.8"/><rect class="d f-y" x="610" y="30" width="136" height="76" rx="10"/><path class="d" d="M598 68 L608 68"/><path class="d" d="M597.2 73.2 L608 68 L597.2 62.8"/><rect class="d f-paper" x="40" y="160" width="210" height="70" rx="10"/><rect class="d f-paper" x="280" y="160" width="210" height="70" rx="10"/><rect class="d f-paper" x="520" y="160" width="210" height="70" rx="10"/></g><text class="t-head" x="78" y="64" text-anchor="middle" font-size="18">detect</text><text class="t" x="78" y="88" text-anchor="middle" font-size="14">SLO burn alert</text><text class="t-head" x="228" y="64" text-anchor="middle" font-size="18">declare</text><text class="t" x="228" y="88" text-anchor="middle" font-size="14">SEV-2</text><text class="t-head" x="378" y="64" text-anchor="middle" font-size="18">mitigate</text><text class="t" x="378" y="88" text-anchor="middle" font-size="14">roll back first</text><text class="t-head" x="528" y="64" text-anchor="middle" font-size="18">resolve</text><text class="t" x="528" y="88" text-anchor="middle" font-size="14">root fix</text><text class="t-head" x="678" y="64" text-anchor="middle" font-size="18">learn</text><text class="t" x="678" y="88" text-anchor="middle" font-size="14">postmortem</text><text class="t-head" x="145" y="191" text-anchor="middle" font-size="18">commander</text><text class="t" x="145" y="215" text-anchor="middle" font-size="17">coordinates</text><text class="t-head" x="385" y="191" text-anchor="middle" font-size="18">ops</text><text class="t" x="385" y="215" text-anchor="middle" font-size="17">investigates, fixes</text><text class="t-head" x="625" y="191" text-anchor="middle" font-size="18">comms</text><text class="t" x="625" y="215" text-anchor="middle" font-size="17">status page, customers</text><text class="t-s t-pen" x="380" y="270" text-anchor="middle">roles, not rank · blameless · actions have owners</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Detect → declare → roles → mitigate first → resolve → blameless postmortem with owned actions.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Define severities</b><p>SEV-1 to SEV-4 with examples and who to page.</p></li>
+    <li><b>Declare early</b><p>Anyone can declare; downgrading is cheap, late declaring is expensive.</p></li>
+    <li><b>Assign roles</b><p>Commander (coordinates, decides), ops (hands on keyboard), comms (updates every 30 min), scribe.</p></li>
+    <li><b>Mitigate before diagnosing</b><p>Roll back, fail over, turn off the flag; find root causes afterwards.</p></li>
+    <li><b>Write a blameless postmortem</b><p>Timeline, impact, contributing factors, what went well, action items with owners and dates.</p></li>
+    <li><b>Close the loop</b><p>Track action items; share postmortems; practise with game days.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Incident commander</dt><dd>Coordinates the response and makes decisions.</dd></div>
+    <div><dt>Severity (SEV)</dt><dd>How bad an incident is, which sets the response.</dd></div>
+    <div><dt>Mitigation</dt><dd>Stopping the impact, even before fixing the cause.</dd></div>
+    <div><dt>Blameless postmortem</dt><dd>Review focused on systems, not individuals.</dd></div>
+    <div><dt>Contributing factors</dt><dd>The conditions that together allowed the incident.</dd></div>
+    <div><dt>Game day</dt><dd>A planned exercise simulating an incident.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>postmortems/2026-11-12-checkout-errors.md</span><span>template</span></div>
+<pre><code><span class="c"># Checkout 5xx spike · SEV-2 · 2026-11-12 · 41 min</span>
+Commander: ana · Ops: ben, cho · Comms: dee · Status: resolved
+
+#<span class="c"># Impact</span>
+6% <span class="k">of</span> checkouts failed (≈ 1,900 orders retried, 140 lost). Error budget: 38% used.
+
+#<span class="c"># Timeline (UTC)</span>
+09:02 deploy web@9c1e (<span class="k">new</span> payment client)   09:07 burn-rate page
+09:09 SEV-2 declared                          09:14 rolled back to web@4a7b
+09:43 error rate normal, monitoring           09:50 resolved
+
+#<span class="c"># Contributing factors</span>
+- Payment client <span class="k">default</span> timeout changed <span class="k">from</span> 10 s to 2 s
+- Canary step was skipped <span class="k">for</span> “small” changes
+- No alert on payment-provider latency
+
+#<span class="c"># Action items</span>
+- [ ] Pin client timeouts <span class="k">in</span> config (ben, 11-19)
+- [ ] Canary required <span class="k">for</span> every prod deploy (cho, 11-26)
+- [ ] Latency SLI <span class="k">for</span> payment provider (dee, 12-03)</code></pre>
+  </div>
+  <p class="aside">tools: PagerDuty / Opsgenie / incident.io / Rootly / FireHydrant, Statuspage / Instatus, Slack incident channels, Jeli for incident analysis, runbooks in the repo, game days and chaos tools.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Faster mitigation</b> with clear roles.</li><li><b>Customers kept informed</b>.</li><li><b>Real learning</b>: systemic fixes, not blame.</li><li><b>Less fear</b>, so people share what really happened.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Process overhead</b> for small incidents.</li><li><b>Time for postmortems</b> and follow-ups.</li><li><b>Action items pile up</b> if not prioritised.</li><li><b>Blameless is hard</b> to keep under pressure.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Operations ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>ad-hoc firefighting and blame-focused reviews</b> to <b>declared incidents with roles and blameless postmortems</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to run &amp; explain?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A routine to learn, then it's automatic.</td></tr>
+      <tr data-before="3" data-after="3"><td>Delivery speed<small>fast from commit to prod?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Release safety<small>low risk per deploy?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Lessons (like “canary always”) make deploys safer.</td></tr>
+      <tr data-before="2" data-after="4"><td>Reliability<small>stays up?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Repeat incidents become rarer.</td></tr>
+      <tr data-before="3" data-after="3"><td>Scalability<small>handles 10× load?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="5"><td>Recoverability<small>fast to restore?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Mitigate-first and roles cut downtime.</td></tr>
+      <tr data-before="2" data-after="4"><td>Observability<small>can we see inside?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Timelines expose missing signals.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Meeting time vs repeated outages.</td></tr>
+      <tr data-before="2" data-after="4"><td>Developer experience<small>pleasant to ship with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Calmer on-call; less blame.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Commander also debugging</h3><p>Nobody coordinates; work overlaps. <span class="fix">Fix →</span> the commander coordinates; others fix.</p></li>
+    <li><h3>Diagnosing before mitigating</h3><p>An hour of root-causing while users suffer. <span class="fix">Fix →</span> roll back or fail over first.</p></li>
+    <li><h3>“Root cause: human error”</h3><p>Nothing changes; it happens again. <span class="fix">Fix →</span> ask what made the error possible and costly.</p></li>
+    <li><h3>Action items never done</h3><p>The same postmortem every quarter. <span class="fix">Fix →</span> owners, dates and tracking; review them.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Every team that runs production services.</li><li>Customer-facing outages and security incidents.</li><li>Near-misses worth learning from.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Use a lighter version for tiny blips; keep the habit, not the paperwork.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>SLOs &amp; error budgets</b></li><li><b>Backups &amp; disaster recovery</b></li><li><b>Feature flags</b></li><li><b>Audit logging</b> (Vol. 5)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does the incident commander do?</summary><p>Coordinates the response, assigns work and makes decisions, rather than debugging.</p></details>
+    <details><summary>Why mitigate before finding the root cause?</summary><p>Users are affected now; rollback or failover stops the impact quickly.</p></details>
+    <details><summary>What makes a postmortem blameless?</summary><p>It examines how the system allowed the failure, not who to punish, so people share details honestly.</p></details>
+    <details><summary>What turns a postmortem into improvement?</summary><p>Action items with owners and dates that are tracked to completion.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p><span class="hl">Fly the plane</span> first, keep the <span class="hl">radio</span> going, and investigate the <span class="hl">system</span>, not the pilot.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/14-postmortems.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Google SRE Book, ch. 14 “Managing Incidents” and ch. 15 “Postmortem Culture”.</li><li>PagerDuty, “Incident Response Documentation” (response.pagerduty.com).</li><li>John Allspaw, “Blameless PostMortems and a Just Culture” (Etsy, 2012).</li><li>Sidney Dekker, <i>The Field Guide to Understanding Human Error</i>.</li></ul>
+  </div>
+  <p class="folio">14</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="disaster-recovery.html"><small>← previous note</small>13 · Backups &amp; Disaster Recovery</a>
+  <a href="finops.html"><small>Next note →</small>15 · Cost Visibility (FinOps)</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 6 · a student's bullet journal on cloud &amp; devops patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Blue–Green Deployment · Jef’s Notes</title>
+<meta name="description" content="Run the new version next to the old one and switch traffic in one step.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-cloud">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 6 · cloud &amp; devops patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="blue-green">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 03.11.26</span><span class="topic">collection · <b>shipping safely</b></span></div>
+  <p class="kicker">a.k.a. “the theatre turntable”</p>
+  <h1><span class="hl">Blue–Green Deployment</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Keep <b>two identical environments</b>. One (blue) serves users; deploy the new version to the other (green), <b>test it with no user traffic</b>, then <b>switch the router</b> in one step. Rollback is <b>switching back</b>, in seconds. The catch: both versions share data, so <b>database changes must be backward compatible</b>.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> deployment strategy</li><li><b>Popularised by:</b> Dan North &amp; Jez Humble; Martin Fowler (2010)</li><li><b>Switch with:</b> load balancer, DNS, service mesh, ingress</li><li><b>Pairs with:</b> build once, expand &amp; contract (Vol. 3)</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Updating servers <span class="hl-pink">in place</span> means a window where some are down or half-updated, and if the new version is broken, rolling back is the <span class="hl-pink">same slow process in reverse</span>.</p>
+  <ul>
+    <li>Users see errors or a maintenance page during each deploy.</li>
+    <li>Deploys are scheduled for nights and weekends, so they're rare and big.</li>
+    <li>Rollback takes as long as the deploy, while things are on fire.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of an in-place deployment on a Friday evening. The servers are stopped, updated one by one and restarted. For ten minutes users see errors and a maintenance page. The new version has a bug, and rolling back means doing the whole slow process again in reverse."><g class="rough"><g transform="translate(30 60) scale(1.2)"><g class="d"><rect class="f-paper" x="0" y="0" width="58" height="22" rx="3"/><rect class="f-paper" x="0" y="28" width="58" height="22" rx="3"/><path d="M8 11 h14 M8 39 h14"/><circle cx="48" cy="11" r="2"/><circle cx="48" cy="39" r="2"/></g></g><g transform="translate(120 60) scale(1.2)"><g class="d"><rect class="f-paper" x="0" y="0" width="58" height="22" rx="3"/><rect class="f-paper" x="0" y="28" width="58" height="22" rx="3"/><path d="M8 11 h14 M8 39 h14"/><circle cx="48" cy="11" r="2"/><circle cx="48" cy="39" r="2"/></g></g><g transform="translate(210 60) scale(1.2)"><g class="d"><rect class="f-paper" x="0" y="0" width="58" height="22" rx="3"/><rect class="f-paper" x="0" y="28" width="58" height="22" rx="3"/><path d="M8 11 h14 M8 39 h14"/><circle cx="48" cy="11" r="2"/><circle cx="48" cy="39" r="2"/></g></g><rect class="d f-pink d-red" x="360" y="40" width="220" height="70" rx="10"/><g transform="translate(640 60) scale(1.0)"><g class="d d-red"><circle class="f-paper" cx="30" cy="30" r="26"/><path d="M30 14 V30 H42"/></g></g></g><text class="t-s t-pen" x="160" y="160" text-anchor="middle">stop → update → start</text><text class="t-head t-red" x="470" y="82" text-anchor="middle" font-size="18">503 · maintenance</text><text class="t-s t-red" x="470" y="140" text-anchor="middle">10 minutes of errors</text><text class="t-s t-red" x="470" y="190" text-anchor="middle">bug found → redo it all in reverse</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Update in place: downtime during the deploy, and a slow, scary rollback.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the theatre turntable</span></h2>
+  <p>Some theatres have a <b>turntable stage</b>. While the audience watches the front, the crew builds the <b>next scene on the back</b>. When it's ready, the stage <b>rotates</b>, and the new scene is there instantly. If a prop is missing, they rotate back.</p>
+  <ul>
+    <li>The front stage is <b>blue</b> (live); the back is <b>green</b> (next).</li>
+    <li>Rotating is the <b>router switch</b>.</li>
+    <li>Rotating back is <b>rollback in seconds</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a theatre with two identical stages on a turntable. While the audience watches the show on the front stage, the crew builds the next scene on the back stage. When it&#x27;s ready, the turntable rotates and the new scene appears instantly. If something&#x27;s wrong, they rotate back."><g class="rough"><circle class="d f-y" cx="230" cy="130" r="100"/><path class="d" d="M130 130 h200"/><path class="d" d="M350 60 Q420 130 350 200"/><path class="d" d="M353.9 188.7 L350 200 L361.3 196.1"/></g><text class="t-s t-green" x="230" y="90" text-anchor="middle">front stage: live show</text><text class="t-s t-pen" x="230" y="180" text-anchor="middle">back stage: next scene</text><text class="t-s" x="392" y="134" text-anchor="start">rotate</text><text class="t-s t-green" x="600" y="90" text-anchor="middle">instant switch</text><text class="t-s t-green" x="600" y="130" text-anchor="middle">rotate back = rollback</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A theatre turntable: build the next scene out of sight, then rotate. Rotate back if needed.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Front stage (live show)</td><td>Blue environment serving users</td></tr>
+      <tr><td>Back stage (next scene)</td><td>Green environment with the new version</td></tr>
+      <tr><td>Dress rehearsal</td><td>Smoke tests on green with no user traffic</td></tr>
+      <tr><td>Turntable rotates</td><td>Load balancer / DNS switches 100% of traffic</td></tr>
+      <tr><td>Rotate back</td><td>Instant rollback to blue</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">two environments, one switch</span></h2>
+  <p>The switch is <b>all-or-nothing</b>: simple and instant, but every user moves at once. For gradual exposure, see canary releases (note 02).</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Blue-green deployment. Two identical environments sit behind a router or load balancer. Blue runs version one and takes all traffic. Green gets version two deployed and smoke-tested with no user traffic. The router switches all traffic to green in one step. Blue stays running, so rollback is switching back. Database changes must work with both versions."><g class="rough"><rect class="d f-y" x="300" y="20" width="160" height="60" rx="10"/><rect class="d f-blue" x="60" y="140" width="220" height="90" rx="10"/><rect class="d f-green" x="480" y="140" width="220" height="90" rx="10"/><path class="d d-dash" d="M340 84 L200 136"/><path class="d" d="M208.3 127.3 L200 136 L211.9 137.1"/><path class="d d-green" d="M420 84 L580 136"/><path class="d d-green" d="M568.1 137.6 L580 136 L571.3 127.7"/></g><text class="t-head" x="380" y="57" text-anchor="middle">router</text><text class="t-head" x="170" y="181" text-anchor="middle">blue · v1</text><text class="t" x="170" y="205" text-anchor="middle" font-size="17">idle after switch, kept warm</text><text class="t-head" x="590" y="181" text-anchor="middle">green · v2</text><text class="t" x="590" y="205" text-anchor="middle" font-size="17">smoke-tested, then live</text><text class="t-s" x="230" y="104" text-anchor="middle">before</text><text class="t-s t-green" x="560" y="104" text-anchor="middle">after: 100%</text><text class="t-s t-pen" x="380" y="270" text-anchor="middle">shared database: schema must suit v1 AND v2 (expand &amp; contract)</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Two identical environments; deploy to the idle one, test it, then flip the router. Flip back to roll back.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Two identical stacks</b><p>Same infrastructure code for blue and green; only the version differs.</p></li>
+    <li><b>Deploy to the idle one</b><p>Install the new build on green while blue serves traffic.</p></li>
+    <li><b>Test green privately</b><p>Smoke tests and health checks via an internal URL.</p></li>
+    <li><b>Switch</b><p>Point the load balancer or ingress at green; drain blue's in-flight requests.</p></li>
+    <li><b>Watch, then keep blue warm</b><p>Monitor errors and latency; keep blue ready for a quick switch back.</p></li>
+    <li><b>Handle data carefully</b><p>Use expand-and-contract migrations so both versions work with the same schema.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Blue / green</dt><dd>The two identical environments.</dd></div>
+    <div><dt>Cutover</dt><dd>The moment traffic switches.</dd></div>
+    <div><dt>Connection draining</dt><dd>Letting in-flight requests finish before shutdown.</dd></div>
+    <div><dt>Smoke test</dt><dd>A quick check that the basics work.</dd></div>
+    <div><dt>Rollback</dt><dd>Returning to the previous version.</dd></div>
+    <div><dt>Backward-compatible migration</dt><dd>A schema change both versions can run against.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>switch.sh</span><span>Kubernetes Service selector</span></div>
+<pre><code><span class="c"># both Deployments run: app-blue (v1) and app-green (v2)</span>
+kubectl rollout status deploy/app-green              <span class="c"># wait until ready</span>
+./smoke-test.sh https:<span class="c">//green.internal.example.com   # test without users</span>
+
+<span class="c"># cutover: point the Service at green</span>
+kubectl patch service app -p <span class="s">'{"spec":{"selector":{"app":"app","color":"green"}}}'</span>
+
+<span class="c"># watch for 15 minutes; if error rate rises, switch back in one command:</span>
+<span class="c"># kubectl patch service app -p '{"spec":{"selector":{"app":"app","color":"blue"}}}'</span></code></pre>
+  </div>
+  <p class="aside">tools: load balancer target groups (AWS ALB/CodeDeploy blue/green), Kubernetes Service selectors or Argo Rollouts blueGreen strategy, Azure App Service deployment slots, Cloud Run traffic splitting, DNS weighted records.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Zero-downtime deploys</b>.</li><li><b>Instant rollback</b>: switch back.</li><li><b>Test the real environment</b> before users see it.</li><li><b>Simple model</b> to explain.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Double infrastructure</b> during deploys.</li><li><b>All users switch at once</b>: no gradual exposure.</li><li><b>Shared data</b> needs compatible migrations.</li><li><b>Long-lived sessions and queues</b> need draining.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Operations ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>in-place deploys with a maintenance window</b> to <b>blue–green deploys behind a switchable router</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="4"><td>Simplicity<small>easy to run &amp; explain?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Two copies, one switch: easy to explain.</td></tr>
+      <tr data-before="2" data-after="4"><td>Delivery speed<small>fast from commit to prod?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Deploy any time; no maintenance windows.</td></tr>
+      <tr data-before="2" data-after="4"><td>Release safety<small>low risk per deploy?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tested before users; rollback in seconds.</td></tr>
+      <tr data-before="2" data-after="4"><td>Reliability<small>stays up?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No downtime during releases.</td></tr>
+      <tr data-before="3" data-after="3"><td>Scalability<small>handles 10× load?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="5"><td>Recoverability<small>fast to restore?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Rollback is flipping the switch back.</td></tr>
+      <tr data-before="3" data-after="3"><td>Observability<small>can we see inside?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral; compare blue and green metrics.</td></tr>
+      <tr data-before="4" data-after="2"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Double capacity while both run.</td></tr>
+      <tr data-before="2" data-after="4"><td>Developer experience<small>pleasant to ship with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Releases stop being scary events.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Breaking schema changes</h3><p>Green migrates the database; blue starts failing. <span class="fix">Fix →</span> expand-and-contract migrations.</p></li>
+    <li><h3>Tearing blue down immediately</h3><p>Rollback now means a full redeploy. <span class="fix">Fix →</span> keep blue warm until green has proven itself.</p></li>
+    <li><h3>Drifting environments</h3><p>Blue and green were configured by hand and differ. <span class="fix">Fix →</span> build both from the same infrastructure code.</p></li>
+    <li><h3>Forgetting background work</h3><p>Old workers keep consuming jobs with old logic. <span class="fix">Fix →</span> switch workers and queues deliberately too.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Services where downtime is unacceptable.</li><li>Releases that need a fast, reliable rollback.</li><li>Teams moving away from maintenance windows.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Huge stateful systems where doubling is impractical (use rolling or canary).</li><li>When you need gradual exposure (canary).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Canary releases</b></li><li><b>Build once, deploy many</b></li><li><b>Health checks &amp; probes</b></li><li><b>Expand &amp; contract</b> (Vol. 3)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>How does rollback work in blue–green?</summary><p>Switch the router back to the previous environment, which is still running.</p></details>
+    <details><summary>What's the main data risk?</summary><p>Both versions share the database, so schema changes must be backward compatible.</p></details>
+    <details><summary>What's the cost trade-off?</summary><p>You run two full environments during the switch.</p></details>
+    <details><summary>How is blue–green different from canary?</summary><p>Blue–green switches all traffic at once; canary shifts a small share first and widens gradually.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Build the next scene <span class="hl">backstage</span>, <span class="hl">rotate</span>, and rotate <span class="hl">back</span> if a prop is missing.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/01-blue-green.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Martin Fowler, “BlueGreenDeployment” (bliki).</li><li>Jez Humble &amp; David Farley, <i>Continuous Delivery</i> (2010), ch. 10.</li><li>AWS whitepaper, “Blue/Green Deployments on AWS”.</li><li>Argo Rollouts docs, “BlueGreen Deployment Strategy”.</li></ul>
+  </div>
+  <p class="folio">01</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="../index.html"><small>← back to</small>Index</a>
+  <a href="canary.html"><small>Next note →</small>02 · Canary Releases</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 6 · a student's bullet journal on cloud &amp; devops patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

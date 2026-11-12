@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Health Checks &amp; Probes · Jef’s Notes</title>
+<meta name="description" content="Let the platform ask each instance “are you alive? are you ready?” and act on it.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-cloud">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 6 · cloud &amp; devops patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="health-checks">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 01.12.26</span><span class="topic">collection · <b>running &amp; observing</b></span></div>
+  <p class="kicker">a.k.a. “the ward round”</p>
+  <h1><span class="hl">Health Checks &amp; Probes</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Let the platform ask every instance <b>two different questions</b>: <b>“are you alive?”</b> (liveness: if not, restart it) and <b>“can you serve traffic right now?”</b> (readiness: if not, stop sending requests until it recovers). Add a <b>startup</b> check for slow boots. Keep liveness <b>cheap and local</b>, so a slow database doesn't trigger a restart storm.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> runtime operations</li><li><b>Probes:</b> startup, liveness, readiness</li><li><b>Used by:</b> Kubernetes, load balancers, ECS, Cloud Run</li><li><b>Pairs with:</b> autoscaling, blue–green, circuit breaker (Vol. 1)</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">“The process is running” isn't the same as “it works”. Without real health checks, a <span class="hl-pink">stuck or half-started</span> instance keeps receiving traffic, and every request it gets fails.</p>
+  <ul>
+    <li>A deadlocked instance serves errors for hours.</li>
+    <li>New instances get traffic before they've warmed up.</li>
+    <li>A bad health check restarts every pod when the database is slow.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a load balancer sending traffic to three instances. One instance has a stuck database connection pool and returns errors to every request, but its process is still running, so the platform thinks it&#x27;s fine and keeps sending it a third of all traffic."><g class="rough"><rect class="d f-y" x="20" y="90" width="150" height="60" rx="10"/><path class="d" d="M176 120 L330 40"/><path class="d" d="M322.8 49.6 L330 40 L318.0 40.3"/><rect class="d f-green" x="336" y="18" width="220" height="46" rx="10"/><path class="d d-red" d="M176 120 L330 110"/><path class="d d-red" d="M319.6 115.9 L330 110 L318.9 105.5"/><rect class="d f-pink d-red" x="336" y="88" width="220" height="46" rx="10"/><path class="d" d="M176 120 L330 180"/><path class="d" d="M318.0 180.9 L330 180 L321.8 171.2"/><rect class="d f-green" x="336" y="158" width="220" height="46" rx="10"/></g><text class="t-head" x="95" y="127" text-anchor="middle" font-size="16">load balancer</text><text class="t-head" x="446" y="48" text-anchor="middle" font-size="16">web-1 ✓</text><text class="t-head t-red" x="446" y="118" text-anchor="middle" font-size="16">web-2 ✗ stuck pool</text><text class="t-head" x="446" y="188" text-anchor="middle" font-size="16">web-3 ✓</text><text class="t-s t-red" x="660" y="110" text-anchor="middle">process up,</text><text class="t-s t-red" x="660" y="136" text-anchor="middle">33% errors</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One instance is broken but still “running”, so it keeps getting a third of the traffic.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the ward round</span></h2>
+  <p>On her round, a nurse asks each patient <b>two different questions</b>: “are you <b>alive</b> and breathing?” and “are you <b>ready for visitors</b> today?”. A patient can be alive but not ready for visitors, and that needs a very different response.</p>
+  <ul>
+    <li>“Alive?” is the <b>liveness</b> probe; “no” means call the doctor (<b>restart</b>).</li>
+    <li>“Visitors?” is <b>readiness</b>; “no” means <b>no traffic</b> for now.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a hospital nurse doing rounds. For each patient she asks two different questions: are you alive and breathing, and are you well enough to have visitors today? A patient can be alive but not ready for visitors."><g class="rough"><g transform="translate(60 50) scale(1.6)"><g class="d"><circle class="f-y" cx="30" cy="10" r="9"/><rect class="f-y" x="16" y="22" width="28" height="26" rx="4"/><path d="M16 26 l-12 14 M44 26 l12 14 M22 48 v14 M38 48 v14"/><circle cx="26" cy="9" r="2"/><path d="M34 6 l4 4 M38 6 l-4 4"/></g></g></g><text class="t-s t-pen" x="250" y="70" text-anchor="start">“are you alive?”</text><text class="t-s t-red" x="470" y="70" text-anchor="start">no → call the doctor (restart)</text><text class="t-s t-pen" x="250" y="130" text-anchor="start">“ready for visitors?”</text><text class="t-s t-pen" x="470" y="130" text-anchor="start">no → no visitors yet</text><text class="t-s t-pen" x="470" y="156" text-anchor="start">(no traffic)</text><text class="t-s t-green" x="380" y="220" text-anchor="middle">alive ≠ ready</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Two questions on the ward round: “alive?” and “ready for visitors?”. Different answers, different actions.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>“Are you alive?”</td><td>Liveness probe</td></tr>
+      <tr><td>Call the doctor</td><td>Restart the container</td></tr>
+      <tr><td>“Ready for visitors?”</td><td>Readiness probe</td></tr>
+      <tr><td>No visitors for now</td><td>Removed from the load balancer</td></tr>
+      <tr><td>Just admitted, still settling</td><td>Startup probe / grace period</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">three probes, three actions</span></h2>
+  <p>The classic mistake is making liveness check dependencies. If the database is slow, every instance fails liveness and restarts, turning a slowdown into an outage.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Kubernetes probes. A startup probe gives a slow app time to boot. A liveness probe checks that the process isn&#x27;t stuck, and if it fails several times the container is restarted. A readiness probe checks the instance can serve now, including critical dependencies, and if it fails the instance is removed from the load balancer until it recovers, without restarting."><g class="rough"><rect class="d f-blue" x="20" y="50" width="220" height="90" rx="10"/><rect class="d f-pink" x="270" y="50" width="220" height="90" rx="10"/><rect class="d f-green" x="520" y="50" width="220" height="90" rx="10"/></g><text class="t-head" x="130" y="91" text-anchor="middle" font-size="20">startup</text><text class="t" x="130" y="115" text-anchor="middle" font-size="17">booted yet?</text><text class="t-s t-pen" x="130" y="180" text-anchor="middle">fail → wait</text><text class="t-head" x="380" y="91" text-anchor="middle" font-size="20">liveness</text><text class="t" x="380" y="115" text-anchor="middle" font-size="17">stuck?</text><text class="t-s t-red" x="380" y="180" text-anchor="middle">fail → restart</text><text class="t-head" x="630" y="91" text-anchor="middle" font-size="20">readiness</text><text class="t" x="630" y="115" text-anchor="middle" font-size="17">can serve now?</text><text class="t-s t-pen" x="630" y="180" text-anchor="middle">fail → remove from LB</text><text class="t-s t-pen" x="380" y="250" text-anchor="middle">liveness: cheap, local · readiness: may check critical deps</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Startup: give it time to boot. Liveness: restart if stuck. Readiness: stop sending traffic until it can serve.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Add endpoints</b><p><code>/livez</code> (process responsive) and <code>/readyz</code> (can serve: warmed up, critical deps reachable).</p></li>
+    <li><b>Keep liveness local</b><p>No database or downstream calls; just “is my event loop alive?”.</p></li>
+    <li><b>Make readiness honest</b><p>Fail while starting, while draining on shutdown, or when a critical dependency is down.</p></li>
+    <li><b>Tune timings</b><p>Startup probe for slow boots; failure thresholds that avoid flapping.</p></li>
+    <li><b>Drain on shutdown</b><p>On SIGTERM: fail readiness, finish in-flight requests, then exit.</p></li>
+    <li><b>Wire them everywhere</b><p>Kubernetes probes, load balancer health checks, deploy gates.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Liveness</dt><dd>Is the process alive and not stuck?</dd></div>
+    <div><dt>Readiness</dt><dd>Can this instance serve traffic right now?</dd></div>
+    <div><dt>Startup probe</dt><dd>Gives slow apps time before liveness starts.</dd></div>
+    <div><dt>Graceful shutdown</dt><dd>Stop taking traffic, finish work, then exit.</dd></div>
+    <div><dt>Flapping</dt><dd>Rapidly switching between healthy and unhealthy.</dd></div>
+    <div><dt>Restart storm</dt><dd>Many instances restarting at once.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>deployment.yaml + health.ts</span><span>Kubernetes + Express</span></div>
+<pre><code>startupProbe:   { httpGet: { path: /livez,  port: 8080 }, failureThreshold: 30, periodSeconds: 2 }
+livenessProbe:  { httpGet: { path: /livez,  port: 8080 }, periodSeconds: 10, failureThreshold: 3 }
+readinessProbe: { httpGet: { path: /readyz, port: 8080 }, periodSeconds: 5,  failureThreshold: 2 }
+
+<span class="c">// health.ts</span>
+<span class="k">let</span> draining = <span class="k">false</span>;
+app.get(<span class="s">"/livez"</span>, (_req, res) =&gt; res.sendStatus(200));          <span class="c">// local only</span>
+app.get(<span class="s">"/readyz"</span>, <span class="k">async</span> (_req, res) =&gt; {
+  <span class="k">if</span> (draining || !cache.warm) <span class="k">return</span> res.sendStatus(503);
+  <span class="k">const</span> dbOk = <span class="k">await</span> db.ping({ timeoutMs: 300 }).<span class="k">catch</span>(() =&gt; <span class="k">false</span>);
+  res.sendStatus(dbOk ? 200 : 503);                              <span class="c">// stop traffic, don't restart</span>
+});
+process.on(<span class="s">"SIGTERM"</span>, () =&gt; { draining = <span class="k">true</span>; setTimeout(() =&gt; server.close(), 10_000); });</code></pre>
+  </div>
+  <p class="aside">tools: Kubernetes probes, AWS ALB/NLB target health checks, ECS health checks, Cloud Run startup/liveness probes, gRPC health checking protocol, Spring Boot Actuator, terminus / lightship for Node.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Broken instances stop getting traffic</b>.</li><li><b>Stuck processes heal</b> by restart.</li><li><b>Safe rollouts</b>: new pods only get traffic when ready.</li><li><b>Graceful shutdowns</b> without dropped requests.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Badly designed checks</b> can cause outages.</li><li><b>Tuning</b> timings takes care.</li><li><b>Readiness can hide</b> a problem if nobody alerts on it.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Operations ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>“process is running” as the only health signal</b> to <b>separate startup, liveness and readiness probes with graceful shutdown</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to run &amp; explain?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Three probes to understand and tune.</td></tr>
+      <tr data-before="3" data-after="4"><td>Delivery speed<small>fast from commit to prod?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Rollouts can rely on readiness gates.</td></tr>
+      <tr data-before="2" data-after="4"><td>Release safety<small>low risk per deploy?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New versions only get traffic when ready.</td></tr>
+      <tr data-before="2" data-after="4"><td>Reliability<small>stays up?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Bad instances drop out automatically.</td></tr>
+      <tr data-before="3" data-after="4"><td>Scalability<small>handles 10× load?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Autoscaling can trust instance health.</td></tr>
+      <tr data-before="2" data-after="4"><td>Recoverability<small>fast to restore?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Stuck processes restart themselves.</td></tr>
+      <tr data-before="2" data-after="3"><td>Observability<small>can we see inside?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Probe status is a useful signal.</td></tr>
+      <tr data-before="4" data-after="4"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Almost free.</td></tr>
+      <tr data-before="3" data-after="4"><td>Developer experience<small>pleasant to ship with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Standard endpoints in every service.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Dependencies in liveness</h3><p>DB slows down; every pod restarts; full outage. <span class="fix">Fix →</span> liveness local only; deps in readiness.</p></li>
+    <li><h3>No startup probe</h3><p>Slow-booting apps get killed in a restart loop. <span class="fix">Fix →</span> startup probe or initial delay.</p></li>
+    <li><h3>Health endpoint does heavy work</h3><p>Probes cause load themselves. <span class="fix">Fix →</span> make checks cheap; cache dependency status briefly.</p></li>
+    <li><h3>Ignoring SIGTERM</h3><p>In-flight requests fail on every deploy. <span class="fix">Fix →</span> fail readiness, drain, then exit.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Every service behind a load balancer or orchestrator.</li><li>Rolling, blue–green and canary deployments.</li><li>Workers that can get stuck.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Short-lived batch jobs (use timeouts and exit codes).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Autoscaling</b></li><li><b>Blue–green deployment</b></li><li><b>Circuit breaker</b> (Vol. 1)</li><li><b>Logs, metrics &amp; traces</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What's the difference between liveness and readiness?</summary><p>Liveness asks if the process is stuck (restart it); readiness asks if it can serve now (stop sending traffic).</p></details>
+    <details><summary>Why shouldn't liveness check the database?</summary><p>A slow database would make all instances fail liveness and restart at once.</p></details>
+    <details><summary>What does a startup probe protect against?</summary><p>Slow-booting apps being killed by liveness before they finish starting.</p></details>
+    <details><summary>What should an app do on SIGTERM?</summary><p>Fail readiness, finish in-flight requests, then exit.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Ask <span class="hl">“alive?”</span> and <span class="hl">“ready?”</span> separately. Alive isn't ready.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/09-health-checks.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Kubernetes docs, “Configure Liveness, Readiness and Startup Probes”.</li><li>Google Cloud blog, “Kubernetes best practices: Setting up health checks with readiness and liveness probes”.</li><li>AWS Builders' Library, “Implementing health checks”.</li><li>gRPC, “Health Checking Protocol”.</li></ul>
+  </div>
+  <p class="folio">09</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="preview-environments.html"><small>← previous note</small>08 · Preview Environments</a>
+  <a href="autoscaling.html"><small>Next note →</small>10 · Autoscaling</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 6 · a student's bullet journal on cloud &amp; devops patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

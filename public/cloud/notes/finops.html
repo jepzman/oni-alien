@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cost Visibility (FinOps) · Jef’s Notes</title>
+<meta name="description" content="Tag, measure and own cloud spend, so cost is a design input, not a surprise.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-cloud">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 6 · cloud &amp; devops patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="finops">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 22.12.26</span><span class="topic">collection · <b>resilience &amp; cost</b></span></div>
+  <p class="kicker">a.k.a. “a meter per room”</p>
+  <h1><span class="hl">Cost Visibility (FinOps)</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Make cloud cost <b>visible, owned and part of design</b>. <b>Tag</b> every resource with team, service and environment (and enforce it), show <b>cost per team</b> and <b>per unit</b> (€ per 1,000 orders), then <b>optimise</b>: rightsize, switch non-production off at night, commit to discounts for steady load, delete idle things. <b>Budgets and anomaly alerts</b> catch surprises in days, not at month end.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> cost management</li><li><b>Phases:</b> inform → optimise → operate (FinOps Foundation)</li><li><b>Tools:</b> cloud cost explorers, Kubecost/OpenCost, Infracost</li><li><b>Pairs with:</b> IaC, autoscaling, preview environments</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Cloud makes it easy to spend and hard to see. Without tags and owners, the bill is <span class="hl-pink">one big number</span> that only finance looks at, and only after the month ends.</p>
+  <ul>
+    <li>The bill doubles and nobody knows which service caused it.</li>
+    <li>Forgotten demo GPUs and preview environments run for months.</li>
+    <li>Engineers never see the cost of their design choices.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a monthly cloud bill that jumped from forty thousand to ninety thousand euros. Finance asks why. Nobody knows which team, service or environment caused it, because resources aren&#x27;t tagged. Later they find forgotten GPU instances from a demo and preview environments that never shut down."><g class="rough"><path class="d d-pen" d="M40 200 L140 190 L240 185 L340 170 L440 60"/></g><text class="t-s t-pen" x="140" y="220" text-anchor="middle">€40k</text><text class="t-s t-red" x="440" y="46" text-anchor="middle">€90k ?!</text><text class="t-s t-red" x="620" y="100" text-anchor="middle">untagged: 70%</text><text class="t-s t-red" x="620" y="140" text-anchor="middle">demo GPUs still on</text><text class="t-s t-red" x="620" y="180" text-anchor="middle">previews never deleted</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The bill doubled. Which team? Which service? Nobody knows: nothing is tagged.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">a meter per room</span></h2>
+  <p>In a shared flat, one big electricity bill leads to arguments. Put a <b>meter in each room</b> and everyone sees their own usage: the person running a <b>space heater all day</b> turns it down, and the flat agrees a <b>monthly budget</b>.</p>
+  <ul>
+    <li>Meters per room are <b>tags and per-team dashboards</b>.</li>
+    <li>Turning down the heater is <b>optimisation</b>.</li>
+    <li>The agreed budget is <b>budgets and alerts</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a shared flat&#x27;s electricity bill. Before smart plugs, flatmates argued about one big bill. With a meter per room, everyone sees their own usage, the person with the space heater turns it down, and the flat agrees a monthly budget."><g class="rough"><g transform="translate(40 60) scale(1.6)"><g class="d"><rect class="f-paper" x="4" y="22" width="60" height="38"/><path class="f-paper" d="M0 22 l8 -16 h52 l8 16 z"/><rect x="26" y="38" width="16" height="22"/></g></g><rect class="d f-green" x="260" y="70" width="140" height="70" rx="10"/><rect class="d f-green" x="420" y="70" width="140" height="70" rx="10"/><rect class="d f-pink" x="580" y="70" width="140" height="70" rx="10"/></g><text class="t-head" x="330" y="101" text-anchor="middle" font-size="16">Ana</text><text class="t" x="330" y="125" text-anchor="middle" font-size="17">€18</text><text class="t-head" x="490" y="101" text-anchor="middle" font-size="16">Ben</text><text class="t" x="490" y="125" text-anchor="middle" font-size="17">€22</text><text class="t-head" x="650" y="101" text-anchor="middle" font-size="16">Cho</text><text class="t" x="650" y="125" text-anchor="middle" font-size="17">€71 · heater!</text><text class="t-s t-green" x="500" y="200" text-anchor="middle">seen → owned → reduced</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A meter per room: everyone sees their own usage, and the space heater gets turned down.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>A meter in each room</td><td>Tags: team, service, environment</td></tr>
+      <tr><td>Everyone sees their own usage</td><td>Cost dashboards per team and service</td></tr>
+      <tr><td>Cost per hot shower</td><td>Unit cost: € per 1,000 orders / per tenant</td></tr>
+      <tr><td>Heater off when you're out</td><td>Non-production scheduled off at night</td></tr>
+      <tr><td>Agreed monthly budget</td><td>Budgets and anomaly alerts</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">inform, optimise, operate</span></h2>
+  <p>FinOps is a <b>culture</b> as much as a tool: engineers see the cost of their choices, finance understands the trade-offs, and both decide together.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="FinOps loop. Inform: every resource is tagged with team, service and environment, enforced by policy; costs are shown per team in a dashboard with unit costs like cost per thousand orders. Optimise: rightsize, schedule non-production off at night, use savings plans and spot for flexible work, delete idle resources. Operate: budgets and anomaly alerts per team, and cost reviewed in design decisions."><g class="rough"><rect class="d f-y" x="20" y="50" width="220" height="100" rx="10"/><rect class="d f-green" x="270" y="50" width="220" height="100" rx="10"/><rect class="d f-blue" x="520" y="50" width="220" height="100" rx="10"/><path class="d" d="M240 100 L266 100"/><path class="d" d="M255.2 105.2 L266 100 L255.2 94.8"/><path class="d" d="M490 100 L516 100"/><path class="d" d="M505.2 105.2 L516 100 L505.2 94.8"/><path class="d d-dash" d="M620 156 Q380 250 140 156"/><path class="d" d="M152.0 155.1 L140 156 L148.2 164.8"/></g><text class="t-head" x="130" y="96" text-anchor="middle" font-size="20">inform</text><text class="t" x="130" y="120" text-anchor="middle" font-size="14">tags · €/team · €/order</text><text class="t-head" x="380" y="96" text-anchor="middle" font-size="20">optimise</text><text class="t" x="380" y="120" text-anchor="middle" font-size="14">rightsize · nights off · spot</text><text class="t-head" x="630" y="96" text-anchor="middle" font-size="20">operate</text><text class="t" x="630" y="120" text-anchor="middle" font-size="14">budgets · anomaly alerts</text><text class="t-s" x="380" y="230" text-anchor="middle">repeat monthly</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Inform (tags, dashboards, unit cost) → optimise (rightsize, schedule, commit) → operate (budgets, alerts, design reviews).</figcaption></figure>
+  <ol class="steps">
+    <li><b>Tag everything</b><p>team, service, env, cost_center; enforced in IaC and with policies.</p></li>
+    <li><b>Show cost to owners</b><p>Per-team dashboards and weekly reports; Kubecost/OpenCost for clusters.</p></li>
+    <li><b>Track unit cost</b><p>€ per 1,000 requests, per order, per tenant: does cost grow with value?</p></li>
+    <li><b>Optimise the big items</b><p>Rightsize, delete idle resources, schedule non-prod off, storage lifecycle rules.</p></li>
+    <li><b>Commit where steady</b><p>Savings plans / reservations for base load; spot for interruptible work.</p></li>
+    <li><b>Alert and review</b><p>Budgets, anomaly detection, and a cost estimate (Infracost) in infrastructure PRs.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>FinOps</dt><dd>Practice of managing cloud cost collaboratively.</dd></div>
+    <div><dt>Cost allocation</dt><dd>Assigning costs to teams and services.</dd></div>
+    <div><dt>Unit economics</dt><dd>Cost per unit of business value.</dd></div>
+    <div><dt>Rightsizing</dt><dd>Matching resource size to actual use.</dd></div>
+    <div><dt>Savings plan / reservation</dt><dd>Discount for committing to steady usage.</dd></div>
+    <div><dt>Spot / preemptible</dt><dd>Cheap, interruptible capacity.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>tags.tf + infracost comment</span><span>enforce tags, see cost in PRs</span></div>
+<pre><code>provider <span class="s">"aws"</span> {
+  region = <span class="s">"eu-west-1"</span>
+  default_tags {
+    tags = { team = <span class="s">"storefront"</span>, service = <span class="s">"web"</span>, env = <span class="s">"prod"</span>, cost_center = <span class="s">"cc-114"</span> }
+  }
+}
+
+<span class="c"># non-prod: off outside working hours</span>
+resource <span class="s">"aws_autoscaling_schedule"</span> <span class="s">"staging_night"</span> {
+  autoscaling_group_name = module.web_staging.asg_name
+  scheduled_action_name  = <span class="s">"night-off"</span>
+  recurrence             = <span class="s">"0 20 * * MON-FRI"</span>
+  min_size               = 0
+  max_size               = 0
+  desired_capacity       = 0
+}
+
+<span class="c"># PR comment from Infracost:</span>
+<span class="c">#   Monthly cost will increase by €1,240 (+9%)</span>
+<span class="c">#   + aws_db_instance.search   db.r6g.2xlarge   €1,240</span></code></pre>
+  </div>
+  <p class="aside">tools: AWS Cost Explorer / CUR, Azure Cost Management, GCP Billing export + Looker Studio, Kubecost / OpenCost, Infracost, Vantage, CloudZero, tag policies (AWS Organizations, Azure Policy), budgets and anomaly detection.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Know who spends what</b>, and why.</li><li><b>Surprises caught in days</b>, not at month end.</li><li><b>Real savings</b> from rightsizing and scheduling.</li><li><b>Cost-aware design</b> decisions.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Tagging discipline</b> and enforcement effort.</li><li><b>Commitments</b> can lock you in.</li><li><b>Over-optimising</b> can hurt reliability.</li><li><b>Shared costs</b> are hard to split fairly.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Operations ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>one untagged monthly bill reviewed by finance</b> to <b>tagged, team-owned costs with unit metrics, budgets and PR cost estimates</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to run &amp; explain?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tags and dashboards to maintain.</td></tr>
+      <tr data-before="3" data-after="3"><td>Delivery speed<small>fast from commit to prod?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral; cost shows up in PRs.</td></tr>
+      <tr data-before="3" data-after="3"><td>Release safety<small>low risk per deploy?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Reliability<small>stays up?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Careful: don't cut redundancy to save money.</td></tr>
+      <tr data-before="3" data-after="3"><td>Scalability<small>handles 10× load?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Recoverability<small>fast to restore?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Observability<small>can we see inside?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Cost becomes another observable signal.</td></tr>
+      <tr data-before="1" data-after="5"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Typically 20–30% saved on the first pass.</td></tr>
+      <tr data-before="3" data-after="4"><td>Developer experience<small>pleasant to ship with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Engineers see the impact of their choices.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Tags as a suggestion</h3><p>Half the resources untagged after a month. <span class="fix">Fix →</span> enforce tags in IaC and with policies.</p></li>
+    <li><h3>Cutting redundancy to save money</h3><p>Single-AZ database; the next outage costs more. <span class="fix">Fix →</span> optimise waste first, not resilience.</p></li>
+    <li><h3>Big commitments too early</h3><p>Three-year reservation for a service you're about to retire. <span class="fix">Fix →</span> commit only to steady, long-lived base load.</p></li>
+    <li><h3>Only finance looks at cost</h3><p>Engineers never see it. <span class="fix">Fix →</span> per-team dashboards and PR estimates.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Any organisation with a meaningful cloud bill.</li><li>Multi-team platforms and Kubernetes clusters.</li><li>SaaS products that need healthy unit economics.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Tiny fixed-price hosting where there's nothing to optimise.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Autoscaling</b></li><li><b>Preview environments</b></li><li><b>Infrastructure as code</b></li><li><b>Multitenancy</b> (Vol. 3)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What are the three FinOps phases?</summary><p>Inform (visibility and allocation), optimise (reduce waste and rates), operate (continuous governance).</p></details>
+    <details><summary>Why track unit cost?</summary><p>To see whether spending grows in line with business value, not just whether the bill goes up.</p></details>
+    <details><summary>What should you optimise first?</summary><p>Waste: idle and oversized resources and non-production running 24/7, not redundancy.</p></details>
+    <details><summary>How do tags help?</summary><p>They let costs be allocated to teams, services and environments, so owners can see and act on them.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Put a <span class="hl">meter</span> in every room, and turn off the <span class="hl">heater</span> when nobody's home.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/15-finops.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>FinOps Foundation, “FinOps Framework” (finops.org).</li><li>J.R. Storment &amp; Mike Fuller, <i>Cloud FinOps</i> (2nd ed., O'Reilly).</li><li>AWS Well-Architected, “Cost Optimization Pillar”.</li><li>OpenCost documentation (CNCF).</li></ul>
+  </div>
+  <p class="folio">15</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="postmortems.html"><small>← previous note</small>14 · Incident Response &amp; Postmortems</a>
+  <a href="../index.html"><small>back to →</small>Index</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 6 · a student's bullet journal on cloud &amp; devops patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

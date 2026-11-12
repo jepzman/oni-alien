@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Build Once, Deploy Many · Jef’s Notes</title>
+<meta name="description" content="Build one immutable artefact and promote the exact same thing through every environment.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-cloud">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 6 · cloud &amp; devops patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="build-once">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 13.11.26</span><span class="topic">collection · <b>shipping safely</b></span></div>
+  <p class="kicker">a.k.a. “the sealed container”</p>
+  <h1><span class="hl">Build Once, Deploy Many</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Build your app <b>exactly once</b> per commit into an <b>immutable artefact</b> (a container image, a bundle), identify it by <b>digest</b>, test it, and <b>promote that same artefact</b> through test, staging and production. Each environment supplies its own <b>configuration and secrets at runtime</b>. What you tested is, byte for byte, what you ship.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> delivery pipeline</li><li><b>Artefacts:</b> container images, JARs, bundles, AMIs</li><li><b>Identify by:</b> content digest + commit SHA</li><li><b>Pairs with:</b> blue–green, GitOps, supply-chain hygiene (Vol. 5)</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">When each environment gets its <span class="hl-pink">own build</span>, dependencies, compilers and base images can differ between them. The code that passed testing is <span class="hl-pink">not the code that ships</span>.</p>
+  <ul>
+    <li>Production pulled a newer library than staging tested.</li>
+    <li>Environment-specific values are baked in at build time.</li>
+    <li>Nobody can say exactly what's running in production.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of three separate builds: one for staging, one for production, each running npm install at a different time. Production pulls a newer dependency version than staging did, so the code that passed testing is not the code that ships. A bug appears only in production."><g class="rough"><rect class="d f-paper" x="20" y="60" width="220" height="80" rx="10"/><rect class="d f-paper" x="270" y="60" width="220" height="80" rx="10"/><rect class="d f-pink d-red" x="520" y="60" width="220" height="80" rx="10"/></g><text class="t-head" x="130" y="96" text-anchor="middle" font-size="17">build for test</text><text class="t" x="130" y="120" text-anchor="middle" font-size="17">lib 2.3.1</text><text class="t-head" x="380" y="96" text-anchor="middle" font-size="17">build for staging</text><text class="t" x="380" y="120" text-anchor="middle" font-size="17">lib 2.3.1</text><text class="t-head t-red" x="630" y="96" text-anchor="middle" font-size="17">build for prod</text><text class="t" x="630" y="120" text-anchor="middle" font-size="17">lib 2.4.0 !</text><text class="t-s t-red" x="380" y="190" text-anchor="middle">tested ≠ shipped</text><text class="t-s t-red" x="380" y="220" text-anchor="middle">“works in staging” bugs</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Rebuilding per environment: what you tested isn't what you shipped.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the sealed shipping container</span></h2>
+  <p>A shipping container is <b>packed and sealed once</b> at the factory. It moves from truck to train to ship <b>without being opened</b>, and the <b>seal number</b> proves it. Only the <b>address label</b> changes along the way.</p>
+  <ul>
+    <li>The sealed container is the <b>artefact</b>.</li>
+    <li>The seal number is the <b>digest</b>.</li>
+    <li>The address label is <b>runtime config</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a sealed, numbered shipping container. It&#x27;s packed and sealed once at the factory, then moves from truck to train to ship to warehouse without ever being opened or repacked. Only the delivery address changes at each stage."><g class="rough"><g transform="translate(30 70) scale(1.6)"><g class="d"><rect class="f-y" x="2" y="10" width="66" height="40" rx="2"/><path d="M12 10 v40 M22 10 v40 M32 10 v40 M42 10 v40 M52 10 v40 M62 10 v40"/></g></g><path class="d" d="M160 110 L290 110"/><path class="d" d="M279.2 115.2 L290 110 L279.2 104.8"/><path class="d" d="M330 110 L460 110"/><path class="d" d="M449.2 115.2 L460 110 L449.2 104.8"/><path class="d" d="M500 110 L630 110"/><path class="d" d="M619.2 115.2 L630 110 L619.2 104.8"/></g><text class="t-s t-pen" x="90" y="190" text-anchor="middle">sealed #A7F3</text><text class="t-s" x="225" y="96" text-anchor="middle">same seal</text><text class="t-s t-pen" x="330" y="150" text-anchor="middle">truck</text><text class="t-s" x="395" y="96" text-anchor="middle">same seal</text><text class="t-s t-pen" x="500" y="150" text-anchor="middle">train</text><text class="t-s" x="565" y="96" text-anchor="middle">same seal</text><text class="t-s t-pen" x="670" y="150" text-anchor="middle">ship</text><text class="t-s t-green" x="450" y="220" text-anchor="middle">only the address label changes</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A sealed shipping container: packed once, same seal number at every stop. Only the address label changes.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Packing once at the factory</td><td>One CI build per commit</td></tr>
+      <tr><td>The seal number</td><td>Image digest (<code>sha256:…</code>)</td></tr>
+      <tr><td>Never repacked on the way</td><td>Promoted unchanged between environments</td></tr>
+      <tr><td>Address label per stop</td><td>Environment config and secrets at runtime</td></tr>
+      <tr><td>Customs checks the seal</td><td>Deploys verify digest and signature</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">one artefact, many environments</span></h2>
+  <p>Promotion becomes a <b>pointer change</b> (“prod now runs digest 9c1e…”), which also makes rollback a pointer change.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Build once, deploy many. CI builds one container image from a commit, tags it with the commit hash and its digest, and runs tests against it. The same digest is promoted to test, staging and production. Each environment injects its own configuration and secrets at runtime. Nothing is rebuilt."><g class="rough"><rect class="d f-blue" x="20" y="40" width="160" height="70" rx="10"/><path class="d" d="M186 75 L256 75"/><path class="d" d="M245.2 80.2 L256 75 L245.2 69.8"/><g transform="translate(262 50) scale(1.0)"><g class="d"><rect class="f-y" x="2" y="10" width="66" height="40" rx="2"/><path d="M12 10 v40 M22 10 v40 M32 10 v40 M42 10 v40 M52 10 v40 M62 10 v40"/></g></g><path class="d" d="M340 80 L470 40"/><path class="d" d="M461.2 48.2 L470 40 L458.1 38.2"/><rect class="d f-green" x="476" y="20" width="140" height="44" rx="10"/><path class="d" d="M340 80 L470 110"/><path class="d" d="M458.3 112.7 L470 110 L460.6 102.5"/><rect class="d f-green" x="476" y="90" width="140" height="44" rx="10"/><path class="d" d="M340 80 L470 180"/><path class="d" d="M458.3 177.5 L470 180 L464.6 169.3"/><rect class="d f-green" x="476" y="160" width="140" height="44" rx="10"/></g><text class="t-head" x="100" y="82" text-anchor="middle">commit 3f2a</text><text class="t-s" x="221" y="61" text-anchor="middle">build</text><text class="t-s t-pen" x="300" y="130" text-anchor="middle">image@sha256:9c1e…</text><text class="t-head" x="546" y="49" text-anchor="middle" font-size="17">test</text><text class="t-s t-pen" x="630" y="48" text-anchor="start">+ test config</text><text class="t-head" x="546" y="119" text-anchor="middle" font-size="17">staging</text><text class="t-s t-pen" x="630" y="118" text-anchor="start">+ staging config</text><text class="t-head" x="546" y="189" text-anchor="middle" font-size="17">prod</text><text class="t-s t-pen" x="630" y="188" text-anchor="start">+ prod config</text><text class="t-s t-green" x="240" y="250" text-anchor="middle">same digest everywhere; nothing rebuilt</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One build, one digest. Promote the identical artefact; inject config per environment at runtime.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Build in CI only</b><p>No laptop builds for deploys; reproducible inputs (lockfiles, pinned base images).</p></li>
+    <li><b>Tag by commit and digest</b><p>Human-readable tag + immutable digest; deploy by digest.</p></li>
+    <li><b>Keep config out of the build</b><p>Environment variables, config maps and secrets injected at runtime (12-factor).</p></li>
+    <li><b>Promote, don't rebuild</b><p>The pipeline moves the same digest from test → staging → prod.</p></li>
+    <li><b>Record what's where</b><p>A deploy log or GitOps repo states which digest runs in each environment.</p></li>
+    <li><b>Roll back by pointer</b><p>Redeploy the previous digest.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Artefact</dt><dd>The built, deployable output of a commit.</dd></div>
+    <div><dt>Immutable</dt><dd>Never changed after it's built.</dd></div>
+    <div><dt>Digest</dt><dd>A content hash that uniquely identifies an artefact.</dd></div>
+    <div><dt>Promotion</dt><dd>Moving an artefact to the next environment.</dd></div>
+    <div><dt>12-factor config</dt><dd>Config from the environment, not the build.</dd></div>
+    <div><dt>Reproducible build</dt><dd>Same inputs always produce the same output.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>.github/workflows/release.yml</span><span>build once, promote by digest</span></div>
+<pre><code>jobs:
+  build:
+    outputs: { digest: ${{ steps.push.outputs.digest }} }
+    steps:
+      - uses: actions/checkout@v5
+      - id: push
+        uses: docker/build-push-action@v6
+        with: { push: <span class="k">true</span>, tags: <span class="s">"ghcr.io/acme/web:${{ github.sha }}"</span> }
+
+  deploy-staging:
+    needs: build
+    steps:
+      - run: ./deploy.sh staging ghcr.io/acme/web@${{ needs.build.outputs.digest }}
+
+  deploy-prod:
+    needs: [build, deploy-staging]
+    environment: production              <span class="c"># approval gate</span>
+    steps:
+      - run: ./deploy.sh prod ghcr.io/acme/web@${{ needs.build.outputs.digest }}</code></pre>
+  </div>
+  <p class="aside">tools: container registries (GHCR, ECR, Artifact Registry), artefact repositories (Artifactory, Nexus), Docker Buildx / Bazel for reproducible builds, deploy-by-digest in Kubernetes and Cloud Run, Kustomize/Helm for per-environment config.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Tested = shipped</b>, byte for byte.</li><li><b>Faster pipelines</b>: no rebuilds.</li><li><b>Clear inventory</b> of what runs where.</li><li><b>Simple rollback</b> to a previous digest.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Config discipline</b>: nothing environment-specific at build time.</li><li><b>Registry storage</b> for many artefacts.</li><li><b>Frontend builds</b> that inline env vars need rework.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Operations ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>rebuilding separately for each environment</b> to <b>one immutable artefact promoted by digest</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="4"><td>Simplicity<small>easy to run &amp; explain?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One build, one pointer per environment.</td></tr>
+      <tr data-before="3" data-after="4"><td>Delivery speed<small>fast from commit to prod?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Promotion skips rebuilds.</td></tr>
+      <tr data-before="2" data-after="5"><td>Release safety<small>low risk per deploy?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Exactly what was tested goes live.</td></tr>
+      <tr data-before="3" data-after="4"><td>Reliability<small>stays up?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No environment-only build surprises.</td></tr>
+      <tr data-before="3" data-after="3"><td>Scalability<small>handles 10× load?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Recoverability<small>fast to restore?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Roll back by redeploying the previous digest.</td></tr>
+      <tr data-before="2" data-after="4"><td>Observability<small>can we see inside?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Every environment reports its digest.</td></tr>
+      <tr data-before="3" data-after="4"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fewer CI minutes; some registry storage.</td></tr>
+      <tr data-before="3" data-after="4"><td>Developer experience<small>pleasant to ship with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Clear, predictable pipeline.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Baking config into the build</h3><p><code>API_URL</code> inlined at build time per environment. <span class="fix">Fix →</span> load config at runtime (or a config.json served per environment).</p></li>
+    <li><h3>Deploying by mutable tag</h3><p><code>:latest</code> or <code>:staging</code> changes underneath you. <span class="fix">Fix →</span> deploy by digest.</p></li>
+    <li><h3>Laptop builds</h3><p>“Quick fix” built and pushed from a laptop. <span class="fix">Fix →</span> only CI builds deployable artefacts.</p></li>
+    <li><h3>Rebuilding for a hotfix</h3><p>The emergency fix skips the pipeline. <span class="fix">Fix →</span> same pipeline, just faster gates.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Any service deployed to more than one environment.</li><li>Container-based and serverless deployments.</li><li>Regulated environments that need traceability.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Truly single-environment scripts.</li><li>Static sites whose content is the build (still: build once per content change).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Blue–green deployment</b></li><li><b>GitOps</b></li><li><b>Immutable infrastructure</b></li><li><b>Supply-chain hygiene</b> (Vol. 5)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why not rebuild for each environment?</summary><p>Dependencies and tools can differ between builds, so the shipped code isn't what was tested.</p></details>
+    <details><summary>Why deploy by digest rather than tag?</summary><p>Tags can be moved; a digest always identifies the exact same artefact.</p></details>
+    <details><summary>Where should environment-specific values come from?</summary><p>Runtime configuration and secrets, not the build.</p></details>
+    <details><summary>How does rollback work?</summary><p>Redeploy the previous known-good digest.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Pack it <span class="hl">once</span>, check the <span class="hl">seal</span>, change only the <span class="hl">label</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/04-build-once.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Jez Humble &amp; David Farley, <i>Continuous Delivery</i>, ch. 5 “Anatomy of the Deployment Pipeline”.</li><li>The Twelve-Factor App, “III. Config” and “V. Build, release, run”.</li><li>Docker docs, “Image digests”.</li><li>reproducible-builds.org.</li></ul>
+  </div>
+  <p class="folio">04</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="feature-flags.html"><small>← previous note</small>03 · Feature Flags</a>
+  <a href="infrastructure-as-code.html"><small>Next note →</small>05 · Infrastructure as Code</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 6 · a student's bullet journal on cloud &amp; devops patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>
