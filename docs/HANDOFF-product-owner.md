@@ -1,6 +1,6 @@
 # Handoff: The Product Owner's Notebook (Series 2, Book 2)
 
-Status as of 2026-11-12: **planned; open questions in section 7 waiting for the owner. Nothing built.**
+Status as of 2026-11-12: **Vol. 1 written (15 notes, `content/product-1/`), on the Series 2 shelf; not yet deployed.** Decisions in section 7.
 
 Story facts: `docs/larder-casebook.md` (source of truth) and the public case file `/larder/`.
 Book 1's plan, for comparison: `docs/HANDOFF-solution-architect.md`.
@@ -102,10 +102,19 @@ Each book has its own skin; Book 2 should feel like a **product team's wall**:
 7. [ ] Book 2 on the case file: status and link; future log update.
 8. [ ] Verify like Vol. 1 (figures contact sheets, 375 px, light/dark, PDFs, the exists check), PR, deploy when asked.
 
-## 7. Open questions for the owner
+## 7. Decisions (owner, 2026-11-12)
 
-1. **Six volumes × 15 notes** like Book 1, or a shorter book (for example four volumes)?
-2. **The skin**: the product board (kraft, index cards, push pins, Permanent Marker), or something else?
-3. **The ratings**: the nine above?
-4. **Sample note**: Opportunity Solution Tree (it carries the substitutions story and pairs with Ana's event storming)?
-5. **Order of work**: Grace's Vol. 1 next, then alternate volumes between the books? Or finish Ana's Vol. 2 first?
+1. Six volumes × 15 notes, like Book 1.
+2. The product-board look (implemented as `.theme-product`).
+3. The nine ratings above (`PRODUCT_ATTRS`).
+4. Sample note: Opportunity Solution Tree.
+5. Order of work: **alternate volumes between the books**: next is Ana's Vol. 2, then Grace's Vol. 2, and so on.
+
+## 8. Built (2026-11-12)
+
+- `product-1` journal, `content/product-1/01_customers.py` … `04_testing.py`. Facts: casebook, “Book 2, Vol. 1”.
+- `meanwhile` field: `(journal key, slug, line here, line there)`; the generator renders the box on both notes.
+- `sheet_doodles="product"` (sticky notes, a marker, a mini Now/Next/Later board); `brand`, `narrator`, `book_no` journal fields.
+- Landing: the Series 2 shelf has one row per book; `PLANNED_PRODUCT` lists vols. 2–6.
+- Case file: every Grace note on the timeline (green ✎), Book 2 card links to vol. 1.
+- Checklist items 1–8 in section 6 are done for Vol. 1.

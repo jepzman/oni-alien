@@ -430,7 +430,7 @@ PLANNED_PRODUCT = [
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
     ("Jan 2027", [("★", "Book 1, vol. 2 · <b>Decisions &amp; Trade-offs</b>, complete: options analysis, one-way doors, build vs buy, technical debt"), ("•", "One-page printable cheat sheet per collection")]),
-    ("Feb 2027", [("★", "Book 2 · <b>The Product Owner's Notebook</b>: Grace's side of the Larder story: discovery, problem framing, prioritisation, saying no, metrics that matter"), ("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
+    ("Feb 2027", [("★", "Book 2, vol. 2 · <b>Deciding What to Build</b> (Grace): prioritising, saying no, strategy on a page, now / next / later roadmaps"), ("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
     ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b> (Sanne, the Rotterdam launch): planning, estimation, risks and dependencies, delivery rhythms, status that tells the truth"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
     ("Mid 2027", [("★", "Book 1, vols. 3–6 · communicating architecture, integration, designing for qualities, governance and influence")]),
@@ -944,7 +944,7 @@ def render_landing():
         months.append(f'    <div class="month"><h3>{month}</h3><ul>{lis}</ul></div>')
     total = sum(len(j["catalogue"]) for j in shelf())
     return "\n".join([
-        head("Jef’s Notes", "A shelf of student bullet journals on software design patterns and the work around the code, with doodles, analogies, trade-offs and ratings.", 0, "Architects+Daughter"),
+        head("Jef’s Notes", "A shelf of student bullet journals on software design patterns and the work around the code, with doodles, analogies, trade-offs and ratings.", 0, "Architects+Daughter&family=Permanent+Marker"),
         body_open(),
         '<a class="skip-link" href="#main">Skip to the shelf</a>',
         bar(None, 0, "shelf"),
@@ -1055,7 +1055,7 @@ def render_casefile():
         c.two_books.html(),
         f'  <ul class="bookcards">\n{books}\n  </ul>',
         '  <h2 id="timeline"><span class="num">7</span>The story timeline <span class="side">every note, pinned to its date</span></h2>',
-        '  <p>Read one book from start to end, or follow the story in date order across books. <span class="sig-inline">★</span> marks story events, <span class="sig-inline">✎</span> a note.</p>',
+        '  <p>Read one book from start to end, or follow the story in date order across books. <span class="sig-inline">★</span> story events · <span class="sig-inline">✎</span> Ana’s notebook · <span class="sig-inline sig-2">✎</span> Grace’s notebook.</p>',
         f'  <div class="future timeline">\n{chr(10).join(months)}\n  </div>',
         '  <p class="aside">the facts on this page are the source of truth for every note. If a note and this page disagree, this page wins (and the note gets fixed).</p>',
         '  <p class="folio">✦</p>',
