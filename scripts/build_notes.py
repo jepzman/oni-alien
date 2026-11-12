@@ -301,8 +301,43 @@ JOURNALS = [
             (15, "finops", "Cost Visibility (FinOps)", "resilience", "Tag, measure and own cloud spend, so cost is a design input, not a surprise."),
         ],
     ),
-    # ---- Series 2 · The Solution Architect's Notebook (draft: rendered, not on the shelf, no PDFs) ----
-    # Plan and handoff: docs/HANDOFF-solution-architect.md. Only the sample chapter exists so far.
+    # ---- Series 2 · The Solution Architect's Notebook ----
+    # Plan and handoff: docs/HANDOFF-solution-architect.md. Case study facts: docs/larder-casebook.md.
+    dict(
+        key="architect-1", vol=1, title="From Requirements to Architecture", short="from requirements to architecture",
+        series=2, book="The Solution Architect's Notebook", title_block=True, sheet_doodles=True,
+        theme="theme-architect", fonts="Architects+Daughter", subject="solution architecture",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Winter term · 2027", weekdays=(0, 3), start=date(2027, 1, 4),
+        kicker="the solution architect's notebook · book 1 · vol. 1",
+        lead="Volume 1 of <span class=\"hl\">The Solution Architect's Notebook</span>: how an architect gets from a vague business plan to a first architecture people can build, without guessing. {n} notes in {c} collections: understand the problem and the people, find the requirements that really shape the system, choose the first shapes, and test the riskiest ideas before they're expensive. Every note follows <b>Larder</b>, a grocery delivery start-up growing from one city to six, and ends with a <b>try it</b> exercise for your own project.",
+        blurb="Stakeholders, drivers, context, the requirements that shape a system, first architecture shapes, and testing risky ideas early.",
+        attrs=ARCHITECT_ATTRS, attrs_title="The nine architect ratings", attrs_side="what a good architecture practice is judged on", ratings_h2="Architect ratings",
+        handmade=set(),
+        collections=[
+            ("understanding", "Understanding the problem", "who cares, what they want, and where the system ends"),
+            ("requirements", "Requirements that shape architecture", "find the few needs that decide the design"),
+            ("shapes", "First shapes", "pick a starting structure you can grow"),
+            ("validating", "Validating early", "test the risky ideas while they're still cheap"),
+        ],
+        catalogue=[
+            (1, "stakeholder-map", "Stakeholder Map", "understanding", "List everyone who can affect or is affected by the system, and plan how to work with each."),
+            (2, "business-drivers", "Business Drivers & Goals", "understanding", "Turn the business plan into a few measurable goals that every design choice can be checked against."),
+            (3, "system-context", "System Context Diagram", "understanding", "One picture of the system as a box, with the people and systems around it, so everyone agrees where it ends."),
+            (4, "event-storming", "Domain Discovery (Event Storming)", "understanding", "Map the business as a timeline of events on sticky notes with the people who do the work."),
+            (5, "asr", "Architecturally Significant Requirements", "requirements", "Find the few requirements that would change the architecture, and design for those first."),
+            (6, "quality-attribute-scenarios", "Quality Attribute Scenarios", "requirements", "Turn “fast” and “reliable” into testable sentences: a stimulus, a context and a measurable response."),
+            (7, "constraints-assumptions", "Constraints vs Assumptions", "requirements", "Separate the fixed rules you must obey from the beliefs you still have to check."),
+            (8, "nfr-checklist", "NFR Checklist", "requirements", "A short list of quality questions to ask on every project, so nothing important is forgotten."),
+            (9, "architecture-styles", "Architecture Styles Compared", "shapes", "Compare monolith, modular monolith, microservices, event-driven and serverless against your drivers."),
+            (10, "modular-monolith", "Modular Monolith First", "shapes", "Start as one deployable app with strict internal modules; split out a service only when you must."),
+            (11, "bounded-contexts", "Bounded Contexts", "shapes", "Draw boundaries where a word changes meaning, and give each area its own model and owner."),
+            (12, "walking-skeleton", "Walking Skeleton", "shapes", "Build the thinnest end-to-end slice through every part first, then add flesh."),
+            (13, "spike-prototype-poc", "Spike vs Prototype vs PoC", "validating", "Pick the right small experiment: a spike answers a question, a prototype tests an idea, a PoC proves it works."),
+            (14, "fitness-functions", "Fitness Functions", "validating", "Turn architecture rules into automated checks that run in CI, so the design can't quietly decay."),
+            (15, "risk-storming", "Risk-Storming", "validating", "The team marks risks on the architecture diagram together, then decides what to do about the biggest."),
+        ],
+    ),
     dict(
         key="architect-2", vol=2, title="Decisions & Trade-offs", short="decisions &amp; trade-offs",
         book="The Solution Architect's Notebook", draft=True, title_block=True, sheet_doodles=True,
