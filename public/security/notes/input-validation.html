@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Validate at the Boundary · Jef’s Notes</title>
+<meta name="description" content="Check every input against an allow-list schema as it enters, and reject the rest.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-security">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 5 · security patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="input-validation">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 26.11.26</span><span class="topic">collection · <b>untrusted input</b></span></div>
+  <p class="kicker">a.k.a. “airport security”</p>
+  <h1><span class="hl">Validate at the Boundary</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Treat every input from outside (bodies, query strings, headers, files, webhooks) as <b>hostile</b>. Check it <b>once, at the boundary</b>, against an <b>allow-list schema</b>: types, ranges, lengths, formats, and <b>drop unknown fields</b>. Reject anything else with a clear error. Inside, code works with <b>typed, trusted data</b>. Validation is your first filter, not your only defence.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> input handling</li><li><b>Approach:</b> allow-list (positive) validation</li><li><b>Tools:</b> Zod, Valibot, JSON Schema, Pydantic</li><li><b>Pairs with:</b> parameterized queries, output encoding</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Without a clear checkpoint, every layer <span class="hl-pink">assumes another one checked</span>. Bad input slips through and breaks logic, data and sometimes security.</p>
+  <ul>
+    <li>A negative quantity gives the customer a refund.</li>
+    <li>An extra <code>role: "admin"</code> field is copied straight into the user (mass assignment).</li>
+    <li>A 4 MB “name” fills logs and slows the service.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a request body passed straight into the app. It contains a negative quantity, a role field set to admin, a four megabyte name and a date of the year 99999. Each layer assumes another layer checked it, so the bad values reach the database and the billing code."><g class="rough"><rect class="d f-pink d-red" x="20" y="30" width="260" height="190" rx="10"/><path class="d d-red" d="M286 125 L400 125"/><path class="d d-red" d="M389.2 130.2 L400 125 L389.2 119.8"/><rect class="d f-paper" x="406" y="30" width="160" height="54" rx="10"/><rect class="d f-paper" x="406" y="100" width="160" height="54" rx="10"/><rect class="d f-paper" x="406" y="170" width="160" height="54" rx="10"/></g><text class="t t-red" x="36" y="62" text-anchor="start" font-size="16">qty: -5</text><text class="t t-red" x="36" y="96" text-anchor="start" font-size="16">role: &quot;admin&quot;</text><text class="t t-red" x="36" y="130" text-anchor="start" font-size="16">name: (4 MB)</text><text class="t t-red" x="36" y="164" text-anchor="start" font-size="16">date: 99999-01-01</text><text class="t t-red" x="36" y="198" text-anchor="start" font-size="16">price: &quot;free&quot;</text><text class="t-head" x="486" y="64" text-anchor="middle" font-size="17">handler</text><text class="t-head" x="486" y="134" text-anchor="middle" font-size="17">service</text><text class="t-head" x="486" y="204" text-anchor="middle" font-size="17">database</text><text class="t-s t-red" x="660" y="60" text-anchor="middle">“the handler</text><text class="t-s t-red" x="660" y="86" text-anchor="middle">checked it”</text><text class="t-s t-red" x="660" y="140" text-anchor="middle">“the DB will</text><text class="t-s t-red" x="660" y="166" text-anchor="middle">reject it”</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Raw input flows straight in. Every layer assumes someone else checked it.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">airport security</span></h2>
+  <p>An airport has <b>one checkpoint</b> with a <b>strict list</b> of what's allowed. Every bag is checked <b>at the entrance</b>; anything not on the list is refused. Inside, gates and shops can rely on the fact that bags were checked.</p>
+  <ul>
+    <li>The checkpoint is your <b>API boundary</b>.</li>
+    <li>The list of allowed items is an <b>allow-list schema</b>.</li>
+    <li>“Not on the list = refused” beats “on the banned list = refused”.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of an airport security checkpoint with a strict list of what&#x27;s allowed. Every bag is checked once, at the entrance, against the list. Anything not on the list is refused. Inside the terminal, shops and gates can trust that bags were checked."><g class="rough"><g transform="translate(300 40) scale(1.8)"><g class="d"><circle class="f-y" cx="30" cy="14" r="10"/><path class="f-y" d="M10 10 h40 l-4 -8 h-32 z"/><rect class="f-y" x="14" y="26" width="32" height="28" rx="4"/><path d="M14 30 l-10 16 M46 30 l10 16 M22 54 v10 M38 54 v10 M26 36 h8"/></g></g><g transform="translate(40 90) scale(0.9)"><g class="d"><rect class="f-paper" x="4" y="14" width="52" height="40" rx="2"/><path d="M4 26 h52 M30 14 v40"/></g></g><g transform="translate(110 90) scale(0.9)"><g class="d"><rect class="f-paper" x="4" y="14" width="52" height="40" rx="2"/><path d="M4 26 h52 M30 14 v40"/></g></g><g transform="translate(180 90) scale(0.9)"><g class="d"><rect class="f-paper" x="4" y="14" width="52" height="40" rx="2"/><path d="M4 26 h52 M30 14 v40"/></g></g><path class="d" d="M250 120 L290 120"/><path class="d" d="M279.2 125.2 L290 120 L279.2 114.8"/><path class="d d-green" d="M420 100 L540 70"/><path class="d d-green" d="M530.8 77.7 L540 70 L528.3 67.6"/><path class="d d-red" d="M420 140 L540 190"/><path class="d d-red" d="M528.0 190.7 L540 190 L532.0 181.0"/></g><text class="t-s t-green" x="480" y="60" text-anchor="middle">on the list ✓</text><text class="t-s t-red" x="480" y="210" text-anchor="middle">not on the list ✗</text><text class="t-s t-green" x="640" y="70" text-anchor="middle">terminal</text><text class="t-s t-red" x="640" y="190" text-anchor="middle">refused</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Airport security: one checkpoint, a strict allowed list, everything else refused.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The checkpoint</td><td>Validation at the API edge</td></tr>
+      <tr><td>The allowed-items list</td><td>A schema of types, ranges, lengths, formats</td></tr>
+      <tr><td>Unlisted item confiscated</td><td>Unknown fields stripped</td></tr>
+      <tr><td>Refused at the gate</td><td>HTTP 400 with field errors</td></tr>
+      <tr><td>Terminal trusts checked bags</td><td>Inner code receives typed, valid objects</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">one schema, at the edge</span></h2>
+  <p>Validate <b>syntax and shape</b> at the edge (is it a number 1–99?), and <b>business rules</b> in the domain (is this product in stock?). Both are needed; neither replaces safe output and queries.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Validation at the boundary. Every request passes through a schema at the API edge: quantity must be an integer from one to ninety-nine, name a string of at most one hundred characters, email a valid email, and unknown fields like role are stripped. Invalid input gets a 400 error with field messages. Inside, the code receives a typed, trusted object."><g class="rough"><rect class="d f-pink" x="20" y="100" width="140" height="70" rx="10"/><path class="d" d="M166 135 L236 135"/><path class="d" d="M225.2 140.2 L236 135 L225.2 129.8"/><rect class="d f-y" x="242" y="30" width="260" height="210" rx="10"/><path class="d d-green" d="M508 100 L580 70"/><path class="d d-green" d="M572.0 79.0 L580 70 L568.0 69.3"/><path class="d d-red" d="M508 180 L580 210"/><path class="d d-red" d="M568.0 210.7 L580 210 L572.0 201.0"/></g><text class="t-head" x="90" y="142" text-anchor="middle" font-size="18">request</text><text class="t-head" x="372" y="60" text-anchor="middle" font-size="18">schema (allow-list)</text><text class="t" x="256" y="96" text-anchor="start" font-size="16">qty: int 1–99</text><text class="t" x="256" y="126" text-anchor="start" font-size="16">name: string ≤ 100</text><text class="t" x="256" y="156" text-anchor="start" font-size="16">email: email</text><text class="t" x="256" y="186" text-anchor="start" font-size="16">date: 2020–2030</text><text class="t" x="256" y="216" text-anchor="start" font-size="16">unknown fields: dropped</text><text class="t-s t-green" x="600" y="56" text-anchor="start">typed object</text><text class="t-s t-red" x="600" y="230" text-anchor="start">400 + field errors</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One strict schema at the edge: allow-list types, ranges and lengths; drop unknown fields; reject the rest.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Define a schema per endpoint</b><p>Types, min/max, lengths, enums, formats, for body, query, params and headers.</p></li>
+    <li><b>Allow-list, don't block-list</b><p>Describe what's valid; don't try to list every bad pattern.</p></li>
+    <li><b>Strip unknown fields</b><p>Prevents mass assignment (<code>role</code>, <code>isAdmin</code>).</p></li>
+    <li><b>Limit sizes</b><p>Request body limits, array lengths, string lengths, file types and sizes.</p></li>
+    <li><b>Fail clearly</b><p>400 with field errors; don't echo raw input back unescaped.</p></li>
+    <li><b>Validate webhooks and files too</b><p>Check signatures, content types (by content, not extension) and sizes.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Allow-list</dt><dd>Only listed values/shapes are accepted.</dd></div>
+    <div><dt>Block-list</dt><dd>Listed bad values are rejected; easy to bypass.</dd></div>
+    <div><dt>Mass assignment</dt><dd>Copying request fields straight onto objects.</dd></div>
+    <div><dt>Schema</dt><dd>A machine-checkable description of valid input.</dd></div>
+    <div><dt>Canonicalisation</dt><dd>Normalising input (unicode, paths) before checks.</dd></div>
+    <div><dt>Trust boundary</dt><dd>Where data crosses from untrusted to trusted.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>orders.route.ts</span><span>Zod + Express</span></div>
+<pre><code><span class="k">import</span> { z } <span class="k">from</span> <span class="s">"zod"</span>;
+
+<span class="k">const</span> CreateOrder = z.object({
+  productId: z.string().uuid(),
+  qty: z.number().int().min(1).max(99),
+  note: z.string().trim().max(500).optional(),
+  deliverOn: z.coerce.date().min(<span class="k">new</span> Date(<span class="s">"2020-01-01"</span>)).max(<span class="k">new</span> Date(<span class="s">"2030-12-31"</span>)),
+}).strip();                                   <span class="c">// unknown fields (role, price…) are dropped</span>
+
+app.post(<span class="s">"/orders"</span>, express.json({ limit: <span class="s">"10kb"</span> }), <span class="k">async</span> (req, res) =&gt; {
+  <span class="k">const</span> parsed = CreateOrder.safeParse(req.body);
+  <span class="k">if</span> (!parsed.success) {
+    <span class="k">return</span> res.status(400).json({ errors: parsed.error.flatten().fieldErrors });
+  }
+  <span class="k">const</span> order = <span class="k">await</span> orders.create(req.user.id, parsed.data);   <span class="c">// typed and trusted</span>
+  res.status(201).json(order);
+});</code></pre>
+  </div>
+  <p class="aside">tools: Zod, Valibot, Yup, Ajv / JSON Schema, OpenAPI request validators, Pydantic (Python), Bean Validation (Java), FluentValidation (.NET), file-type sniffing libraries.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Bad data stopped at the door</b>.</li><li><b>No mass assignment</b>.</li><li><b>Typed data inside</b>: simpler code.</li><li><b>Clear errors</b> for honest clients.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Schemas to write</b> and keep in sync.</li><li><b>False rejections</b> when rules are too strict (names, addresses).</li><li><b>Not a full defence</b>: still need safe queries and output.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Security ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>ad-hoc checks scattered through the code</b> to <b>one strict allow-list schema per endpoint</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="2" data-after="4"><td>Simplicity<small>easy to get right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One obvious place for input rules.</td></tr>
+      <tr data-before="3" data-after="3"><td>Usability<small>little friction?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Good errors help; over-strict rules annoy.</td></tr>
+      <tr data-before="3" data-after="3"><td>Confidentiality<small>secrets stay secret?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Integrity<small>can't be tampered with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Impossible values and extra fields are blocked.</td></tr>
+      <tr data-before="2" data-after="4"><td>Availability<small>stays up under attack?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Size limits stop oversized payload abuse.</td></tr>
+      <tr data-before="2" data-after="3"><td>Containment<small>small blast radius?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Narrows what an attacker can send.</td></tr>
+      <tr data-before="3" data-after="3"><td>Auditability<small>can we tell what happened?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Rejections can be logged and counted.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Schemas cost a little; bugs cost more.</td></tr>
+      <tr data-before="2" data-after="5"><td>Developer experience<small>easy to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Typed objects after the edge.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Block-lists</h3><p>Filtering out “&lt;script&gt;” and calling it safe. <span class="fix">Fix →</span> allow-list valid shapes; encode output separately.</p></li>
+    <li><h3>Client-side validation only</h3><p>The browser checks; the API trusts. <span class="fix">Fix →</span> always validate on the server.</p></li>
+    <li><h3>Passing req.body through</h3><p><code>User.update(req.body)</code>. <span class="fix">Fix →</span> pick known fields via the schema.</p></li>
+    <li><h3>Over-strict names and addresses</h3><p>Rejecting “O'Brien” or non-Latin names. <span class="fix">Fix →</span> validate length and type; don't guess what a name looks like.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Every API endpoint, form handler, webhook and message consumer.</li><li>File uploads (type, size, content).</li><li>Config and environment variables at start-up.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Never skip it; just keep business-rule checks in the domain layer.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Parameterized queries</b></li><li><b>Output encoding &amp; CSP</b></li><li><b>Defence in depth</b></li><li><b>API gateway</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why prefer allow-lists over block-lists?</summary><p>It's impossible to list every bad input; describing valid input rejects everything else by default.</p></details>
+    <details><summary>What is mass assignment?</summary><p>Copying request fields directly onto objects, letting attackers set fields like role or isAdmin.</p></details>
+    <details><summary>Is client-side validation enough?</summary><p>No. It's for user experience; the server must validate everything.</p></details>
+    <details><summary>Does validation make SQL injection impossible?</summary><p>No. Use parameterized queries as well; validation is one layer.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>One <span class="hl">checkpoint</span>, a strict <span class="hl">list</span>, and everything else <span class="hl">refused</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/08-input-validation.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>OWASP, “Input Validation Cheat Sheet”.</li><li>OWASP, “Mass Assignment Cheat Sheet”.</li><li>OWASP ASVS v4, V5 “Validation, Sanitization and Encoding”.</li><li>Zod documentation (zod.dev).</li></ul>
+  </div>
+  <p class="folio">08</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="password-hashing.html"><small>← previous note</small>07 · Password Hashing</a>
+  <a href="parameterized-queries.html"><small>Next note →</small>09 · Parameterized Queries</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 5 · a student's bullet journal on security patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Short-Lived Tokens · Jef’s Notes</title>
+<meta name="description" content="Credentials that expire in minutes, refreshed safely, so a stolen one is soon useless.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-security">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 5 · security patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="short-lived-tokens">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 12.11.26</span><span class="topic">collection · <b>identity &amp; access</b></span></div>
+  <p class="kicker">a.k.a. “today's cinema ticket”</p>
+  <h1><span class="hl">Short-Lived Tokens</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Credentials that <b>never expire</b> become a time bomb. Issue <b>access tokens that live minutes</b>, pair them with <b>refresh tokens that rotate</b> on every use (reuse = revoke the session), and give workloads <b>automatically issued credentials</b> instead of static keys. A stolen token is <b>soon useless</b>, and revocation becomes routine.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> credentials</li><li><b>Typical lifetimes:</b> access 5–15 min · refresh hours–days</li><li><b>Workloads:</b> cloud workload identity, OIDC federation</li><li><b>Pairs with:</b> OAuth + PKCE, secrets management</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Long-lived API keys and passwords get copied into laptops, CI, chats and wikis. When one leaks, it works <span class="hl-pink">until someone notices</span>, and rotating it might break systems nobody remembers.</p>
+  <ul>
+    <li>A key from 2021 still works, and nobody knows every place it's used.</li>
+    <li>Sessions stay valid for months after a laptop is stolen.</li>
+    <li>CI holds cloud admin keys that never expire.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of an API key created in 2021 that never expires. It has been copied into three laptops, a CI system and a chat message. When it leaks, nobody knows which copy, and rotating it would break unknown systems, so it stays valid."><g class="rough"><g transform="translate(30 80) scale(1.6)"><g class="d"><circle class="f-y" cx="14" cy="30" r="11"/><path d="M25 30 h32 M48 30 v9 M55 30 v6"/></g></g><path class="d" d="M150 110 L396 38"/><path class="d" d="M387.1 46.0 L396 38 L384.2 36.0"/><rect class="d f-paper" x="400" y="20" width="130" height="36" rx="10"/><path class="d" d="M150 110 L396 82"/><path class="d" d="M385.9 88.4 L396 82 L384.7 78.0"/><rect class="d f-paper" x="400" y="64" width="130" height="36" rx="10"/><path class="d" d="M150 110 L396 126"/><path class="d" d="M384.9 130.5 L396 126 L385.6 120.1"/><rect class="d f-paper" x="400" y="108" width="130" height="36" rx="10"/><path class="d" d="M150 110 L396 170"/><path class="d" d="M384.3 172.5 L396 170 L386.7 162.4"/><rect class="d f-paper" x="400" y="152" width="130" height="36" rx="10"/><path class="d" d="M150 110 L396 214"/><path class="d" d="M384.0 214.6 L396 214 L388.1 205.0"/><rect class="d f-paper" x="400" y="196" width="130" height="36" rx="10"/></g><text class="t-s t-red" x="140" y="200" text-anchor="middle">created 2021 · expires: never</text><text class="t-head" x="465" y="45" text-anchor="middle" font-size="15">laptop</text><text class="t-head" x="465" y="89" text-anchor="middle" font-size="15">CI</text><text class="t-head" x="465" y="133" text-anchor="middle" font-size="15">chat</text><text class="t-head" x="465" y="177" text-anchor="middle" font-size="15">wiki</text><text class="t-head" x="465" y="221" text-anchor="middle" font-size="15">old VM</text><text class="t-s t-red" x="650" y="120" text-anchor="middle">leaked from</text><text class="t-s t-red" x="650" y="146" text-anchor="middle">which one?</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A key from 2021 that never expires, copied everywhere. Leaked? Nobody dares rotate it.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">today's cinema ticket</span></h2>
+  <p>A cinema ticket is valid for <b>one showing, today</b>. Drop it on the street and it's <b>useless by tonight</b>. Your <b>membership card</b> gets you a fresh ticket each visit, and if you lose the card, you <b>cancel it once</b>.</p>
+  <ul>
+    <li>The ticket is an <b>access token</b>.</li>
+    <li>The membership card is a <b>refresh token</b>, kept safe.</li>
+    <li>A ticket showing up twice is a sign of <b>theft</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a cinema ticket valid for one showing today, and a membership card that issues a new ticket each visit. If you drop a ticket, it&#x27;s useless by tonight. If you lose the membership card, you cancel it once."><g class="rough"><g transform="translate(60 60) scale(1.6)"><g class="d"><path class="f-y" d="M0 8 h60 v14 a6 6 0 0 0 0 12 v14 h-60 v-14 a6 6 0 0 0 0 -12 z"/><path d="M42 8 v40" stroke-dasharray="4 4"/></g></g><g transform="translate(380 60) scale(1.4)"><g class="d"><rect class="f-green" x="2" y="10" width="58" height="40" rx="5"/><rect x="10" y="20" width="14" height="12"/><path d="M32 22 h20 M32 30 h14 M10 40 h42"/></g></g></g><text class="t-s t-green" x="110" y="170" text-anchor="middle">ticket: today, 19:30 only</text><text class="t-s t-pen" x="420" y="170" text-anchor="middle">membership card</text><text class="t-s t-pen" x="420" y="196" text-anchor="middle">→ fresh ticket each visit</text><text class="t-s t-green" x="380" y="236" text-anchor="middle">drop a ticket? useless by tonight</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A cinema ticket is good for one showing; the membership card gets you a fresh one each time.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Ticket for tonight only</td><td>Access token with a 10-minute expiry</td></tr>
+      <tr><td>Membership card</td><td>Refresh token, stored securely</td></tr>
+      <tr><td>Fresh ticket each visit</td><td>Refresh rotation: new pair every use</td></tr>
+      <tr><td>Same ticket used twice</td><td>Refresh-token reuse detection → revoke</td></tr>
+      <tr><td>Staff badge printed each shift</td><td>Workload identity: auto-issued, short-lived credentials</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">expire fast, rotate on use</span></h2>
+  <p>Short lifetimes turn revocation from a crisis into a default: even if you can't find every copy, the copies <b>stop working on their own</b>.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Short-lived token design. The client holds an access token valid for ten minutes and a refresh token stored securely. When the access token expires, the client sends the refresh token to the auth server, which issues a new access token and a new refresh token and invalidates the old refresh token, called rotation. If an old refresh token is reused, the auth server sees reuse and revokes the whole session."><g class="rough"><rect class="d f-green" x="20" y="40" width="180" height="70" rx="10"/><rect class="d f-y" x="20" y="150" width="180" height="70" rx="10"/><path class="d" d="M206 185 L380 120"/><path class="d" d="M371.7 128.7 L380 120 L368.1 118.9"/><rect class="d f-blue" x="386" y="70" width="180" height="90" rx="10"/><path class="d d-green" d="M572 100 L640 60"/><path class="d d-green" d="M633.3 70.0 L640 60 L628.0 61.0"/><path class="d d-red" d="M572 140 L640 200"/><path class="d d-red" d="M628.4 196.8 L640 200 L635.4 188.9"/><rect class="d f-pink d-red" x="600" y="236" width="150" height="44" rx="10"/></g><text class="t-head" x="110" y="71" text-anchor="middle">access token</text><text class="t" x="110" y="95" text-anchor="middle" font-size="17">10 minutes</text><text class="t-head" x="110" y="181" text-anchor="middle">refresh token</text><text class="t" x="110" y="205" text-anchor="middle" font-size="17">rotates, httpOnly</text><text class="t-s" x="300" y="196" text-anchor="middle">expired → refresh</text><text class="t-head" x="476" y="122" text-anchor="middle">auth server</text><text class="t-s t-green" x="640" y="44" text-anchor="middle">new pair</text><text class="t-s t-red" x="640" y="226" text-anchor="middle">old token reused?</text><text class="t-head t-red" x="675" y="265" text-anchor="middle" font-size="16">revoke all</text><text class="t-s t-pen" x="380" y="280" text-anchor="middle">workloads: no refresh, just fetch a new 1-hour token</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Access tokens live minutes. Refresh tokens rotate on every use; reusing an old one revokes the session.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Short access tokens</b><p>5–15 minutes; validate expiry on every request.</p></li>
+    <li><b>Rotating refresh tokens</b><p>Each refresh returns a new refresh token and invalidates the old one.</p></li>
+    <li><b>Detect reuse</b><p>If an already-used refresh token appears, revoke the whole token family.</p></li>
+    <li><b>Store them safely</b><p>Browser: httpOnly, Secure, SameSite cookies, not localStorage. Mobile: OS keychain.</p></li>
+    <li><b>No static keys for workloads</b><p>CI and services get credentials via OIDC federation or cloud workload identity, valid for an hour.</p></li>
+    <li><b>Make revocation easy</b><p>Sign-out, password change and admin action revoke refresh tokens immediately.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Access token</dt><dd>Short-lived credential sent with each API call.</dd></div>
+    <div><dt>Refresh token</dt><dd>Longer-lived credential used only to get new access tokens.</dd></div>
+    <div><dt>Rotation</dt><dd>Replacing a credential on every use or on a schedule.</dd></div>
+    <div><dt>Reuse detection</dt><dd>Spotting an old refresh token being used again.</dd></div>
+    <div><dt>Workload identity</dt><dd>Credentials issued automatically to a running service.</dd></div>
+    <div><dt>OIDC federation</dt><dd>Trading a signed identity token (from CI) for cloud credentials.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>.github/workflows/deploy.yml</span><span>no stored cloud keys</span></div>
+<pre><code>permissions:
+  id-token: write          <span class="c"># CI gets a signed OIDC token for this run</span>
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::123456789012:role/deploy-web
+          aws-region: eu-west-1
+          role-duration-seconds: 3600      <span class="c"># credentials expire in 1 hour</span>
+      - run: ./deploy.sh
+<span class="c"># the role trusts only this repo + branch (sub: repo:acme/web:ref:refs/heads/main)</span></code></pre>
+  </div>
+  <p class="aside">tools: identity providers with refresh-token rotation (Auth0, Okta, Keycloak), GitHub/GitLab OIDC to AWS/GCP/Azure, cloud workload identity (IRSA, GKE Workload Identity, Azure managed identity), SPIFFE/SPIRE, HashiCorp Vault dynamic credentials.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Leaks expire on their own</b>.</li><li><b>Theft is detectable</b> via refresh reuse.</li><li><b>No static keys in CI</b> or config.</li><li><b>Revocation is routine</b>, not an emergency.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More token plumbing</b>: refresh logic, storage.</li><li><b>Clock and expiry edge cases</b>.</li><li><b>Dependence on the token issuer</b> being available.</li><li><b>Revoking access tokens</b> mid-life still needs extra work.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Security ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>long-lived API keys and sessions</b> to <b>short access tokens, rotating refresh tokens and workload identity</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to get right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Refresh and rotation logic to get right.</td></tr>
+      <tr data-before="3" data-after="4"><td>Usability<small>little friction?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Silent refresh; users rarely notice.</td></tr>
+      <tr data-before="2" data-after="4"><td>Confidentiality<small>secrets stay secret?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Stolen tokens stop working within minutes.</td></tr>
+      <tr data-before="3" data-after="4"><td>Integrity<small>can't be tampered with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Reuse detection reveals stolen refresh tokens.</td></tr>
+      <tr data-before="3" data-after="3"><td>Availability<small>stays up under attack?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Issuer must be up for refreshes.</td></tr>
+      <tr data-before="1" data-after="5"><td>Containment<small>small blast radius?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A leak is bounded in time.</td></tr>
+      <tr data-before="2" data-after="4"><td>Auditability<small>can we tell what happened?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Each token issue and refresh is logged.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Mostly configuration; some engineering.</td></tr>
+      <tr data-before="2" data-after="4"><td>Developer experience<small>easy to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No more key copying and manual rotation.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Long access tokens</h3><p>“Short-lived” tokens valid for 30 days. <span class="fix">Fix →</span> minutes for access, rotate refresh.</p></li>
+    <li><h3>Tokens in localStorage</h3><p>Any XSS can read and exfiltrate them. <span class="fix">Fix →</span> httpOnly secure cookies or a backend-for-frontend.</p></li>
+    <li><h3>Static keys in CI</h3><p>Cloud admin keys stored as CI secrets forever. <span class="fix">Fix →</span> OIDC federation with short role sessions.</p></li>
+    <li><h3>No reuse detection</h3><p>A stolen refresh token keeps working alongside the real one. <span class="fix">Fix →</span> rotate and revoke the family on reuse.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>User sessions in web and mobile apps.</li><li>API access by third parties.</li><li>CI/CD and services calling cloud APIs.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Truly offline devices that can't refresh (use other controls).</li><li>Legacy systems that only accept static keys (wrap them in a vault with rotation).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>OAuth 2.0 with PKCE</b></li><li><b>Secrets management</b></li><li><b>Least privilege</b></li><li><b>Zero trust</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why keep access tokens short-lived?</summary><p>So a stolen one stops working within minutes, without needing to find and revoke it.</p></details>
+    <details><summary>What's refresh-token rotation?</summary><p>Each refresh returns a new refresh token and invalidates the old one.</p></details>
+    <details><summary>What should happen if an old refresh token is reused?</summary><p>Treat it as theft and revoke the whole session (token family).</p></details>
+    <details><summary>How can CI deploy to the cloud without stored keys?</summary><p>With OIDC federation: CI presents a signed identity token and receives short-lived role credentials.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>A <span class="hl">ticket</span> for tonight, a <span class="hl">card</span> kept safe, and a fresh ticket <span class="hl">every visit</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/04-short-lived-tokens.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>RFC 9700, “OAuth 2.0 Security Best Current Practice” (refresh token protection).</li><li>Auth0 docs, “Refresh Token Rotation”.</li><li>GitHub docs, “About security hardening with OpenID Connect”.</li><li>OWASP, “JSON Web Token Cheat Sheet” and “Session Management Cheat Sheet”.</li></ul>
+  </div>
+  <p class="folio">04</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="oauth-pkce.html"><small>← previous note</small>03 · OAuth 2.0 with PKCE</a>
+  <a href="secrets-management.html"><small>Next note →</small>05 · Secrets Management</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 5 · a student's bullet journal on security patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

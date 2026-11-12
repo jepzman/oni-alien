@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Output Encoding &amp; CSP · Jef’s Notes</title>
+<meta name="description" content="Escape data for where it&#x27;s shown, and let the browser block anything you didn&#x27;t send.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-security">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 5 · security patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="output-encoding">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 03.12.26</span><span class="topic">collection · <b>untrusted input</b></span></div>
+  <p class="kicker">a.k.a. “text behind glass”</p>
+  <h1><span class="hl">Output Encoding &amp; CSP</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Cross-site scripting happens when <b>data is shown as code</b>. Prevent it with two layers: <b>encode output for its context</b> (HTML text, attribute, URL, JavaScript), which modern frameworks do by default, so avoid <code>innerHTML</code> and <code>dangerouslySetInnerHTML</code>; and send a strict <b>Content Security Policy</b> so the browser <b>refuses to run scripts you didn't send</b>. Sanitize the rare rich HTML with a proven library.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> XSS prevention</li><li><b>Layers:</b> contextual encoding + CSP</li><li><b>Tools:</b> framework escaping, DOMPurify, CSP nonces</li><li><b>Pairs with:</b> input validation, CSRF protection</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Any place that shows user content (comments, names, search terms, error messages) can become a way to <span class="hl-pink">run a stranger's script in your users' browsers</span>, with their session and their permissions.</p>
+  <ul>
+    <li>A comment with a script tag runs for every visitor.</li>
+    <li>A search term echoed into the page runs via a crafted link.</li>
+    <li>Tokens in localStorage are read and sent away.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a comment section. A user posts a comment containing a script tag. The page inserts the comment as raw HTML, so every visitor&#x27;s browser runs the script, which reads their session and sends it to another site."><g class="rough"><rect class="d f-pink d-red" x="20" y="30" width="300" height="80" rx="10"/><path class="d d-red" d="M326 70 L430 70"/><path class="d d-red" d="M419.2 75.2 L430 70 L419.2 64.8"/><g transform="translate(440 30) scale(1.2)"><g class="d"><rect class="f-paper" x="0" y="0" width="60" height="70" rx="4"/><path d="M30 0 v70 M0 35 h60"/></g></g><path class="d d-red d-dash" d="M470 120 L470 190"/><path class="d d-red" d="M464.8 179.2 L470 190 L475.2 179.2"/></g><text class="t-head t-red" x="170" y="77" text-anchor="middle" font-size="15">comment: &lt;script&gt;…&lt;/script&gt;</text><text class="t-s t-red" x="378" y="56" text-anchor="middle">innerHTML</text><text class="t-s t-red" x="600" y="60" text-anchor="start">runs in every</text><text class="t-s t-red" x="600" y="86" text-anchor="start">visitor&#x27;s browser</text><text class="t-s t-red" x="470" y="220" text-anchor="middle">session sent elsewhere</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A comment shown as raw HTML: every visitor's browser runs the stranger's script.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">text behind glass</span></h2>
+  <p>In a museum, an exhibit label can say anything, even “open all the cases!”, but it's <b>behind glass</b>: visitors can read it, it can't <b>do</b> anything. And the museum only lets in <b>guides wearing an official badge</b>.</p>
+  <ul>
+    <li>Glass is <b>output encoding</b>: shown, never executed.</li>
+    <li>The badge rule is <b>CSP</b>: only scripts you approved may act.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a museum exhibit label behind glass. Visitors can read any text, even text that says open the cases, but it&#x27;s on the other side of the glass and can&#x27;t do anything. And the museum only lets in guides wearing an official badge."><g class="rough"><rect class="d f-blue" x="40" y="40" width="300" height="150" rx="4"/><path class="d d-thin d-soft" d="M60 60 l40 -16 M280 180 l40 -16"/><g transform="translate(470 50) scale(1.4)"><g class="d"><rect class="f-y" x="4" y="6" width="52" height="56" rx="4"/><circle cx="30" cy="26" r="9"/><path d="M16 50 q14 -16 28 0 M22 6 v-4 h16 v4"/></g></g></g><text class="t" x="60" y="110" text-anchor="start" font-size="18">“open all the cases!”</text><text class="t-s t-green" x="190" y="220" text-anchor="middle">behind glass: shown, not obeyed</text><text class="t-s t-pen" x="560" y="170" text-anchor="middle">only badged guides</text><text class="t-s t-pen" x="560" y="196" text-anchor="middle">(CSP: allowed sources)</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Text behind glass can be read, never act. And only guides with an official badge get in.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Text behind glass</td><td>Escaped output (<code>&amp;lt;script&amp;gt;</code>)</td></tr>
+      <tr><td>Different glass for different cases</td><td>Contextual encoding: HTML, attribute, URL, JS</td></tr>
+      <tr><td>Only badged guides allowed</td><td>CSP <code>script-src</code> with nonces</td></tr>
+      <tr><td>A curator checks donated exhibits</td><td>Sanitizing rich HTML with DOMPurify</td></tr>
+      <tr><td>Smashing the glass</td><td><code>innerHTML</code> / <code>dangerouslySetInnerHTML</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">encode, then restrict</span></h2>
+  <p>Encoding stops injected markup becoming code. CSP is the <b>safety net</b> for the bug you'll eventually ship anyway.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Two layers against cross-site scripting. Layer one: output encoding, data is escaped for its context, HTML text, attribute, URL or JavaScript, so a script tag becomes harmless visible text. Frameworks like React do this by default. Layer two: a Content Security Policy header tells the browser to run only scripts from your own origin with a per-request nonce, so even an injected script is blocked."><g class="rough"><rect class="d f-pink d-red" x="20" y="40" width="200" height="70" rx="10"/><path class="d" d="M226 75 L316 75"/><path class="d" d="M305.2 80.2 L316 75 L305.2 69.8"/><rect class="d f-green" x="322" y="40" width="220" height="70" rx="10"/><rect class="d f-y" x="20" y="180" width="520" height="70" rx="10"/><path class="d d-red" d="M546 215 L620 215"/><path class="d d-red" d="M609.2 220.2 L620 215 L609.2 209.8"/></g><text class="t-head t-red" x="120" y="82" text-anchor="middle" font-size="18">&lt;script&gt;</text><text class="t-s" x="271" y="61" text-anchor="middle">encode</text><text class="t-head" x="432" y="82" text-anchor="middle" font-size="17">&amp;lt;script&amp;gt;</text><text class="t-s t-green" x="432" y="140" text-anchor="middle">shown as text</text><text class="t-head" x="280" y="222" text-anchor="middle" font-size="16">CSP: script-src &#x27;self&#x27; &#x27;nonce-r4nd0m&#x27;</text><text class="t-s t-red" x="583" y="200" text-anchor="middle">blocked</text><text class="t-s t-red" x="690" y="220" text-anchor="middle">injected script</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Escape data for where it goes; then let CSP block any script you didn't send yourself.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Let the framework escape</b><p>React, Vue, Angular, Svelte and server templates escape text by default; keep it that way.</p></li>
+    <li><b>Avoid raw HTML sinks</b><p><code>innerHTML</code>, <code>dangerouslySetInnerHTML</code>, <code>v-html</code>, <code>document.write</code>.</p></li>
+    <li><b>Sanitize rich content</b><p>If you must render user HTML or Markdown, sanitize with DOMPurify (or server-side equivalent).</p></li>
+    <li><b>Check URLs</b><p>Allow only <code>http(s)</code> in user links; block <code>javascript:</code>.</p></li>
+    <li><b>Add a strict CSP</b><p><code>script-src 'nonce-…' 'strict-dynamic'</code>, <code>object-src 'none'</code>, <code>base-uri 'none'</code>; start in report-only mode.</p></li>
+    <li><b>Keep tokens out of JS reach</b><p>httpOnly cookies, so even a successful XSS can't read them.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>XSS</dt><dd>Cross-site scripting: attacker's script runs on your page.</dd></div>
+    <div><dt>Output encoding</dt><dd>Turning special characters into harmless text.</dd></div>
+    <div><dt>Context</dt><dd>Where data is placed: HTML, attribute, URL, script.</dd></div>
+    <div><dt>CSP</dt><dd>Header telling the browser which content may load and run.</dd></div>
+    <div><dt>Nonce</dt><dd>Random value per response allowing specific scripts.</dd></div>
+    <div><dt>Sanitizer</dt><dd>Removes dangerous parts from HTML.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>comment.tsx + headers.ts</span><span>React + Express</span></div>
+<pre><code><span class="c">// ✓ React escapes text automatically</span>
+&lt;p className=<span class="s">"comment"</span>&gt;{comment.body}&lt;/p&gt;
+
+<span class="c">// rich text: sanitize first, then render</span>
+&lt;div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(markdownToHtml(c.body)) }} /&gt;
+
+<span class="c">// links: allow only http(s)</span>
+<span class="k">const</span> safeHref = /^https?:\/\<span class="c">//i.test(url) ? url : "#";</span>
+
+<span class="c">// strict CSP with a fresh nonce per response</span>
+app.use((req, res, next) =&gt; {
+  res.locals.nonce = crypto.randomBytes(16).toString(<span class="s">"base64"</span>);
+  res.setHeader(<span class="s">"Content-Security-Policy"</span>,
+    <span class="s">`script-src 'nonce-${res.locals.nonce}' 'strict-dynamic'; `</span> +
+    <span class="s">"object-src 'none'; base-uri 'none'; frame-ancestors 'none'"</span>);
+  next();
+});</code></pre>
+  </div>
+  <p class="aside">tools: framework auto-escaping, DOMPurify, sanitize-html, Trusted Types, CSP Evaluator, report-uri / report-to endpoints, Helmet (Express), eslint-plugin-react rules for dangerous props.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>User content stays text</b>.</li><li><b>CSP blocks injected scripts</b> even when a bug slips through.</li><li><b>Framework defaults</b> do most of the work.</li><li><b>CSP reports</b> reveal attacks and mistakes.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>CSP takes tuning</b> (third-party scripts, inline handlers).</li><li><b>Rich text needs a sanitizer</b>.</li><li><b>Easy to bypass</b> with one raw HTML sink.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Security ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>rendering user content as raw HTML with no CSP</b> to <b>contextual encoding, sanitized rich text and a strict nonce-based CSP</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="4"><td>Simplicity<small>easy to get right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Framework defaults; CSP needs one-time care.</td></tr>
+      <tr data-before="3" data-after="3"><td>Usability<small>little friction?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Invisible to users.</td></tr>
+      <tr data-before="1" data-after="4"><td>Confidentiality<small>secrets stay secret?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Scripts can't read sessions or page data.</td></tr>
+      <tr data-before="1" data-after="5"><td>Integrity<small>can't be tampered with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Injected code can't act as the user.</td></tr>
+      <tr data-before="3" data-after="3"><td>Availability<small>stays up under attack?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="1" data-after="4"><td>Containment<small>small blast radius?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A missed escape is blocked by CSP.</td></tr>
+      <tr data-before="2" data-after="4"><td>Auditability<small>can we tell what happened?</small></td><td class="dcell"></td><td class="score"></td><td class="why">CSP violation reports show attempts.</td></tr>
+      <tr data-before="3" data-after="4"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Mostly configuration.</td></tr>
+      <tr data-before="3" data-after="4"><td>Developer experience<small>easy to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Safe by default; linters flag dangerous props.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Raw HTML sinks</h3><p><code>el.innerHTML = name</code> in one widget. <span class="fix">Fix →</span> use textContent / framework rendering; lint sinks.</p></li>
+    <li><h3>Sanitizing with regex</h3><p>Stripping “&lt;script&gt;” misses event handlers and SVG. <span class="fix">Fix →</span> use DOMPurify.</p></li>
+    <li><h3>A CSP with 'unsafe-inline'</h3><p>The policy allows exactly what attackers inject. <span class="fix">Fix →</span> nonces + strict-dynamic, no unsafe-inline.</p></li>
+    <li><h3>javascript: links</h3><p>User-supplied URLs run code on click. <span class="fix">Fix →</span> allow only http(s) schemes.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Every page that shows user or third-party content.</li><li>Admin panels (attackers love targeting admins).</li><li>Any HTML email or PDF generated from user data.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Never skip encoding; CSP can be phased in with report-only mode.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Validate at the boundary</b></li><li><b>CSRF protection</b></li><li><b>Short-lived tokens</b></li><li><b>Error boundaries</b> (Vol. 2)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What makes XSS possible?</summary><p>User-controlled data is placed into a page in a way the browser interprets as code.</p></details>
+    <details><summary>Why does encoding depend on context?</summary><p>Different places (HTML text, attributes, URLs, scripts) have different special characters.</p></details>
+    <details><summary>What does a nonce-based CSP do?</summary><p>Only scripts carrying the per-response nonce may run, so injected scripts are blocked.</p></details>
+    <details><summary>How do you render user-supplied HTML safely?</summary><p>Sanitize it with a proven library like DOMPurify before inserting it.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Put user text behind <span class="hl">glass</span>, and only let <span class="hl">badged</span> scripts in.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/10-output-encoding.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>OWASP, “Cross Site Scripting Prevention Cheat Sheet”.</li><li>Google, “Strict CSP” (csp.withgoogle.com).</li><li>MDN, “Content Security Policy (CSP)”.</li><li>DOMPurify documentation.</li></ul>
+  </div>
+  <p class="folio">10</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="parameterized-queries.html"><small>← previous note</small>09 · Parameterized Queries</a>
+  <a href="csrf-protection.html"><small>Next note →</small>11 · CSRF Protection</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 5 · a student's bullet journal on security patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CSRF Protection · Jef’s Notes</title>
+<meta name="description" content="Make sure a state-changing request really came from your own page, not another site.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-security">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 5 · security patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="csrf-protection">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 07.12.26</span><span class="topic">collection · <b>untrusted input</b></span></div>
+  <p class="kicker">a.k.a. “the restaurant's own order pad”</p>
+  <h1><span class="hl">CSRF Protection</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Browsers attach cookies to requests <b>even when another site triggers them</b>. If your app trusts the cookie alone, a hidden form elsewhere can act as the user. Defend in layers: <b>SameSite</b> session cookies, a <b>CSRF token</b> (or a custom header) on every state-changing request, an <b>Origin check</b> on the server, and <b>never change state on GET</b>.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> request forgery</li><li><b>Defences:</b> SameSite cookies, synchronizer / double-submit tokens, Origin checks</li><li><b>Not needed for:</b> APIs using Authorization headers only</li><li><b>Pairs with:</b> output encoding & CSP</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Cookie-based sessions have a catch: the browser sends your cookie to your site <span class="hl-pink">no matter which site started the request</span>. A malicious page can make the user's browser submit a form to your app, fully authenticated.</p>
+  <ul>
+    <li>A hidden form transfers money or changes the account email.</li>
+    <li>An image tag hits <code>GET /delete?id=5</code>.</li>
+    <li>The server sees a valid session and does it.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a user logged into their bank in one tab. In another tab they visit a malicious page which contains a hidden form that posts to the bank&#x27;s transfer endpoint. The browser automatically attaches the bank&#x27;s session cookie, so the bank thinks the user asked for the transfer."><g class="rough"><rect class="d f-pink d-red" x="20" y="40" width="200" height="70" rx="10"/><path class="d d-red" d="M226 75 L470 75"/><path class="d d-red" d="M459.2 80.2 L470 75 L459.2 69.8"/><rect class="d f-blue" x="476" y="40" width="200" height="70" rx="10"/></g><text class="t-head t-red" x="120" y="82" text-anchor="middle" font-size="17">evil.example</text><text class="t-s t-red" x="120" y="140" text-anchor="middle">hidden form</text><text class="t-s t-red" x="348" y="60" text-anchor="middle">POST /transfer + your cookie</text><text class="t-head" x="576" y="82" text-anchor="middle" font-size="17">bank.example</text><text class="t-s t-red" x="576" y="150" text-anchor="middle">“looks like you!”</text><text class="t-s t-pen" x="380" y="220" text-anchor="middle">the browser attached the session automatically</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A hidden form on another site posts to your bank, and the browser helpfully adds your cookie.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the restaurant's own order pad</span></h2>
+  <p>In a busy restaurant, waiters only accept orders written on the restaurant's <b>own order pads</b>, each with a <b>unique stamp</b>. A note slipped under the door saying “table 5 wants champagne” is ignored, even though table 5 is real.</p>
+  <ul>
+    <li>The stamped pad is a <b>CSRF token</b> only your pages have.</li>
+    <li>The note under the door is a <b>cross-site request</b>.</li>
+    <li>Checking it came from inside is the <b>Origin check</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a restaurant where waiters only accept orders written on the restaurant&#x27;s own order pads, each with a unique stamp. A note slipped under the door saying table 5 wants champagne is ignored, even though it names a real table."><g class="rough"><g transform="translate(60 50) scale(1.4)"><g class="d"><rect class="f-green" x="0" y="0" width="48" height="62" rx="3"/><path d="M10 12 h28 M10 22 h20 M10 32 h26 M10 42 h18 M10 52 h24"/></g></g><g transform="translate(110 110) scale(0.8)"><g class="d"><path class="f-paper" d="M22 4 h16 v18 q0 6 8 8 h8 v12 h-48 v-12 h8 q8 -2 8 -8 z"/><path d="M4 50 h52"/></g></g><g transform="translate(400 70) scale(1.4)"><g class="d"><rect class="f-pink" x="0" y="10" width="60" height="40" rx="3"/><path d="M0 12 L30 34 L60 12"/></g></g></g><text class="t-s t-green" x="110" y="210" text-anchor="middle">own pad + stamp ✓</text><text class="t-s t-red" x="440" y="170" text-anchor="middle">“table 5: champagne”</text><text class="t-s t-red" x="440" y="196" text-anchor="middle">under the door ✗</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Only orders on the restaurant's own stamped pad count; a note under the door is ignored.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Table 5 really exists</td><td>The user really has a valid session cookie</td></tr>
+      <tr><td>Note slipped under the door</td><td>A form on another site posting to yours</td></tr>
+      <tr><td>The restaurant's own stamped pad</td><td>A CSRF token from your page</td></tr>
+      <tr><td>Waiter checks it came from inside</td><td>Server checks the <code>Origin</code> header</td></tr>
+      <tr><td>Pads never leave the restaurant</td><td><code>SameSite</code> cookies stay on same-site requests</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">prove the request came from you</span></h2>
+  <p>Modern browsers default cookies to <code>SameSite=Lax</code>, which blocks the classic attack, but set it explicitly and keep a token or header check as a second layer.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="CSRF defences. Layer one: session cookies are set with SameSite Lax or Strict, so browsers don&#x27;t send them on cross-site posts. Layer two: state-changing requests must carry a CSRF token that only your own page knows, or a custom header that cross-site forms can&#x27;t add. Layer three: the server checks the Origin header. GET requests never change state."><g class="rough"><rect class="d f-green" x="20" y="50" width="220" height="90" rx="10"/><rect class="d f-y" x="270" y="50" width="220" height="90" rx="10"/><rect class="d f-blue" x="520" y="50" width="220" height="90" rx="10"/><path class="d d-red" d="M380 200 L380 150"/><path class="d d-red" d="M385.2 160.8 L380 150 L374.8 160.8"/></g><text class="t-head" x="130" y="91" text-anchor="middle" font-size="18">SameSite=Lax</text><text class="t" x="130" y="115" text-anchor="middle" font-size="17">cookie stays home</text><text class="t-head" x="380" y="91" text-anchor="middle" font-size="18">CSRF token</text><text class="t" x="380" y="115" text-anchor="middle" font-size="17">only your page has it</text><text class="t-head" x="630" y="91" text-anchor="middle" font-size="18">Origin check</text><text class="t" x="630" y="115" text-anchor="middle" font-size="17">must be your site</text><text class="t-s t-red" x="400" y="190" text-anchor="start">cross-site POST</text><text class="t-s t-red" x="380" y="240" text-anchor="middle">fails all three</text><text class="t-s t-pen" x="380" y="274" text-anchor="middle">and GET never changes anything</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>SameSite cookies, a token or custom header only your pages can send, an Origin check, and GET never changes state.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Set SameSite explicitly</b><p><code>Set-Cookie: session=…; HttpOnly; Secure; SameSite=Lax</code> (Strict where usable).</p></li>
+    <li><b>Require a token on unsafe methods</b><p>POST, PUT, PATCH, DELETE carry a per-session token in a hidden field or header.</p></li>
+    <li><b>Or require a custom header</b><p>APIs called with <code>fetch</code> can require <code>X-Requested-With</code>/JSON content type, which cross-site forms can't send without CORS.</p></li>
+    <li><b>Check Origin</b><p>Reject unsafe requests whose <code>Origin</code> isn't yours.</p></li>
+    <li><b>Keep GET safe</b><p>GET and HEAD never change state.</p></li>
+    <li><b>Use the framework's built-in protection</b><p>Rails, Django, Laravel, Spring and Next.js server actions include it.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>CSRF</dt><dd>Cross-site request forgery: another site acts with the user's session.</dd></div>
+    <div><dt>SameSite</dt><dd>Cookie attribute controlling cross-site sending (Strict, Lax, None).</dd></div>
+    <div><dt>Synchronizer token</dt><dd>Random token stored server-side and embedded in forms.</dd></div>
+    <div><dt>Double-submit cookie</dt><dd>Token in a cookie and a header that must match.</dd></div>
+    <div><dt>Origin header</dt><dd>Browser-set header naming the requesting site.</dd></div>
+    <div><dt>Safe method</dt><dd>GET/HEAD/OPTIONS: must not change state.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>csrf.ts</span><span>Express</span></div>
+<pre><code><span class="c">// session cookie: never sent on cross-site POSTs</span>
+res.cookie(<span class="s">"session"</span>, sid, { httpOnly: <span class="k">true</span>, secure: <span class="k">true</span>, sameSite: <span class="s">"lax"</span> });
+
+<span class="c">// second layer for every state-changing request</span>
+<span class="k">const</span> UNSAFE = <span class="k">new</span> Set([<span class="s">"POST"</span>, <span class="s">"PUT"</span>, <span class="s">"PATCH"</span>, <span class="s">"DELETE"</span>]);
+app.use((req, res, next) =&gt; {
+  <span class="k">if</span> (!UNSAFE.has(req.method)) <span class="k">return</span> next();
+
+  <span class="k">const</span> origin = req.get(<span class="s">"origin"</span>);
+  <span class="k">if</span> (origin &amp;&amp; origin !== <span class="s">"https://bank.example"</span>) <span class="k">return</span> res.sendStatus(403);
+
+  <span class="k">const</span> token = req.get(<span class="s">"x-csrf-token"</span>) ?? req.body?._csrf;
+  <span class="k">if</span> (!token || !timingSafeEqual(token, req.session.csrfToken)) <span class="k">return</span> res.sendStatus(403);
+  next();
+});
+
+<span class="c">// pages embed the token:  &lt;input type="hidden" name="_csrf" value="{{csrfToken}}"&gt;</span></code></pre>
+  </div>
+  <p class="aside">tools: built-in CSRF protection in Rails, Django, Laravel, Spring Security, ASP.NET; csrf-csrf / lusca for Express; Next.js server actions (Origin checks); browser SameSite defaults.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Forged requests rejected</b>.</li><li><b>Cookie sessions stay usable</b> safely.</li><li><b>Built into most frameworks</b>.</li><li><b>Cheap</b>: a few checks per request.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Tokens to plumb</b> into forms and fetch calls.</li><li><b>SameSite=Strict</b> can break inbound links' logged-in state.</li><li><b>Cross-site embeds and SSO</b> need careful exceptions.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Security ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>cookie sessions with no CSRF checks</b> to <b>SameSite cookies + token/header + Origin checks</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to get right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A few extra checks to understand.</td></tr>
+      <tr data-before="4" data-after="4"><td>Usability<small>little friction?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Invisible with SameSite=Lax.</td></tr>
+      <tr data-before="3" data-after="3"><td>Confidentiality<small>secrets stay secret?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="1" data-after="5"><td>Integrity<small>can't be tampered with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Other sites can't act as your users.</td></tr>
+      <tr data-before="3" data-after="3"><td>Availability<small>stays up under attack?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Containment<small>small blast radius?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A malicious page can't trigger actions.</td></tr>
+      <tr data-before="3" data-after="4"><td>Auditability<small>can we tell what happened?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Rejected forgeries can be logged.</td></tr>
+      <tr data-before="4" data-after="4"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Mostly framework defaults.</td></tr>
+      <tr data-before="3" data-after="4"><td>Developer experience<small>easy to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Frameworks handle tokens for you.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>State changes on GET</h3><p><code>GET /logout</code> or <code>/delete?id=5</code>. <span class="fix">Fix →</span> use POST/DELETE for changes.</p></li>
+    <li><h3>Disabling protection for “the API”</h3><p>The same cookie session is used by the API. <span class="fix">Fix →</span> if it uses cookies, it needs CSRF protection.</p></li>
+    <li><h3>SameSite=None everywhere</h3><p>Set for one embed, applied to the session. <span class="fix">Fix →</span> only on cookies that truly need cross-site use.</p></li>
+    <li><h3>Tokens in URLs</h3><p>Leak via logs and referrers. <span class="fix">Fix →</span> put tokens in bodies or headers.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Any app using cookie-based sessions.</li><li>Forms and fetch calls that change state.</li><li>Admin panels and account settings especially.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>APIs authenticated only by Authorization headers (bearer tokens), which browsers don't attach automatically.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Output encoding &amp; CSP</b></li><li><b>Short-lived tokens</b></li><li><b>Validate at the boundary</b></li><li><b>Optimistic UI</b> (Vol. 2)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why does CSRF work at all?</summary><p>Browsers automatically attach cookies to requests to your site, even when another site triggers them.</p></details>
+    <details><summary>What does SameSite=Lax do?</summary><p>Stops the cookie being sent on cross-site POSTs and other unsafe cross-site requests.</p></details>
+    <details><summary>Why must GET never change state?</summary><p>GET requests are easy to trigger cross-site (links, images) and aren't covered by token checks.</p></details>
+    <details><summary>Do bearer-token APIs need CSRF tokens?</summary><p>Usually not, because browsers don't attach Authorization headers automatically.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Only orders on your own <span class="hl">stamped pad</span> count. Notes under the <span class="hl">door</span> are ignored.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/11-csrf-protection.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>OWASP, “Cross-Site Request Forgery Prevention Cheat Sheet”.</li><li>MDN, “SameSite cookies”.</li><li>RFC 6265bis, “Cookies: HTTP State Management Mechanism” (SameSite).</li><li>web.dev, “SameSite cookies explained”.</li></ul>
+  </div>
+  <p class="folio">11</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="output-encoding.html"><small>← previous note</small>10 · Output Encoding &amp; CSP</a>
+  <a href="threat-modeling.html"><small>Next note →</small>12 · Threat Modelling</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 5 · a student's bullet journal on security patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

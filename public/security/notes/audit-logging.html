@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Audit Logging · Jef’s Notes</title>
+<meta name="description" content="Record who did what, when and from where, in a log attackers can&#x27;t quietly edit.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-security">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 5 · security patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="audit-logging">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 14.12.26</span><span class="topic">collection · <b>building &amp; running</b></span></div>
+  <p class="kicker">a.k.a. “the ship's logbook”</p>
+  <h1><span class="hl">Audit Logging</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>For every <b>security-relevant action</b> (sign-ins, permission changes, exports, deletes, admin actions), write a <b>structured audit event</b>: <b>who</b>, <b>what</b>, <b>on which target</b>, <b>result</b>, <b>when</b>, <b>from where</b>. Ship it to a <b>separate, append-only store</b> that app admins <b>can't edit</b>, keep it long enough, and <b>alert</b> on unusual patterns. Never log secrets or more personal data than needed.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> detection &amp; forensics</li><li><b>Log:</b> who · what · target · result · when · where</li><li><b>Store:</b> append-only / WORM, separate account</li><li><b>Pairs with:</b> history tables (Vol. 3), zero trust</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">When something goes wrong, the first questions are <b>who, what and when</b>. Application logs are built for debugging, so they often <span class="hl-pink">can't answer them</span>, or they've already been rotated away.</p>
+  <ul>
+    <li>“GET /export 200” with no user or tenant.</li>
+    <li>Logs deleted after 7 days; the breach is noticed after 40.</li>
+    <li>An attacker with admin rights quietly deletes the evidence.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of an incident review. Someone downloaded the entire customer export last month. The application logs only say GET slash export 200, with no user, no tenant and no IP, and logs older than seven days were deleted. An admin account could also have edited the logs."><g class="rough"><rect class="d f-paper" x="20" y="40" width="340" height="120" rx="3"/></g><text class="t" x="36" y="76" text-anchor="start" font-size="17">GET /export 200</text><text class="t" x="36" y="106" text-anchor="start" font-size="17">GET /export 200</text><text class="t t-soft" x="36" y="136" text-anchor="start" font-size="16">(older: deleted)</text><text class="t-s t-red" x="560" y="60" text-anchor="middle">who? no user id</text><text class="t-s t-red" x="560" y="100" text-anchor="middle">which tenant? unknown</text><text class="t-s t-red" x="560" y="140" text-anchor="middle">admins can edit logs</text><text class="t-s t-red" x="380" y="220" text-anchor="middle">breach confirmed, scope unknown</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>“Who exported all customers last month?” The logs say: GET /export 200. And they were deleted after 7 days.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the ship's logbook</span></h2>
+  <p>A ship keeps a <b>logbook in ink</b> with <b>numbered pages</b>. Every entry says the time, <b>who was on watch</b> and what happened. A torn-out page would be noticed, and copies are <b>sent ashore</b>, beyond the crew's reach.</p>
+  <ul>
+    <li>Entries are <b>audit events</b>.</li>
+    <li>Ink and numbered pages are <b>append-only, tamper-evident</b> storage.</li>
+    <li>Copies ashore are a <b>separate account</b> the app's admins can't touch.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a ship&#x27;s logbook written in ink with numbered pages. Every entry has the time, who was on watch and what happened. Pages can&#x27;t be torn out unnoticed because they&#x27;re numbered, and copies are sent to the harbour office."><g class="rough"><g transform="translate(40 40) scale(2.2)"><g class="d"><rect class="f-y" x="4" y="0" width="52" height="60" rx="3"/><path d="M14 12 h32 M14 22 h32 M14 32 h32 M14 42 h22"/></g></g></g><text class="t-s t-pen" x="220" y="70" text-anchor="start">06:00 · Ana on watch · course 270</text><text class="t-s t-pen" x="220" y="110" text-anchor="start">06:40 · Ben · engine checked</text><text class="t-s t-pen" x="220" y="150" text-anchor="start">07:15 · Ana · storm warning</text><text class="t-s t-green" x="220" y="200" text-anchor="start">numbered pages · copy sent ashore</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A ship's logbook: ink, numbered pages, who and when for every entry, copies sent ashore.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>An entry in ink</td><td>A structured audit event</td></tr>
+      <tr><td>Who was on watch</td><td>The actor (user or service id)</td></tr>
+      <tr><td>Numbered pages</td><td>Append-only, tamper-evident storage</td></tr>
+      <tr><td>Copies sent ashore</td><td>Shipped to a separate account / SIEM</td></tr>
+      <tr><td>Captain reviews odd entries</td><td>Alerts on unusual patterns</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">structured, separate, append-only</span></h2>
+  <p>Audit logs are a <b>product feature</b> for your security team and your customers' admins: define the events, their fields and retention on purpose, not by accident.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Audit logging pipeline. The app writes a structured audit event for each sensitive action: who the actor is, the tenant, the action such as customer export, the target, the result, the time, the IP and a request id. Events are shipped to a separate append-only store with write-once retention for one year, which admins of the app can&#x27;t modify. Alerts fire on unusual patterns like bulk exports at night."><g class="rough"><rect class="d f-blue" x="20" y="40" width="160" height="70" rx="10"/><rect class="d f-y" x="20" y="140" width="330" height="120" rx="10"/><path class="d" d="M186 75 L440 75"/><path class="d" d="M429.2 80.2 L440 75 L429.2 69.8"/><rect class="d f-green" x="446" y="40" width="180" height="90" rx="10"/><path class="d d-red" d="M632 85 L700 150"/><path class="d d-red" d="M688.6 146.3 L700 150 L695.8 138.8"/></g><text class="t-head" x="100" y="82" text-anchor="middle">app</text><text class="t" x="34" y="166" text-anchor="start" font-size="15">actor: ana@acme · tenant: 42</text><text class="t" x="34" y="192" text-anchor="start" font-size="15">action: customers.export</text><text class="t" x="34" y="218" text-anchor="start" font-size="15">target: all · result: ok</text><text class="t" x="34" y="244" text-anchor="start" font-size="15">ip · request_id · time</text><text class="t-s" x="313" y="61" text-anchor="middle">ship</text><text class="t-head" x="536" y="81" text-anchor="middle">audit store</text><text class="t" x="536" y="105" text-anchor="middle" font-size="17">append-only · 1 year</text><text class="t-s t-pen" x="536" y="160" text-anchor="middle">app admins: read-only</text><text class="t-s t-red" x="690" y="186" text-anchor="middle">alert: bulk</text><text class="t-s t-red" x="690" y="210" text-anchor="middle">export at 3 am</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Structured events for sensitive actions, shipped to a separate, append-only store. Alerts on the unusual.</figcaption></figure>
+  <ol class="steps">
+    <li><b>List auditable actions</b><p>Sign-in/out, MFA changes, role changes, exports, deletes, settings, admin and support access.</p></li>
+    <li><b>Use a fixed schema</b><p>actor, actor type, tenant, action, target, result, timestamp (UTC), IP, user agent, request id.</p></li>
+    <li><b>Write at the decision point</b><p>Log where the action is authorised and performed, including failures.</p></li>
+    <li><b>Ship to a separate store</b><p>Different account/project; append-only or WORM retention.</p></li>
+    <li><b>Protect privacy</b><p>No passwords, tokens or full card numbers; minimise personal data.</p></li>
+    <li><b>Alert and review</b><p>Rules for bulk exports, privilege changes, impossible travel; regular reviews.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Audit event</dt><dd>A record of a security-relevant action.</dd></div>
+    <div><dt>Actor</dt><dd>Who or what performed the action.</dd></div>
+    <div><dt>Non-repudiation</dt><dd>Being able to prove who did something.</dd></div>
+    <div><dt>WORM storage</dt><dd>Write once, read many: can't be altered.</dd></div>
+    <div><dt>SIEM</dt><dd>Security information and event management system.</dd></div>
+    <div><dt>Retention</dt><dd>How long logs are kept.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>audit.ts</span><span>structured audit events</span></div>
+<pre><code><span class="k">type</span> AuditEvent = {
+  at: string; actor: { id: string; <span class="k">type</span>: <span class="s">"user"</span> | <span class="s">"service"</span> }; tenantId: string;
+  action: string; target: string; result: <span class="s">"ok"</span> | <span class="s">"denied"</span> | <span class="s">"error"</span>;
+  ip?: string; requestId: string; meta?: Record&lt;string, unknown&gt;;
+};
+
+<span class="k">export</span> <span class="k">function</span> audit(e: Omit&lt;AuditEvent, <span class="s">"at"</span>&gt;) {
+  auditSink.write({ ...e, at: <span class="k">new</span> Date().toISOString() });   <span class="c">// separate pipeline</span>
+}
+
+<span class="c">// at the decision point, success AND failure</span>
+<span class="k">if</span> (!can(user, <span class="s">"customers.export"</span>, tenant)) {
+  audit({ actor: { id: user.id, <span class="k">type</span>: <span class="s">"user"</span> }, tenantId: tenant.id,
+          action: <span class="s">"customers.export"</span>, target: <span class="s">"all"</span>, result: <span class="s">"denied"</span>, requestId, ip });
+  <span class="k">throw</span> <span class="k">new</span> Forbidden();
+}
+audit({ actor: { id: user.id, <span class="k">type</span>: <span class="s">"user"</span> }, tenantId: tenant.id,
+        action: <span class="s">"customers.export"</span>, target: <span class="s">"all"</span>, result: <span class="s">"ok"</span>, requestId, ip,
+        meta: { rows: count } });</code></pre>
+  </div>
+  <p class="aside">tools: cloud audit trails (CloudTrail, GCP Audit Logs, Azure Activity Log), S3 Object Lock / immutable storage, SIEMs (Splunk, Elastic Security, Microsoft Sentinel, Panther), OpenTelemetry logs for shipping, WorkOS / Retraced-style audit log products.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Answer who, what, when</b> after an incident.</li><li><b>Detect abuse</b> early with alerts.</li><li><b>Evidence</b> that survives an admin compromise.</li><li><b>Compliance</b> and customer trust (admin audit views).</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Storage costs</b> for long retention.</li><li><b>Privacy risk</b> if logs hold too much personal data.</li><li><b>Alert fatigue</b> with noisy rules.</li><li><b>Effort</b> to define and maintain events.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Security ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>debug-style app logs only</b> to <b>structured audit events in a separate append-only store with alerts</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to get right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A schema and a pipeline to maintain.</td></tr>
+      <tr data-before="3" data-after="3"><td>Usability<small>little friction?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Invisible to users; admins may get an audit view.</td></tr>
+      <tr data-before="3" data-after="3"><td>Confidentiality<small>secrets stay secret?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral, if secrets are kept out of logs.</td></tr>
+      <tr data-before="2" data-after="4"><td>Integrity<small>can't be tampered with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tamper-evident record of changes.</td></tr>
+      <tr data-before="3" data-after="3"><td>Availability<small>stays up under attack?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Containment<small>small blast radius?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fast detection limits how far an attacker gets.</td></tr>
+      <tr data-before="1" data-after="5"><td>Auditability<small>can we tell what happened?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Who did what, when and from where.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Storage, SIEM and review time.</td></tr>
+      <tr data-before="3" data-after="4"><td>Developer experience<small>easy to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One audit() helper with a fixed schema.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Logging secrets</h3><p>Tokens and passwords end up in the audit store. <span class="fix">Fix →</span> redact by schema; never log credentials.</p></li>
+    <li><h3>Same account as the app</h3><p>An attacker with app admin deletes the logs. <span class="fix">Fix →</span> ship to a separate account with append-only retention.</p></li>
+    <li><h3>Only successes</h3><p>Failed attempts, which show probing, are missing. <span class="fix">Fix →</span> log denied and failed actions too.</p></li>
+    <li><h3>Unstructured text</h3><p>“User did export” can't be searched or alerted on. <span class="fix">Fix →</span> fixed fields, machine-readable JSON.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Authentication, authorization and admin actions.</li><li>Exports, deletes, payments and settings changes.</li><li>Support staff accessing customer data.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Every page view or debug detail (that's for app logs/metrics).</li><li>Data you aren't allowed to keep (minimise).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Zero trust</b></li><li><b>Defence in depth</b></li><li><b>History tables</b> (Vol. 3)</li><li><b>Change data capture</b> (Vol. 3)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What fields should an audit event have?</summary><p>Actor, action, target, result, timestamp, tenant, source IP and a request id.</p></details>
+    <details><summary>Why ship audit logs to a separate account?</summary><p>So an attacker or insider with app admin rights can't alter or delete them.</p></details>
+    <details><summary>Should denied actions be logged?</summary><p>Yes; failed attempts reveal probing and abuse.</p></details>
+    <details><summary>What must never appear in audit logs?</summary><p>Secrets such as passwords and tokens, and more personal data than needed.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Write it in <span class="hl">ink</span>: who, what, when. And send a copy <span class="hl">ashore</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/13-audit-logging.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>OWASP, “Logging Cheat Sheet” and “Logging Vocabulary Cheat Sheet”.</li><li>NIST SP 800-92, “Guide to Computer Security Log Management”.</li><li>OWASP Top 10 (2021), A09 “Security Logging and Monitoring Failures”.</li><li>AWS docs, “S3 Object Lock”.</li></ul>
+  </div>
+  <p class="folio">13</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="threat-modeling.html"><small>← previous note</small>12 · Threat Modelling</a>
+  <a href="supply-chain.html"><small>Next note →</small>14 · Supply-Chain Hygiene</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 5 · a student's bullet journal on security patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

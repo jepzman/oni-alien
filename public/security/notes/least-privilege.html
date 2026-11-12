@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Least Privilege · Jef’s Notes</title>
+<meta name="description" content="Give every person, service and key only the access it needs, for as long as it needs it.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-security">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 5 · security patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="least-privilege">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 05.11.26</span><span class="topic">collection · <b>identity &amp; access</b></span></div>
+  <p class="kicker">a.k.a. “the hotel key card”</p>
+  <h1><span class="hl">Least Privilege</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Give every person, service and key <b>only the permissions its job needs</b>, on <b>only the resources</b> it touches, for <b>only as long</b> as it needs them. Use <b>narrow roles</b> per workload, <b>just-in-time</b> elevation for humans, and <b>remove unused rights</b> regularly. When something leaks, it can only do a little.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> access control</li><li><b>Origin:</b> Saltzer &amp; Schroeder, 1975</li><li><b>Tools:</b> IAM roles, RBAC/ABAC, JIT access, access analyzers</li><li><b>Pairs with:</b> zero trust, secrets management</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Permissions are granted generously (“just give it admin so it works”) and <span class="hl-pink">almost never taken away</span>. Every over-powered key is a bigger prize for an attacker, and a bigger mess when someone makes a mistake.</p>
+  <ul>
+    <li>A read-only report runs as the database admin.</li>
+    <li>Ex-employees and old services still have access years later.</li>
+    <li>A typo in a script deletes production because the script could.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a small reporting script that only needs to read the sales table, running with the database admin account. When its API key leaks on a public repository, the attacker can read every table, delete backups and create new admin users."><g class="rough"><rect class="d f-blue" x="20" y="90" width="180" height="70" rx="10"/><path class="d" d="M206 125 L300 125"/><path class="d" d="M289.2 130.2 L300 125 L289.2 119.8"/><rect class="d f-pink d-red" x="306" y="40" width="190" height="170" rx="10"/></g><text class="t-head" x="110" y="121" text-anchor="middle">sales report</text><text class="t" x="110" y="145" text-anchor="middle" font-size="17">needs: read sales</text><text class="t-s" x="253" y="110" text-anchor="middle">db_admin key</text><text class="t t-red" x="320" y="76" text-anchor="start" font-size="16">read all tables</text><text class="t t-red" x="320" y="112" text-anchor="start" font-size="16">DROP backups</text><text class="t t-red" x="320" y="148" text-anchor="start" font-size="16">CREATE admin</text><text class="t t-red" x="320" y="184" text-anchor="start" font-size="16">export customers</text><text class="t-s t-red" x="630" y="90" text-anchor="middle">key leaked on</text><text class="t-s t-red" x="630" y="116" text-anchor="middle">a public repo →</text><text class="t-s t-red" x="630" y="142" text-anchor="middle">game over</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A report script with admin rights: one leaked key, and the attacker owns everything.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the hotel key card</span></h2>
+  <p>Your hotel card opens <b>your room and the gym</b>, and stops working at <b>check-out</b>. The cleaner's card opens <b>one floor, during the shift</b>. The <b>master key</b> lives in the manager's safe and is signed out when needed.</p>
+  <ul>
+    <li>Your card is a <b>narrow role</b>.</li>
+    <li>“Until Sunday” is an <b>expiry</b>.</li>
+    <li>Signing out the master key is <b>just-in-time elevation</b>, with a log.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a hotel key card that opens only your room and the gym, and only until check-out. The cleaner&#x27;s card opens the rooms on one floor during working hours. Only the manager has a master key, kept in a safe."><g class="rough"><g transform="translate(90 30) scale(1.4)"><g class="d"><rect class="f-green" x="2" y="10" width="58" height="40" rx="5"/><rect x="10" y="20" width="14" height="12"/><path d="M32 22 h20 M32 30 h14 M10 40 h42"/></g></g><g transform="translate(340 30) scale(1.4)"><g class="d"><rect class="f-y" x="2" y="10" width="58" height="40" rx="5"/><rect x="10" y="20" width="14" height="12"/><path d="M32 22 h20 M32 30 h14 M10 40 h42"/></g></g><g transform="translate(590 30) scale(1.4)"><g class="d"><rect class="f-pink" x="2" y="10" width="58" height="40" rx="5"/><rect x="10" y="20" width="14" height="12"/><path d="M32 22 h20 M32 30 h14 M10 40 h42"/></g></g></g><text class="t-s t-pen" x="130" y="150" text-anchor="middle">guest</text><text class="t-s" x="130" y="176" text-anchor="middle">room 214 + gym · until Sun</text><text class="t-s t-pen" x="380" y="150" text-anchor="middle">cleaner</text><text class="t-s" x="380" y="176" text-anchor="middle">floor 2 · 8:00–16:00</text><text class="t-s t-pen" x="630" y="150" text-anchor="middle">manager</text><text class="t-s" x="630" y="176" text-anchor="middle">master · in the safe</text><text class="t-s t-green" x="380" y="230" text-anchor="middle">each card opens only what its holder needs</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Hotel key cards: your room and the gym, until check-out. The master key stays in the safe.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Card opens room 214 + gym</td><td>A role with only the needed actions and resources</td></tr>
+      <tr><td>Stops working at check-out</td><td>Time-limited grants and short-lived credentials</td></tr>
+      <tr><td>Cleaner: one floor, one shift</td><td>Scoped service roles</td></tr>
+      <tr><td>Master key signed out from the safe</td><td>Just-in-time admin access, approved and logged</td></tr>
+      <tr><td>Cancel cards of departed guests</td><td>Access reviews and removing unused permissions</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">narrow, short, reviewed</span></h2>
+  <p>Least privilege works best when it's the <b>default</b>: new roles start empty, and every permission has a reason, an owner and, ideally, an expiry.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Least privilege applied. The sales report gets a role that can only select from the sales table. The billing service can read invoices and insert refunds. Deploys use a separate migration role. A human admin uses just-in-time elevation that expires after one hour and is approved and logged. Unused permissions are found by access analysis and removed."><g class="rough"><rect class="d f-green" x="20" y="20" width="300" height="64" rx="10"/><rect class="d f-green" x="20" y="100" width="300" height="64" rx="10"/><rect class="d f-y" x="20" y="180" width="300" height="64" rx="10"/><rect class="d f-pink" x="400" y="40" width="340" height="90" rx="10"/><g transform="translate(690 140) scale(0.8)"><g class="d"><circle class="f-paper" cx="30" cy="30" r="26"/><path d="M30 14 V30 H42"/></g></g><rect class="d f-blue" x="400" y="170" width="340" height="70" rx="10"/></g><text class="t-head" x="170" y="48" text-anchor="middle" font-size="18">report_reader</text><text class="t" x="170" y="72" text-anchor="middle" font-size="17">SELECT sales</text><text class="t-head" x="170" y="128" text-anchor="middle" font-size="18">billing_svc</text><text class="t" x="170" y="152" text-anchor="middle" font-size="17">read invoices · insert refunds</text><text class="t-head" x="170" y="208" text-anchor="middle" font-size="18">migrator</text><text class="t" x="170" y="232" text-anchor="middle" font-size="17">ALTER (deploys only)</text><text class="t-head" x="570" y="81" text-anchor="middle" font-size="18">admin: just-in-time</text><text class="t" x="570" y="105" text-anchor="middle" font-size="17">approved · 1 hour · logged</text><text class="t-head" x="570" y="212" text-anchor="middle" font-size="16">unused for 90 days → removed</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One narrow role per job, time-boxed elevation for humans, and regular clean-up of unused rights.</figcaption></figure>
+  <ol class="steps">
+    <li><b>One identity per workload</b><p>No shared “app” user; each service, job and person has its own identity.</p></li>
+    <li><b>Start from zero</b><p>Grant specific actions on specific resources (<code>SELECT</code> on <code>sales</code>), not wildcards.</p></li>
+    <li><b>Separate duties</b><p>Runtime roles can't change schema; deploy roles can't read customer data.</p></li>
+    <li><b>Time-box human admin</b><p>Just-in-time elevation with approval, expiry and logs; no standing admin.</p></li>
+    <li><b>Review and prune</b><p>Use access analyzers and last-used data; remove what hasn't been used in 90 days.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Principle of least privilege</dt><dd>Only the access needed, nothing more.</dd></div>
+    <div><dt>RBAC</dt><dd>Role-based access control: permissions grouped into roles.</dd></div>
+    <div><dt>ABAC</dt><dd>Attribute-based: decisions use attributes like team or region.</dd></div>
+    <div><dt>Just-in-time access</dt><dd>Temporary elevation granted when needed.</dd></div>
+    <div><dt>Standing privilege</dt><dd>Access held permanently, used or not.</dd></div>
+    <div><dt>Separation of duties</dt><dd>No single identity can do every risky step.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>roles.sql + reader-policy.json</span><span>PostgreSQL + AWS IAM</span></div>
+<pre><code><span class="c">-- the report can read one table, and nothing else</span>
+<span class="k">CREATE</span> ROLE report_reader LOGIN;
+GRANT <span class="k">SELECT</span> <span class="k">ON</span> sales <span class="k">TO</span> report_reader;
+<span class="k">ALTER</span> ROLE report_reader <span class="k">SET</span> statement_timeout = <span class="s">'30s'</span>;
+
+<span class="c">-- the invoice worker can read one bucket prefix</span>
+{
+  <span class="s">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="s">"Statement"</span>: [{
+    <span class="s">"Effect"</span>: <span class="s">"Allow"</span>,
+    <span class="s">"Action"</span>: [<span class="s">"s3:GetObject"</span>],
+    <span class="s">"Resource"</span>: <span class="s">"arn:aws:s3:::acme-invoices/2026/*"</span>
+  }]
+}
+<span class="c">// not "Action": "s3:*", not "Resource": "*"</span></code></pre>
+  </div>
+  <p class="aside">tools: cloud IAM (AWS, GCP, Azure) with access analyzers and last-accessed data, Kubernetes RBAC, database roles, Teleport / StrongDM / cloud PIM for just-in-time access, policy linters like Checkov and tfsec.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Small blast radius</b> for leaks and mistakes.</li><li><b>Clear ownership</b>: every permission has a reason.</li><li><b>Easier audits</b> and compliance.</li><li><b>Fewer accidents</b>: scripts can't do what they shouldn't.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More roles</b> to define and maintain.</li><li><b>“Permission denied” friction</b> while getting it right.</li><li><b>Reviews take time</b>.</li><li><b>Too narrow</b> can break things in production.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Security ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>broad, standing admin-style access</b> to <b>narrow per-workload roles with JIT elevation and regular reviews</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to get right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More roles, but each one is simple.</td></tr>
+      <tr data-before="4" data-after="3"><td>Usability<small>little friction?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Occasional “access denied” until roles settle.</td></tr>
+      <tr data-before="2" data-after="5"><td>Confidentiality<small>secrets stay secret?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Each identity sees only its own data.</td></tr>
+      <tr data-before="2" data-after="4"><td>Integrity<small>can't be tampered with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fewer identities can change things.</td></tr>
+      <tr data-before="3" data-after="4"><td>Availability<small>stays up under attack?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Mistaken deletes and rogue scripts are limited.</td></tr>
+      <tr data-before="1" data-after="5"><td>Containment<small>small blast radius?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A leaked key reaches one table or prefix.</td></tr>
+      <tr data-before="2" data-after="4"><td>Auditability<small>can we tell what happened?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Grants have owners, reasons and expiry.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Design and review time.</td></tr>
+      <tr data-before="3" data-after="3"><td>Developer experience<small>easy to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Needs good templates to stay easy.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Wildcards “for now”</h3><p><code>"Action": "*"</code> ships and stays for years. <span class="fix">Fix →</span> start from zero; lint policies for wildcards.</p></li>
+    <li><h3>Shared accounts</h3><p>Five services use one database user. <span class="fix">Fix →</span> one identity per workload.</p></li>
+    <li><h3>Standing admin for humans</h3><p>Every engineer is always admin. <span class="fix">Fix →</span> just-in-time elevation with expiry.</p></li>
+    <li><h3>Never removing access</h3><p>Old services and leavers keep permissions. <span class="fix">Fix →</span> automated reviews using last-used data.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Every system, every identity: it's a default, not a feature.</li><li>Especially service accounts, CI pipelines and API keys.</li><li>Admin access to production and customer data.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Don't skip it; just don't spend weeks on throwaway prototypes with no real data.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Zero trust</b></li><li><b>Secrets management</b></li><li><b>Short-lived tokens</b></li><li><b>Bulkhead</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does least privilege limit?</summary><p>Which actions, on which resources, for how long each identity can act.</p></details>
+    <details><summary>What's just-in-time access?</summary><p>Temporary elevated access granted when needed, with approval and an expiry, instead of standing admin rights.</p></details>
+    <details><summary>Why one identity per workload?</summary><p>So each one gets only its own permissions, and logs and revocation are precise.</p></details>
+    <details><summary>How do you find permissions to remove?</summary><p>Use last-used data and access analyzers; remove what hasn't been used in a set period.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Each card opens <span class="hl">your room</span>, until <span class="hl">check-out</span>. The master key stays in the <span class="hl">safe</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/02-least-privilege.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Saltzer &amp; Schroeder, “The Protection of Information in Computer Systems” (1975).</li><li>NIST SP 800-53, AC-6 “Least Privilege”.</li><li>AWS docs, “Apply least-privilege permissions” and IAM Access Analyzer.</li><li>OWASP Top 10 (2021), A01 “Broken Access Control”.</li></ul>
+  </div>
+  <p class="folio">02</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="zero-trust.html"><small>← previous note</small>01 · Zero Trust</a>
+  <a href="oauth-pkce.html"><small>Next note →</small>03 · OAuth 2.0 with PKCE</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 5 · a student's bullet journal on security patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

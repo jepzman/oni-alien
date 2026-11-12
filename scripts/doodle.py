@@ -266,3 +266,15 @@ ICONS.update({
     "handshake": '<path class="F" d="M0 20 h14 l10 -6 h10 l14 10 l12 0 v20 h-12 l-14 10 h-10 l-10 -6 h-14 z"/><path d="M24 14 l12 12 M30 34 l6 6 M36 30 l6 6"/>',
     "stopwatch": '<circle class="F" cx="30" cy="34" r="24"/><path d="M24 4 h12 M30 4 v6 M30 34 l10 -10 M50 14 l4 -4"/>',
 })
+
+# Icons added for the security journal (same ~60×60 convention).
+ICONS.update({
+    "badge": '<rect class="F" x="4" y="6" width="52" height="56" rx="4"/><circle cx="30" cy="26" r="9"/><path d="M16 50 q14 -16 28 0 M22 6 v-4 h16 v4"/>',
+    "vault": '<rect class="F" x="2" y="2" width="58" height="58" rx="4"/><circle class="F" cx="31" cy="31" r="16"/><path d="M31 15 v32 M15 31 h32 M2 18 h-2 M2 44 h-2"/>',
+    "guard": '<circle class="F" cx="30" cy="14" r="10"/><path class="F" d="M10 10 h40 l-4 -8 h-32 z"/><rect class="F" x="14" y="26" width="32" height="28" rx="4"/><path d="M14 30 l-10 16 M46 30 l10 16 M22 54 v10 M38 54 v10 M26 36 h8"/>',
+    "eye": '<path class="F" d="M2 30 q28 -30 56 0 q-28 30 -56 0 z"/><circle cx="30" cy="30" r="9"/>',
+    "castle": '<path class="F" d="M4 64 v-40 h8 v8 h8 v-8 h8 v8 h8 v-8 h8 v8 h8 v-8 h8 v40 z"/><path d="M28 64 v-14 a6 6 0 0 1 12 0 v14"/>',
+    "keycard": '<rect class="F" x="2" y="10" width="58" height="40" rx="5"/><rect x="10" y="20" width="14" height="12"/><path d="M32 22 h20 M32 30 h14 M10 40 h42"/>',
+    "fingerprint": '<path d="M30 58 c-10 -8 -14 -20 -12 -30 a12 12 0 0 1 24 0 c0 8 -2 14 -6 20 M22 54 c-6 -8 -10 -18 -8 -28 a16 16 0 0 1 32 0 M30 50 c-4 -8 -6 -14 -4 -22 a4 4 0 0 1 8 0 c0 6 -2 10 -4 14"/>',
+    "seal": '<circle class="F" cx="30" cy="26" r="20"/><path d="M18 42 l-6 20 l10 -6 l6 8 l2 -18 M42 42 l6 20 l-10 -6 l-6 8 l-2 -18 M22 26 l6 6 l12 -12"/>',
+})

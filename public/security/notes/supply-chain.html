@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Supply-Chain Hygiene · Jef’s Notes</title>
+<meta name="description" content="Pin, scan and verify the packages and images you depend on.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-security">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 5 · security patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="supply-chain">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 17.12.26</span><span class="topic">collection · <b>building &amp; running</b></span></div>
+  <p class="kicker">a.k.a. “check the deliveries”</p>
+  <h1><span class="hl">Supply-Chain Hygiene</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Most of your app is <b>other people's code</b>. Keep it under control: <b>lock</b> exact versions with integrity hashes, take updates through <b>small automated PRs</b> that run your tests, <b>scan</b> for known vulnerabilities and malicious packages, produce an <b>SBOM</b> so you know what's inside, <b>sign builds</b> with provenance, and <b>deploy only what you signed</b>, on minimal, pinned base images.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> software supply chain</li><li><b>Frameworks:</b> SLSA, OpenSSF Scorecard, NIST SSDF</li><li><b>Artefacts:</b> lockfiles, SBOM (CycloneDX/SPDX), signatures</li><li><b>Pairs with:</b> least privilege, defence in depth</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">A typical app has a handful of direct dependencies and <span class="hl-pink">hundreds of transitive ones</span>, plus base images, CI actions and build tools. Any of them can be vulnerable, abandoned, typosquatted or hijacked.</p>
+  <ul>
+    <li>Floating versions pull a malicious release into the next build.</li>
+    <li>Nobody can say whether a newly announced vulnerability affects you.</li>
+    <li>A two-year-old base image carries dozens of known CVEs.</li>
+    <li>A CI action pinned to a tag is quietly changed upstream.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of an app with five direct dependencies that pull in eight hundred transitive packages. One small package deep in the tree gets a malicious new version, and because versions use caret ranges and the build pulls latest, the next build ships the malicious code to production. The Docker base image is also latest and two years unpatched."><g class="rough"><rect class="d f-blue" x="20" y="100" width="120" height="60" rx="10"/><path class="d" d="M146 130 L230 40"/><path class="d" d="M226.4 51.5 L230 40 L218.8 44.3"/><rect class="d f-paper" x="236" y="24" width="110" height="32" rx="4"/><path class="d" d="M146 130 L230 84"/><path class="d" d="M223.0 93.8 L230 84 L218.0 84.6"/><rect class="d f-paper" x="236" y="68" width="110" height="32" rx="4"/><path class="d" d="M146 130 L230 128"/><path class="d" d="M219.3 133.5 L230 128 L219.1 123.0"/><rect class="d f-paper" x="236" y="112" width="110" height="32" rx="4"/><path class="d" d="M146 130 L230 172"/><path class="d" d="M218.0 171.8 L230 172 L222.7 162.5"/><rect class="d f-paper" x="236" y="156" width="110" height="32" rx="4"/><path class="d" d="M146 130 L230 216"/><path class="d" d="M218.7 211.9 L230 216 L226.2 204.6"/><rect class="d f-paper" x="236" y="200" width="110" height="32" rx="4"/><path class="d d-thin" d="M346 40 L420 30"/><path class="d d-thin" d="M346 40 L420 51"/><path class="d d-thin" d="M346 84 L420 72"/><path class="d d-thin" d="M346 84 L420 93"/><path class="d d-thin" d="M346 128 L420 114"/><path class="d d-thin" d="M346 128 L420 135"/><path class="d d-thin" d="M346 172 L420 156"/><path class="d d-thin" d="M346 172 L420 177"/><path class="d d-thin" d="M346 216 L420 198"/><path class="d d-thin" d="M346 216 L420 219"/><rect class="d f-pink d-red" x="450" y="120" width="290" height="50" rx="10"/></g><text class="t-head" x="80" y="137" text-anchor="middle" font-size="17">your app</text><text class="t-s t-pen" x="480" y="40" text-anchor="start">800 transitive</text><text class="t-head t-red" x="595" y="152" text-anchor="middle" font-size="16">tiny-pkg 1.3.7: malicious</text><text class="t-s t-red" x="470" y="210" text-anchor="start">FROM node:latest (2 yrs old)</text><text class="t-s t-red" x="470" y="240" text-anchor="start">next build ships it</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>5 direct packages, 800 transitive ones, floating versions: one poisoned update ships in the next build.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">checking the deliveries</span></h2>
+  <p>A good kitchen checks every delivery: <b>known suppliers</b>, <b>seals intact</b>, an <b>ingredient label</b> on every package, and a <b>batch number</b> logged. When a supplier recalls a batch, the kitchen knows <b>exactly which dishes</b> used it.</p>
+  <ul>
+    <li>The order sheet is your <b>lockfile</b>.</li>
+    <li>The ingredient label is the <b>SBOM</b>.</li>
+    <li>The seal is a <b>signature</b>; the batch log is <b>provenance</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a restaurant kitchen receiving deliveries. Each crate is checked against the order sheet, sealed packages only, from known suppliers, with a label listing every ingredient. Recalled batches are pulled immediately because the kitchen knows exactly which batch went into which dish."><g class="rough"><g transform="translate(30 80) scale(1.6)"><g class="d"><rect class="f-paper" x="0" y="10" width="40" height="30" rx="3"/><path class="f-paper" d="M40 20 h12 l8 10 v10 h-20 z"/><circle class="f-paper" cx="12" cy="44" r="6"/><circle class="f-paper" cx="48" cy="44" r="6"/></g></g><path class="d" d="M140 110 L230 110"/><path class="d" d="M219.2 115.2 L230 110 L219.2 104.8"/><g transform="translate(240 70) scale(1.4)"><g class="d"><rect class="f-y" x="4" y="14" width="52" height="40" rx="2"/><path d="M4 26 h52 M30 14 v40"/></g></g><g transform="translate(290 120) scale(0.7)"><g class="d"><circle class="f-green" cx="30" cy="26" r="20"/><path d="M18 42 l-6 20 l10 -6 l6 8 l2 -18 M42 42 l6 20 l-10 -6 l-6 8 l-2 -18 M22 26 l6 6 l12 -12"/></g></g></g><text class="t-s t-green" x="430" y="60" text-anchor="start">✓ known supplier</text><text class="t-s t-green" x="430" y="100" text-anchor="start">✓ seal intact</text><text class="t-s t-green" x="430" y="140" text-anchor="start">✓ ingredient label</text><text class="t-s t-green" x="430" y="180" text-anchor="start">✓ batch number logged</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A kitchen checks every delivery: known suppliers, sealed, labelled, and recalls traced to the dish.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The order sheet</td><td>Lockfile with exact versions and hashes</td></tr>
+      <tr><td>Known suppliers only</td><td>Trusted registries, scoped packages, reviewed new deps</td></tr>
+      <tr><td>Intact seals</td><td>Integrity hashes and signature verification</td></tr>
+      <tr><td>Ingredient labels</td><td>An SBOM for every build</td></tr>
+      <tr><td>Recall traced to the dish</td><td>Knowing which services use a vulnerable package</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">lock, update, scan, sign, verify</span></h2>
+  <p>Small, frequent updates are <b>safer</b> than rare big ones: each PR is easy to review and test, and you're never years behind when a critical fix lands.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Supply-chain controls. A lockfile pins every package to an exact version and integrity hash. Dependency update bots open small pull requests that run tests. Scanners check for known vulnerabilities and malicious packages. The build produces a software bill of materials, signs the image, and records provenance. Deploys only accept signed images from the trusted build. Base images are minimal and pinned by digest."><g class="rough"><rect class="d f-y" x="10" y="50" width="136" height="84" rx="10"/><rect class="d f-blue" x="160" y="50" width="136" height="84" rx="10"/><path class="d" d="M148 92 L158 92"/><path class="d" d="M147.2 97.2 L158 92 L147.2 86.8"/><rect class="d f-pink" x="310" y="50" width="136" height="84" rx="10"/><path class="d" d="M298 92 L308 92"/><path class="d" d="M297.2 97.2 L308 92 L297.2 86.8"/><rect class="d f-green" x="460" y="50" width="136" height="84" rx="10"/><path class="d" d="M448 92 L458 92"/><path class="d" d="M447.2 97.2 L458 92 L447.2 86.8"/><rect class="d f-green" x="610" y="50" width="136" height="84" rx="10"/><path class="d" d="M598 92 L608 92"/><path class="d" d="M597.2 97.2 L608 92 L597.2 86.8"/><path class="d d-green" d="M700 140 L700 200"/><path class="d d-green" d="M694.8 189.2 L700 200 L705.2 189.2"/><rect class="d f-green" x="500" y="204" width="250" height="56" rx="10"/></g><text class="t-head" x="78" y="88" text-anchor="middle" font-size="18">lockfile</text><text class="t" x="78" y="112" text-anchor="middle" font-size="15">exact + hash</text><text class="t-head" x="228" y="88" text-anchor="middle" font-size="18">update bot</text><text class="t" x="228" y="112" text-anchor="middle" font-size="15">small PRs</text><text class="t-head" x="378" y="88" text-anchor="middle" font-size="18">scan</text><text class="t" x="378" y="112" text-anchor="middle" font-size="15">CVEs · malware</text><text class="t-head" x="528" y="88" text-anchor="middle" font-size="18">SBOM</text><text class="t" x="528" y="112" text-anchor="middle" font-size="15">what&#x27;s inside</text><text class="t-head" x="678" y="88" text-anchor="middle" font-size="18">sign</text><text class="t" x="678" y="112" text-anchor="middle" font-size="15">provenance</text><text class="t-head" x="625" y="239" text-anchor="middle" font-size="17">deploy: signed only</text><text class="t-s t-pen" x="240" y="236" text-anchor="middle">base image: minimal, pinned by digest</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Pin and hash, update in small reviewed steps, scan, produce an SBOM, sign the build, and only deploy what you signed.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Lock everything</b><p>Commit lockfiles; install with <code>npm ci</code>; pin CI actions and base images by digest/SHA.</p></li>
+    <li><b>Review new dependencies</b><p>Is it maintained? How many maintainers? Install scripts? Prefer fewer, well-known packages.</p></li>
+    <li><b>Automate updates</b><p>Dependabot or Renovate: small PRs, tests, grouped minor updates, auto-merge only for low risk.</p></li>
+    <li><b>Scan continuously</b><p>Known vulnerabilities (OSV, npm audit) and malicious package feeds; fail builds on criticals.</p></li>
+    <li><b>Generate an SBOM</b><p>CycloneDX or SPDX per build, stored with the artefact.</p></li>
+    <li><b>Sign and verify</b><p>Sign images with provenance (Sigstore/cosign, SLSA); admission control accepts only signed images.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Transitive dependency</dt><dd>A dependency of a dependency.</dd></div>
+    <div><dt>Lockfile</dt><dd>Exact resolved versions and hashes of all packages.</dd></div>
+    <div><dt>SBOM</dt><dd>Software bill of materials: what's inside a build.</dd></div>
+    <div><dt>Provenance</dt><dd>Signed record of how and where an artefact was built.</dd></div>
+    <div><dt>Typosquatting</dt><dd>Malicious packages with names like popular ones.</dd></div>
+    <div><dt>SLSA</dt><dd>Framework of levels for build integrity.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>.github/workflows/build.yml</span><span>pinned, scanned, signed</span></div>
+<pre><code>steps:
+  - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955   <span class="c"># pinned SHA</span>
+  - run: npm ci --ignore-scripts          <span class="c"># exact lockfile, no install scripts</span>
+  - run: npx osv-scanner --lockfile=package-lock.json
+  - run: docker build -t $IMAGE .         <span class="c"># FROM node:22.11-slim@sha256:…</span>
+  - run: syft $IMAGE -o cyclonedx-json &gt; sbom.json
+  - run: cosign sign --yes $IMAGE         <span class="c"># keyless, via the CI's OIDC identity</span>
+  - run: cosign attest --yes --<span class="k">type</span> cyclonedx --predicate sbom.json $IMAGE
+
+<span class="c"># cluster admission policy: only images signed by this repo's workflow may run</span></code></pre>
+  </div>
+  <p class="aside">tools: Dependabot, Renovate, npm/pnpm lockfiles, OSV-Scanner, Snyk, Socket (malicious package detection), Syft/Trivy/Grype, CycloneDX, Sigstore cosign, SLSA GitHub generator, OpenSSF Scorecard, Kyverno / Sigstore policy-controller.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Reproducible builds</b>: the same code every time.</li><li><b>Fast answers</b> to “are we affected?”</li><li><b>Poisoned updates blocked</b> or caught early.</li><li><b>Only trusted artefacts</b> reach production.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>A steady stream of update PRs</b>.</li><li><b>Scanner noise</b> and false positives.</li><li><b>Pipeline complexity</b> for signing and verification.</li><li><b>Pinned versions</b> need active updating.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Security ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>floating versions, latest base images and no scanning</b> to <b>lockfiles, automated small updates, scanning, SBOMs and signed deploys</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to get right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More pipeline steps, mostly automated.</td></tr>
+      <tr data-before="3" data-after="3"><td>Usability<small>little friction?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Invisible to users.</td></tr>
+      <tr data-before="2" data-after="4"><td>Confidentiality<small>secrets stay secret?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Malicious packages are blocked before they ship.</td></tr>
+      <tr data-before="1" data-after="5"><td>Integrity<small>can't be tampered with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Only signed, provenance-checked builds deploy.</td></tr>
+      <tr data-before="3" data-after="4"><td>Availability<small>stays up under attack?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fewer emergency upgrades during incidents.</td></tr>
+      <tr data-before="2" data-after="4"><td>Containment<small>small blast radius?</small></td><td class="dcell"></td><td class="score"></td><td class="why">SBOMs show exactly where a bad package is used.</td></tr>
+      <tr data-before="2" data-after="5"><td>Auditability<small>can we tell what happened?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Every artefact says what's in it and how it was built.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tooling is mostly free; reviews take time.</td></tr>
+      <tr data-before="3" data-after="3"><td>Developer experience<small>easy to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Update PRs are a constant, small chore.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Ignoring the update PRs</h3><p>200 open Dependabot PRs; nobody looks. <span class="fix">Fix →</span> group updates, auto-merge low-risk, own the queue.</p></li>
+    <li><h3>Pinning but never updating</h3><p>Locked to versions with known CVEs for years. <span class="fix">Fix →</span> small, regular updates.</p></li>
+    <li><h3>Install scripts</h3><p>A package's postinstall runs arbitrary code in CI. <span class="fix">Fix →</span> <code>--ignore-scripts</code> where possible; review packages that need them.</p></li>
+    <li><h3>Unpinned CI actions</h3><p><code>uses: some/action@v1</code> changes underneath you. <span class="fix">Fix →</span> pin third-party actions by commit SHA.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Every project with dependencies (all of them).</li><li>Container images and CI pipelines.</li><li>Software you ship to customers.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Don't skip; scale it. A small project can start with a lockfile, Dependabot and one scanner.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Defence in depth</b></li><li><b>Least privilege</b></li><li><b>Short-lived tokens</b></li><li><b>Parallel &amp; selective runs</b> (Vol. 4)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why are transitive dependencies a risk?</summary><p>They make up most of your code, and you didn't choose or review them directly.</p></details>
+    <details><summary>What is an SBOM for?</summary><p>Knowing exactly which components and versions are in a build, so you can answer “are we affected?” quickly.</p></details>
+    <details><summary>Why pin CI actions by commit SHA?</summary><p>Tags can be moved to point at different code; a SHA can't change.</p></details>
+    <details><summary>What does signing images with provenance give you?</summary><p>Proof that an image was built by your trusted pipeline, which deploys can verify.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Check every <span class="hl">delivery</span>: known supplier, intact <span class="hl">seal</span>, and a <span class="hl">label</span> on the box.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/14-supply-chain.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>SLSA specification (slsa.dev).</li><li>NIST SP 800-218, “Secure Software Development Framework (SSDF)”.</li><li>OpenSSF, “Concise Guide for Evaluating Open Source Software”.</li><li>CISA, “Software Bill of Materials (SBOM)”.</li></ul>
+  </div>
+  <p class="folio">14</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="audit-logging.html"><small>← previous note</small>13 · Audit Logging</a>
+  <a href="defense-in-depth.html"><small>Next note →</small>15 · Defence in Depth</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 5 · a student's bullet journal on security patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>
