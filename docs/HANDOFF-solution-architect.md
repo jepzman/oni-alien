@@ -1,6 +1,6 @@
 # Handoff: The Solution Architect's Notebook (Series 2, Book 1)
 
-Status as of 2026-11-12: **planned, sample chapter built, nothing deployed.**
+Status as of 2026-11-12: **Vol. 1 written (15 notes), Vol. 2 has its first note (ADR); both on the Series 2 shelf on the working branch, not yet deployed.**
 
 - Shareable plan (Claude Docs, private until shared by the owner): https://claude.ai/artifact/GF641a5WavDf4mpNx8bKH1
 - Sample chapter (draft, unlisted): `public/architect-2/notes/adr.html` — preview with `npm run serve`, then open http://localhost:8080/architect-2/notes/adr.html
@@ -74,15 +74,15 @@ Drafting sheet, vibrant version (owner asked for more colour and depth):
 ## 5. Build checklist for the next session
 
 1. [x] Open questions decided (section 6).
-2. [ ] **Series support on the landing page**: add `series` to journals (1 = patterns, 2 = practitioner
+2. [x] **Series support on the landing page**: add `series` to journals (1 = patterns, 2 = practitioner
        notebooks); render a second shelf “Series 2 · The Practitioner's Notebooks” under the first, with
        covers using `--cover-architect` / `--band-architect` and labels “book 1 · vol. N”.
-3. [ ] Rename keys if wanted (`architect-1` … `architect-6`; URLs `/architect-N/`). Keys must stay flat:
+3. [x] Keys are `architect-1`, `architect-2`, … (decided). Rename keys if wanted (`architect-1` … `architect-6`; URLs `/architect-N/`). Keys must stay flat:
        page depth assumptions (`../`) break with nested folders.
-4. [ ] For each volume: add the `JOURNALS` entry (copy `architect-2`, remove `draft=True` when ready),
+4. [~] For each volume (Vol. 1 done; Vol. 2: 1 of 15): add the `JOURNALS` entry (copy `architect-2`, remove `draft=True` when ready),
        full 15-note catalogue, write `content/architect-N/01_….py` … `04_….py` (4 collections).
-5. [ ] Write `docs/larder-casebook.md` first, then Vol. 1, then Vol. 2 (ADR note already done).
-6. [ ] Update `PLANNED` / `FUTURE_LOG`, README volume table.
+5. [x] Write `docs/larder-casebook.md` first, then Vol. 1 (done), then Vol. 2 (ADR note already done).
+6. [x] Update `PLANNED` / `FUTURE_LOG`, README volume table.
 7. [ ] Verify (same routine used for Vols. 3–6):
        - build: `python3 scripts/build_notes.py`
        - doodles: screenshot every `figure.fig svg` and review them as contact sheets; fix overlaps
@@ -101,3 +101,13 @@ Drafting sheet, vibrant version (owner asked for more colour and depth):
 - **Use the Larder case study** throughout; keep `docs/larder-casebook.md` as the source of truth.
 - **Books 2–4 each get their own skin** (as Vols. 1–6 do), sharing the title block and “Try it” box.
 - **Keep the sample chapter unlisted** (`draft=True`) until Vol. 1 is written; launch them together.
+
+## 7. Vol. 1 notes on the build (2026-11-12)
+
+- Content: `content/architect-1/01_understanding.py` … `04_validating.py`; Larder facts in `docs/larder-casebook.md`
+  (Vol. 1 runs October 2025 → January 2026; ADRs 0001–0006 are referenced but only 0007 is written out).
+- Journal flags: `series=2` puts a journal on the second shelf; `in_progress=True` labels the cover “N notes · in progress”.
+  `PLANNED_2` lists the planned Series 2 volumes. `draft=True` still works for unlisted drafts.
+- Doodle text width in this skin: headings ≈ 0.65 × font size per character, body ≈ 0.5 ×, scribbles ≈ 0.45 ×.
+  Budget box widths with that, and check every figure on a contact sheet.
+- Next: the other 14 notes of Vol. 2 (catalogue in section 2), then move Vol. 2 off `in_progress`.

@@ -340,12 +340,12 @@ JOURNALS = [
     ),
     dict(
         key="architect-2", vol=2, title="Decisions & Trade-offs", short="decisions &amp; trade-offs",
-        book="The Solution Architect's Notebook", draft=True, title_block=True, sheet_doodles=True,
+        series=2, book="The Solution Architect's Notebook", in_progress=True, title_block=True, sheet_doodles=True,
         theme="theme-architect", fonts="Architects+Daughter", subject="solution architecture",
         problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
-        term="Sample chapter · draft", weekdays=(1, 3), start=date(2027, 1, 5),
-        kicker="the solution architect's notebook · book 1 · sample sheet",
-        lead="A sample chapter from <span class=\"hl\">The Solution Architect's Notebook</span>, the first book of the new series. Same eight sections as the pattern journals, rebuilt for work whose output is decisions and documents: a <b>situation</b> from the running Larder case study, a <b>template card</b> to copy, nine <b>architect ratings</b>, and a <b>try it</b> exercise. {n} note so far.",
+        term="Spring term · 2027", weekdays=(1, 3), start=date(2027, 3, 2),
+        kicker="the solution architect's notebook · book 1 · vol. 2 · in progress",
+        lead="Volume 2 of <span class=\"hl\">The Solution Architect's Notebook</span>: how architects choose between options, record why, and live with the consequences. This volume is <b>in progress</b>: the first note is here, the other fourteen follow (see the future log on the shelf). Same format as Vol. 1, following Larder from March 2026. {n} note so far.",
         blurb="How architects choose between options, record why, and live with the consequences.",
         attrs=ARCHITECT_ATTRS, attrs_title="The nine architect ratings", attrs_side="what a good architecture practice is judged on", ratings_h2="Architect ratings",
         handmade=set(),
@@ -362,12 +362,20 @@ JOURNALS = [
 PLANNED = [
     (7, "AI App Patterns", "Retrieval-augmented generation, agents and tools, evaluation, guardrails and cost-aware LLM apps."),
 ]
+# Planned volumes of Series 2, book 1 (see docs/HANDOFF-solution-architect.md).
+PLANNED_2 = [
+    (3, "Communicating Architecture", "C4 and other views, one-pagers, docs as code, presenting to executives, explaining trade-offs."),
+    (4, "Integration & the Enterprise", "Integration styles, anti-corruption layers, capability maps, portfolios and strangler-fig migrations."),
+    (5, "Designing for Qualities", "Back-of-the-envelope estimates, availability maths, security reviews and total cost of ownership."),
+    (6, "Delivery, Governance & Influence", "Just-enough design, principles, guardrails, risk, go-live, and influencing without authority."),
+]
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
-    ("Jan 2027", [("★", "New series, book 1 · <b>The Solution Architect's Notebook</b>: turning requirements into architecture, trade-off records, quality attributes, diagrams for every audience"), ("•", "One-page printable cheat sheet per collection")]),
+    ("Jan 2027", [("★", "Book 1, vol. 2 · <b>Decisions &amp; Trade-offs</b>, complete: options analysis, one-way doors, build vs buy, technical debt"), ("•", "One-page printable cheat sheet per collection")]),
     ("Feb 2027", [("★", "Book 2 · <b>Product Management</b>: discovery, problem framing, prioritisation, roadmaps, metrics that matter"), ("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
     ("Mar 2027", [("★", "Book 3 · <b>Project Management</b>: planning, estimation, risks and dependencies, delivery rhythms, status that tells the truth"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
     ("Apr 2027", [("★", "Book 4 · <b>Client Management</b>: expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
+    ("Mid 2027", [("★", "Book 1, vols. 3–6 · communicating architecture, integration, designing for qualities, governance and influence")]),
     ("Someday", [("•", "Extra notes for Vols. 2, 5 and 6: Debounce &amp; Throttle, Passkeys, Signed Webhooks, Chaos Engineering, Service Catalogues"), ("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
 
@@ -444,7 +452,7 @@ KEY = '''  <aside class="key" aria-label="Key to the signifiers on this page">
 
 
 def foot(j=None):
-    what = (f"{j['book']} · vol. {j['vol']} · sample chapter" if j and j.get("book") else
+    what = (f"{j['book']} · vol. {j['vol']}" if j and j.get("book") else
             f"Vol. {j['vol']} · a student's bullet journal on {j['short']}") if j else "a shelf of student bullet journals on software design"
     return f'<footer class="foot"><span>Jef’s Notes · {what}</span><span>by {AUTHOR}</span></footer>'
 
@@ -481,7 +489,7 @@ def bar(j, depth, current=None, print_button=True, disabled=False):
     if j is None:
         nav = (f'<a href="{root}index.html#shelf"{cur("shelf")}>Journals</a>\n'
                f'      <a class="hide-sm" href="{root}index.html#future">Future log</a>')
-        brand_small = "a shelf of design-pattern journals"
+        brand_small = "a shelf of design notebooks"
         btn = ""
     else:
         jp = "" if depth == 1 else "../"
@@ -697,10 +705,10 @@ def render_index(j):
         '  <h2 id="index"><span class="num">✎</span>Index <span class="side">tap a note to open it</span></h2>',
         index_list(j),
         '  <h2 id="how-to-read"><span class="num">?</span>How every note is laid out <span class="side">same eight sections, every time</span></h2>',
-        '''  <ol class="how-to">
-    <li><b>The problem</b>: what breaks without the pattern, with a doodle.</li>
-    <li><b>Real-life analogy</b>: an everyday version, plus a “translate to code” table.</li>
-    <li><b>How it solves it</b>: diagrams, steps, vocabulary and a code card.</li>
+        f'''  <ol class="how-to">
+    <li><b>{j.get("problem_h2", "The problem")}</b>: {"a scene from the case study where it goes wrong" if j.get("book") else "what breaks without the pattern"}, with a doodle.</li>
+    <li><b>Real-life analogy</b>: an everyday version, plus a “{j.get("map_caption", "translate to code").lower()}” table.</li>
+    <li><b>How it solves it</b>: diagrams, steps, vocabulary and a {"template" if j.get("book") else "code"} card.</li>
     <li><b>Gains vs losses</b>: the trade-off spread.</li>
     <li><b>Ratings</b>: nine qualities, before → after.</li>
     <li><b>Common pitfalls</b>: each with its fix.</li>
@@ -779,32 +787,43 @@ def shelf():
     return [j for j in JOURNALS if not j.get("draft")]
 
 
-def render_landing():
+def book_items(journals, planned, series=1):
     books = []
-    for j in shelf():
+    for j in journals:
         k = j["key"]
+        vol = f"book 1 · vol. {j['vol']}" if series == 2 else f"vol. {j['vol']}"
+        n = len(j["catalogue"])
+        count = (f"{n} note{'s' if n != 1 else ''} · in progress" if j.get("in_progress")
+                 else f"{n} notes · {len(j['collections'])} collections")
         books.append(f'''    <li class="book book--{k}">
-      <a class="book-cover" href="{k}/index.html" aria-label="Open Vol. {j['vol']}: {esc(j['title'])}">
+      <a class="book-cover" href="{k}/index.html" aria-label="Open {vol}: {esc(j['title'])}">
         <span class="book-band" aria-hidden="true"></span>
-        <span class="book-label"><small>vol. {j['vol']}</small><b>{esc(j['title'])}</b><i>{len(j['catalogue'])} notes · {len(j['collections'])} collections</i></span>
+        <span class="book-label"><small>{vol}</small><b>{esc(j['title'])}</b><i>{count}</i></span>
       </a>
       <div class="book-meta">
         <p>{j['blurb']}</p>
         <p class="book-actions"><a class="btn" href="{k}/index.html">Open journal</a><a class="btn btn--ghost" href="{k}/pdf/{journal_pdf(j)}">{DL}PDF</a></p>
       </div>
     </li>''')
-    for vol, title, blurb in PLANNED:
+    for vol, title, blurb in planned:
+        label = f"book 1 · vol. {vol}" if series == 2 else f"vol. {vol}"
         books.append(f'''    <li class="book book--planned">
-      <div class="book-cover" aria-hidden="true"><span class="book-label"><small>vol. {vol}</small><b>{title}</b><i>planned</i></span></div>
-      <div class="book-meta"><p><b>Vol. {vol} · {title}.</b> {blurb}</p></div>
+      <div class="book-cover" aria-hidden="true"><span class="book-label"><small>{label}</small><b>{title}</b><i>planned</i></span></div>
+      <div class="book-meta"><p><b>{label[0].upper() + label[1:]} · {title}.</b> {blurb}</p></div>
     </li>''')
+    return "\n".join(books)
+
+
+def render_landing():
+    series1 = [j for j in shelf() if j.get("series", 1) == 1]
+    series2 = [j for j in shelf() if j.get("series", 1) == 2]
     months = []
     for month, items in FUTURE_LOG:
         lis = "".join(f'<li><span class="sig">{s}</span> {t}</li>' for s, t in items)
         months.append(f'    <div class="month"><h3>{month}</h3><ul>{lis}</ul></div>')
     total = sum(len(j["catalogue"]) for j in shelf())
     return "\n".join([
-        head("Jef’s Notes", "A shelf of student bullet journals on software design patterns, with doodles, analogies, trade-offs and ratings.", 0),
+        head("Jef’s Notes", "A shelf of student bullet journals on software design patterns and the work around the code, with doodles, analogies, trade-offs and ratings.", 0, "Architects+Daughter"),
         body_open(),
         '<a class="skip-link" href="#main">Skip to the shelf</a>',
         bar(None, 0, "shelf"),
@@ -813,13 +832,16 @@ def render_landing():
         '  <div class="page-meta"><span class="day">The shelf · 2026</span><span class="topic">series · <b>software design</b></span></div>',
         '  <p class="kicker">hand-written field journals, one subject per volume</p>',
         '  <h1 class="cover-title"><span class="hl">Jef’s Notes</span></h1>',
-        f'  <p class="lead">A student\'s bullet journals on software design patterns: what problem each pattern solves, an everyday analogy with doodles, how it works, what it costs, how it rates, and how people get it wrong. <b>{len(shelf())} volumes, {total} notes</b> so far, more on the way.</p>',
-        '  <h2 id="shelf"><span class="num">✎</span>The shelf <span class="side">pick a journal</span></h2>',
-        f'  <ul class="shelf">\n{chr(10).join(books)}\n  </ul>',
+        f'  <p class="lead">A student\'s bullet journals on software design patterns, and now on the work around the code: what problem each idea solves, an everyday analogy with doodles, how it works, what it costs, how it rates, and how people get it wrong. <b>{len(shelf())} volumes, {total} notes</b> in two series so far, more on the way.</p>',
+        '  <h2 id="shelf"><span class="num">✎</span>The shelf <span class="side">series 1 · design patterns</span></h2>',
+        f'  <ul class="shelf">\n{book_items(series1, PLANNED)}\n  </ul>',
+        '  <h2 id="series-2"><span class="num">✎</span>Series 2 · The Practitioner\'s Notebooks <span class="side">book 1 · the solution architect</span></h2>',
+        '  <p>The second series is about the work <b>around</b> the code. Book 1, <b>The Solution Architect\'s Notebook</b>, follows one company, <b>Larder</b>, a grocery delivery start-up growing from one city to six, from a vague business plan to a running architecture. Same eight sections, a template to copy in every note, and a <b>try it</b> exercise for your own project.</p>',
+        f'  <ul class="shelf shelf-series">\n{book_items(series2, PLANNED_2, series=2)}\n  </ul>',
         AUTHOR_NOTE,
         '  <h2 id="future"><span class="num">→</span>Future log <span class="side">plans, not promises</span></h2>',
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
-        '  <p class="aside">after the design-pattern volumes, a <b>new series</b> begins (★): four notebooks on the work around the code, for solution architects, product managers, project managers and anyone who manages clients. Same format: the problem, an analogy, how it works, trade-offs, pitfalls and a quiz.</p>',
+        '  <p class="aside">series 2 (★) has begun with the solution architect\'s notebook. Next come notebooks for product managers, project managers and anyone who manages clients. Same format: the problem, an analogy, how it works, trade-offs, pitfalls and a quiz.</p>',
         f'  <div class="future">\n{chr(10).join(months)}\n  </div>',
         '  <h2 id="inside"><span class="num">?</span>What\'s inside every note <span class="side">same eight sections</span></h2>',
         '''  <ol class="how-to">
