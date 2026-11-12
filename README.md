@@ -22,6 +22,10 @@ Live site: https://jepzman.github.io/oni-alien/
 
 The landing page (`/`) shows two shelves (Series 1: design patterns; Series 2: practitioner's notebooks, with `series=2` in `JOURNALS`), planned volumes (`PLANNED`, `PLANNED_2`) and a “future log” of upcoming work.
 
+## Handoff
+
+Start with `docs/HANDOFF.md`: current state, next steps, how to build, verify and deploy.
+
 ## Layout
 
 - `public/`: the static site (deployed as is)
