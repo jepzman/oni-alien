@@ -146,7 +146,14 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
 | 0004 | Picker app is offline-first | 2026-01-12 | Accepted |
 | 0005 | Cache StockPilot stock per store, sync by events | 2026-01-26 | Accepted |
 | 0006 | Introduce one managed Kafka cluster | 2026-02-23 | Accepted |
-| 0007 | Send orders to delivery via a transactional outbox (Vol. 2 sample) | 2026-03-14 | Accepted |
+| 0007 | Send orders to delivery via a transactional outbox | 2026-03-14 | Accepted |
+| 0008 | Dispatch as a service: Ordering publishes events, no sync calls (from RFC-003) | 2026-03-27 | Accepted |
+| 0009 | Second payment provider for cards + iDEAL, manual switch-over, live by 1 Sep 2026 (~€900/month) | 2026-04-02 | Accepted |
+| 0010 | Run Dispatch on the managed container service | 2026-04-08 | Accepted |
+| 0011 | Run the Korenwolf pilot on manual standing orders | 2026-04-15 | Superseded by 0014 |
+| 0012 | Routing Engine A (open source, self-hosted) for Dispatch | 2026-05-26 | Accepted (on watch, Sep 2026) |
+| 0013 | Buy a billing service for Larder for Business invoices | 2026-06-08 | Accepted |
+| 0014 | Scheduled orders on business accounts, in Ordering | 2026-09-21 | Proposed |
 
 ## Book 2, Vol. 1: Grace's facts (October 2025 → January 2026)
 
@@ -172,3 +179,46 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
   74 % accepted, 15 % chose no swap, 11 % no answer; swap refund tickets 1.1 % (Zuid 6.8 %); picking +40 s. ≈ 60 agent-hours.
 - **Prototype test** (13–22 Jan 2026): 6 customers, 3 pickers. Fixes: big countdown, price difference shown,
   glove-friendly buttons, pickers continue (answer applied at packing), inline “never swap this”.
+
+## Book 1, Vol. 2: Ana's facts (March → September 2026)
+
+- **Decision log** (`docs/decisions/README.md`, 16 Mar): Sanne asks what's still open for Rotterdam; 7 ADRs plus
+  19 decisions in chat (11), tickets (5) and meeting notes (3); 6 open with no owner. Reviewed Mondays by Ana and Sanne.
+  Lines used: D-19 opening hours (config), D-21 Dispatch (RFC-003), D-22 second PSP, D-24 substitution window (2 min, a
+  flag, Grace decided), D-26 where Dispatch runs, D-27 Korenwolf pilot, D-29 picker log library.
+- **RFC-003 Dispatch as a service** (Eli + Ben, reviewers Ana, Cho, Sanne; comments 18–25 Mar; accepted 27 Mar → ADR 0008).
+  Ben had pictured HTTP calls, Eli events; two weeks of code didn't fit. Rollout: RTM-0 → Rotterdam → Amsterdam the week after.
+- **D-22 second PSP** (DACI, 23 Mar): Driver Cho, Approver Marco, Contributors Ana, Lena (veto on data terms), Sam, Joost;
+  Informed Femke, Priya, tech leads. Stuck 3 weeks / 4 meetings, decided in 8 days (2 Apr). A 4-hour outage ≈ €60k lost orders.
+  Standing decision rights (2026 Q2): inside one module → team; across modules / ADR → Ana + tech leads; > €1,000/month →
+  Marco; personal data, contracts → Lena can veto; city launch dates → Femke.
+- **Trade-off sliders** for Rotterdam (31 Mar; Femke, Joost, Priya, Sanne, Ana, Grace): launch date 5 (lease) > orders safe,
+  paid once 4 > city as configuration 3 (hard-coding allowed if logged as debt) > feature scope 2 (substitution approvals:
+  Amsterdam first, Rotterdam in June) > internal tool polish 1. Review the week of 11 May.
+- **Doors** (9 Apr): 31 decisions queued for Ana's Thursday meeting (about 8 a week, 2 weeks deep); 24 two-way back to
+  teams, 7 one-way.
+- **Korenwolf pilot** (options analysis 13 Apr, ADR 0011): weekly pantry restock at Amsterdam HQ, 07:00–09:00 by van from store **Zuid**, from **4 May**, 12 weeks; support enters one standing order a week (~3 h/week);
+  Mo's spreadsheet invoices. Scores: by hand 74, flag 56, scheduled orders 68, new service 48.
+- **Rotterdam's internet line** was ordered 30 Mar with a 6-week lead time; live mid-May. The store opened on a 4G router
+  with the offline-first picker app (ADR 0004).
+- **Antwerp planning date: September 2027** (not committed, as of 20 Apr 2026). Decision calendar: store lease by Dec 2026
+  (Femke), Belgian invoices/VAT by Mar 2027 (Marco), French and Dutch in the apps by May 2027 (Grace; all text translatable
+  from now on), courier contracts by May 2027 (Joost), Bancontact by Jul 2027 (Cho).
+- **Dispatch hosting** (ADR 0010): ~60 location messages/s from 300 courier phones (every 5 s), always on 07:00–23:00.
+  Larder Core runs on virtual machines Eli patches by hand. Revisit when more than 5 services (3 in Sep 2026).
+- **After Rotterdam opened**: express on time 89 % Amsterdam, 84 % Rotterdam (May). Dispatch still ran the 30-second loop.
+- **Routing evaluation** (11–22 May, owner Eli): 7 → 4 → 3; bake-off replayed Fri 8 May, Amsterdam, 17:00–19:30, scaled to
+  300 couriers. Engine A 1.4 s / 93 % / easy to run / €300; Engine B 0.9 s / 94 % / weak / €300; Service C 1.1 s / 93 % /
+  €4,800 a month at six cities. Engine A chosen (ADR 0012); Service C is plan B. Engines are kept anonymous on purpose.
+- **Business billing** (ADR 0013, 8 Jun): May's Korenwolf invoice took Mo and Marco 6 hours with 2 VAT errors (pantry goods
+  9 %, coffee-machine rental 21 %). Ruben wants invoices per office and cost centre. 3-year cost: build ≈ €112k, buy ≈ €34k
+  (€600/month), open source ≈ €59k. Larder keeps "what was delivered"; the billing SaaS owns invoices, VAT, reminders, Peppol.
+- **Engineers**: 14 → 18 in Q2 2026 (four hires, the 2026 budget). First **tech radar** 22 Jun 2026 (14 blips; refresh Dec 2026).
+- **Technical debt register** (15 Jun): TD-1 three Rotterdam settings hard-coded (before Utrecht prep, Oct); TD-2 Korenwolf
+  by hand (~12 h/month); TD-3 Dispatch 30-s loop (July, Engine A); TD-4 outbox polls 2 s (left on purpose); TD-5 picker sync
+  conflicts by hand (~12/week at Noord, July); TD-6 four allowed cross-module reads (before any Payments split). 20 % of each sprint.
+- **StockPilot** letter (Jul 2026): from the Jul 2027 renewal, pricing per store, ≈ 3× today for 12 stores. Contract ends
+  30 Jun 2027, 6 months' notice → decide by 31 Dec 2026. Exit options: WMS B (~3 months' work, 5 months' lead, ≈ 1.4×) or
+  Larder's own stock service (~6 months). Marco goes into the autumn renewal talks with a costed alternative (outcome open).
+- **Decision review** (21 Sep 2026): peak 2.6 orders/s across two cities; stock mismatch 0.4 %; 3 services; on time
+  Amsterdam 93 %, Rotterdam 91 % → ADR 0012 on watch (re-check 19 Oct); Korenwolf signed for three offices → ADR 0014 proposed.

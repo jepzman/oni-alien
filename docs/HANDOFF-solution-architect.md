@@ -1,6 +1,6 @@
 # Handoff: The Solution Architect's Notebook (Series 2, Book 1)
 
-Status as of 2026-11-12: **Vol. 1 written (15 notes), Vol. 2 has its first note (ADR); both on the Series 2 shelf on the working branch, not yet deployed.**
+Status as of 2026-11-12: **Vols. 1 and 2 written (15 notes each). Vol. 1 is deployed; Vol. 2 is on the working branch, not yet deployed.**
 
 - Shareable plan (Claude Docs, private until shared by the owner): https://claude.ai/artifact/GF641a5WavDf4mpNx8bKH1
 - Sample chapter (draft, unlisted): `public/architect-2/notes/adr.html` — preview with `npm run serve`, then open http://localhost:8080/architect-2/notes/adr.html
@@ -79,7 +79,7 @@ Drafting sheet, vibrant version (owner asked for more colour and depth):
        covers using `--cover-architect` / `--band-architect` and labels “book 1 · vol. N”.
 3. [x] Keys are `architect-1`, `architect-2`, … (decided). Rename keys if wanted (`architect-1` … `architect-6`; URLs `/architect-N/`). Keys must stay flat:
        page depth assumptions (`../`) break with nested folders.
-4. [~] For each volume (Vol. 1 done; Vol. 2: 1 of 15): add the `JOURNALS` entry (copy `architect-2`, remove `draft=True` when ready),
+4. [~] For each volume (Vols. 1 and 2 done): add the `JOURNALS` entry (copy `architect-2`, remove `draft=True` when ready),
        full 15-note catalogue, write `content/architect-N/01_….py` … `04_….py` (4 collections).
 5. [x] Write `docs/larder-casebook.md` first, then Vol. 1 (done), then Vol. 2 (ADR note already done).
 6. [x] Update `PLANNED` / `FUTURE_LOG`, README volume table.
@@ -110,7 +110,7 @@ Drafting sheet, vibrant version (owner asked for more colour and depth):
   `PLANNED_2` lists the planned Series 2 volumes. `draft=True` still works for unlisted drafts.
 - Doodle text width in this skin: headings ≈ 0.65 × font size per character, body ≈ 0.5 ×, scribbles ≈ 0.45 ×.
   Budget box widths with that, and check every figure on a contact sheet.
-- Next: the other 14 notes of Vol. 2 (catalogue in section 2), then move Vol. 2 off `in_progress`.
+- Vol. 2 done: see section 9.
 
 ## 8. The case file and book 2 (2026-11-12)
 
@@ -123,3 +123,18 @@ Drafting sheet, vibrant version (owner asked for more colour and depth):
   launch). Book 4: Mo (key account manager, Mar 2026) and the client **Korenwolf Group** (Hanna, Ruben). All in the casebook.
 - Fixed: template-card headers no longer overlap on phones; wide templates fit the card; the gains/losses divider is
   hidden when stacked and joins the underlines on wide screens (all journals).
+
+## 9. Vol. 2 notes on the build (2026-11-12)
+
+- Content: `content/architect-2/01_recording.py` (ADR, decision log, RFCs, decision rights), `02_choosing.py` (options
+  analysis, trade-off sliders, one-way vs two-way doors, last responsible moment), `03_big.py` (build vs buy, technology
+  evaluation, cloud service model, technology radar), `04_living.py` (technical debt register, exit plans, revisiting decisions).
+- Story runs **March → September 2026**; every new fact (ADRs 0008–0014, the Korenwolf pilot details, Antwerp's planning date
+  of September 2027, StockPilot's per-store pricing letter, 14 → 18 engineers) is in the casebook section “Book 1, Vol. 2”.
+- No `meanwhile` links yet: Grace's Vol. 1 ends in January 2026. Suggested pairs for **Grace's Vol. 2** (Jan → Apr 2026):
+  Saying No ↔ options analysis (Korenwolf pilot by hand) or one-way doors; Now/Next/Later roadmap ↔ trade-off sliders
+  (31 Mar, Grace is in the room; approvals go to Amsterdam first); Cost of delay ↔ last responsible moment; Business case
+  one-pager ↔ build vs buy (billing). Write them on Grace's side; the reverse boxes appear on Ana's notes automatically.
+- Open threads for later volumes: ADR 0014 (business ordering, proposed Sep 2026), ADR 0012 on watch (Rotterdam 91 % on
+  time), StockPilot renewal decision by 31 Dec 2026, Antwerp decision calendar, TD-1 before Utrecht prep (Oct 2026).
+- Next for book 1: Vol. 3, Communicating Architecture (after Grace's Vol. 2).
