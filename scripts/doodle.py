@@ -278,3 +278,15 @@ ICONS.update({
     "fingerprint": '<path d="M30 58 c-10 -8 -14 -20 -12 -30 a12 12 0 0 1 24 0 c0 8 -2 14 -6 20 M22 54 c-6 -8 -10 -18 -8 -28 a16 16 0 0 1 32 0 M30 50 c-4 -8 -6 -14 -4 -22 a4 4 0 0 1 8 0 c0 6 -2 10 -4 14"/>',
     "seal": '<circle class="F" cx="30" cy="26" r="20"/><path d="M18 42 l-6 20 l10 -6 l6 8 l2 -18 M42 42 l6 20 l-10 -6 l-6 8 l-2 -18 M22 26 l6 6 l12 -12"/>',
 })
+
+# Icons added for the cloud & devops journal (same ~60×60 convention).
+ICONS.update({
+    "cloud": '<path class="F" d="M14 52 a12 12 0 0 1 0 -24 a16 16 0 0 1 30 -8 a12 12 0 0 1 18 14 a9 9 0 0 1 -4 18 z"/>',
+    "rocket": '<path class="F" d="M30 2 q14 12 12 36 h-24 q-2 -24 12 -36 z"/><circle cx="30" cy="22" r="5"/><path class="F" d="M18 30 l-10 14 h10 M42 30 l10 14 h-10"/><path d="M24 44 l-2 12 M30 44 v14 M36 44 l2 12"/>',
+    "gear": '<circle class="F" cx="30" cy="30" r="18"/><circle cx="30" cy="30" r="7"/><path d="M30 4 v8 M30 48 v8 M4 30 h8 M48 30 h8 M12 12 l6 6 M42 42 l6 6 M48 12 l-6 6 M12 48 l6 -6"/>',
+    "gauge": '<path class="F" d="M4 44 a26 26 0 0 1 52 0 z"/><path d="M30 44 l14 -18 M10 36 l4 -2 M30 20 v4 M50 36 l-4 -2"/><circle cx="30" cy="44" r="3"/>',
+    "flag": '<path d="M8 2 v60"/><path class="F" d="M8 4 h40 l-8 12 l8 12 h-40 z"/>',
+    "switch": '<rect class="F" x="2" y="16" width="56" height="28" rx="14"/><circle class="F" cx="44" cy="30" r="10"/>',
+    "container": '<rect class="F" x="2" y="10" width="66" height="40" rx="2"/><path d="M12 10 v40 M22 10 v40 M32 10 v40 M42 10 v40 M52 10 v40 M62 10 v40"/>',
+    "coins": '<ellipse class="F" cx="24" cy="46" rx="20" ry="8"/><ellipse class="F" cx="24" cy="36" rx="20" ry="8"/><ellipse class="F" cx="36" cy="22" rx="20" ry="8"/>',
+})

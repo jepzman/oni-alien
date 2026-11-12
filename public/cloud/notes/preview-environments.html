@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Preview Environments · Jef’s Notes</title>
+<meta name="description" content="Spin up a short-lived copy of the app for every pull request.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-cloud">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 6 · cloud &amp; devops patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="preview-environments">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 27.11.26</span><span class="topic">collection · <b>infrastructure as code</b></span></div>
+  <p class="kicker">a.k.a. “pop-up stalls”</p>
+  <h1><span class="hl">Preview Environments</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Give <b>every pull request its own short-lived environment</b> with a unique URL: the app, its dependencies and a <b>seeded database</b>, created by the pipeline from your infrastructure code. Reviewers, designers and product managers can <b>try the change</b> before merge. When the PR is <b>merged or closed</b>, everything is <b>destroyed</b>, with a time-to-live as a safety net.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> developer workflow</li><li><b>a.k.a.:</b> ephemeral / review apps, PR environments</li><li><b>Tools:</b> Vercel, Netlify, Render, Argo CD ApplicationSet, Neon branches</li><li><b>Pairs with:</b> IaC, build once, feature flags</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">A single <span class="hl-pink">shared staging</span> environment becomes a queue and a battlefield: one broken branch blocks everyone, and non-developers can't see changes until they're merged.</p>
+  <ul>
+    <li>Teams wait for their turn on staging.</li>
+    <li>Someone's half-finished change breaks it for everyone else.</li>
+    <li>Design and product review happens after merge, when fixes are slower.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of one shared staging environment with five teams queueing for it. Team A&#x27;s half-finished change breaks staging for everyone, the designer can&#x27;t review the new page because staging has someone else&#x27;s branch, and reviews happen by reading code diffs only."><g class="rough"><circle class="d f-paper" cx="40" cy="120" r="18"/><circle class="d f-paper" cx="86" cy="120" r="18"/><circle class="d f-paper" cx="132" cy="120" r="18"/><circle class="d f-paper" cx="178" cy="120" r="18"/><circle class="d f-paper" cx="224" cy="120" r="18"/><path class="d" d="M270 120 L380 120"/><path class="d" d="M369.2 125.2 L380 120 L369.2 114.8"/><rect class="d f-pink d-red" x="386" y="70" width="200" height="100" rx="10"/></g><text class="t-s t-pen" x="130" y="170" text-anchor="middle">waiting for staging…</text><text class="t-head t-red" x="486" y="116" text-anchor="middle">staging</text><text class="t" x="486" y="140" text-anchor="middle" font-size="17">Team A&#x27;s branch, broken</text><text class="t-s t-red" x="670" y="90" text-anchor="middle">designer can&#x27;t</text><text class="t-s t-red" x="670" y="116" text-anchor="middle">see the new page</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One shared staging, five teams in the queue, and someone's half-finished change breaks it for all.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">pop-up market stalls</span></h2>
+  <p>At a market, each vendor gets a <b>pop-up stall</b> for the day, set up in minutes from a <b>standard kit</b>. Customers can try things, and in the evening it's <b>packed away</b>. Nobody has to share one stall and wait their turn.</p>
+  <ul>
+    <li>Each stall is a <b>preview environment</b>.</li>
+    <li>The standard kit is your <b>IaC + build</b>.</li>
+    <li>Packing up is <b>automatic teardown</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a pop-up market stall. Each vendor gets their own stall for the day to show their goods. It&#x27;s set up in minutes from a standard kit, customers can try things, and it&#x27;s packed away in the evening. Nobody has to share one stall."><g class="rough"><g transform="translate(40 60) scale(1.3)"><g class="d"><rect class="f-y" x="4" y="22" width="60" height="38"/><path class="f-y" d="M0 22 l8 -16 h52 l8 16 z"/><rect x="26" y="38" width="16" height="22"/></g></g><g transform="translate(190 60) scale(1.3)"><g class="d"><rect class="f-green" x="4" y="22" width="60" height="38"/><path class="f-green" d="M0 22 l8 -16 h52 l8 16 z"/><rect x="26" y="38" width="16" height="22"/></g></g><g transform="translate(340 60) scale(1.3)"><g class="d"><rect class="f-blue" x="4" y="22" width="60" height="38"/><path class="f-blue" d="M0 22 l8 -16 h52 l8 16 z"/><rect x="26" y="38" width="16" height="22"/></g></g></g><text class="t-s t-pen" x="85" y="180" text-anchor="middle">PR #101</text><text class="t-s t-pen" x="235" y="180" text-anchor="middle">PR #102</text><text class="t-s t-pen" x="385" y="180" text-anchor="middle">PR #103</text><text class="t-s t-green" x="580" y="90" text-anchor="middle">set up in minutes</text><text class="t-s t-green" x="580" y="130" text-anchor="middle">packed away tonight</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Pop-up stalls: each vendor gets one for the day, from a standard kit, packed away at night.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>A stall per vendor</td><td>An environment per pull request</td></tr>
+      <tr><td>The standard kit</td><td>Shared IaC modules and the PR's image</td></tr>
+      <tr><td>Customers trying goods</td><td>Reviewers testing the real change</td></tr>
+      <tr><td>Packed away at night</td><td>Destroyed on merge/close</td></tr>
+      <tr><td>Market closes at 6 p.m.</td><td>Time-to-live for forgotten environments</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">create on open, destroy on close</span></h2>
+  <p>The hardest part is usually <b>data</b>: use seeded fixtures or cheap database branches, never a copy of production personal data.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Preview environment lifecycle. Opening a pull request triggers the pipeline to build the image and create a namespace pr-142 with the app, a seeded database branch and a unique URL, posted as a PR comment. Reviewers, designers and product managers test it. Pushing updates redeploys it. Merging or closing the PR destroys everything, and a time-to-live cleans up anything forgotten."><g class="rough"><rect class="d f-blue" x="20" y="40" width="160" height="70" rx="10"/><path class="d" d="M186 75 L266 75"/><path class="d" d="M255.2 80.2 L266 75 L255.2 69.8"/><rect class="d f-green" x="272" y="30" width="260" height="110" rx="10"/><path class="d" d="M538 85 L600 85"/><path class="d" d="M589.2 90.2 L600 85 L589.2 79.8"/><rect class="d f-pink d-red" x="252" y="190" width="300" height="60" rx="10"/><path class="d d-red d-dash" d="M402 144 L402 186"/><path class="d d-red" d="M396.8 175.2 L402 186 L407.2 175.2"/></g><text class="t-head" x="100" y="71" text-anchor="middle">PR #142</text><text class="t" x="100" y="95" text-anchor="middle" font-size="17">opened</text><text class="t-s" x="226" y="61" text-anchor="middle">deploy</text><text class="t-head" x="402" y="81" text-anchor="middle" font-size="15">pr-142.preview.acme.dev</text><text class="t" x="402" y="105" text-anchor="middle" font-size="17">app + seeded DB branch</text><text class="t-s t-pen" x="680" y="70" text-anchor="middle">reviewers, PMs,</text><text class="t-s t-pen" x="680" y="96" text-anchor="middle">designers test it</text><text class="t-head t-red" x="402" y="227" text-anchor="middle" font-size="15">merged / closed → destroy</text><text class="t-s t-pen" x="140" y="230" text-anchor="middle">TTL: 3 days idle</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Every PR gets its own short-lived copy with a URL. Merge or close it, and it's destroyed.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Make environments cheap to create</b><p>IaC modules and small, scaled-down resources.</p></li>
+    <li><b>Trigger from PR events</b><p>On open/push: build, deploy to <code>pr-&lt;n&gt;</code>; post the URL.</p></li>
+    <li><b>Seed the data</b><p>Fixtures or database branches (Neon, PlanetScale); no production PII.</p></li>
+    <li><b>Stub expensive dependencies</b><p>Shared sandbox accounts for payments and email.</p></li>
+    <li><b>Destroy automatically</b><p>On merge/close, plus a TTL for idle environments.</p></li>
+    <li><b>Protect them</b><p>SSO or basic auth in front; they're not public sites.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Ephemeral environment</dt><dd>Created for a short time, then destroyed.</dd></div>
+    <div><dt>Review app</dt><dd>Heroku's name for a per-PR app.</dd></div>
+    <div><dt>TTL</dt><dd>Time-to-live after which a resource is deleted.</dd></div>
+    <div><dt>Database branch</dt><dd>A copy-on-write database clone for a branch.</dd></div>
+    <div><dt>Namespace</dt><dd>An isolated slice of a Kubernetes cluster.</dd></div>
+    <div><dt>Seed data</dt><dd>Known, fake data loaded for testing.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>.github/workflows/preview.yml</span><span>per-PR namespace</span></div>
+<pre><code>on:
+  pull_request: { types: [opened, synchronize, reopened, closed] }
+
+jobs:
+  preview:
+    <span class="k">if</span>: github.event.action != <span class="s">'closed'</span>
+    steps:
+      - run: ./build.sh                             <span class="c"># image tagged with the PR sha</span>
+      - run: |
+          helm upgrade --install pr-${{ github.event.number }} ./chart \
+            --namespace pr-${{ github.event.number }} --create-namespace \
+            --set image.digest=$DIGEST --set db.branch=pr-${{ github.event.number }} \
+            --set ingress.host=pr-${{ github.event.number }}.preview.acme.dev
+      - run: gh pr comment ${{ github.event.number }} --body <span class="s">"Preview ready"</span>
+
+  teardown:
+    <span class="k">if</span>: github.event.action == <span class="s">'closed'</span>
+    steps:
+      - run: kubectl delete namespace pr-${{ github.event.number }}</code></pre>
+  </div>
+  <p class="aside">tools: Vercel and Netlify preview deploys, Render/Heroku review apps, Argo CD ApplicationSet pull-request generator, Okteto, Uffizzi, Neon / PlanetScale / Supabase database branching, kube-janitor for TTL cleanup.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>No staging queue</b>.</li><li><b>Review the real thing</b> before merge.</li><li><b>Isolated</b>: one broken PR breaks only itself.</li><li><b>Proves IaC works</b> many times a day.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Cloud cost</b> if teardown fails.</li><li><b>Data seeding</b> takes effort.</li><li><b>Not production-sized</b>: performance differs.</li><li><b>External integrations</b> need sandboxes.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Operations ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>one shared staging environment</b> to <b>an automatic preview environment per pull request</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to run &amp; explain?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More automation; each environment is simple.</td></tr>
+      <tr data-before="2" data-after="5"><td>Delivery speed<small>fast from commit to prod?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No waiting; review in parallel.</td></tr>
+      <tr data-before="3" data-after="4"><td>Release safety<small>low risk per deploy?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Problems found before merge.</td></tr>
+      <tr data-before="3" data-after="3"><td>Reliability<small>stays up?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral for production.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>handles 10× load?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Scales with the number of teams.</td></tr>
+      <tr data-before="3" data-after="4"><td>Recoverability<small>fast to restore?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Environments are recreated constantly from code.</td></tr>
+      <tr data-before="3" data-after="3"><td>Observability<small>can we see inside?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Many small environments; TTL keeps it in check.</td></tr>
+      <tr data-before="2" data-after="5"><td>Developer experience<small>pleasant to ship with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Share a link instead of a screenshot.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>No teardown</h3><p>200 forgotten environments on the bill. <span class="fix">Fix →</span> destroy on close + TTL + cost alerts.</p></li>
+    <li><h3>Copying production data</h3><p>Customer PII in dozens of temporary environments. <span class="fix">Fix →</span> seeded fake data or anonymised subsets.</p></li>
+    <li><h3>Public preview URLs</h3><p>Unreleased features indexed by search engines. <span class="fix">Fix →</span> SSO/basic auth, noindex.</p></li>
+    <li><h3>Full-size infrastructure per PR</h3><p>Each preview costs as much as staging. <span class="fix">Fix →</span> scale down; share heavy dependencies.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Web apps and APIs with frequent PRs.</li><li>Teams where design and product review matter.</li><li>Several teams sharing one staging environment.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Systems too heavy to clone (use shared integration environments + flags).</li><li>Very early prototypes with one developer.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Infrastructure as code</b></li><li><b>Build once, deploy many</b></li><li><b>Feature flags</b></li><li><b>Throwaway containers</b> (Vol. 4)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What triggers a preview environment's creation and deletion?</summary><p>Opening/updating a pull request creates or updates it; merging or closing destroys it.</p></details>
+    <details><summary>Why add a TTL?</summary><p>To clean up environments that were never torn down and keep costs under control.</p></details>
+    <details><summary>What data should previews use?</summary><p>Seeded fake data or database branches from safe data, never raw production PII.</p></details>
+    <details><summary>What's the main benefit over shared staging?</summary><p>No queue and no interference: each change is reviewed in isolation before merge.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>A <span class="hl">stall</span> per vendor, set up from the <span class="hl">kit</span>, packed away <span class="hl">tonight</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/08-preview-environments.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Heroku docs, “Review Apps”.</li><li>Vercel docs, “Preview Deployments”.</li><li>Argo CD docs, “ApplicationSet: Pull Request Generator”.</li><li>Neon docs, “Database branching”.</li></ul>
+  </div>
+  <p class="folio">08</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="immutable-infrastructure.html"><small>← previous note</small>07 · Immutable Infrastructure</a>
+  <a href="health-checks.html"><small>Next note →</small>09 · Health Checks &amp; Probes</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 6 · a student's bullet journal on cloud &amp; devops patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

@@ -80,6 +80,17 @@ SECURITY_ATTRS = [
     ("Low cost", "cheap to build &amp; run?", "Tools, infrastructure and people time. High = cheap."),
     ("Developer experience", "easy to build with?", "Developers can follow it without being security experts."),
 ]
+CLOUD_ATTRS = [
+    ("Simplicity", "easy to run &amp; explain?", "Few moving parts; the on-call person can understand it at 3 a.m."),
+    ("Delivery speed", "fast from commit to prod?", "Short lead time and frequent, small releases."),
+    ("Release safety", "low risk per deploy?", "A bad change reaches few users and is easy to undo."),
+    ("Reliability", "stays up?", "Users get a working service; failures are rare and short."),
+    ("Scalability", "handles 10× load?", "Capacity grows with demand without redesign."),
+    ("Recoverability", "fast to restore?", "How quickly you get back after a failure or disaster."),
+    ("Observability", "can we see inside?", "You can tell what's wrong, and where, from the outside."),
+    ("Low cost", "cheap to run?", "Cloud bill, tooling and people time. High = cheap."),
+    ("Developer experience", "pleasant to ship with?", "Self-service, fast feedback, little toil."),
+]
 
 # ---------------------------------------------------------------- journals
 JOURNALS = [
@@ -247,20 +258,51 @@ JOURNALS = [
             (15, "defense-in-depth", "Defence in Depth", "operations", "Stack independent layers so one failure doesn't mean a breach."),
         ],
     ),
+    dict(
+        key="cloud", vol=6, title="Cloud & DevOps Patterns", short="cloud &amp; devops patterns",
+        theme="theme-cloud", subject="cloud &amp; devops", term="Winter term · 2026", weekdays=(1, 4), start=date(2026, 11, 3),
+        kicker="drawn on isometric paper, between deploys",
+        lead="My notes on <span class=\"hl\">cloud &amp; DevOps patterns</span>: how to ship small changes safely, describe infrastructure as code, run services you can see into, and recover calmly when things break, without a runaway bill. {n} patterns in {c} collections, with the same eight sections as the other volumes, rated on nine <b>operations</b> qualities like release safety, recoverability, observability and cost. Examples use GitHub Actions, Terraform, Kubernetes and OpenTelemetry, but the ideas work on any cloud.",
+        blurb="Shipping safely, infrastructure as code, running and observing, and resilience and cost: the patterns behind calm deploys and boring on-call.",
+        attrs=CLOUD_ATTRS, attrs_title="The nine operations ratings", attrs_side="what an SRE would ask about", ratings_h2="Operations ratings",
+        handmade=set(),
+        collections=[
+            ("shipping", "Shipping safely", "get changes to users in small, reversible steps"),
+            ("infra", "Infrastructure as code", "describe every server, network and environment in files"),
+            ("running", "Running &amp; observing", "keep services healthy and see what they're doing"),
+            ("resilience", "Resilience &amp; cost", "recover from the worst day, learn from it, and pay less"),
+        ],
+        catalogue=[
+            (1, "blue-green", "Blue–Green Deployment", "shipping", "Run the new version next to the old one and switch traffic in one step."),
+            (2, "canary", "Canary Releases", "shipping", "Send a small share of traffic to the new version and widen it only if metrics stay healthy."),
+            (3, "feature-flags", "Feature Flags", "shipping", "Ship code switched off, then turn features on for chosen users without a deploy."),
+            (4, "build-once", "Build Once, Deploy Many", "shipping", "Build one immutable artefact and promote the exact same thing through every environment."),
+            (5, "infrastructure-as-code", "Infrastructure as Code", "infra", "Describe cloud resources in reviewed, versioned files instead of clicking in consoles."),
+            (6, "gitops", "GitOps", "infra", "Git holds the desired state; an agent keeps the cluster matching it."),
+            (7, "immutable-infrastructure", "Immutable Infrastructure", "infra", "Never patch servers in place; replace them with fresh ones built from an image."),
+            (8, "preview-environments", "Preview Environments", "infra", "Spin up a short-lived copy of the app for every pull request."),
+            (9, "health-checks", "Health Checks & Probes", "running", "Let the platform ask each instance “are you alive? are you ready?” and act on it."),
+            (10, "autoscaling", "Autoscaling", "running", "Add and remove capacity automatically as load rises and falls."),
+            (11, "observability", "Logs, Metrics & Traces", "running", "Emit structured signals so you can answer new questions about production."),
+            (12, "slo-error-budgets", "SLOs & Error Budgets", "running", "Agree how reliable is reliable enough, and spend the rest on shipping."),
+            (13, "disaster-recovery", "Backups & Disaster Recovery", "resilience", "Keep tested backups and a rehearsed plan to restore service elsewhere."),
+            (14, "postmortems", "Incident Response & Postmortems", "resilience", "Handle incidents with clear roles, then learn from them without blame."),
+            (15, "finops", "Cost Visibility (FinOps)", "resilience", "Tag, measure and own cloud spend, so cost is a design input, not a surprise."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
 PLANNED = [
-    (6, "Cloud &amp; DevOps Patterns", "Blue–green and canary releases, infrastructure as code, GitOps, observability and cost control."),
     (7, "AI App Patterns", "Retrieval-augmented generation, agents and tools, evaluation, guardrails and cost-aware LLM apps."),
 ]
 FUTURE_LOG = [
-    ("Dec 2026", [("•", "Vol. 6 · Cloud &amp; DevOps Patterns: first notes"), ("•", "Vol. 2 extra notes: Debounce &amp; Throttle, Progressive Enhancement")]),
-    ("Jan 2027", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
-    ("Feb 2027", [("•", "Vol. 5 extra notes: Passkeys, Signed Webhooks, Secure File Uploads"), ("•", "One-page printable cheat sheet per collection")]),
-    ("Mar 2027", [("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes"), ("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
-    ("Apr 2027", [("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments"), ("•", "Quiz mode that remembers your score")]),
-    ("Someday", [("•", "Static Generation &amp; ISR, Offline-first, Feature Flags (Vol. 2)"), ("•", "A “compare two patterns” page")]),
+    ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
+    ("Jan 2027", [("★", "New series, book 1 · <b>The Solution Architect's Notebook</b>: turning requirements into architecture, trade-off records, quality attributes, diagrams for every audience"), ("•", "One-page printable cheat sheet per collection")]),
+    ("Feb 2027", [("★", "Book 2 · <b>Product Management</b>: discovery, problem framing, prioritisation, roadmaps, metrics that matter"), ("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
+    ("Mar 2027", [("★", "Book 3 · <b>Project Management</b>: planning, estimation, risks and dependencies, delivery rhythms, status that tells the truth"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
+    ("Apr 2027", [("★", "Book 4 · <b>Client Management</b>: expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
+    ("Someday", [("•", "Extra notes for Vols. 2, 5 and 6: Debounce &amp; Throttle, Passkeys, Signed Webhooks, Chaos Engineering, Service Catalogues"), ("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
 
 
@@ -670,6 +712,7 @@ def render_landing():
         AUTHOR_NOTE,
         '  <h2 id="future"><span class="num">→</span>Future log <span class="side">plans, not promises</span></h2>',
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
+        '  <p class="aside">after the design-pattern volumes, a <b>new series</b> begins (★): four notebooks on the work around the code, for solution architects, product managers, project managers and anyone who manages clients. Same format: the problem, an analogy, how it works, trade-offs, pitfalls and a quiz.</p>',
         f'  <div class="future">\n{chr(10).join(months)}\n  </div>',
         '  <h2 id="inside"><span class="num">?</span>What\'s inside every note <span class="side">same eight sections</span></h2>',
         '''  <ol class="how-to">

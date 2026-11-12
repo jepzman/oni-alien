@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SLOs &amp; Error Budgets · Jef’s Notes</title>
+<meta name="description" content="Agree how reliable is reliable enough, and spend the rest on shipping.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-cloud">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 6 · cloud &amp; devops patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="slo-error-budgets">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 11.12.26</span><span class="topic">collection · <b>running &amp; observing</b></span></div>
+  <p class="kicker">a.k.a. “the monthly data allowance”</p>
+  <h1><span class="hl">SLOs &amp; Error Budgets</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Agree, in numbers, <b>how reliable is reliable enough</b>. Pick an <b>SLI</b> that reflects what users feel (share of fast, successful checkouts), set an <b>SLO</b> (99.9% over 28 days), and treat the remainder as an <b>error budget</b> to spend on change. <b>Alert on burn rate</b>, not on every blip. Budget left: ship. Budget spent: <b>prioritise reliability</b>.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> reliability engineering</li><li><b>Origin:</b> Google SRE (2016)</li><li><b>Terms:</b> SLI, SLO, SLA, error budget, burn rate</li><li><b>Pairs with:</b> observability, canary releases, postmortems</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Product wants speed; operations wants stability. Without a shared definition of <span class="hl-pink">“reliable enough”</span>, every release is a negotiation, and teams either freeze or break things.</p>
+  <ul>
+    <li>Aiming for 100% makes every change look dangerous.</li>
+    <li>Alerts fire on every CPU spike; real user pain goes unnoticed.</li>
+    <li>Reliability work never gets prioritised until there's an outage.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a tug of war between a product team pulling for more features and faster releases, and an operations team pulling for more stability and fewer changes. Without a shared measure of how reliable is reliable enough, every release becomes an argument."><g class="rough"><path class="d" d="M170 130 h400"/><rect class="d f-y" x="20" y="100" width="150" height="60" rx="10"/><rect class="d f-blue" x="570" y="100" width="180" height="60" rx="10"/></g><text class="t-head" x="95" y="137" text-anchor="middle" font-size="17">“ship more!”</text><text class="t-head" x="660" y="137" text-anchor="middle" font-size="17">“change less!”</text><text class="t-s t-red" x="380" y="110" text-anchor="middle" font-size="40">?</text><text class="t-s t-red" x="380" y="210" text-anchor="middle">“how reliable is reliable enough?” nobody knows</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Features vs stability: without a shared number, every release is a tug of war.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the monthly data allowance</span></h2>
+  <p>A phone plan gives you <b>10 GB a month</b>. You stream freely while there's plenty left, and <b>slow down</b> when you're near the limit. The allowance was <b>agreed up front</b>, so nobody argues about each video.</p>
+  <ul>
+    <li>The allowance is the <b>error budget</b>.</li>
+    <li>Data used is <b>bad events</b> (failed or slow requests).</li>
+    <li>Your usage alert is a <b>burn-rate alert</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a monthly data allowance on a phone plan. You get ten gigabytes. You can stream as much as you like until you&#x27;ve used it up; when you&#x27;re close to the limit, you slow down. The allowance is agreed in advance, so nobody argues about each video."><g class="rough"><g transform="translate(60 50) scale(1.6)"><g class="d"><rect class="f-y" x="16" y="0" width="30" height="56" rx="6"/><path d="M26 48 h10"/></g></g><rect class="d f-paper" x="260" y="60" width="400" height="40" rx="6"/><rect class="d f-green" x="260" y="60" width="280" height="40" rx="6"/></g><text class="t-s t-pen" x="460" y="130" text-anchor="middle">7 of 10 GB used</text><text class="t-s t-green" x="460" y="170" text-anchor="middle">plenty left → stream away</text><text class="t-s t-red" x="460" y="210" text-anchor="middle">almost gone → slow down</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A monthly data allowance: use it freely; near the limit, slow down. No arguing over each video.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>What you measure: data used</td><td>SLI: good events ÷ valid events</td></tr>
+      <tr><td>The plan: 10 GB/month</td><td>SLO: 99.9% over 28 days</td></tr>
+      <tr><td>What's left to use</td><td>Error budget: 0.1% bad events</td></tr>
+      <tr><td>“80% used, 10 days left”</td><td>Burn-rate alert</td></tr>
+      <tr><td>Slowing down near the limit</td><td>Pausing risky releases, fixing reliability</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">measure what users feel, then budget</span></h2>
+  <p>100% is the wrong target: users can't tell 99.99% from 100% through their own Wi-Fi, and chasing it stops all change. The budget makes the trade-off explicit.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="SLO and error budget. The service level indicator is the share of checkout requests that succeed in under 400 milliseconds. The objective is 99.9 percent over 28 days, which leaves an error budget of 0.1 percent, about 40 minutes. Burn-rate alerts page someone when the budget is burning fast. When budget remains, teams ship freely; when it&#x27;s spent, they focus on reliability."><g class="rough"><rect class="d f-y" x="20" y="30" width="220" height="80" rx="10"/><path class="d" d="M246 70 L286 70"/><path class="d" d="M275.2 75.2 L286 70 L275.2 64.8"/><rect class="d f-green" x="292" y="30" width="200" height="80" rx="10"/><path class="d" d="M498 70 L538 70"/><path class="d" d="M527.2 75.2 L538 70 L527.2 64.8"/><rect class="d f-pink" x="544" y="30" width="200" height="80" rx="10"/><rect class="d f-green" x="20" y="160" width="340" height="60" rx="10"/><rect class="d f-pink d-red" x="400" y="160" width="340" height="60" rx="10"/></g><text class="t-head" x="130" y="66" text-anchor="middle">SLI</text><text class="t" x="130" y="90" text-anchor="middle" font-size="17">% good checkouts (&lt;400 ms)</text><text class="t-head" x="392" y="66" text-anchor="middle">SLO 99.9%</text><text class="t" x="392" y="90" text-anchor="middle" font-size="17">over 28 days</text><text class="t-head" x="644" y="66" text-anchor="middle">budget 0.1%</text><text class="t" x="644" y="90" text-anchor="middle" font-size="17">≈ 40 min / 28 days</text><text class="t-head" x="190" y="197" text-anchor="middle" font-size="17">budget left → ship features</text><text class="t-head t-red" x="570" y="197" text-anchor="middle" font-size="16">budget spent → reliability work</text><text class="t-s t-pen" x="380" y="270" text-anchor="middle">page on fast burn (e.g. 2% of budget in 1 hour)</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>SLI → SLO → error budget. Alert on burn rate. Budget left: ship. Budget gone: fix reliability first.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Pick user journeys</b><p>Sign-in, search, checkout: what users actually care about.</p></li>
+    <li><b>Define SLIs</b><p>Good events ÷ valid events, measured as close to the user as possible.</p></li>
+    <li><b>Set SLOs</b><p>Realistic, based on history and user needs; a 28-day rolling window.</p></li>
+    <li><b>Agree the policy</b><p>What happens when the budget is spent (freeze risky launches, fix top causes).</p></li>
+    <li><b>Alert on burn rate</b><p>Multi-window alerts: page on fast burn, ticket on slow burn.</p></li>
+    <li><b>Review regularly</b><p>Adjust SLOs as users and systems change.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>SLI</dt><dd>Service level indicator: a measure of good service.</dd></div>
+    <div><dt>SLO</dt><dd>Service level objective: the target for an SLI.</dd></div>
+    <div><dt>SLA</dt><dd>A contract with consequences, usually looser than the SLO.</dd></div>
+    <div><dt>Error budget</dt><dd>Allowed unreliability: 100% − SLO.</dd></div>
+    <div><dt>Burn rate</dt><dd>How fast the budget is being used.</dd></div>
+    <div><dt>Toil</dt><dd>Repetitive manual operational work.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>slo.yaml</span><span>OpenSLO-style + Prometheus burn alert</span></div>
+<pre><code>apiVersion: openslo/v1
+kind: SLO
+metadata: { name: checkout-availability }
+spec:
+  service: checkout
+  indicator:
+    ratioMetric:
+      good:  { metricSource: { spec: { query: <span class="s">'sum(rate(http_requests_total{route="/checkout",code!~"5..",le_400ms="true"}[5m]))'</span> } } }
+      total: { metricSource: { spec: { query: <span class="s">'sum(rate(http_requests_total{route="/checkout"}[5m]))'</span> } } }
+  timeWindow: [{ duration: 28d, isRolling: <span class="k">true</span> }]
+  objectives: [{ target: 0.999 }]
+
+<span class="c"># page: burning 14.4× budget over 1h AND 5m (≈2% of the 28-day budget in an hour)</span>
+<span class="c"># ticket: burning 1× over 3 days</span></code></pre>
+  </div>
+  <p class="aside">tools: Prometheus + Sloth / Pyrra, Grafana SLO, Datadog / New Relic / Honeycomb SLOs, Google Cloud Service Monitoring, Nobl9, OpenSLO specification.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>A shared, numeric definition</b> of reliable enough.</li><li><b>Fewer, better alerts</b> tied to user pain.</li><li><b>Explicit trade-off</b> between speed and stability.</li><li><b>Reliability work gets prioritised</b> by data.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Hard to choose good SLIs</b> at first.</li><li><b>Needs organisational buy-in</b> for the budget policy.</li><li><b>Measurement work</b> to get accurate SLIs.</li><li><b>Can be gamed</b> if SLIs don't reflect users.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Operations ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>implicit “keep it up” goals and CPU alerts</b> to <b>user-centred SLOs with error budgets and burn-rate alerts</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to run &amp; explain?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New terms; one clear number per journey.</td></tr>
+      <tr data-before="2" data-after="4"><td>Delivery speed<small>fast from commit to prod?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Ship freely while the budget lasts.</td></tr>
+      <tr data-before="3" data-after="4"><td>Release safety<small>low risk per deploy?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Risky changes pause when the budget is low.</td></tr>
+      <tr data-before="3" data-after="4"><td>Reliability<small>stays up?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Reliability work happens before outages.</td></tr>
+      <tr data-before="3" data-after="3"><td>Scalability<small>handles 10× load?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Recoverability<small>fast to restore?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Burn alerts catch real incidents early.</td></tr>
+      <tr data-before="2" data-after="5"><td>Observability<small>can we see inside?</small></td><td class="dcell"></td><td class="score"></td><td class="why">User-centred signals, not just CPU.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Some tooling; fewer wasted pages.</td></tr>
+      <tr data-before="2" data-after="4"><td>Developer experience<small>pleasant to ship with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fewer arguments; fewer noisy alerts.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>100% targets</h3><p>Every change becomes too risky. <span class="fix">Fix →</span> realistic SLOs below 100%.</p></li>
+    <li><h3>SLIs users don't feel</h3><p>CPU usage as an SLI. <span class="fix">Fix →</span> measure success and latency of user journeys.</p></li>
+    <li><h3>No budget policy</h3><p>Budget is spent and nothing changes. <span class="fix">Fix →</span> agree consequences up front.</p></li>
+    <li><h3>Too many SLOs</h3><p>Forty SLOs nobody reads. <span class="fix">Fix →</span> a few per critical journey.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Services with real users and frequent changes.</li><li>Teams arguing about speed vs stability.</li><li>Replacing noisy alerting.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Internal prototypes with no users yet.</li><li>Batch jobs (use freshness and completion SLOs instead of availability).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Logs, metrics &amp; traces</b></li><li><b>Canary releases</b></li><li><b>Incident response &amp; postmortems</b></li><li><b>Circuit breaker</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What's the difference between an SLO and an SLA?</summary><p>An SLO is an internal target; an SLA is a contract with consequences, usually set looser than the SLO.</p></details>
+    <details><summary>How do you calculate the error budget?</summary><p>100% minus the SLO, e.g. 0.1% of requests for a 99.9% SLO.</p></details>
+    <details><summary>Why alert on burn rate?</summary><p>It pages when user-facing reliability is actually at risk, not on every blip.</p></details>
+    <details><summary>Why not aim for 100%?</summary><p>It's unreachable and stops all change; users can't tell the difference beyond a point.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Agree the <span class="hl">allowance</span>, watch the <span class="hl">burn</span>, and slow down near the <span class="hl">limit</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/12-slo-error-budgets.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Beyer et al., <i>Site Reliability Engineering</i> (Google, 2016), ch. 3–4.</li><li><i>The Site Reliability Workbook</i>, ch. 2 “Implementing SLOs” and ch. 5 “Alerting on SLOs”.</li><li>Alex Hidalgo, <i>Implementing Service Level Objectives</i> (O'Reilly).</li><li>OpenSLO specification (openslo.com).</li></ul>
+  </div>
+  <p class="folio">12</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="observability.html"><small>← previous note</small>11 · Logs, Metrics &amp; Traces</a>
+  <a href="disaster-recovery.html"><small>Next note →</small>13 · Backups &amp; Disaster Recovery</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 6 · a student's bullet journal on cloud &amp; devops patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

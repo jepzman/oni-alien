@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Infrastructure as Code · Jef’s Notes</title>
+<meta name="description" content="Describe cloud resources in reviewed, versioned files instead of clicking in consoles.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-cloud">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 6 · cloud &amp; devops patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="infrastructure-as-code">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 17.11.26</span><span class="topic">collection · <b>infrastructure as code</b></span></div>
+  <p class="kicker">a.k.a. “the blueprint”</p>
+  <h1><span class="hl">Infrastructure as Code</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Describe networks, databases, queues, DNS and permissions in <b>code files in git</b> (Terraform, OpenTofu, Pulumi, CloudFormation), and change them only through <b>pull requests</b> that show a <b>plan</b> of exactly what will change. A pipeline <b>applies</b> it. Environments become <b>reproducible</b>, changes become <b>reviewable</b>, and git becomes the history of your infrastructure.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> infrastructure</li><li><b>Tools:</b> Terraform / OpenTofu, Pulumi, CloudFormation, CDK, Bicep</li><li><b>Key idea:</b> declarative desired state + plan</li><li><b>Pairs with:</b> GitOps, immutable infrastructure</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Infrastructure built by <span class="hl-pink">clicking in a console</span> lives only in that account and in someone's memory. Environments drift apart, changes aren't reviewed, and disaster recovery is guesswork.</p>
+  <ul>
+    <li>Staging and production differ in dozens of small settings.</li>
+    <li>“Who opened port 22 to the world?” No record.</li>
+    <li>Rebuilding after an account loss would take weeks.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of an engineer clicking through a cloud console to create a database, a load balancer and firewall rules, following a wiki page from two years ago. Staging and production were set up by different people and differ in thirty small ways. Nobody can recreate production if the account is lost."><g class="rough"><g transform="translate(30 50) scale(1.6)"><g class="d"><rect class="f-paper" x="0" y="0" width="64" height="44" rx="4"/><path d="M24 44 l-4 12 h24 l-4 -12"/><path d="M14 30 l10 -10 l8 8 l14 -14"/></g></g><rect class="d f-paper" x="260" y="40" width="200" height="70" rx="10"/><rect class="d f-paper" x="500" y="40" width="200" height="70" rx="10"/></g><text class="t-s t-pen" x="80" y="170" text-anchor="middle">click, click, click…</text><text class="t-head" x="360" y="71" text-anchor="middle">staging</text><text class="t" x="360" y="95" text-anchor="middle" font-size="17">set up by Ana, 2023</text><text class="t-head" x="600" y="71" text-anchor="middle">prod</text><text class="t" x="600" y="95" text-anchor="middle" font-size="17">set up by Ben, 2024</text><text class="t-s t-red" x="480" y="150" text-anchor="middle">30 small differences</text><text class="t-s t-red" x="480" y="190" text-anchor="middle">account lost? can&#x27;t rebuild</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Clicked together from an old wiki page: staging ≠ prod, and nobody could rebuild it.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the blueprint</span></h2>
+  <p>Builders follow an <b>architect's blueprint</b>, so you can build <b>identical houses</b> again and again. Changes are drawn <b>on the plan first</b>, checked, then built. Nobody knocks down a wall without updating the drawing.</p>
+  <ul>
+    <li>The blueprint is your <b>IaC code</b>.</li>
+    <li>Checking the drawing is <b>reviewing the plan</b>.</li>
+    <li>A wall knocked down without updating plans is <b>drift</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of an architect&#x27;s blueprint for a house. Builders follow the drawing, so any number of identical houses can be built. Changes are made on the drawing first, reviewed, and then built; nobody knocks down walls without updating the plans."><g class="rough"><g transform="translate(40 50) scale(1.8)"><g class="d"><path class="f-blue" d="M0 8 l20 -6 l20 6 l20 -6 v50 l-20 6 l-20 -6 l-20 6 z"/><path d="M20 2 v50 M40 8 v50"/></g></g><path class="d" d="M170 110 L300 110"/><path class="d" d="M289.2 115.2 L300 110 L289.2 104.8"/><g transform="translate(310 70) scale(1.2)"><g class="d"><rect class="f-y" x="4" y="22" width="60" height="38"/><path class="f-y" d="M0 22 l8 -16 h52 l8 16 z"/><rect x="26" y="38" width="16" height="22"/></g></g><g transform="translate(430 70) scale(1.2)"><g class="d"><rect class="f-y" x="4" y="22" width="60" height="38"/><path class="f-y" d="M0 22 l8 -16 h52 l8 16 z"/><rect x="26" y="38" width="16" height="22"/></g></g><g transform="translate(550 70) scale(1.2)"><g class="d"><rect class="f-y" x="4" y="22" width="60" height="38"/><path class="f-y" d="M0 22 l8 -16 h52 l8 16 z"/><rect x="26" y="38" width="16" height="22"/></g></g></g><text class="t-s t-pen" x="100" y="190" text-anchor="middle">the blueprint</text><text class="t-s" x="235" y="96" text-anchor="middle">build</text><text class="t-s t-green" x="490" y="200" text-anchor="middle">identical houses</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A blueprint: change the drawing first, review it, then build. Identical houses every time.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The blueprint</td><td>Terraform/Pulumi files in git</td></tr>
+      <tr><td>Reviewing changes to the drawing</td><td>PR with a <code>plan</code> diff</td></tr>
+      <tr><td>Builders follow the plan</td><td>CI runs <code>apply</code></td></tr>
+      <tr><td>Identical houses from one plan</td><td>Same modules for staging and prod</td></tr>
+      <tr><td>Unrecorded wall changes</td><td>Drift from console edits</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">plan, review, apply</span></h2>
+  <p>Most IaC tools are <b>declarative</b>: you describe the end state, the tool works out the steps. The <b>plan</b> is the most important safety feature: read it before every apply.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Infrastructure as code workflow. Resources are described in Terraform files in git. A pull request runs a plan showing exactly what will be created, changed or destroyed. A reviewer approves. On merge, the pipeline applies the change. State is stored remotely with locking. The same modules create staging and production with different variables."><g class="rough"><rect class="d f-blue" x="20" y="40" width="160" height="70" rx="10"/><path class="d" d="M186 75 L266 75"/><path class="d" d="M255.2 80.2 L266 75 L255.2 69.8"/><rect class="d f-y" x="272" y="30" width="200" height="90" rx="10"/><path class="d d-green" d="M478 75 L556 75"/><path class="d d-green" d="M545.2 80.2 L556 75 L545.2 69.8"/><rect class="d f-green" x="562" y="40" width="180" height="70" rx="10"/><rect class="d f-paper" x="140" y="170" width="240" height="60" rx="10"/><path class="d" d="M386 190 L470 170"/><path class="d" d="M460.7 177.6 L470 170 L458.3 167.4"/><path class="d" d="M386 210 L470 230"/><path class="d" d="M458.3 232.6 L470 230 L460.7 222.4"/><rect class="d f-green" x="476" y="150" width="140" height="40" rx="10"/><rect class="d f-green" x="476" y="210" width="140" height="40" rx="10"/></g><text class="t-head" x="100" y="71" text-anchor="middle">main.tf</text><text class="t" x="100" y="95" text-anchor="middle" font-size="17">in git</text><text class="t-s" x="226" y="61" text-anchor="middle">PR</text><text class="t-head" x="372" y="71" text-anchor="middle">plan</text><text class="t" x="372" y="95" text-anchor="middle" font-size="17">+2 ~1 −0</text><text class="t-s t-green" x="517" y="61" text-anchor="middle">approve</text><text class="t-head" x="652" y="82" text-anchor="middle">apply (CI)</text><text class="t-head" x="260" y="207" text-anchor="middle" font-size="16">module: web-service</text><text class="t-head" x="546" y="177" text-anchor="middle" font-size="16">staging</text><text class="t-head" x="546" y="237" text-anchor="middle" font-size="16">prod</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Describe resources in code, review the plan in a PR, apply from the pipeline. Same modules for every environment.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Start with what hurts</b><p>Import or codify the most critical resources first (network, databases, IAM).</p></li>
+    <li><b>Use modules</b><p>Reusable building blocks (<code>web-service</code>, <code>postgres</code>) with environment variables.</p></li>
+    <li><b>Remote state with locking</b><p>S3 + DynamoDB, Terraform Cloud, or your tool's backend.</p></li>
+    <li><b>Plan in every PR</b><p>Post the plan as a comment; reviewers read it.</p></li>
+    <li><b>Apply only from CI</b><p>Short-lived credentials; no laptop applies to production.</p></li>
+    <li><b>Detect drift</b><p>Scheduled plans that alert when reality differs from code; lock down console write access.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>IaC</dt><dd>Infrastructure defined in machine-readable files.</dd></div>
+    <div><dt>Declarative</dt><dd>Describe the end state, not the steps.</dd></div>
+    <div><dt>State</dt><dd>The tool's record of what it created.</dd></div>
+    <div><dt>Plan</dt><dd>Preview of creates, updates and deletes.</dd></div>
+    <div><dt>Module</dt><dd>A reusable group of resources.</dd></div>
+    <div><dt>Drift</dt><dd>Real infrastructure differing from the code.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>envs/prod/main.tf</span><span>Terraform / OpenTofu</span></div>
+<pre><code>terraform {
+  backend <span class="s">"s3"</span> {
+    bucket         = <span class="s">"acme-tfstate"</span>
+    key            = <span class="s">"prod/web.tfstate"</span>
+    dynamodb_table = <span class="s">"tf-locks"</span>          <span class="c"># state locking</span>
+  }
+}
+
+module <span class="s">"web"</span> {
+  source        = <span class="s">"../../modules/web-service"</span>
+  name          = <span class="s">"web"</span>
+  environment   = <span class="s">"prod"</span>
+  image_digest  = <span class="k">var</span>.image_digest       <span class="c"># from the build pipeline</span>
+  min_instances = 3
+  max_instances = 30
+  tags          = { team = <span class="s">"storefront"</span>, cost_center = <span class="s">"cc-114"</span> }
+}
+
+<span class="c"># PR:    terraform plan  → posted as a comment</span>
+<span class="c"># merge: terraform apply → from CI with a short-lived role</span></code></pre>
+  </div>
+  <p class="aside">tools: Terraform / OpenTofu, Pulumi, AWS CloudFormation and CDK, Azure Bicep, Crossplane, Atlantis or Spacelift for PR plans, Checkov/tfsec/Trivy for policy checks, driftctl-style drift detection.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Reproducible environments</b>.</li><li><b>Reviewed changes</b> with a visible plan.</li><li><b>History</b> in git: who changed what and why.</li><li><b>Faster recovery</b>: rebuild from code.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Learning curve</b> and state management.</li><li><b>Plans can surprise</b> (replacements, deletions).</li><li><b>Slower for one-off experiments</b>.</li><li><b>Drift</b> if people still click in consoles.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Operations ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>infrastructure clicked together in consoles</b> to <b>infrastructure as code with PR plans and CI apply</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to run &amp; explain?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More tooling; but everything is written down.</td></tr>
+      <tr data-before="2" data-after="4"><td>Delivery speed<small>fast from commit to prod?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New environments in minutes, not days.</td></tr>
+      <tr data-before="2" data-after="4"><td>Release safety<small>low risk per deploy?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Plans show exactly what will change.</td></tr>
+      <tr data-before="2" data-after="4"><td>Reliability<small>stays up?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fewer config differences and manual mistakes.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>handles 10× load?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Modules stamp out more capacity easily.</td></tr>
+      <tr data-before="1" data-after="4"><td>Recoverability<small>fast to restore?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Rebuild from code after a disaster.</td></tr>
+      <tr data-before="2" data-after="4"><td>Observability<small>can we see inside?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Git history explains every change.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tool costs vs. fewer hours clicking.</td></tr>
+      <tr data-before="2" data-after="4"><td>Developer experience<small>pleasant to ship with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Self-service via reviewed PRs.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Applying from laptops</h3><p>Two people apply at once; state corrupts. <span class="fix">Fix →</span> apply only from CI with locking.</p></li>
+    <li><h3>Not reading the plan</h3><p>A rename destroys and recreates the database. <span class="fix">Fix →</span> review plans; protect critical resources (<code>prevent_destroy</code>).</p></li>
+    <li><h3>One giant state file</h3><p>Every plan takes 20 minutes and touches everything. <span class="fix">Fix →</span> split state by service and environment.</p></li>
+    <li><h3>Secrets in code or state</h3><p>Passwords committed in .tf files. <span class="fix">Fix →</span> reference a secrets manager; encrypt state.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Any cloud infrastructure that matters.</li><li>Multiple environments that should match.</li><li>Teams that want reviewed, auditable changes.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Throwaway sandbox experiments (but codify what survives).</li><li>Fully managed platforms with nothing to configure.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>GitOps</b></li><li><b>Immutable infrastructure</b></li><li><b>Preview environments</b></li><li><b>Least privilege</b> (Vol. 5)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does declarative mean in IaC?</summary><p>You describe the desired end state; the tool works out how to reach it.</p></details>
+    <details><summary>Why review the plan?</summary><p>It shows exactly what will be created, changed or destroyed before anything happens.</p></details>
+    <details><summary>What is drift?</summary><p>Differences between real infrastructure and the code, usually from manual changes.</p></details>
+    <details><summary>Why apply only from CI?</summary><p>Locking, consistent credentials, audit trail, and no conflicting applies from laptops.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Change the <span class="hl">blueprint</span> first, <span class="hl">review</span> it, then build.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/05-infrastructure-as-code.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Kief Morris, <i>Infrastructure as Code</i> (2nd ed., O'Reilly).</li><li>HashiCorp, “Terraform Recommended Practices”.</li><li>OpenTofu documentation.</li><li>Google Cloud, “Best practices for using Terraform”.</li></ul>
+  </div>
+  <p class="folio">05</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="build-once.html"><small>← previous note</small>04 · Build Once, Deploy Many</a>
+  <a href="gitops.html"><small>Next note →</small>06 · GitOps</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 6 · a student's bullet journal on cloud &amp; devops patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

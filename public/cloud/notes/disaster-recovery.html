@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Backups &amp; Disaster Recovery · Jef’s Notes</title>
+<meta name="description" content="Keep tested backups and a rehearsed plan to restore service elsewhere.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-cloud">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 6 · cloud &amp; devops patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="disaster-recovery">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 15.12.26</span><span class="topic">collection · <b>resilience &amp; cost</b></span></div>
+  <p class="kicker">a.k.a. “the spare key and the fire drill”</p>
+  <h1><span class="hl">Backups &amp; Disaster Recovery</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Decide how much data you can afford to lose (<b>RPO</b>) and how fast you must be back (<b>RTO</b>), then design for it: <b>3-2-1 backups</b> with at least one <b>immutable copy in a separate account and region</b>, <b>infrastructure as code</b> to rebuild the platform, and <b>regular restore drills</b> that prove you can hit the targets. An untested backup is a hope, not a plan.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> resilience</li><li><b>Targets:</b> RPO (data loss), RTO (downtime)</li><li><b>Strategies:</b> backup/restore, pilot light, warm standby, active–active</li><li><b>Pairs with:</b> IaC, replication (Vol. 1), postmortems</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Most teams have backups. Far fewer have backups that <span class="hl-pink">survive the disaster</span> and that they have <span class="hl-pink">actually restored</span>. Ransomware, a deleted account or a bad migration reveals the difference.</p>
+  <ul>
+    <li>Backups in the same account are deleted along with production.</li>
+    <li>Nobody knows how long a full restore takes.</li>
+    <li>The database is restored, but the infrastructure around it isn't.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a ransomware or deleted-account incident. The team discovers that backups exist but were stored in the same account, so they were deleted too. An older backup in another place has never been restored, and the restore takes three days instead of the hour everyone assumed."><g class="rough"><rect class="d d-dash d-red" x="20" y="30" width="330" height="150" rx="8" style="fill:none"/><path class="d d-thin f-paper" d="M65 70 v40 a45 9 0 0 0 90 0 v-40"/><ellipse class="d d-thin f-paper" cx="110" cy="70" rx="45" ry="9"/><path class="d d-thin f-paper" d="M215 70 v40 a45 9 0 0 0 90 0 v-40"/><ellipse class="d d-thin f-paper" cx="260" cy="70" rx="45" ry="9"/><path class="d d-red" d="M60 60 L320 160 M320 60 L60 160"/></g><text class="t t-soft" x="110" y="140" text-anchor="middle" font-size="16">prod DB</text><text class="t t-soft" x="260" y="140" text-anchor="middle" font-size="16">backups</text><text class="t-s t-red" x="185" y="210" text-anchor="middle">same account → both deleted</text><text class="t-s t-pen" x="570" y="70" text-anchor="middle">other backup:</text><text class="t-s t-red" x="570" y="100" text-anchor="middle">never restored</text><text class="t-s t-pen" x="570" y="150" text-anchor="middle">assumed: 1 hour</text><text class="t-s t-red" x="570" y="180" text-anchor="middle">actual: 3 days</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Backups in the same account (gone too), and the other one never tested: 3 days to restore, not 1 hour.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the spare key and the fire drill</span></h2>
+  <p>Sensible families keep a <b>spare key with a trusted neighbour</b>, not under the doormat, and practise a <b>fire drill</b> so everyone knows the way out and the meeting point. A plan that's never been practised fails at the worst moment.</p>
+  <ul>
+    <li>The spare key next door is an <b>off-site, separate-account backup</b>.</li>
+    <li>The drill is a <b>restore test</b>.</li>
+    <li>The meeting point is your <b>runbook</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a fire drill and a spare house key. Families keep a spare key with a trusted neighbour, not under the mat, and practise the fire drill twice a year so everyone knows the meeting point. The plan only counts if it has been practised."><g class="rough"><g transform="translate(40 60) scale(1.4)"><g class="d"><circle class="f-y" cx="14" cy="30" r="11"/><path d="M25 30 h32 M48 30 v9 M55 30 v6"/></g></g><g transform="translate(360 50) scale(1.4)"><g class="d"><path class="f-pink" d="M10 44 q0 -30 20 -30 q20 0 20 30 z"/><path d="M4 46 h52 M30 8 v6 M26 50 a4 4 0 0 0 8 0"/></g></g></g><text class="t-s t-green" x="90" y="150" text-anchor="middle">spare key next door</text><text class="t-s t-pen" x="90" y="176" text-anchor="middle">(not under the mat)</text><text class="t-s t-green" x="400" y="160" text-anchor="middle">fire drill twice a year</text><text class="t-s t-pen" x="640" y="100" text-anchor="middle">meeting point:</text><text class="t-s t-pen" x="640" y="126" text-anchor="middle">the oak tree</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A spare key at a neighbour's, and a fire drill you've actually practised.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Spare key at the neighbour's</td><td>Backup in another account and region</td></tr>
+      <tr><td>Not under the doormat</td><td>Not in the same account as production</td></tr>
+      <tr><td>The fire drill</td><td>Scheduled restore tests</td></tr>
+      <tr><td>The meeting point</td><td>A written, rehearsed DR runbook</td></tr>
+      <tr><td>“Out in 2 minutes”</td><td>RTO measured in drills, not assumed</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">targets, copies, rebuild, rehearse</span></h2>
+  <p>Choose a strategy per system based on RPO/RTO and cost: <b>backup &amp; restore</b> (hours), <b>pilot light</b> or <b>warm standby</b> (minutes), <b>active–active</b> (seconds, expensive).</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Disaster recovery plan. Set targets: recovery point objective, how much data you can lose, for example five minutes, and recovery time objective, how long to restore, for example one hour. Follow 3-2-1: three copies, two kinds of storage, one off-site in a separate account and region, immutable so it can&#x27;t be deleted. Infrastructure as code rebuilds the platform. Restore drills every quarter prove the times."><g class="rough"><rect class="d f-y" x="20" y="30" width="200" height="70" rx="10"/><rect class="d f-y" x="20" y="120" width="200" height="70" rx="10"/><rect class="d f-green" x="260" y="30" width="260" height="160" rx="10"/><rect class="d f-blue" x="560" y="30" width="180" height="70" rx="10"/><rect class="d f-pink" x="560" y="120" width="180" height="70" rx="10"/></g><text class="t-head" x="120" y="61" text-anchor="middle">RPO: 5 min</text><text class="t" x="120" y="85" text-anchor="middle" font-size="17">data you may lose</text><text class="t-head" x="120" y="151" text-anchor="middle">RTO: 1 hour</text><text class="t" x="120" y="175" text-anchor="middle" font-size="17">time to recover</text><text class="t-head" x="390" y="60" text-anchor="middle" font-size="18">3-2-1 backups</text><text class="t" x="276" y="92" text-anchor="start" font-size="15">3 copies</text><text class="t" x="276" y="116" text-anchor="start" font-size="15">2 storage types</text><text class="t" x="276" y="140" text-anchor="start" font-size="15">1 other account + region</text><text class="t" x="276" y="164" text-anchor="start" font-size="15">immutable (locked)</text><text class="t-head" x="650" y="72" text-anchor="middle" font-size="17">IaC rebuild</text><text class="t-head" x="650" y="151" text-anchor="middle">restore drill</text><text class="t" x="650" y="175" text-anchor="middle" font-size="17">every quarter</text><text class="t-s t-red" x="380" y="250" text-anchor="middle">a backup you haven&#x27;t restored is a hope, not a backup</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Set RPO and RTO; keep 3-2-1 immutable backups in another account and region; rebuild with IaC; drill restores.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Set RPO and RTO per system</b><p>With the business: what does an hour of downtime or data loss cost?</p></li>
+    <li><b>Follow 3-2-1</b><p>Three copies, two media, one off-site; plus immutability (object lock).</p></li>
+    <li><b>Separate the blast radius</b><p>Backups in a different account with separate credentials and region.</p></li>
+    <li><b>Back up the platform too</b><p>Infrastructure as code, secrets, DNS and configuration.</p></li>
+    <li><b>Drill restores</b><p>Quarterly: restore to a clean environment, time it, fix what's slow.</p></li>
+    <li><b>Write the runbook</b><p>Who decides, who does what, in which order, how to communicate.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>RPO</dt><dd>Recovery point objective: maximum acceptable data loss.</dd></div>
+    <div><dt>RTO</dt><dd>Recovery time objective: maximum acceptable downtime.</dd></div>
+    <div><dt>3-2-1 rule</dt><dd>3 copies, 2 media, 1 off-site.</dd></div>
+    <div><dt>Immutable backup</dt><dd>Can't be modified or deleted for a set period.</dd></div>
+    <div><dt>Pilot light / warm standby</dt><dd>Minimal or scaled-down copy of production ready elsewhere.</dd></div>
+    <div><dt>Point-in-time recovery</dt><dd>Restoring a database to a specific moment.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>backups.tf</span><span>AWS Backup, cross-account vault lock</span></div>
+<pre><code>resource <span class="s">"aws_backup_plan"</span> <span class="s">"prod"</span> {
+  name = <span class="s">"prod-daily"</span>
+  rule {
+    rule_name         = <span class="s">"daily-35d"</span>
+    target_vault_name = aws_backup_vault.local.name
+    schedule          = <span class="s">"cron(0 3 * * ? *)"</span>
+    lifecycle { delete_after = 35 }
+    copy_action {                                   <span class="c"># copy to the isolated DR account/region</span>
+      destination_vault_arn = <span class="s">"arn:aws:backup:eu-central-1:999999999999:backup-vault:dr"</span>
+      lifecycle { delete_after = 90 }
+    }
+  }
+}
+
+<span class="c"># in the DR account: vault lock = nobody (not even admins) can delete early</span>
+resource <span class="s">"aws_backup_vault_lock_configuration"</span> <span class="s">"dr"</span> {
+  backup_vault_name  = <span class="s">"dr"</span>
+  min_retention_days = 30
+}
+<span class="c"># + continuous PITR on the database (RPO ≈ 5 min) + quarterly restore drill</span></code></pre>
+  </div>
+  <p class="aside">tools: AWS Backup (vault lock, cross-account copy), Azure Backup immutable vaults, GCP Backup and DR, database point-in-time recovery, Velero for Kubernetes, restic / Kopia, object lock / WORM storage, IaC for the platform.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Survive the worst day</b>: deletion, ransomware, region loss.</li><li><b>Known recovery times</b>, proven by drills.</li><li><b>Clear expectations</b> with the business.</li><li><b>Calmer incidents</b>: there's a plan.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Storage and standby costs</b>.</li><li><b>Drills take time</b> and planning.</li><li><b>Complexity</b> for warm standby and active–active.</li><li><b>Immutability</b> makes deleting data on request harder.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Operations ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>untested backups in the production account</b> to <b>RPO/RTO targets, immutable cross-account backups, IaC rebuilds and quarterly restore drills</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to run &amp; explain?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More pieces, but one written plan.</td></tr>
+      <tr data-before="3" data-after="3"><td>Delivery speed<small>fast from commit to prod?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Release safety<small>low risk per deploy?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Bad migrations can be undone with PITR.</td></tr>
+      <tr data-before="3" data-after="4"><td>Reliability<small>stays up?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Disasters become recoverable incidents.</td></tr>
+      <tr data-before="3" data-after="3"><td>Scalability<small>handles 10× load?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="1" data-after="5"><td>Recoverability<small>fast to restore?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Recovery is designed, measured and rehearsed.</td></tr>
+      <tr data-before="2" data-after="4"><td>Observability<small>can we see inside?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Backup jobs and drills are monitored.</td></tr>
+      <tr data-before="4" data-after="2"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Extra storage, copies and drill time.</td></tr>
+      <tr data-before="3" data-after="3"><td>Developer experience<small>pleasant to ship with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Runbooks and drills take effort.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Backups in the same account</h3><p>Ransomware or a deleted account takes them too. <span class="fix">Fix →</span> separate account, credentials and region; vault lock.</p></li>
+    <li><h3>Never testing restores</h3><p>The backup is corrupt or takes days. <span class="fix">Fix →</span> quarterly restore drills with timing.</p></li>
+    <li><h3>Only backing up data</h3><p>Data restored, but no infrastructure to run it. <span class="fix">Fix →</span> IaC for the platform; back up config and secrets.</p></li>
+    <li><h3>No owner for the decision</h3><p>During the disaster nobody knows who calls failover. <span class="fix">Fix →</span> runbook with roles and decision points.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Every production data store.</li><li>Systems with business or legal recovery requirements.</li><li>Anything ransomware could reach.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Truly disposable data (caches, rebuildable indexes): document that instead.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Infrastructure as code</b></li><li><b>Incident response &amp; postmortems</b></li><li><b>Leader–follower replication</b> (Vol. 1)</li><li><b>Envelope encryption</b> (Vol. 5)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What's the difference between RPO and RTO?</summary><p>RPO is how much data you can lose; RTO is how long you can be down.</p></details>
+    <details><summary>What is the 3-2-1 rule?</summary><p>Three copies of data, on two kinds of storage, with one off-site.</p></details>
+    <details><summary>Why keep backups in a separate account?</summary><p>So an attacker or mistake in production can't delete them too.</p></details>
+    <details><summary>Why run restore drills?</summary><p>To prove backups work and to measure real recovery time.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Spare key at the <span class="hl">neighbour's</span>, and practise the <span class="hl">fire drill</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/13-disaster-recovery.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>AWS whitepaper, “Disaster Recovery of Workloads on AWS”.</li><li>Google Cloud, “Disaster recovery planning guide”.</li><li>NIST SP 800-34, “Contingency Planning Guide for Federal Information Systems”.</li><li>CISA, “Ransomware Guide” (backups section).</li></ul>
+  </div>
+  <p class="folio">13</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="slo-error-budgets.html"><small>← previous note</small>12 · SLOs &amp; Error Budgets</a>
+  <a href="postmortems.html"><small>Next note →</small>14 · Incident Response &amp; Postmortems</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 6 · a student's bullet journal on cloud &amp; devops patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

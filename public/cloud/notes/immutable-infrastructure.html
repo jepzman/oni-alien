@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Immutable Infrastructure · Jef’s Notes</title>
+<meta name="description" content="Never patch servers in place; replace them with fresh ones built from an image.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-cloud">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 6 · cloud &amp; devops patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="immutable-infrastructure">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 24.11.26</span><span class="topic">collection · <b>infrastructure as code</b></span></div>
+  <p class="kicker">a.k.a. “paper cups, not the treasured mug”</p>
+  <h1><span class="hl">Immutable Infrastructure</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Never change a running server. <b>Bake</b> everything (OS, patches, runtime, app) into an <b>image</b>, launch instances from it, and to change anything <b>bake a new image and replace</b> the old instances. Servers become <b>identical and disposable</b> (cattle, not pets), drift disappears, and rollback is launching the previous image.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> infrastructure</li><li><b>Phrase:</b> “cattle, not pets” (Bill Baker / Randy Bias)</li><li><b>Tools:</b> containers, Packer, managed instance groups, Bottlerocket</li><li><b>Pairs with:</b> build once, IaC, autoscaling</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Servers that are <span class="hl-pink">patched by hand</span> slowly become unique snowflakes. Nobody knows exactly what's on them, they can't be recreated, and everyone is afraid to touch them.</p>
+  <ul>
+    <li>“It works on web-01 but not web-03.”</li>
+    <li>A security patch applied to 9 servers out of 10.</li>
+    <li>Rebooting is a risk; replacing is impossible.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a server called web-03 that has been running for four years. Engineers SSH in to patch packages, edit config files and restart services. It is now unlike any other server, nobody knows exactly what&#x27;s on it, and everyone is afraid to reboot it."><g class="rough"><g transform="translate(40 60) scale(1.6)"><g class="d"><rect class="f-pink" x="0" y="0" width="58" height="22" rx="3"/><rect class="f-pink" x="0" y="28" width="58" height="22" rx="3"/><path d="M8 11 h14 M8 39 h14"/><circle cx="48" cy="11" r="2"/><circle cx="48" cy="39" r="2"/></g></g></g><text class="t-s t-red" x="90" y="170" text-anchor="middle">web-03 · up 1,460 days</text><text class="t-s t-pen" x="320" y="60" text-anchor="start">ssh: apt upgrade</text><text class="t-s t-pen" x="320" y="100" text-anchor="start">ssh: vim nginx.conf</text><text class="t-s t-pen" x="320" y="140" text-anchor="start">ssh: “quick fix”</text><text class="t-s t-red" x="560" y="200" text-anchor="middle">“don&#x27;t reboot it!”</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>web-03: four years of hand patches. A unique snowflake nobody dares to reboot.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">paper cups vs the treasured mug</span></h2>
+  <p>A <b>treasured mug</b> gets chipped, glued and repaired, and when it finally breaks it's a crisis. <b>Paper cups</b> are all identical; if one is damaged you just <b>take a fresh one</b> from the stack. Nobody repairs a paper cup.</p>
+  <ul>
+    <li>The mug is a <b>pet server</b>.</li>
+    <li>Paper cups are <b>instances from an image</b>.</li>
+    <li>The stack of cups is your <b>image</b>, reproducible on demand.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of disposable paper cups versus a treasured mug. The mug gets chipped, glued, and has a unique history; when it breaks, it&#x27;s a crisis. Paper cups are all identical; if one is damaged you take a fresh one from the stack."><g class="rough"><g transform="translate(60 60) scale(1.8)"><g class="d"><path class="f-pink" d="M6 16 h40 v20 a20 20 0 0 1 -40 0 z"/><path d="M46 22 h6 a7 7 0 0 1 0 14 h-7 M14 4 q4 5 0 9 M26 2 q4 5 0 9"/></g></g><g transform="translate(330 70) scale(1.0)"><g class="d"><path class="f-y" d="M6 16 h40 v20 a20 20 0 0 1 -40 0 z"/><path d="M46 22 h6 a7 7 0 0 1 0 14 h-7 M14 4 q4 5 0 9 M26 2 q4 5 0 9"/></g></g><g transform="translate(400 70) scale(1.0)"><g class="d"><path class="f-y" d="M6 16 h40 v20 a20 20 0 0 1 -40 0 z"/><path d="M46 22 h6 a7 7 0 0 1 0 14 h-7 M14 4 q4 5 0 9 M26 2 q4 5 0 9"/></g></g><g transform="translate(470 70) scale(1.0)"><g class="d"><path class="f-y" d="M6 16 h40 v20 a20 20 0 0 1 -40 0 z"/><path d="M46 22 h6 a7 7 0 0 1 0 14 h-7 M14 4 q4 5 0 9 M26 2 q4 5 0 9"/></g></g><g transform="translate(540 70) scale(1.0)"><g class="d"><path class="f-y" d="M6 16 h40 v20 a20 20 0 0 1 -40 0 z"/><path d="M46 22 h6 a7 7 0 0 1 0 14 h-7 M14 4 q4 5 0 9 M26 2 q4 5 0 9"/></g></g><g transform="translate(610 70) scale(1.0)"><g class="d"><path class="f-y" d="M6 16 h40 v20 a20 20 0 0 1 -40 0 z"/><path d="M46 22 h6 a7 7 0 0 1 0 14 h-7 M14 4 q4 5 0 9 M26 2 q4 5 0 9"/></g></g></g><text class="t-s t-red" x="110" y="190" text-anchor="middle">the treasured mug</text><text class="t-s t-red" x="110" y="216" text-anchor="middle">(glued 3 times)</text><text class="t-s t-green" x="500" y="190" text-anchor="middle">identical cups: take a fresh one</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Pets vs cattle, or a treasured mug vs paper cups: a damaged cup is replaced, not repaired.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>A treasured, repaired mug</td><td>A long-lived server patched by hand</td></tr>
+      <tr><td>A stack of identical cups</td><td>Instances launched from one image</td></tr>
+      <tr><td>Take a fresh cup</td><td>Replace an instance instead of fixing it</td></tr>
+      <tr><td>A new cup design</td><td>Bake a new image version</td></tr>
+      <tr><td>Throw the damaged cup away</td><td>Terminate unhealthy instances freely</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">replace, don't repair</span></h2>
+  <p>Containers made this the default for apps; the same idea applies to VMs (golden images) and even to node operating systems.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Immutable infrastructure. A pipeline bakes a machine image or container image with the OS, patches and app. Instances are launched from that image and never modified. To patch or change config, bake a new image and roll it out, replacing old instances. SSH access is off. Instances can be destroyed at any time."><g class="rough"><rect class="d f-y" x="20" y="40" width="180" height="80" rx="10"/><path class="d" d="M206 80 L286 80"/><path class="d" d="M275.2 85.2 L286 80 L275.2 74.8"/><g transform="translate(300 50) scale(1.0)"><g class="d"><rect class="f-green" x="0" y="0" width="58" height="22" rx="3"/><rect class="f-green" x="0" y="28" width="58" height="22" rx="3"/><path d="M8 11 h14 M8 39 h14"/><circle cx="48" cy="11" r="2"/><circle cx="48" cy="39" r="2"/></g></g><g transform="translate(380 50) scale(1.0)"><g class="d"><rect class="f-green" x="0" y="0" width="58" height="22" rx="3"/><rect class="f-green" x="0" y="28" width="58" height="22" rx="3"/><path d="M8 11 h14 M8 39 h14"/><circle cx="48" cy="11" r="2"/><circle cx="48" cy="39" r="2"/></g></g><g transform="translate(460 50) scale(1.0)"><g class="d"><rect class="f-green" x="0" y="0" width="58" height="22" rx="3"/><rect class="f-green" x="0" y="28" width="58" height="22" rx="3"/><path d="M8 11 h14 M8 39 h14"/><circle cx="48" cy="11" r="2"/><circle cx="48" cy="39" r="2"/></g></g><path class="d d-dash" d="M400 160 L400 200"/><path class="d" d="M394.8 189.2 L400 200 L405.2 189.2"/><rect class="d f-blue" x="250" y="204" width="300" height="50" rx="10"/></g><text class="t-head" x="110" y="76" text-anchor="middle">bake image</text><text class="t" x="110" y="100" text-anchor="middle" font-size="17">OS + patches + app</text><text class="t-s" x="246" y="66" text-anchor="middle">v42</text><text class="t-s t-green" x="400" y="140" text-anchor="middle">launched from v42</text><text class="t-head" x="400" y="236" text-anchor="middle" font-size="16">patch? bake v43, replace</text><text class="t-s t-red" x="660" y="70" text-anchor="middle">SSH: off</text><text class="t-s t-red" x="660" y="100" text-anchor="middle">edit in place: never</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Bake a new image for every change; replace instances instead of patching them. No SSH.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Bake images in CI</b><p>Container images or VM images (Packer) with OS patches and the app.</p></li>
+    <li><b>Launch from images only</b><p>Instance groups or Kubernetes pull a specific image version.</p></li>
+    <li><b>Externalise state</b><p>Data in databases, object storage and volumes, not on the instance disk.</p></li>
+    <li><b>Roll out by replacement</b><p>Rolling, blue–green or canary replacement of instances.</p></li>
+    <li><b>Remove SSH</b><p>Use logs, metrics and ephemeral debug sessions instead of shell access.</p></li>
+    <li><b>Rebuild regularly</b><p>Bake weekly even without app changes, to pick up patches.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Immutable server</dt><dd>Never modified after launch.</dd></div>
+    <div><dt>Golden image</dt><dd>A pre-built machine image used for all instances.</dd></div>
+    <div><dt>Pets vs cattle</dt><dd>Unique, hand-cared servers vs identical, replaceable ones.</dd></div>
+    <div><dt>Configuration drift</dt><dd>Servers diverging through manual changes.</dd></div>
+    <div><dt>Stateless instance</dt><dd>Holds no data that must survive replacement.</dd></div>
+    <div><dt>Rolling replacement</dt><dd>Replacing instances a few at a time.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>web.pkr.hcl</span><span>Packer (VM images)</span></div>
+<pre><code>source <span class="s">"amazon-ebs"</span> <span class="s">"web"</span> {
+  region        = <span class="s">"eu-west-1"</span>
+  instance_type = <span class="s">"t3.small"</span>
+  source_ami_filter { filters = { name = <span class="s">"al2023-ami-*-x86_64"</span> } most_recent = <span class="k">true</span> owners = [<span class="s">"amazon"</span>] }
+  ami_name      = <span class="s">"web-${formatdate("</span>YYYYMMDD-hhmm<span class="s">", timestamp())}"</span>
+}
+
+build {
+  sources = [<span class="s">"source.amazon-ebs.web"</span>]
+  provisioner <span class="s">"shell"</span> { inline = [<span class="s">"sudo dnf -y update"</span>, <span class="s">"sudo dnf -y install nginx"</span>] }
+  provisioner <span class="s">"file"</span>  { source = <span class="s">"dist/"</span>, destination = <span class="s">"/srv/web"</span> }
+}
+<span class="c"># the instance group's launch template points at the new AMI;</span>
+<span class="c"># an instance refresh replaces servers one by one. Nobody SSHes in.</span></code></pre>
+  </div>
+  <p class="aside">tools: container images on Kubernetes / ECS / Cloud Run, Packer for VM images, AWS instance refresh and GCP managed instance groups, Bottlerocket / Talos / Flatcar (immutable node OS), Systems Manager Session Manager for break-glass access.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>No drift</b>: every instance is identical.</li><li><b>Easy rollback</b>: launch the previous image.</li><li><b>Fearless replacement</b> and autoscaling.</li><li><b>Smaller attack surface</b> without SSH.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Every change needs a bake</b> and rollout.</li><li><b>Image pipelines</b> to build and maintain.</li><li><b>State must live elsewhere</b>.</li><li><b>Debugging</b> without shell access takes new habits.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Operations ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>long-lived servers patched by hand</b> to <b>instances launched from baked images and replaced on change</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="2" data-after="4"><td>Simplicity<small>easy to run &amp; explain?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Every server is the same; no mystery state.</td></tr>
+      <tr data-before="3" data-after="4"><td>Delivery speed<small>fast from commit to prod?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Changes flow through one image pipeline.</td></tr>
+      <tr data-before="2" data-after="4"><td>Release safety<small>low risk per deploy?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Known images, replaced gradually.</td></tr>
+      <tr data-before="2" data-after="4"><td>Reliability<small>stays up?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No snowflakes; unhealthy instances just get replaced.</td></tr>
+      <tr data-before="2" data-after="5"><td>Scalability<small>handles 10× load?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Identical instances scale out freely.</td></tr>
+      <tr data-before="2" data-after="4"><td>Recoverability<small>fast to restore?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Recreate anything from an image.</td></tr>
+      <tr data-before="3" data-after="3"><td>Observability<small>can we see inside?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Needs good logs and metrics instead of SSH.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Bake time vs. hours of manual patching.</td></tr>
+      <tr data-before="3" data-after="4"><td>Developer experience<small>pleasant to ship with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No “special server” knowledge needed.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Data on the instance</h3><p>Uploads stored on local disk vanish on replacement. <span class="fix">Fix →</span> object storage, databases, persistent volumes.</p></li>
+    <li><h3>Break-glass SSH becomes normal</h3><p>“Just this once” edits return. <span class="fix">Fix →</span> audit any access; bake the fix into the next image.</p></li>
+    <li><h3>Stale images</h3><p>Images built months ago with old patches. <span class="fix">Fix →</span> rebuild on a schedule.</p></li>
+    <li><h3>Slow bakes</h3><p>45-minute image builds discourage fixes. <span class="fix">Fix →</span> layered images, caching, smaller base images.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Stateless app servers, workers, container nodes.</li><li>Fleets that autoscale.</li><li>Security-sensitive environments.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Stateful databases without a managed service (handle carefully).</li><li>Legacy systems that can't be automated yet (start by codifying them).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Build once, deploy many</b></li><li><b>Infrastructure as code</b></li><li><b>Autoscaling</b></li><li><b>Defence in depth</b> (Vol. 5)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does “cattle, not pets” mean?</summary><p>Servers are identical and replaceable rather than unique and hand-maintained.</p></details>
+    <details><summary>How do you patch an immutable server?</summary><p>Bake a new image with the patch and replace the instances.</p></details>
+    <details><summary>What must happen to state?</summary><p>It must live outside the instance (databases, object storage, volumes).</p></details>
+    <details><summary>Why remove SSH?</summary><p>It prevents drift from manual changes and removes an attack path.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Don't glue the <span class="hl">mug</span>. Take a fresh <span class="hl">cup</span> from the <span class="hl">stack</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/07-immutable-infrastructure.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Chad Fowler, “Trash Your Servers and Burn Your Code: Immutable Infrastructure” (2013).</li><li>Martin Fowler, “ImmutableServer” and “SnowflakeServer” (bliki).</li><li>Randy Bias, “The History of Pets vs Cattle”.</li><li>HashiCorp Packer documentation.</li></ul>
+  </div>
+  <p class="folio">07</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="gitops.html"><small>← previous note</small>06 · GitOps</a>
+  <a href="preview-environments.html"><small>Next note →</small>08 · Preview Environments</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 6 · a student's bullet journal on cloud &amp; devops patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

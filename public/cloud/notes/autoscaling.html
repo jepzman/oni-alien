@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Autoscaling · Jef’s Notes</title>
+<meta name="description" content="Add and remove capacity automatically as load rises and falls.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-cloud">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 6 · cloud &amp; devops patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="autoscaling">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 04.12.26</span><span class="topic">collection · <b>running &amp; observing</b></span></div>
+  <p class="kicker">a.k.a. “open more checkout lanes”</p>
+  <h1><span class="hl">Autoscaling</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Let the platform <b>add instances when load rises</b> and <b>remove them when it falls</b>, based on a signal that tracks real demand (requests per instance, queue depth, CPU), within <b>min and max limits</b>. Scale <b>up fast and down slowly</b>. You get capacity for spikes without paying for idle servers at night, as long as instances are <b>stateless</b> and <b>start quickly</b>.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> capacity</li><li><b>Kinds:</b> horizontal, vertical, scheduled, event-driven, scale-to-zero</li><li><b>Tools:</b> Kubernetes HPA, KEDA, cloud autoscaling groups, Cloud Run</li><li><b>Pairs with:</b> health checks, immutable infrastructure, competing consumers (Vol. 1)</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Fixed capacity is <span class="hl-pink">always wrong</span>: too little at peak (timeouts, lost sales), too much off-peak (wasted money). Manual scaling is slow and happens after the outage starts.</p>
+  <ul>
+    <li>The lunchtime spike overloads the fleet.</li>
+    <li>At night 95% of the capacity sits idle.</li>
+    <li>Someone has to remember to scale up before the big launch.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a fixed fleet of four servers. During a lunchtime traffic spike they max out and requests time out. At night the same four servers sit at five percent CPU, costing money for nothing."><g class="rough"><path class="d d-pen" d="M20 200 C 120 200 160 60 260 50 C 360 40 380 200 480 200 C 560 200 600 190 740 190"/><path class="d d-red d-dash" d="M20 120 h720"/></g><text class="t-s t-red" x="620" y="110" text-anchor="middle">capacity: 4 servers</text><text class="t-s t-red" x="260" y="34" text-anchor="middle">lunch spike: timeouts</text><text class="t-s t-red" x="620" y="230" text-anchor="middle">night: 5% CPU, still paying</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Four servers, always: overwhelmed at lunch, idle at night.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">supermarket checkout lanes</span></h2>
+  <p>A good supermarket <b>opens more lanes</b> when queues grow and <b>closes them</b> when it's quiet. The manager watches the <b>queue length</b>, not how tired the cashiers look, and knows a new lane takes a minute to open, so they open one <b>a little early</b>.</p>
+  <ul>
+    <li>Lanes are <b>instances</b>.</li>
+    <li>Queue length is the <b>scaling metric</b>.</li>
+    <li>Opening early is <b>headroom</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a supermarket opening more checkout lanes when queues get long and closing them when it&#x27;s quiet. A manager watches the queue length, not how tired the cashiers look, and new lanes take a minute to open."><g class="rough"><g transform="translate(40 60) scale(2.0)"><g class="d"><path d="M0 0 v60 M30 0 v60 M60 0 v60 M90 0 v60"/><rect class="f-paper" x="6" y="10" width="18" height="12"/><rect class="f-paper" x="36" y="26" width="18" height="12"/><rect class="f-paper" x="66" y="6" width="18" height="12"/></g></g><g transform="translate(360 100) scale(1.0)"><g class="d"><path d="M0 0 v60 M30 0 v60 M60 0 v60 M90 0 v60"/><rect class="f-paper" x="6" y="10" width="18" height="12"/><rect class="f-paper" x="36" y="26" width="18" height="12"/><rect class="f-paper" x="66" y="6" width="18" height="12"/></g></g></g><text class="t-s t-green" x="130" y="200" text-anchor="middle">queue long → open a lane</text><text class="t-s t-pen" x="410" y="200" text-anchor="middle">quiet → close lanes</text><text class="t-s t-pen" x="620" y="100" text-anchor="middle">new lane: ~1 min</text><text class="t-s t-pen" x="620" y="126" text-anchor="middle">to open</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Open lanes when queues grow, close them when it's quiet. Watch the queue, not the cashiers.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Checkout lanes</td><td>Instances / pods</td></tr>
+      <tr><td>Watching queue length</td><td>Scaling on requests per pod or queue depth</td></tr>
+      <tr><td>Open a lane when it's busy</td><td>Scale out above the target</td></tr>
+      <tr><td>Close lanes slowly when quiet</td><td>Scale in with a cooldown</td></tr>
+      <tr><td>Store has only 30 tills</td><td>Max replicas (and a minimum for safety)</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">target tracking within limits</span></h2>
+  <p>Pick a metric that <b>leads</b> load (requests, queue depth) rather than one that lags (memory). And make sure new instances are <b>ready fast</b>: autoscaling can't help if boot takes ten minutes.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Horizontal autoscaling loop. A metric such as requests per second per instance or queue depth is compared to a target. The autoscaler adds instances when above the target and removes them when below, within a minimum of three and a maximum of thirty. Scale-up is fast, scale-down is slow with a cooldown, so it doesn&#x27;t flap."><g class="rough"><rect class="d f-y" x="20" y="50" width="180" height="80" rx="10"/><path class="d" d="M206 90 L286 90"/><path class="d" d="M275.2 95.2 L286 90 L275.2 84.8"/><rect class="d f-blue" x="292" y="40" width="200" height="100" rx="10"/><path class="d d-green" d="M498 70 L580 50"/><path class="d d-green" d="M570.7 57.6 L580 50 L568.3 47.5"/><path class="d" d="M498 110 L580 130"/><path class="d" d="M568.3 132.5 L580 130 L570.7 122.4"/><rect class="d f-green" x="160" y="190" width="440" height="54" rx="10"/></g><text class="t-head" x="110" y="86" text-anchor="middle">metric</text><text class="t" x="110" y="110" text-anchor="middle" font-size="17">RPS/pod or queue</text><text class="t-head" x="392" y="86" text-anchor="middle">autoscaler</text><text class="t" x="392" y="110" text-anchor="middle" font-size="17">target: 50 RPS / pod</text><text class="t-s t-green" x="590" y="40" text-anchor="start">+ pods, fast</text><text class="t-s" x="590" y="150" text-anchor="start">− pods, slowly</text><text class="t-head" x="380" y="224" text-anchor="middle" font-size="17">min 3 · max 30 · keep headroom</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Measure a load signal, compare with a target, add or remove instances within min/max. Up fast, down slow.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Make instances stateless</b><p>Sessions and data outside the instance; any instance can serve any request.</p></li>
+    <li><b>Pick the right signal</b><p>Web: requests/instance or CPU; workers: queue depth or lag.</p></li>
+    <li><b>Set min, max and target</b><p>Min for redundancy (≥ 2–3), max for cost and downstream safety.</p></li>
+    <li><b>Up fast, down slow</b><p>Short scale-up window; longer scale-down stabilisation.</p></li>
+    <li><b>Make boot fast</b><p>Small images, readiness probes, pre-warmed caches.</p></li>
+    <li><b>Schedule known peaks</b><p>Scale ahead of launches and daily patterns.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Horizontal scaling</dt><dd>More or fewer instances.</dd></div>
+    <div><dt>Vertical scaling</dt><dd>Bigger or smaller instances.</dd></div>
+    <div><dt>Target tracking</dt><dd>Adjust capacity to keep a metric near a target.</dd></div>
+    <div><dt>Cooldown / stabilisation</dt><dd>Waiting before scaling again, to avoid flapping.</dd></div>
+    <div><dt>Scale to zero</dt><dd>No instances when idle; start on demand.</dd></div>
+    <div><dt>Headroom</dt><dd>Spare capacity kept for sudden spikes.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>hpa.yaml + keda.yaml</span><span>Kubernetes HPA and KEDA</span></div>
+<pre><code>apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: web }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: web }
+  minReplicas: 3
+  maxReplicas: 30
+  metrics:
+    - <span class="k">type</span>: Resource
+      resource: { name: cpu, target: { <span class="k">type</span>: Utilization, averageUtilization: 60 } }
+  behavior:
+    scaleUp:   { stabilizationWindowSeconds: 0 }
+    scaleDown: { stabilizationWindowSeconds: 300 }    <span class="c"># down slowly</span>
+---
+<span class="c"># workers: scale on queue length with KEDA</span>
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata: { name: invoice-worker }
+spec:
+  scaleTargetRef: { name: invoice-worker }
+  minReplicaCount: 0
+  maxReplicaCount: 50
+  triggers: [{ <span class="k">type</span>: aws-sqs-queue, metadata: { queueURL: <span class="s">"…"</span>, queueLength: <span class="s">"20"</span> } }]</code></pre>
+  </div>
+  <p class="aside">tools: Kubernetes HPA / VPA, KEDA, Karpenter and Cluster Autoscaler (nodes), AWS Auto Scaling groups and ECS service autoscaling, GCP managed instance groups, Cloud Run / Lambda (automatic, scale to zero).</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Capacity for spikes</b>.</li><li><b>Lower cost</b> off-peak.</li><li><b>No manual scaling</b> under pressure.</li><li><b>Scale to zero</b> for idle workloads.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Cold starts and lag</b> during sudden spikes.</li><li><b>Downstream overload</b>: more instances, more DB connections.</li><li><b>Tuning</b> metrics and windows.</li><li><b>Runaway cost</b> without a max.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Operations ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares a <b>fixed-size fleet scaled by hand</b> to <b>autoscaling on a demand signal with min/max limits</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to run &amp; explain?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Targets, limits and windows to tune.</td></tr>
+      <tr data-before="3" data-after="3"><td>Delivery speed<small>fast from commit to prod?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Release safety<small>low risk per deploy?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Reliability<small>stays up?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Spikes get capacity automatically.</td></tr>
+      <tr data-before="2" data-after="5"><td>Scalability<small>handles 10× load?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Grows to demand within limits.</td></tr>
+      <tr data-before="3" data-after="4"><td>Recoverability<small>fast to restore?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Replaces failed capacity automatically.</td></tr>
+      <tr data-before="3" data-after="3"><td>Observability<small>can we see inside?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Scaling events are visible signals.</td></tr>
+      <tr data-before="2" data-after="4"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Pay for what you use; watch the max.</td></tr>
+      <tr data-before="3" data-after="4"><td>Developer experience<small>pleasant to ship with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No midnight manual scaling.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Scaling on a lagging metric</h3><p>Memory rises after the overload; scaling comes too late. <span class="fix">Fix →</span> scale on requests or queue depth.</p></li>
+    <li><h3>No max</h3><p>A bug or attack scales you to 500 instances. <span class="fix">Fix →</span> set max and budget alerts.</p></li>
+    <li><h3>Forgetting downstream limits</h3><p>30 pods × 20 connections overwhelm the database. <span class="fix">Fix →</span> connection pooling and limits (Vol. 3).</p></li>
+    <li><h3>Slow boot</h3><p>New pods take 5 minutes; the spike is over. <span class="fix">Fix →</span> smaller images, startup tuning, headroom.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Variable or spiky traffic.</li><li>Queue-based workers.</li><li>Stateless services.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Steady, predictable load (right-size and reserve instead).</li><li>Stateful systems that can't add nodes quickly.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Health checks &amp; probes</b></li><li><b>Immutable infrastructure</b></li><li><b>Cost visibility (FinOps)</b></li><li><b>Connection pooling</b> (Vol. 3)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why scale up fast and down slowly?</summary><p>To catch spikes quickly while avoiding flapping when load dips briefly.</p></details>
+    <details><summary>What makes a good scaling metric?</summary><p>One that tracks demand early, like requests per instance or queue depth.</p></details>
+    <details><summary>Why set a maximum?</summary><p>To cap cost and protect downstream systems from too many instances.</p></details>
+    <details><summary>What must be true of instances?</summary><p>They must be stateless and start quickly.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Watch the <span class="hl">queue</span>, open <span class="hl">lanes</span> early, close them <span class="hl">slowly</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/10-autoscaling.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Kubernetes docs, “Horizontal Pod Autoscaling”.</li><li>KEDA documentation.</li><li>AWS docs, “Target tracking scaling policies”.</li><li>Google SRE Book, ch. 21 “Handling Overload”.</li></ul>
+  </div>
+  <p class="folio">10</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="health-checks.html"><small>← previous note</small>09 · Health Checks &amp; Probes</a>
+  <a href="observability.html"><small>Next note →</small>11 · Logs, Metrics &amp; Traces</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 6 · a student's bullet journal on cloud &amp; devops patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

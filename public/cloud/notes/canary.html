@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Canary Releases · Jef’s Notes</title>
+<meta name="description" content="Send a small share of traffic to the new version and widen it only if metrics stay healthy.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-cloud">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 6 · cloud &amp; devops patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="canary">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 06.11.26</span><span class="topic">collection · <b>shipping safely</b></span></div>
+  <p class="kicker">a.k.a. “the canary in the coal mine”</p>
+  <h1><span class="hl">Canary Releases</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Release a new version to a <b>small slice of traffic</b> first (1–5%), <b>compare its metrics</b> (errors, latency, business signals) with the stable version, and <b>widen in steps</b> only while it stays healthy. If any check fails, <b>shift traffic back automatically</b>. A bad release hurts a few users for a few minutes, not everyone.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> progressive delivery</li><li><b>Tools:</b> Argo Rollouts, Flagger, AWS CodeDeploy, Cloud Run, Spinnaker/Kayenta</li><li><b>Signals:</b> error rate, p95 latency, saturation, business KPIs</li><li><b>Pairs with:</b> SLOs, observability, feature flags</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Some bugs only show up with <span class="hl-pink">real traffic</span>: a device type, a data shape, a load pattern. If every user gets the new version at once, every affected user hits the bug <span class="hl-pink">before anyone notices</span>.</p>
+  <ul>
+    <li>Staging passed, production broke for 5% of users, all at once.</li>
+    <li>Alerts fire after the damage is done.</li>
+    <li>Rollback decisions are made by a tired human under pressure.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a release going to one hundred percent of users at once. A bug that only affects users on old Android phones, five percent of traffic, crashes their app. By the time alerts fire, every one of those users has been hit, and support is flooded."><g class="rough"><rect class="d f-y" x="20" y="80" width="160" height="70" rx="10"/><path class="d d-red" d="M186 115 L300 115"/><path class="d d-red" d="M289.2 120.2 L300 115 L289.2 109.8"/><circle class="d f-pink d-red" cx="320" cy="60" r="16"/><circle class="d f-paper" cx="380" cy="60" r="16"/><circle class="d f-paper" cx="440" cy="60" r="16"/><circle class="d f-paper" cx="500" cy="60" r="16"/><circle class="d f-pink d-red" cx="560" cy="60" r="16"/><circle class="d f-paper" cx="620" cy="60" r="16"/><circle class="d f-paper" cx="320" cy="130" r="16"/><circle class="d f-paper" cx="380" cy="130" r="16"/><circle class="d f-pink d-red" cx="440" cy="130" r="16"/><circle class="d f-paper" cx="500" cy="130" r="16"/><circle class="d f-paper" cx="560" cy="130" r="16"/><circle class="d f-paper" cx="620" cy="130" r="16"/></g><text class="t-head" x="100" y="122" text-anchor="middle" font-size="22">v2</text><text class="t-s t-red" x="243" y="100" text-anchor="middle">100% at once</text><text class="t-s t-red" x="470" y="220" text-anchor="middle">every affected user hit before the alert</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Everyone gets the new version at once, so every affected user hits the bug before anyone notices.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the canary in the coal mine</span></h2>
+  <p>Miners once carried a <b>canary</b> underground. The bird reacted to bad air <b>long before</b> people would, so the miners got out in time. Only the canary was exposed first.</p>
+  <ul>
+    <li>The canary is the <b>small slice of traffic</b> on the new version.</li>
+    <li>Watching the bird is <b>automated analysis</b>.</li>
+    <li>Getting out is <b>automatic rollback</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of coal miners carrying a canary into a mine. The small bird reacts to bad air long before the miners would, giving them time to get out. Only the canary is exposed first."><g class="rough"><path class="d f-y" d="M120 120 q30 -40 60 -10 q20 -20 30 0 l-10 10 q10 30 -30 40 q-40 0 -50 -40 z"/><circle cx="180" cy="104" r="3"/><path class="d d-dash" d="M260 130 L400 130"/><path class="d" d="M389.2 135.2 L400 130 L389.2 124.8"/></g><text class="t-s t-pen" x="170" y="200" text-anchor="middle">small, sensitive, first</text><text class="t-s t-red" x="560" y="90" text-anchor="middle">bird uneasy → everyone out</text><text class="t-s t-green" x="560" y="140" text-anchor="middle">bird happy → keep digging</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The canary in the coal mine: a small early warning, before everyone is exposed.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The canary</td><td>The new version receiving 1–5% of traffic</td></tr>
+      <tr><td>The miners</td><td>The other 95–99% of users on stable</td></tr>
+      <tr><td>Watching the bird</td><td>Comparing canary vs stable metrics</td></tr>
+      <tr><td>Going deeper while it's happy</td><td>Widening to 25%, 50%, 100%</td></tr>
+      <tr><td>Running out when it's uneasy</td><td>Automatic rollback</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">small slice, compare, widen</span></h2>
+  <p>The key is <b>comparison</b>: canary vs stable at the same time, so normal daily ups and downs don't fool the analysis.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Canary release. Traffic is split: five percent to version two, ninety-five percent to version one. An analysis step compares error rate and latency of the canary against the stable version for ten minutes. If healthy, the share grows to twenty-five, fifty, then one hundred percent. If any check fails, traffic goes back to version one automatically."><g class="rough"><rect class="d f-y" x="20" y="50" width="130" height="64" rx="10"/><rect class="d f-y" x="180" y="50" width="130" height="64" rx="10"/><path class="d" d="M154 82 L176 82"/><path class="d" d="M165.2 87.2 L176 82 L165.2 76.8"/><rect class="d f-y" x="340" y="50" width="130" height="64" rx="10"/><path class="d" d="M314 82 L336 82"/><path class="d" d="M325.2 87.2 L336 82 L325.2 76.8"/><rect class="d f-green" x="500" y="50" width="130" height="64" rx="10"/><path class="d" d="M474 82 L496 82"/><path class="d" d="M485.2 87.2 L496 82 L485.2 76.8"/><rect class="d f-blue" x="140" y="180" width="480" height="60" rx="10"/><path class="d d-red" d="M380 244 L380 280"/><path class="d d-red" d="M374.8 269.2 L380 280 L385.2 269.2"/></g><text class="t-head" x="85" y="89" text-anchor="middle" font-size="22">5%</text><text class="t-s t-green" x="85" y="140" text-anchor="middle">10 min ✓</text><text class="t-head" x="245" y="89" text-anchor="middle" font-size="22">25%</text><text class="t-s t-green" x="245" y="140" text-anchor="middle">10 min ✓</text><text class="t-head" x="405" y="89" text-anchor="middle" font-size="22">50%</text><text class="t-s t-green" x="405" y="140" text-anchor="middle">10 min ✓</text><text class="t-head" x="565" y="89" text-anchor="middle" font-size="22">100%</text><text class="t-s t-green" x="565" y="140" text-anchor="middle">done</text><text class="t-head" x="380" y="217" text-anchor="middle" font-size="16">analysis: errors, p95 latency vs stable</text><text class="t-s t-red" x="560" y="278" text-anchor="middle">any check fails → back to 0%</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Shift a little traffic, compare metrics with the stable version, widen in steps, or roll back automatically.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Split traffic</b><p>Weighted routing in the load balancer, ingress or service mesh.</p></li>
+    <li><b>Define health</b><p>Error rate, p95 latency, saturation and a business signal (checkouts per minute).</p></li>
+    <li><b>Compare against stable</b><p>Same window, same metrics; thresholds or statistical analysis.</p></li>
+    <li><b>Step up</b><p>1% → 5% → 25% → 50% → 100%, pausing at each step.</p></li>
+    <li><b>Automate rollback</b><p>Any failed check sends all traffic back to stable without a human.</p></li>
+    <li><b>Keep it sticky when needed</b><p>Route the same user consistently so they don't flip between versions.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Canary</dt><dd>The new version on a small share of traffic.</dd></div>
+    <div><dt>Baseline / stable</dt><dd>The current version for comparison.</dd></div>
+    <div><dt>Traffic weight</dt><dd>The percentage routed to each version.</dd></div>
+    <div><dt>Canary analysis</dt><dd>Automated health comparison.</dd></div>
+    <div><dt>Progressive delivery</dt><dd>Gradually exposing changes with checks.</dd></div>
+    <div><dt>Sticky sessions</dt><dd>Keeping a user on the same version.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>rollout.yaml</span><span>Argo Rollouts</span></div>
+<pre><code>apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata: { name: checkout }
+spec:
+  strategy:
+    canary:
+      steps:
+        - setWeight: 5
+        - pause: { duration: 10m }
+        - analysis: { templates: [{ templateName: error-rate-vs-stable }] }
+        - setWeight: 25
+        - pause: { duration: 10m }
+        - setWeight: 50
+        - pause: { duration: 10m }
+<span class="c"># AnalysisTemplate: fail if canary 5xx rate &gt; stable + 0.5% or p95 &gt; 400 ms</span>
+<span class="c"># a failed analysis aborts the rollout and returns traffic to stable</span></code></pre>
+  </div>
+  <p class="aside">tools: Argo Rollouts, Flagger (with Istio, Linkerd, NGINX, Gateway API), AWS CodeDeploy / Lambda aliases, Google Cloud Run and Cloud Deploy, Spinnaker with Kayenta, mobile staged rollouts (Play Console, App Store phased release).</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Small blast radius</b> for bad releases.</li><li><b>Real-traffic validation</b>, not just staging.</li><li><b>Automatic rollback</b>.</li><li><b>Confidence to deploy often</b>.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Needs good metrics</b> and enough traffic.</li><li><b>Slower full rollout</b>.</li><li><b>Two versions live</b>: data and API compatibility.</li><li><b>More tooling</b> (mesh, rollout controller).</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Operations ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>releasing to 100% of traffic at once</b> to <b>canary steps with automated analysis and rollback</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to run &amp; explain?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Rollout steps and analysis rules to understand.</td></tr>
+      <tr data-before="3" data-after="3"><td>Delivery speed<small>fast from commit to prod?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A release takes ~30–60 min to fully roll out.</td></tr>
+      <tr data-before="2" data-after="5"><td>Release safety<small>low risk per deploy?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A bad release reaches a few percent, briefly.</td></tr>
+      <tr data-before="3" data-after="4"><td>Reliability<small>stays up?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Problems are caught before most users see them.</td></tr>
+      <tr data-before="3" data-after="3"><td>Scalability<small>handles 10× load?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Recoverability<small>fast to restore?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Automatic rollback in minutes.</td></tr>
+      <tr data-before="3" data-after="4"><td>Observability<small>can we see inside?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Forces clear health metrics per release.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Extra tooling; little extra capacity.</td></tr>
+      <tr data-before="3" data-after="4"><td>Developer experience<small>pleasant to ship with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Ship often without fear.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Too little traffic</h3><p>1% of 50 requests/min tells you nothing. <span class="fix">Fix →</span> longer steps or a bigger first slice.</p></li>
+    <li><h3>Only technical metrics</h3><p>No errors, but checkouts dropped 30%. <span class="fix">Fix →</span> include a business signal.</p></li>
+    <li><h3>Manual watching</h3><p>Someone has to stare at dashboards. <span class="fix">Fix →</span> automate analysis and rollback.</p></li>
+    <li><h3>Incompatible versions</h3><p>v1 and v2 write data the other can't read. <span class="fix">Fix →</span> backward-compatible APIs and schemas.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Services with steady traffic and good metrics.</li><li>High-risk changes and frequent releases.</li><li>Mobile and desktop apps (staged rollouts).</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Very low traffic (use flags for internal users instead).</li><li>Changes that can't run side by side with the old version.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Blue–green deployment</b></li><li><b>Feature flags</b></li><li><b>SLOs &amp; error budgets</b></li><li><b>Logs, metrics &amp; traces</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why compare the canary with the stable version rather than a fixed threshold?</summary><p>Traffic and error rates vary over the day; comparing at the same time removes that noise.</p></details>
+    <details><summary>What should happen when canary analysis fails?</summary><p>Traffic is automatically shifted back to the stable version.</p></details>
+    <details><summary>Why add a business metric?</summary><p>A release can be technically healthy while breaking something users care about, like checkout.</p></details>
+    <details><summary>When is canary a poor fit?</summary><p>Very low traffic, or changes that can't run alongside the old version.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Send the <span class="hl">canary</span> first, watch it <span class="hl">closely</span>, and leave the mine if it <span class="hl">struggles</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/02-canary.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Danilo Sato, “CanaryRelease” (martinfowler.com).</li><li>Google SRE Workbook, ch. 16 “Canarying Releases”.</li><li>Argo Rollouts docs, “Canary” and “Analysis &amp; Progressive Delivery”.</li><li>Netflix/Google, “Automated Canary Analysis at Netflix with Kayenta”.</li></ul>
+  </div>
+  <p class="folio">02</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="blue-green.html"><small>← previous note</small>01 · Blue–Green Deployment</a>
+  <a href="feature-flags.html"><small>Next note →</small>03 · Feature Flags</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 6 · a student's bullet journal on cloud &amp; devops patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

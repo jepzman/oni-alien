@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Logs, Metrics &amp; Traces · Jef’s Notes</title>
+<meta name="description" content="Emit structured signals so you can answer new questions about production.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-cloud">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 6 · cloud &amp; devops patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="observability">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 08.12.26</span><span class="topic">collection · <b>running &amp; observing</b></span></div>
+  <p class="kicker">a.k.a. “the parcel tracking number”</p>
+  <h1><span class="hl">Logs, Metrics &amp; Traces</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Emit three kinds of signals from every service: <b>metrics</b> (cheap numbers over time: rate, errors, duration) to <b>notice</b> problems, <b>traces</b> (one request's journey across services) to find <b>where</b>, and <b>structured logs</b> (events with context) to see <b>why</b>. Link them with a shared <b>trace id</b>, collect them with <b>OpenTelemetry</b>, and you can answer questions you didn't plan for.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> operations</li><li><b>Standard:</b> OpenTelemetry (CNCF)</li><li><b>Starter metrics:</b> RED: rate, errors, duration · USE for resources</li><li><b>Pairs with:</b> SLOs, audit logging (Vol. 5), canary releases</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">With many services, “it's slow for some users” is a <span class="hl-pink">needle in a haystack</span>: text logs on many machines, dashboards that show averages, and no way to follow one request end to end.</p>
+  <ul>
+    <li>Averages hide the 1% of users with 10-second checkouts.</li>
+    <li>Log lines can't be joined across services.</li>
+    <li>Every incident starts with “add more logging and redeploy”.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of an engineer at 3 a.m. with a ticket that says checkout is slow for some users. There are gigabytes of unstructured log lines across twelve services, a CPU graph that looks normal, and no way to follow one request from the browser through the services to the database."><g class="rough"><g transform="translate(40 60) scale(1.6)"><g class="d"><circle class="f-paper" cx="24" cy="24" r="20"/><path d="M38 38 L58 58"/></g></g><rect class="d f-paper" x="220" y="30" width="300" height="130" rx="3"/></g><text class="t" x="234" y="60" text-anchor="start" font-size="15">INFO done</text><text class="t" x="234" y="86" text-anchor="start" font-size="15">ERROR something failed</text><text class="t" x="234" y="112" text-anchor="start" font-size="15">INFO ok</text><text class="t" x="234" y="138" text-anchor="start" font-size="15">WARN retry</text><text class="t-s t-red" x="640" y="60" text-anchor="middle">which request?</text><text class="t-s t-red" x="640" y="100" text-anchor="middle">which service?</text><text class="t-s t-red" x="640" y="140" text-anchor="middle">which users?</text><text class="t-s t-red" x="370" y="210" text-anchor="middle">12 services, 0 connected clues</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>“Checkout is slow for some users.” Twelve services, gigabytes of text logs, no way to follow one request.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the parcel tracking number</span></h2>
+  <p>A parcel has <b>one tracking number</b>. Every depot <b>scans it</b> with a timestamp, so you can see its whole journey and exactly <b>where it got stuck</b>. The company also <b>counts parcels per hour</b> on a dashboard, and each depot keeps a <b>detailed diary</b>.</p>
+  <ul>
+    <li>The tracking number is the <b>trace id</b>; each scan is a <b>span</b>.</li>
+    <li>Parcels per hour is a <b>metric</b>.</li>
+    <li>The depot diary is <b>logs</b>, mentioning the tracking number.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a parcel delivery tracking page. The parcel has one tracking number. Every depot it passes scans it with a timestamp, so you can see the whole journey and exactly where it got stuck. Separately, the company&#x27;s dashboard counts parcels per hour, and each depot keeps a detailed diary."><g class="rough"><g transform="translate(30 80) scale(1.2)"><g class="d"><rect class="f-y" x="4" y="14" width="52" height="40" rx="2"/><path d="M4 26 h52 M30 14 v40"/></g></g><rect class="d f-green" x="160" y="70" width="130" height="60" rx="10"/><rect class="d f-green" x="305" y="70" width="130" height="60" rx="10"/><path class="d" d="M291 100 L303 100"/><path class="d" d="M292.2 105.2 L303 100 L292.2 94.8"/><rect class="d f-pink" x="450" y="70" width="130" height="60" rx="10"/><path class="d" d="M436 100 L448 100"/><path class="d" d="M437.2 105.2 L448 100 L437.2 94.8"/><rect class="d f-green" x="595" y="70" width="130" height="60" rx="10"/><path class="d" d="M581 100 L593 100"/><path class="d" d="M582.2 105.2 L593 100 L582.2 94.8"/></g><text class="t-s t-pen" x="70" y="180" text-anchor="middle">#TRK-42</text><text class="t-head" x="225" y="96" text-anchor="middle" font-size="16">depot A</text><text class="t" x="225" y="120" text-anchor="middle" font-size="14">09:00</text><text class="t-head" x="370" y="96" text-anchor="middle" font-size="16">hub</text><text class="t" x="370" y="120" text-anchor="middle" font-size="14">09:40</text><text class="t-head" x="515" y="96" text-anchor="middle" font-size="16">depot B</text><text class="t" x="515" y="120" text-anchor="middle" font-size="14">17:55 ← stuck</text><text class="t-head" x="660" y="96" text-anchor="middle" font-size="16">door</text><text class="t" x="660" y="120" text-anchor="middle" font-size="14">18:10</text><text class="t-s t-green" x="450" y="210" text-anchor="middle">one id, every scan, the whole journey</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A parcel tracking number: every depot scans it, so you can see where it got stuck.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Tracking number</td><td>Trace id (W3C traceparent)</td></tr>
+      <tr><td>A scan at each depot</td><td>A span with start time and duration</td></tr>
+      <tr><td>Parcels per hour dashboard</td><td>Metrics: rate, errors, duration</td></tr>
+      <tr><td>Depot diary entries</td><td>Structured logs with the trace id</td></tr>
+      <tr><td>“Stuck at depot B”</td><td>The slow span in a trace</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">three signals, one id</span></h2>
+  <p>Observability isn't more dashboards. It's being able to ask a <b>new question</b> (“which tenant on which version is slow?”) <b>without shipping new code</b>.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="The three signals. Metrics are cheap numbers over time, like request rate, errors and duration per service, used for dashboards and alerts. Traces follow a single request across services as spans with timings, sharing one trace id. Logs are structured JSON events with details, also carrying the trace id. OpenTelemetry collects all three and sends them to a backend, where you jump from an alert to a trace to the logs."><g class="rough"><rect class="d f-y" x="20" y="40" width="220" height="90" rx="10"/><rect class="d f-green" x="270" y="40" width="220" height="90" rx="10"/><rect class="d f-blue" x="520" y="40" width="220" height="90" rx="10"/><path class="d" d="M240 85 L266 85"/><path class="d" d="M255.2 90.2 L266 85 L255.2 79.8"/><path class="d" d="M490 85 L516 85"/><path class="d" d="M505.2 90.2 L516 85 L505.2 79.8"/><rect class="d f-paper d-green" x="160" y="200" width="440" height="54" rx="10"/></g><text class="t-head" x="130" y="81" text-anchor="middle">metrics</text><text class="t" x="130" y="105" text-anchor="middle" font-size="17">rate · errors · duration</text><text class="t-head" x="380" y="81" text-anchor="middle">traces</text><text class="t" x="380" y="105" text-anchor="middle" font-size="17">spans across services</text><text class="t-head" x="630" y="81" text-anchor="middle">logs</text><text class="t" x="630" y="105" text-anchor="middle" font-size="17">structured JSON + trace_id</text><text class="t-s t-pen" x="130" y="160" text-anchor="middle">something&#x27;s wrong</text><text class="t-s t-pen" x="380" y="160" text-anchor="middle">where</text><text class="t-s t-pen" x="630" y="160" text-anchor="middle">why</text><text class="t-head t-green" x="380" y="234" text-anchor="middle" font-size="17">OpenTelemetry → one backend</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Metrics say something's wrong, traces say where, logs say why. One trace id links them.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Instrument with OpenTelemetry</b><p>Auto-instrumentation for HTTP, databases and queues; vendor-neutral.</p></li>
+    <li><b>Propagate context</b><p>Pass the trace context (traceparent) across HTTP and message headers.</p></li>
+    <li><b>RED metrics per service</b><p>Request rate, error rate, duration histograms (p50/p95/p99), by route.</p></li>
+    <li><b>Structured logs</b><p>JSON with trace_id, user/tenant id, version; no secrets.</p></li>
+    <li><b>Add business attributes</b><p>tenant, plan, feature flag state on spans: that's what answers “for some users”.</p></li>
+    <li><b>Sample wisely</b><p>Keep all errors and slow traces; sample the boring ones.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Metric</dt><dd>A number measured over time.</dd></div>
+    <div><dt>Trace</dt><dd>The full journey of one request across services.</dd></div>
+    <div><dt>Span</dt><dd>One step in a trace, with timing.</dd></div>
+    <div><dt>Structured log</dt><dd>A log event as key–value data (JSON).</dd></div>
+    <div><dt>Cardinality</dt><dd>How many distinct values a label has.</dd></div>
+    <div><dt>Percentile (p95)</dt><dd>95% of requests are faster than this.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>checkout.ts</span><span>OpenTelemetry JS</span></div>
+<pre><code><span class="k">import</span> { trace, metrics } <span class="k">from</span> <span class="s">"@opentelemetry/api"</span>;
+<span class="k">const</span> tracer = trace.getTracer(<span class="s">"checkout"</span>);
+<span class="k">const</span> duration = metrics.getMeter(<span class="s">"checkout"</span>).createHistogram(<span class="s">"checkout.duration"</span>, { unit: <span class="s">"ms"</span> });
+
+<span class="k">export</span> <span class="k">async</span> <span class="k">function</span> checkout(req: Req) {
+  <span class="k">return</span> tracer.startActiveSpan(<span class="s">"checkout"</span>, <span class="k">async</span> (span) =&gt; {
+    span.setAttributes({ <span class="s">"tenant.id"</span>: req.tenantId, <span class="s">"cart.items"</span>: req.items.length,
+                         <span class="s">"flag.new_checkout"</span>: req.flags.newCheckout });
+    <span class="k">const</span> t0 = performance.now();
+    <span class="k">try</span> {
+      <span class="k">const</span> order = <span class="k">await</span> placeOrder(req);              <span class="c">// child spans: db, payments</span>
+      logger.info({ msg: <span class="s">"order placed"</span>, orderId: order.id, traceId: span.spanContext().traceId });
+      <span class="k">return</span> order;
+    } <span class="k">catch</span> (e) {
+      span.recordException(e as Error); span.setStatus({ code: 2 });
+      <span class="k">throw</span> e;
+    } <span class="k">finally</span> {
+      duration.record(performance.now() - t0, { route: <span class="s">"/checkout"</span> });
+      span.end();
+    }
+  });
+}</code></pre>
+  </div>
+  <p class="aside">tools: OpenTelemetry SDKs and Collector, Prometheus + Grafana, Grafana Tempo/Loki, Jaeger, Honeycomb, Datadog, New Relic, Elastic, cloud-native (CloudWatch, Cloud Trace, Azure Monitor).</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Find where and why</b> quickly.</li><li><b>Answer new questions</b> without redeploying.</li><li><b>See tail latency</b>, not just averages.</li><li><b>Vendor-neutral</b> instrumentation with OpenTelemetry.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Data volume and cost</b>.</li><li><b>High-cardinality traps</b> in metrics.</li><li><b>Instrumentation effort</b> and consistency.</li><li><b>Privacy risk</b> if personal data leaks into telemetry.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Operations ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>unstructured text logs and host CPU graphs</b> to <b>OpenTelemetry metrics, traces and structured logs linked by trace id</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to run &amp; explain?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More concepts, but one standard.</td></tr>
+      <tr data-before="3" data-after="4"><td>Delivery speed<small>fast from commit to prod?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Confident, faster releases.</td></tr>
+      <tr data-before="3" data-after="4"><td>Release safety<small>low risk per deploy?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Canary analysis and alerts get real signals.</td></tr>
+      <tr data-before="3" data-after="4"><td>Reliability<small>stays up?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Problems are found and fixed sooner.</td></tr>
+      <tr data-before="3" data-after="3"><td>Scalability<small>handles 10× load?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Recoverability<small>fast to restore?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Faster diagnosis means faster recovery.</td></tr>
+      <tr data-before="1" data-after="5"><td>Observability<small>can we see inside?</small></td><td class="dcell"></td><td class="score"></td><td class="why">From an alert to the slow span to the log line.</td></tr>
+      <tr data-before="4" data-after="2"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Telemetry storage isn't cheap; sample and tier.</td></tr>
+      <tr data-before="2" data-after="4"><td>Developer experience<small>pleasant to ship with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Debug production without guesswork.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Averages only</h3><p>Mean latency 120 ms; p99 is 9 s. <span class="fix">Fix →</span> histograms and percentiles.</p></li>
+    <li><h3>User ids as metric labels</h3><p>Millions of time series; the bill explodes. <span class="fix">Fix →</span> high-cardinality data on spans and logs, not metric labels.</p></li>
+    <li><h3>Broken context propagation</h3><p>Traces stop at the queue. <span class="fix">Fix →</span> propagate traceparent through messages too.</p></li>
+    <li><h3>Logging personal data</h3><p>Emails and tokens in logs. <span class="fix">Fix →</span> redact; log ids, not secrets.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Any production service, especially distributed ones.</li><li>Canary analysis and SLO alerting.</li><li>Debugging “only some users” problems.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Don't skip; for a tiny app, start with RED metrics and structured logs.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>SLOs &amp; error budgets</b></li><li><b>Canary releases</b></li><li><b>Audit logging</b> (Vol. 5)</li><li><b>Sidecar &amp; service mesh</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does each signal answer?</summary><p>Metrics: is something wrong? Traces: where? Logs: why?</p></details>
+    <details><summary>What links the three?</summary><p>A shared trace id, propagated across services.</p></details>
+    <details><summary>Why use percentiles instead of averages?</summary><p>Averages hide slow outliers that real users experience.</p></details>
+    <details><summary>Where should high-cardinality data (user id) go?</summary><p>On spans and logs, not on metric labels.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Give every request a <span class="hl">tracking number</span>, and <span class="hl">scan</span> it at every depot.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/11-observability.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>OpenTelemetry documentation (opentelemetry.io).</li><li>Charity Majors, Liz Fong-Jones &amp; George Miranda, <i>Observability Engineering</i> (O'Reilly).</li><li>Tom Wilkie, “The RED Method”; Brendan Gregg, “The USE Method”.</li><li>W3C Trace Context recommendation.</li></ul>
+  </div>
+  <p class="folio">11</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="autoscaling.html"><small>← previous note</small>10 · Autoscaling</a>
+  <a href="slo-error-budgets.html"><small>Next note →</small>12 · SLOs &amp; Error Budgets</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 6 · a student's bullet journal on cloud &amp; devops patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>
