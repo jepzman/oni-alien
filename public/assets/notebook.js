@@ -1,4 +1,4 @@
-/* Jef’s Note — small helpers, no dependencies.
+/* Jef’s Notes — small helpers, no dependencies.
    1. Rating dots drawn from data-before / data-after.
    2. "Export as PDF" buttons (the print dialog's "Save as PDF").
    3. Quiz answers open while printing.

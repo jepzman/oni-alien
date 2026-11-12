@@ -1,4 +1,4 @@
-# Jef’s Note
+# Jef’s Notes
 
 A shelf of student bullet journals on software design patterns. Every note covers the problem a pattern solves, a real-life analogy with doodles, how it works, gains vs losses, nine ratings, common pitfalls, when to use it, and a self-check quiz.
 

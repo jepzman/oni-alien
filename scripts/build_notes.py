@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builds the Jef’s Note bookshelf.
+"""Builds the Jef’s Notes bookshelf.
 
 Each journal (see JOURNALS) lives in public/<key>/:
   - notes written as data in content/<key>/*.py are rendered into public/<key>/notes/<slug>.html
@@ -191,7 +191,7 @@ KEY = '''  <aside class="key" aria-label="Key to the signifiers on this page">
 
 def foot(j=None):
     what = f"Vol. {j['vol']} · a student's bullet journal on {j['short']}" if j else "a shelf of student bullet journals on software design"
-    return f'<footer class="foot"><span>Jef’s Note · {what}</span><span>by {AUTHOR}</span></footer>'
+    return f'<footer class="foot"><span>Jef’s Notes · {what}</span><span>by {AUTHOR}</span></footer>'
 
 
 def head(title, desc, depth):
@@ -238,7 +238,7 @@ def bar(j, depth, current=None, print_button=True, disabled=False):
             btn = f'\n      <a class="btn" href="{jp}all.html?print">{DL}Export as PDF</a>'
     return f'''<header class="bar">
   <div class="bar-in">
-    <a class="brand" href="{root}index.html"><b>Jef’s<span>.</span>Note</b><small>{brand_small}</small></a>
+    <a class="brand" href="{root}index.html"><b>Jef’s<span>.</span>Notes</b><small>{brand_small}</small></a>
     <nav aria-label="Main">
       {nav}{btn}
     </nav>
@@ -297,7 +297,7 @@ def render_note(j, n):
     code = n["code"]
     figs = lambda key: "\n".join(f.html() for f in n.get(key, []))
     parts = [
-        head(f"{title} · Jef’s Note", summary, 2),
+        head(f"{title} · Jef’s Notes", summary, 2),
         body_open(j),
         '<a class="skip-link" href="#main">Skip to the notes</a>',
         bar(j, 2),
@@ -413,7 +413,7 @@ def counts(j):
 
 def render_index(j):
     return "\n".join([
-        head(f"{j['title']} · Jef’s Note", j["blurb"], 1),
+        head(f"{j['title']} · Jef’s Notes", j["blurb"], 1),
         body_open(j),
         '<a class="skip-link" href="#main">Skip to the index</a>',
         bar(j, 1, "index", print_button=False),
@@ -482,7 +482,7 @@ def render_all(j):
   <p class="aside no-print">in the print window pick “Save as PDF” as the destination. Each note starts on a new page.</p>''',
         '</section>',
         '</main>',
-        f'<footer class="foot desk" style="padding-block:0 40px"><span>Jef’s Note · Vol. {j["vol"]} · by {AUTHOR}</span></footer>',
+        f'<footer class="foot desk" style="padding-block:0 40px"><span>Jef’s Notes · Vol. {j["vol"]} · by {AUTHOR}</span></footer>',
         '</body>',
         '</html>',
         '',
@@ -529,7 +529,7 @@ def render_landing():
         months.append(f'    <div class="month"><h3>{month}</h3><ul>{lis}</ul></div>')
     total = sum(len(j["catalogue"]) for j in JOURNALS)
     return "\n".join([
-        head("Jef’s Note", "A shelf of student bullet journals on software design patterns, with doodles, analogies, trade-offs and ratings.", 0),
+        head("Jef’s Notes", "A shelf of student bullet journals on software design patterns, with doodles, analogies, trade-offs and ratings.", 0),
         body_open(),
         '<a class="skip-link" href="#main">Skip to the shelf</a>',
         bar(None, 0, "shelf"),
@@ -537,7 +537,7 @@ def render_landing():
         '<article class="sheet landing">',
         '  <div class="page-meta"><span class="day">The shelf · 2026</span><span class="topic">series · <b>software design</b></span></div>',
         '  <p class="kicker">hand-written field journals, one subject per volume</p>',
-        '  <h1 class="cover-title"><span class="hl">Jef’s Note</span></h1>',
+        '  <h1 class="cover-title"><span class="hl">Jef’s Notes</span></h1>',
         f'  <p class="lead">A student\'s bullet journals on software design patterns: what problem each pattern solves, an everyday analogy with doodles, how it works, what it costs, how it rates, and how people get it wrong. <b>{len(JOURNALS)} volumes, {total} notes</b> so far, more on the way.</p>',
         '  <h2 id="shelf"><span class="num">✎</span>The shelf <span class="side">pick a journal</span></h2>',
         f'  <ul class="shelf">\n{chr(10).join(books)}\n  </ul>',
