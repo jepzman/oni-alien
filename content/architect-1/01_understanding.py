@@ -329,8 +329,8 @@ systems = [("payment provider", 10, "charges, refunds"), ("StockPilot", 200, "st
 for name, x, what in systems:
     sc_how.box(x, 314, 170, 66, name, "blue", sub=what, size=16, subsize=15)
     sc_how.arrow(380 + (x - 295) * 0.35, 244, x + 85, 310)
-sc_how.note(650, 128, "people", "green", size=17)
-sc_how.note(650, 280, "systems we don't own", "pen", size=17)
+sc_how.note(504, 190, "↑ people", "green", anchor="start", size=17)
+sc_how.note(504, 220, "↓ systems we don't own", "pen", anchor="start", size=17)
 
 SYSTEM_CONTEXT = dict(
     slug="system-context",
