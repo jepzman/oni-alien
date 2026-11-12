@@ -305,7 +305,7 @@ JOURNALS = [
     # Plan and handoff: docs/HANDOFF-solution-architect.md. Only the sample chapter exists so far.
     dict(
         key="architect-2", vol=2, title="Decisions & Trade-offs", short="decisions &amp; trade-offs",
-        book="The Solution Architect's Notebook", draft=True, title_block=True,
+        book="The Solution Architect's Notebook", draft=True, title_block=True, sheet_doodles=True,
         theme="theme-architect", fonts="Architects+Daughter", subject="solution architecture",
         problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
         term="Sample chapter · draft", weekdays=(1, 3), start=date(2027, 1, 5),
@@ -374,6 +374,26 @@ ROUGH = ('<svg width="0" height="0" style="position:absolute" aria-hidden="true"
          '<filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" '
          'baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" '
          'scale="3.2"/></filter></svg>')
+# Desk doodles drawn around an architect sheet (journals with sheet_doodles=True): a coffee ring,
+# a drafting compass, and a pencil resting on a ruler. Decorative only; hidden on small screens.
+SHEET_DOODLES = (
+    '<div class="sheet-doodles" aria-hidden="true">'
+    '<svg class="sd sd-coffee" viewBox="0 0 120 120"><g class="rough">'
+    '<circle cx="60" cy="60" r="44" fill="none" style="stroke:var(--mustard);stroke-opacity:.35;stroke-width:7"/>'
+    '<circle cx="60" cy="60" r="38" fill="none" style="stroke:var(--mustard);stroke-opacity:.22;stroke-width:2"/>'
+    '<path d="M100 74 q8 6 4 14" fill="none" style="stroke:var(--mustard);stroke-opacity:.3;stroke-width:4;stroke-linecap:round"/></g></svg>'
+    '<svg class="sd sd-compass" viewBox="0 0 70 110"><g class="rough">'
+    '<path class="d" d="M33 4 v8"/><circle class="d f-y" cx="35" cy="18" r="8"/>'
+    '<path class="d" d="M31 25 L14 98 M39 25 L56 98 M20 70 Q35 62 50 70"/>'
+    '<path class="d d-pen" d="M56 98 l3 9"/><path class="d" d="M14 98 l-2 8"/>'
+    '<path class="d d-thin d-dash" d="M12 106 Q35 120 59 107"/></g></svg>'
+    '<svg class="sd sd-pencil" viewBox="0 0 240 80"><g class="rough">'
+    '<rect class="d d-thin f-green" x="6" y="44" width="228" height="26" rx="3"/>'
+    '<path class="d d-thin" d="M26 44 v10 M46 44 v6 M66 44 v10 M86 44 v6 M106 44 v10 M126 44 v6 M146 44 v10 M166 44 v6 M186 44 v10 M206 44 v6"/>'
+    '<path class="d f-y" d="M40 30 L190 6 L196 18 L46 42 Z"/><path class="d f-pink" d="M190 6 l14 -2 l-8 14 z"/>'
+    '<path class="d f-paper" d="M40 30 l-14 4 l20 8 z"/><path class="d d-thin" d="M58 27 l2 12"/></g></svg>'
+    '</div>'
+)
 KEY = '''  <aside class="key" aria-label="Key to the signifiers on this page">
     <h3>Key</h3>
     <ul>
@@ -517,6 +537,7 @@ def render_note(j, n):
         '<main id="main" class="desk">',
         f'<article class="sheet" id="{slug}">',
         f'  {ROUGH}',
+        SHEET_DOODLES if j.get("sheet_doodles") else "",
         f'  <div class="page-meta"><span class="day">{day_label(j, num)}</span><span class="topic">collection · <b>{cname.lower()}</b></span></div>',
         f'  <p class="kicker">{n["kicker"]}</p>',
         f'  <h1><span class="hl">{esc(title)}</span></h1>',

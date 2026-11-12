@@ -56,15 +56,24 @@ six (Rotterdam launch, orders → delivery via Postgres outbox, see ADR 0007 in 
 
 ## 4. Style (implemented as `.theme-architect` in `public/assets/bujo.css`)
 
-Drafting sheet: warm tracing paper, double frame inset 14 px, no grid; Architects Daughter for
-`--f-letter`; graphite #2B2B2B, terracotta accent #C0643B, slate teal gains #2F7A78, brick losses
-#B23A2E, sand tape; leader-line-with-dot title mark; “REV A” tag on the TL;DR; circled section numbers;
-template card with a “TEMPLATE” tab and ruled lines; dashed “try it” box; title block. Dark mode and
-print variants included. Cover (not yet used): charcoal #2E3440, copper band #C27C4E.
+Drafting sheet, vibrant version (owner asked for more colour and depth):
+
+- Paper: warm white #FFFDF7 on a sand desk #EFE6D6, a faint cobalt blueprint grid (24 px minor,
+  120 px major), a double frame inset 14 px, and a small stack of sheets drawn underneath (shadow).
+- Palette: ink #24211E · vivid orange accent #EE6A2F · teal gains #0E9A8A · red losses #D64545 ·
+  cobalt pen #2753C9 · yellow highlighter rgba(255, 214, 0, .45) · tapes in orange, teal and yellow.
+- Fonts: Architects Daughter for `--f-letter` (titles, section heads); body fonts unchanged.
+- Marks: leader line with a dot under the title; “REV A” tag and a paperclip on the TL;DR; circled
+  section numbers on a highlighter swipe; orange drop cap.
+- Depth and doodles: every figure is taped on like a photo (tilted ±0.3°, tape in rotating colours);
+  desk doodles around the sheet (`sheet_doodles=True` → `SHEET_DOODLES` in `build_notes.py`): a coffee
+  ring, a drafting compass, a pencil on a ruler. Hidden under 760 px; coffee ring and stack hidden in print.
+- Template card with a “TEMPLATE” tab and ruled lines; dashed “try it” box; title block.
+- Dark mode and print variants included. Cover (not yet used): charcoal #2E3440, copper band #C27C4E.
 
 ## 5. Build checklist for the next session
 
-1. [ ] Decide the open questions (section 6) with the owner.
+1. [x] Open questions decided (section 6).
 2. [ ] **Series support on the landing page**: add `series` to journals (1 = patterns, 2 = practitioner
        notebooks); render a second shelf “Series 2 · The Practitioner's Notebooks” under the first, with
        covers using `--cover-architect` / `--band-architect` and labels “book 1 · vol. N”.
@@ -85,11 +94,10 @@ print variants included. Cover (not yet used): charcoal #2E3440, copper band #C2
 8. [ ] Commit on the working branch, push, open a PR to `main`, merge = deploy to GitHub Pages and the
        Cloudflare Worker mirror. Only deploy when the owner asks.
 
-## 6. Open questions
+## 6. Decisions (accepted by the owner, 2026-11-12)
 
-- Keep Vol. 7 · AI App Patterns in Series 1, or end Series 1 at Vol. 6?
-- One book with six volumes (as planned) or six thinner books? (Affects shelf layout only.)
-- Is the fictional Larder case study welcome, or should examples stay generic?
-- Should Books 2–4 (Product, Project, Client Management) get their own paper styles, or share the
-  drafting sheet with a different palette?
-- Publish the sample chapter publicly as a teaser (remove `draft=True`) or keep it unlisted?
+- **Vol. 7 · AI App Patterns stays** in Series 1, planned for December.
+- **One book, six volumes**, matching the existing shelf and covers.
+- **Use the Larder case study** throughout; keep `docs/larder-casebook.md` as the source of truth.
+- **Books 2–4 each get their own skin** (as Vols. 1–6 do), sharing the title block and “Try it” box.
+- **Keep the sample chapter unlisted** (`draft=True`) until Vol. 1 is written; launch them together.
