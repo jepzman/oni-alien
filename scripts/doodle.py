@@ -121,6 +121,26 @@ class Doodle:
         self.shapes.append(f'<g transform="translate({x} {y}) scale({s})"><g class="{cls}">{body}</g></g>')
         return self
 
+    def table(self, x, y, name, cols, w=170, fill="y", row=26, hl=(), strike=(), soft=(), stroke="", size=16):
+        """A database table drawn as a card: a filled header row, then one line per column.
+        hl / strike / soft are indexes of rows to mark green, cross out in red, or grey out."""
+        h = 32 + row * len(cols)
+        cls = "d d-thin" + (f" d-{stroke}" if stroke else "")
+        self.shapes.append(f'<rect class="{cls} f-paper" x="{x}" y="{y}" width="{w}" height="{h}" rx="4"/>')
+        self.shapes.append(f'<path class="{cls} f-{fill}" d="M{x} {y + 4} a4 4 0 0 1 4 -4 h{w - 8} a4 4 0 0 1 4 4 v28 h-{w} z"/>')
+        self.texts.append(f'<text class="t-head" x="{x + w / 2:g}" y="{y + 23}" text-anchor="middle" font-size="{size + 1}">{esc(name)}</text>')
+        for i, c in enumerate(cols):
+            ry = y + 32 + i * row
+            if i:
+                self.shapes.append(f'<path class="d d-thin d-soft" d="M{x + 6} {ry} h{w - 12}"/>')
+            if i in hl:
+                self.shapes.append(f'<rect class="f-hl" x="{x + 3}" y="{ry + 2}" width="{w - 6}" height="{row - 4}" rx="2" style="stroke:none"/>')
+            tc = "t" + (" t-soft" if i in soft else "") + (" t-red" if i in strike else "")
+            self.texts.append(f'<text class="{tc}" x="{x + 10}" y="{ry + row / 2 + 6:g}" font-size="{size}">{esc(c)}</text>')
+            if i in strike:
+                self.shapes.append(f'<path class="d d-red" d="M{x + 6} {ry + row / 2:g} h{w - 12}"/>')
+        return self
+
     def html(self):
         shapes = "".join(self.shapes)
         texts = "".join(self.texts)
@@ -175,7 +195,7 @@ ICONS = {
 
 
 # ---------------------------------------------------------------- code highlighter
-KEYWORDS = r"\b(const|let|var|async|await|function|return|if|else|for|of|in|new|class|type|export|import|from|throw|try|catch|finally|private|while|interface|true|false|null|undefined|SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|BEGIN|COMMIT|ON|CONFLICT|DO|NOTHING|DELETE|AND|ORDER|BY|LIMIT|FOR|SKIP|LOCKED|RETURNING|CREATE|TABLE|PRIMARY|KEY|def|yield|break|continue|switch|case|default)\b"
+KEYWORDS = r"\b(const|let|var|async|await|function|return|if|else|for|of|in|new|class|type|export|import|from|throw|try|catch|finally|private|while|interface|true|false|null|undefined|SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|BEGIN|COMMIT|ON|CONFLICT|DO|NOTHING|DELETE|AND|ORDER|BY|LIMIT|FOR|SKIP|LOCKED|RETURNING|CREATE|TABLE|PRIMARY|KEY|JOIN|LEFT|INDEX|ALTER|ADD|DROP|COLUMN|NOT|NULL|DEFAULT|GROUP|PARTITION|RANGE|REFERENCES|UNIQUE|CHECK|VIEW|MATERIALIZED|REFRESH|CONCURRENTLY|WITH|AS|IS|OR|IN|TO|OF|USING|POLICY|ENABLE|ROW|LEVEL|SECURITY|EXISTS|IF|DESC|ASC|INCLUDE|CASE|WHEN|THEN|END|BETWEEN|ALL|def|yield|break|continue|switch|case|default)\b"
 
 
 def highlight(code: str) -> str:
@@ -217,4 +237,20 @@ ICONS.update({
     "tv": '<rect class="F" x="0" y="10" width="70" height="46" rx="5"/><path d="M24 0 l11 10 l11 -10 M14 62 h42"/><path d="M10 20 h40 v28 h-40 z"/>',
     "tray": '<path class="F" d="M0 20 h70 l-6 16 h-58 z"/><circle class="F" cx="22" cy="12" r="7"/><rect class="F" x="38" y="6" width="16" height="12"/>',
     "curtain": '<path d="M0 0 h80"/><path class="F" d="M2 0 q4 30 -2 60 h22 q-10 -30 0 -60 z"/><path class="F" d="M78 0 q-4 30 2 60 h-22 q10 -30 0 -60 z"/>',
+})
+
+
+# Icons added for the data journal (same ~60×60 convention).
+ICONS.update({
+    "cabinet": '<rect class="F" x="4" y="0" width="52" height="64" rx="3"/><path d="M4 21 h52 M4 42 h52"/><rect x="22" y="8" width="16" height="6"/><rect x="22" y="29" width="16" height="6"/><rect x="22" y="50" width="16" height="6"/>',
+    "cards": '<path class="F" d="M0 22 h64 v38 h-64 z"/><path class="F" d="M6 22 v-16 h52 v16"/><path d="M14 6 v-6 h12 v6 M6 14 h52"/>',
+    "stamp": '<path class="F" d="M22 4 h16 v18 q0 6 8 8 h8 v12 h-48 v-12 h8 q8 -2 8 -8 z"/><path d="M4 50 h52"/>',
+    "receipt": '<path class="F" d="M6 0 h48 v62 l-8 -6 l-8 6 l-8 -6 l-8 6 l-8 -6 l-8 6 z"/><path d="M14 12 h32 M14 22 h24 M14 32 h32 M14 42 h18"/>',
+    "tag": '<path class="F" d="M2 18 L18 2 h40 v32 h-40 z"/><circle cx="14" cy="18" r="4"/><path d="M28 14 h22 M28 24 h16"/>',
+    "bin": '<path class="F" d="M8 14 h44 l-5 46 h-34 z"/><path d="M2 14 h56 M22 14 v-8 h16 v8 M22 24 v28 M38 24 v28"/>',
+    "box": '<path class="F" d="M4 18 l26 -12 l26 12 v32 l-26 12 l-26 -12 z"/><path d="M4 18 l26 12 l26 -12 M30 30 v32"/>',
+    "pool": '<path class="F" d="M0 20 h70 v30 h-70 z"/><path d="M6 30 q6 -6 12 0 q6 6 12 0 q6 -6 12 0 q6 6 12 0 q6 -6 12 0 M10 20 v-16 h8 M52 20 v-16 h8"/>',
+    "star": '<path class="F" d="M30 2 l8 18 l20 2 l-15 13 l5 20 l-18 -11 l-18 11 l5 -20 l-15 -13 l20 -2 z"/>',
+    "bricks": '<rect class="F" x="0" y="0" width="70" height="48"/><path d="M0 16 h70 M0 32 h70 M24 0 v16 M50 0 v16 M12 16 v16 M38 16 v16 M62 16 v16 M24 32 v16 M50 32 v16"/>',
+    "camera": '<rect class="F" x="0" y="14" width="64" height="40" rx="5"/><path d="M20 14 l6 -8 h12 l6 8"/><circle class="F" cx="32" cy="34" r="11"/>',
 })

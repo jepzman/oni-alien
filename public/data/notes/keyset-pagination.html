@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Keyset Pagination · Jef’s Notes</title>
+<meta name="description" content="Page with “after this key”, not OFFSET, so page 1,000 is as fast as page 1.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-data">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 3 · data &amp; database patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="keyset-pagination">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 28.09.26</span><span class="topic">collection · <b>reading fast</b></span></div>
+  <p class="kicker">a.k.a. “the bookmark”</p>
+  <h1><span class="hl">Keyset Pagination</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Instead of <code>LIMIT 20 OFFSET 100000</code>, remember the <b>sort key of the last row</b> you showed and ask for <b>rows after it</b>: <code>WHERE (created_at, id) &lt; (:last_at, :last_id)</code>. With an index on those columns, <b>every page is as fast as page 1</b>, and new inserts don't make items repeat or vanish.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> query performance</li><li><b>a.k.a.:</b> seek method, cursor pagination</li><li><b>Needs:</b> a unique, indexed sort order</li><li><b>Pairs with:</b> indexing, infinite scroll</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead"><code>OFFSET</code> pagination is easy, but the database still has to <span class="hl-pink">read every skipped row</span>. Deep pages get slower and slower, and the results shift under your feet.</p>
+  <ul>
+    <li>Page 5,000 reads 100,020 rows to return 20.</li>
+    <li>Someone inserts a row while you page, and an item appears twice.</li>
+    <li>Crawlers and exports that walk every page hammer the database.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of OFFSET pagination. To show page 5,000 with 20 rows per page, the database reads and throws away 100,000 rows before returning 20. Meanwhile a new row was inserted, so one item appears on two pages."><g class="rough"><rect class="d d-thin f-pink" x="20" y="60" width="520" height="40" rx="3"/><rect class="d d-thin f-green" x="540" y="60" width="40" height="40" rx="3"/></g><text class="t-s t-red" x="280" y="50" text-anchor="middle">skipped: 100,000 rows read and thrown away</text><text class="t-s t-green" x="600" y="130" text-anchor="middle">20 kept</text><text class="t-s t-red" x="280" y="150" text-anchor="middle">page 1 → 3 ms · page 5,000 → 900 ms</text><text class="t-s t-red" x="280" y="190" text-anchor="middle">a new row arrives → items repeat or vanish</text><text class="t-s t-pen" x="280" y="230" text-anchor="middle">SELECT … ORDER BY id LIMIT 20 OFFSET 100000</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>OFFSET 100000: read 100,020 rows, keep 20, and new inserts shift every page.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the bookmark</span></h2>
+  <p>When you stop reading a novel you leave a <b>bookmark</b>. Tomorrow you open the book there. You don't count 4,000 lines from the first page. And if the publisher adds a preface, your bookmark is still in the right place.</p>
+  <ul>
+    <li>The bookmark is the <b>cursor</b>: the last row's sort key.</li>
+    <li>Opening at it is an <b>index seek</b>.</li>
+    <li>Counting lines from the start is <b>OFFSET</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of reading a long novel with a bookmark. To continue tomorrow you open at the bookmark. You don&#x27;t count 4,000 lines from the start. If the author adds a preface, your bookmark still points at the right place."><g class="rough"><g transform="translate(60 50) scale(2.4)"><g class="d"><path class="f-y" d="M4 6 h22 a6 6 0 0 1 6 6 v44 a6 6 0 0 0 -6 -6 h-22 z"/><path class="f-y" d="M60 6 h-22 a6 6 0 0 0 -6 6 v44 a6 6 0 0 1 6 -6 h22 z"/></g></g><path class="d d-red f-pink" d="M140 30 v70 l8 -8 l8 8 v-70 z"/></g><text class="t-s t-green" x="140" y="230" text-anchor="middle">open at the bookmark</text><text class="t-s t-red" x="480" y="80" text-anchor="middle">✗ “start at line 1, count 4,000”</text><text class="t-s t-green" x="480" y="130" text-anchor="middle">✓ “continue after this line”</text><text class="t-s t-pen" x="480" y="180" text-anchor="middle">new preface? bookmark still right</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A bookmark: continue from where you stopped, without counting from the start.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The bookmark</td><td>The cursor: <code>(created_at, id)</code> of the last row</td></tr>
+      <tr><td>Open at the bookmark</td><td><code>WHERE (created_at, id) &lt; (…)</code> + index seek</td></tr>
+      <tr><td>Counting lines from page 1</td><td><code>OFFSET n</code></td></tr>
+      <tr><td>A new preface</td><td>Rows inserted while you page</td></tr>
+      <tr><td>Ribbon instead of page number</td><td>An opaque cursor token in the API</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">seek, don't skip</span></h2>
+  <p>The trick is a <b>unique, stable sort order</b> (add the id as a tie-breaker) and an index that matches it. Then “rows after X” is a single index seek.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Keyset pagination. Page one returns rows ordered by created_at and id and ends at the cursor 12 Nov, 9041. The next request asks for rows after that pair. The index on created_at and id jumps straight to the cursor, so every page costs the same."><g class="rough"><rect class="d d-thin f-paper" x="20" y="20" width="200" height="110" rx="4"/><path class="d d-thin f-green" d="M20 24 a4 4 0 0 1 4 -4 h192 a4 4 0 0 1 4 4 v28 h-200 z"/><path class="d d-thin d-soft" d="M26 78 h188"/><path class="d d-thin d-soft" d="M26 104 h188"/><rect class="f-hl" x="23" y="106" width="194" height="22" rx="2" style="stroke:none"/><path class="d" d="M226 112 L330 112"/><path class="d" d="M319.2 117.2 L330 112 L319.2 106.8"/><rect class="d f-y" x="336" y="82" width="260" height="60" rx="10"/><path class="d d-green" d="M466 146 L466 190"/><path class="d d-green" d="M460.8 179.2 L466 190 L471.2 179.2"/><rect class="d f-green" x="336" y="194" width="260" height="50" rx="10"/></g><text class="t-head" x="120" y="43" text-anchor="middle" font-size="17">page 1</text><text class="t" x="30" y="71" font-size="16">12 Nov · 9044</text><text class="t" x="30" y="97" font-size="16">12 Nov · 9043</text><text class="t" x="30" y="123" font-size="16">12 Nov · 9041</text><text class="t-s" x="278" y="98" text-anchor="middle">cursor</text><text class="t-head" x="466" y="119" text-anchor="middle" font-size="16">next: after (12 Nov, 9041)</text><text class="t-head" x="466" y="226" text-anchor="middle" font-size="17">index jumps there</text><text class="t-s t-green" x="680" y="60" text-anchor="middle">page 1: 3 ms</text><text class="t-s t-green" x="680" y="90" text-anchor="middle">page 5,000: 3 ms</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Remember the last row's sort key; ask for rows after it. The index jumps there directly.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Pick a stable order</b><p>Sort by something meaningful plus a unique tie-breaker: <code>ORDER BY created_at DESC, id DESC</code>.</p></li>
+    <li><b>Index it</b><p><code>CREATE INDEX ON posts (created_at DESC, id DESC)</code>.</p></li>
+    <li><b>Return a cursor</b><p>Send the last row's <code>(created_at, id)</code>, encoded as an opaque token.</p></li>
+    <li><b>Seek on the next request</b><p>Row-value comparison: <code>WHERE (created_at, id) &lt; ($1, $2)</code>.</p></li>
+    <li><b>Design the UI for it</b><p>Next/previous and infinite scroll work well; “jump to page 731” doesn't.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>OFFSET pagination</dt><dd>Skip n rows, then take a page.</dd></div>
+    <div><dt>Keyset / seek</dt><dd>Continue after the last row's key.</dd></div>
+    <div><dt>Cursor</dt><dd>Token holding the last row's sort key.</dd></div>
+    <div><dt>Tie-breaker</dt><dd>A unique column that makes the order total.</dd></div>
+    <div><dt>Row-value comparison</dt><dd><code>(a, b) &lt; (x, y)</code> compares pairs in order.</dd></div>
+    <div><dt>Page drift</dt><dd>Items repeating or vanishing as data changes.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>feed.sql</span><span>PostgreSQL</span></div>
+<pre><code><span class="k">CREATE</span> <span class="k">INDEX</span> posts_feed <span class="k">ON</span> posts (created_at <span class="k">DESC</span>, id <span class="k">DESC</span>);
+
+<span class="c">-- first page</span>
+<span class="k">SELECT</span> id, title, created_at <span class="k">FROM</span> posts
+<span class="k">ORDER</span> <span class="k">BY</span> created_at <span class="k">DESC</span>, id <span class="k">DESC</span>
+<span class="k">LIMIT</span> 20;
+
+<span class="c">-- next page: continue after the last row we sent</span>
+<span class="k">SELECT</span> id, title, created_at <span class="k">FROM</span> posts
+<span class="k">WHERE</span> (created_at, id) &lt; ($1, $2)     <span class="c">-- $1, $2 = last row's values</span>
+<span class="k">ORDER</span> <span class="k">BY</span> created_at <span class="k">DESC</span>, id <span class="k">DESC</span>
+<span class="k">LIMIT</span> 20;
+
+<span class="c">-- API: { items: [...], next: base64('2026-11-12T09:41Z|9041') }</span></code></pre>
+  </div>
+  <p class="aside">tools: most APIs with a <code>next_cursor</code> (Stripe, Slack, GitHub GraphQL) use it. GraphQL Relay connections, Django REST <code>CursorPagination</code>, Prisma <code>cursor</code>, jOOQ <code>seek()</code>.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Constant speed</b>: page 5,000 = page 1.</li><li><b>No duplicates or gaps</b> when rows are inserted.</li><li><b>Cheap full walks</b> for exports and syncs.</li><li><b>Natural fit</b> for infinite scroll and APIs.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>No “jump to page 731”</b>.</li><li><b>Total counts are separate</b> (and still expensive).</li><li><b>Needs a matching index</b> and unique order.</li><li><b>Cursor logic</b> is fiddlier with many sort options.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Database ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>LIMIT/OFFSET pages</b> to <b>keyset pagination</b> with a matching index.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="5" data-after="4"><td>Simplicity<small>easy to reason about?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A cursor and row comparison instead of a page number.</td></tr>
+      <tr data-before="2" data-after="5"><td>Read speed<small>fast queries?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Every page is a single index seek.</td></tr>
+      <tr data-before="3" data-after="3"><td>Write speed<small>cheap inserts &amp; updates?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Integrity<small>data stays correct?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No repeated or skipped items while data changes.</td></tr>
+      <tr data-before="1" data-after="5"><td>Scalability<small>10× more rows?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Cost doesn't grow with page depth.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low storage cost<small>cheap to keep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One index you likely needed anyway.</td></tr>
+      <tr data-before="4" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Random page jumps and odd sort orders are harder.</td></tr>
+      <tr data-before="3" data-after="4"><td>Operability<small>calm to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Crawlers and exports stop hammering the database.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change shape?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Each new sort order needs its own index and cursor.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>A non-unique sort</h3><p>Ordering by <code>created_at</code> alone skips rows with the same timestamp. <span class="fix">Fix →</span> always add a unique tie-breaker (id).</p></li>
+    <li><h3>Index doesn't match the order</h3><p>The seek turns into a scan plus sort. <span class="fix">Fix →</span> index the exact columns and directions.</p></li>
+    <li><h3>Exposing raw values</h3><p>Clients build their own cursors and break when you change the sort. <span class="fix">Fix →</span> encode the cursor as an opaque token.</p></li>
+    <li><h3>COUNT(*) on every page</h3><p>The pagination is fast, the total count isn't. <span class="fix">Fix →</span> show “more” instead, or cache an estimate.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Feeds, timelines, infinite scroll and activity logs.</li><li>Public APIs that return lists.</li><li>Exports, syncs and batch jobs that walk a whole table.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Small result sets where OFFSET is instant.</li><li>UIs that really need numbered pages you can jump between.</li><li>Ad-hoc admin screens with many sortable columns.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Indexing</b></li><li><b>Batch loading</b></li><li><b>Table partitioning</b></li><li><b>List virtualization</b> (Vol. 2)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why does OFFSET get slower on deep pages?</summary><p>The database still reads every skipped row before discarding it.</p></details>
+    <details><summary>Why add the id to the sort?</summary><p>To make the order unique, so rows sharing the same timestamp aren't skipped or repeated.</p></details>
+    <details><summary>What index supports ORDER BY created_at DESC, id DESC?</summary><p>A composite index on (created_at DESC, id DESC).</p></details>
+    <details><summary>What can't keyset pagination do easily?</summary><p>Jump straight to an arbitrary page number.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Use a <span class="hl">bookmark</span>, not a <span class="hl">line count</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/07-keyset-pagination.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Markus Winand, “We need tool support for keyset pagination” and use-the-index-luke.com/no-offset.</li><li>PostgreSQL docs, “Row Constructor Comparison”.</li><li>Slack engineering, “Evolving API Pagination at Slack”.</li><li>Relay docs, “GraphQL Cursor Connections Specification”.</li></ul>
+  </div>
+  <p class="folio">07</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="n-plus-one.html"><small>← previous note</small>06 · Batch Loading (Fixing N+1)</a>
+  <a href="materialized-views.html"><small>Next note →</small>08 · Materialized Views</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 3 · a student's bullet journal on data &amp; database patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

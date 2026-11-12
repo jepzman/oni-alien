@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Indexing · Jef’s Notes</title>
+<meta name="description" content="Keep a sorted lookup next to the table so queries jump to rows instead of scanning.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-data">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 3 · data &amp; database patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="indexing">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 21.09.26</span><span class="topic">collection · <b>reading fast</b></span></div>
+  <p class="kicker">a.k.a. “the index at the back of the book”</p>
+  <h1><span class="hl">Indexing</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>An index is a <b>sorted copy of one or more columns</b> with pointers back to the rows, usually a <b>B-tree</b>. Queries that filter, join or sort on those columns <b>jump straight to the rows</b> instead of scanning the whole table. Every index makes <b>writes a little slower</b> and takes space, so index the queries you actually run, and check with <code>EXPLAIN</code>.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> query performance</li><li><b>Default type:</b> B-tree</li><li><b>Others:</b> hash, GIN, GiST, BRIN, partial, covering</li><li><b>Check with:</b> EXPLAIN ANALYZE</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">A table without the right index is a book without an index: to answer “which orders belong to customer 42?”, the database must <span class="hl-pink">read every row</span>. Fine at 1,000 rows. A disaster at 10 million.</p>
+  <ul>
+    <li>Pages get slower every month as data grows, with no code change.</li>
+    <li>One slow query holds locks and connections, so everything else queues up.</li>
+    <li>Throwing a bigger server at it buys weeks, not years.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a query looking for the orders of customer 42 in a table of ten million rows. Without an index the database reads every row from top to bottom, a sequential scan, and the request takes four seconds."><g class="rough"><rect class="d d-thin f-paper" x="20" y="20" width="230" height="162" rx="4"/><path class="d d-thin f-y" d="M20 24 a4 4 0 0 1 4 -4 h222 a4 4 0 0 1 4 4 v28 h-230 z"/><path class="d d-thin d-soft" d="M26 78 h218"/><path class="d d-thin d-soft" d="M26 104 h218"/><rect class="f-hl" x="23" y="106" width="224" height="22" rx="2" style="stroke:none"/><path class="d d-thin d-soft" d="M26 130 h218"/><path class="d d-thin d-soft" d="M26 156 h218"/><path class="d d-red" d="M280 30 L280 180"/><path class="d d-red" d="M274.8 169.2 L280 180 L285.2 169.2"/><g transform="translate(520 90) scale(1.1)"><g class="d d-red"><circle class="f-paper" cx="30" cy="30" r="26"/><path d="M30 14 V30 H42"/></g></g></g><text class="t-head" x="135" y="43" text-anchor="middle" font-size="17">orders · 10M rows</text><text class="t" x="30" y="71" font-size="16">#1 · cust 913</text><text class="t" x="30" y="97" font-size="16">#2 · cust 7</text><text class="t" x="30" y="123" font-size="16">#3 · cust 42</text><text class="t" x="30" y="149" font-size="16">#4 · cust 518</text><text class="t t-soft" x="30" y="175" font-size="16">…9,999,996 more…</text><text class="t-s t-red" x="296" y="110" text-anchor="start">read every row</text><text class="t-s t-pen" x="560" y="60" text-anchor="middle">WHERE customer_id = 42</text><text class="t-s t-red" x="600" y="130" text-anchor="start">4.1 s</text><text class="t-s t-red" x="560" y="200" text-anchor="middle">Seq Scan · rows read: 10,000,000</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>No index: to find 12 rows, the database reads all 10,000,000.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the index at the back of the book</span></h2>
+  <p>To find every page about photosynthesis you don't read the whole textbook. You flip to the <b>index</b>: words in <b>alphabetical order</b>, each with page numbers. Because it's sorted, you find the word in seconds and jump to the pages.</p>
+  <ul>
+    <li>Every new edition must update the index too: <b>indexes slow down writes</b>.</li>
+    <li>An index of every word would be as big as the book: <b>don't index everything</b>.</li>
+    <li>“Words starting with ph” is easy; “words ending in -sis” isn't: <b>column order and leading wildcards matter</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a thick textbook. To find every page about photosynthesis you don&#x27;t read the whole book: you open the index at the back, find the word in alphabetical order, and jump straight to pages 14, 88 and 203."><g class="rough"><g transform="translate(40 50) scale(2.4)"><g class="d"><path class="f-y" d="M4 6 h22 a6 6 0 0 1 6 6 v44 a6 6 0 0 0 -6 -6 h-22 z"/><path class="f-y" d="M60 6 h-22 a6 6 0 0 0 -6 6 v44 a6 6 0 0 1 6 -6 h22 z"/></g></g><rect class="d f-paper" x="260" y="30" width="230" height="160" rx="3"/><rect class="f-hl" x="266" y="80" width="220" height="26" style="stroke:none"/><path class="d" d="M500 92 L620 92"/><path class="d" d="M609.2 97.2 L620 92 L609.2 86.8"/><g transform="translate(630 60) scale(1.2)"><g class="d"><rect class="f-paper" x="0" y="0" width="64" height="50" rx="2"/><rect x="8" y="8" width="48" height="34"/><path d="M12 38 l14 -14 l10 10 l8 -6 l10 10"/></g></g></g><text class="t-s" x="110" y="230" text-anchor="middle">600 pages</text><text class="t" x="272" y="64" text-anchor="start" font-size="16">osmosis … 51</text><text class="t" x="272" y="98" text-anchor="start" font-size="16">photosynthesis … 14, 88, 203</text><text class="t" x="272" y="132" text-anchor="start" font-size="16">pigment … 90</text><text class="t" x="272" y="166" text-anchor="start" font-size="16">pollen … 112</text><text class="t-s t-pen" x="375" y="220" text-anchor="middle">sorted, so you jump in</text><text class="t-s" x="560" y="78" text-anchor="middle">jump to p. 14</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The index at the back of the book: sorted words, each with page numbers.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The index pages at the back</td><td>A B-tree index on <code>customer_id</code></td></tr>
+      <tr><td>Alphabetical order</td><td>Sorted keys, so lookups take a few hops</td></tr>
+      <tr><td>Page numbers next to each word</td><td>Row pointers (or the row itself, if covering)</td></tr>
+      <tr><td>Updating the index for a new edition</td><td>Extra work on every INSERT / UPDATE</td></tr>
+      <tr><td>Reading the whole book</td><td>A sequential scan</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">sorted keys, a few hops down a tree</span></h2>
+  <p>A B-tree keeps keys <b>sorted in pages</b>. Finding one key among millions takes only 3–4 page reads, and once you're there, ranges and ORDER BY come for free.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="B-tree index on customer_id. A root node splits key ranges, branch nodes narrow them, and the leaf for 42 holds pointers to the three matching rows in the table. The lookup touches four pages instead of millions, and finishes in under a millisecond."><g class="rough"><rect class="d f-y" x="300" y="10" width="160" height="50" rx="10"/><path class="d" d="M330 64 L180 100"/><path class="d" d="M189.3 92.4 L180 100 L191.7 102.6"/><path class="d" d="M430 64 L580 100"/><path class="d" d="M568.3 102.6 L580 100 L570.7 92.4"/><rect class="d f-y" x="90" y="104" width="180" height="50" rx="10"/><rect class="d f-paper" x="500" y="104" width="180" height="50" rx="10"/><path class="d" d="M180 158 L180 188"/><path class="d" d="M174.8 177.2 L180 188 L185.2 177.2"/><rect class="d f-green" x="70" y="192" width="220" height="50" rx="10"/><path class="d d-green" d="M296 216 L440 230"/><path class="d d-green" d="M428.7 234.1 L440 230 L429.8 223.8"/><rect class="d d-thin f-paper" x="446" y="186" width="200" height="84" rx="4"/><path class="d d-thin f-y" d="M446 190 a4 4 0 0 1 4 -4 h192 a4 4 0 0 1 4 4 v28 h-200 z"/><rect class="f-hl" x="449" y="220" width="194" height="22" rx="2" style="stroke:none"/><path class="d d-thin d-soft" d="M452 244 h188"/><rect class="f-hl" x="449" y="246" width="194" height="22" rx="2" style="stroke:none"/></g><text class="t-head" x="380" y="42" text-anchor="middle" font-size="16">root: 1 … 1M</text><text class="t-head" x="180" y="136" text-anchor="middle" font-size="16">1 … 500</text><text class="t-head" x="590" y="136" text-anchor="middle" font-size="16">500 … 1M</text><text class="t-head" x="180" y="224" text-anchor="middle" font-size="16">leaf: 42 → rows</text><text class="t-head" x="546" y="209" text-anchor="middle" font-size="17">orders</text><text class="t" x="456" y="237" font-size="16">#3 · cust 42</text><text class="t" x="456" y="263" font-size="16">#81k · cust 42</text><text class="t-s t-green" x="700" y="30" text-anchor="middle">Index Scan</text><text class="t-s t-green" x="700" y="56" text-anchor="middle">0.4 ms</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A B-tree index: a few hops down sorted pages, then straight to the matching rows.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Find the slow queries</b><p>Use <code>pg_stat_statements</code> or your APM; sort by total time, not just the slowest single call.</p></li>
+    <li><b>Read the plan</b><p><code>EXPLAIN (ANALYZE, BUFFERS)</code>: a Seq Scan reading millions of rows for a few results is the signal.</p></li>
+    <li><b>Index what you filter, join and sort on</b><p>Equality columns first, then range or sort columns: <code>(customer_id, placed_at)</code>.</p></li>
+    <li><b>Use special shapes when they fit</b><p>Partial (<code>WHERE status = 'open'</code>), covering (<code>INCLUDE (total)</code>), expression (<code>lower(email)</code>), GIN for JSON and full text.</p></li>
+    <li><b>Build it without blocking</b><p><code>CREATE INDEX CONCURRENTLY</code> on busy tables.</p></li>
+    <li><b>Prune</b><p>Drop indexes nobody uses (<code>pg_stat_user_indexes.idx_scan = 0</code>); they only slow writes.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>B-tree</dt><dd>Balanced sorted tree; the default index type.</dd></div>
+    <div><dt>Sequential scan</dt><dd>Reading the whole table, row by row.</dd></div>
+    <div><dt>Selectivity</dt><dd>How few rows a condition matches; high = good for an index.</dd></div>
+    <div><dt>Composite index</dt><dd>An index on several columns, in a set order.</dd></div>
+    <div><dt>Covering index</dt><dd>Holds every column the query needs: no table visit.</dd></div>
+    <div><dt>Query plan</dt><dd>The database's step-by-step recipe; see it with EXPLAIN.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>indexes.sql</span><span>PostgreSQL</span></div>
+<pre><code><span class="c">-- the query we run all day</span>
+<span class="k">SELECT</span> id, total <span class="k">FROM</span> orders
+<span class="k">WHERE</span> customer_id = 42 <span class="k">ORDER</span> <span class="k">BY</span> placed_at <span class="k">DESC</span> <span class="k">LIMIT</span> 20;
+
+<span class="c">-- equality first, then the sort column; INCLUDE makes it covering</span>
+<span class="k">CREATE</span> <span class="k">INDEX</span> <span class="k">CONCURRENTLY</span> orders_customer_recent
+  <span class="k">ON</span> orders (customer_id, placed_at <span class="k">DESC</span>) <span class="k">INCLUDE</span> (total);
+
+<span class="c">-- only open tickets are ever searched: index just those</span>
+<span class="k">CREATE</span> <span class="k">INDEX</span> tickets_open <span class="k">ON</span> tickets (assignee_id) <span class="k">WHERE</span> status = <span class="s">'open'</span>;
+
+<span class="c">-- case-insensitive email lookups need an expression index</span>
+<span class="k">CREATE</span> <span class="k">UNIQUE</span> <span class="k">INDEX</span> users_email_ci <span class="k">ON</span> users (lower(email));
+
+EXPLAIN (ANALYZE, BUFFERS) <span class="k">SELECT</span> …;   <span class="c">-- Seq Scan → Index Only Scan</span></code></pre>
+  </div>
+  <p class="aside">tools: <code>EXPLAIN ANALYZE</code>, pg_stat_statements, explain.depesz.com, pgMustard, MySQL <code>EXPLAIN FORMAT=TREE</code>, SQL Server execution plans, the “use-the-index-luke.com” guide.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Huge read speedups</b>: seconds to milliseconds.</li><li><b>Cheap ORDER BY and ranges</b> on indexed columns.</li><li><b>Uniqueness enforced</b> by unique indexes.</li><li><b>Less load</b>: fewer pages read, fewer locks held.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Slower writes</b>: every index is updated on insert/update.</li><li><b>Disk and memory</b> for each index.</li><li><b>Easy to get wrong</b>: wrong column order, unused indexes.</li><li><b>Bloat</b> on heavily updated tables needs maintenance.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Database ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares a table with <b>only a primary key</b> to the same table with <b>a few indexes chosen from real slow queries</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to reason about?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Plans and column order take some learning.</td></tr>
+      <tr data-before="1" data-after="5"><td>Read speed<small>fast queries?</small></td><td class="dcell"></td><td class="score"></td><td class="why">From full scans to a few page reads.</td></tr>
+      <tr data-before="5" data-after="4"><td>Write speed<small>cheap inserts &amp; updates?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Each index adds work to every write.</td></tr>
+      <tr data-before="3" data-after="4"><td>Integrity<small>data stays correct?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Unique indexes enforce rules the app might miss.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>10× more rows?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Lookups stay fast as tables grow.</td></tr>
+      <tr data-before="5" data-after="3"><td>Low storage cost<small>cheap to keep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Indexes can rival the table in size.</td></tr>
+      <tr data-before="3" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fast for indexed questions, not for any question.</td></tr>
+      <tr data-before="2" data-after="4"><td>Operability<small>calm to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fewer slow-query fires and lock pile-ups.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change shape?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New queries may need new indexes.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Indexing every column</h3><p>Twelve single-column indexes, and writes crawl. <span class="fix">Fix →</span> index real queries; prefer one good composite.</p></li>
+    <li><h3>Wrong column order</h3><p>An index on (placed_at, customer_id) for <code>WHERE customer_id = ?</code>. <span class="fix">Fix →</span> equality columns first, then range/sort.</p></li>
+    <li><h3>Functions on the column</h3><p><code>WHERE lower(email) = ?</code> ignores an index on email. <span class="fix">Fix →</span> use an expression index or store it normalized.</p></li>
+    <li><h3>Guessing instead of measuring</h3><p>An index is added and the plan doesn't use it. <span class="fix">Fix →</span> always confirm with EXPLAIN ANALYZE on real data.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Columns in frequent WHERE, JOIN and ORDER BY clauses.</li><li>Foreign key columns (joins and cascading deletes).</li><li>Uniqueness rules (unique indexes).</li><li>Large tables where a query returns a small share of rows.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Tiny tables, where a scan is already instant.</li><li>Columns with few distinct values (a boolean), unless partial.</li><li>Write-heavy tables where the query is rare (log tables).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Keyset pagination</b></li><li><b>Materialized views</b></li><li><b>Table partitioning</b></li><li><b>Cache-aside</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why does column order matter in a composite index?</summary><p>The index is sorted by the first column, then the second; it helps queries that filter on a leading prefix of the columns.</p></details>
+    <details><summary>What's a covering index?</summary><p>One that contains every column the query needs, so the database never has to visit the table (an index-only scan).</p></details>
+    <details><summary>Why can too many indexes hurt?</summary><p>Each one must be updated on every write and takes disk and memory.</p></details>
+    <details><summary>How do you know an index is used?</summary><p>EXPLAIN ANALYZE shows an Index Scan or Index Only Scan, and index usage stats show scans over time.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Don't read the <span class="hl">whole book</span>. Check the <span class="hl">index</span>, but don't index every word.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/05-indexing.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Markus Winand, <i>SQL Performance Explained</i> and use-the-index-luke.com.</li><li>PostgreSQL docs, “Indexes” and “Using EXPLAIN”.</li><li>Bayer &amp; McCreight, “Organization and Maintenance of Large Ordered Indexes” (1972).</li><li>Haki Benita, “Things I Wish I Knew About PostgreSQL Indexes”.</li></ul>
+  </div>
+  <p class="folio">05</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="history-tables.html"><small>← previous note</small>04 · History Tables (Audit Trail)</a>
+  <a href="n-plus-one.html"><small>Next note →</small>06 · Batch Loading (Fixing N+1)</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 3 · a student's bullet journal on data &amp; database patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

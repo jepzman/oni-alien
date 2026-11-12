@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Soft Delete · Jef’s Notes</title>
+<meta name="description" content="Mark rows as deleted instead of removing them, so they can be restored or audited.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-data">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 3 · data &amp; database patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="soft-delete">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 14.09.26</span><span class="topic">collection · <b>modelling</b></span></div>
+  <p class="kicker">a.k.a. “the recycle bin”</p>
+  <h1><span class="hl">Soft Delete</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Instead of <code>DELETE</code>, set <b><code>deleted_at = now()</code></b>. Normal reads <b>filter deleted rows out</b> (ideally through a view or a default scope), a <b>restore</b> clears the stamp, and a <b>purge job</b> hard-deletes rows once the undo window has passed, which also keeps you honest about privacy laws.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> data lifecycle</li><li><b>Column:</b> deleted_at timestamptz</li><li><b>Variants:</b> archive table, status column</li><li><b>Pairs with:</b> history tables, partial indexes</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Hard deletes are <span class="hl-pink">instant and permanent</span>. Users make mistakes, support needs to see what happened, and other rows still point at the one you removed.</p>
+  <ul>
+    <li>“I deleted it by accident” has no answer except restoring a backup.</li>
+    <li>Foreign keys either block the delete or cascade and wipe related data too.</li>
+    <li>Reports for last month change because their rows vanished.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a support agent getting a call: I deleted my project by accident, can you bring it back? The DELETE statement already removed the row, the comments and the files. The only copy is in last night&#x27;s backup, which would also roll back everyone else&#x27;s work."><g class="rough"><g transform="translate(30 40) scale(1.6)"><g class="d"><rect class="f-paper" x="16" y="0" width="30" height="56" rx="6"/><path d="M26 48 h10"/></g></g><rect class="d d-thin f-paper" x="380" y="30" width="200" height="110" rx="4"/><path class="d d-thin f-y" d="M380 34 a4 4 0 0 1 4 -4 h192 a4 4 0 0 1 4 4 v28 h-200 z"/><path class="d d-thin d-soft" d="M386 88 h188"/><path class="d d-red" d="M386 101 h188"/><path class="d d-thin d-soft" d="M386 114 h188"/><g transform="translate(640 60) scale(1.4)"><g class="d"><path class="f-pink" d="M8 14 h44 l-5 46 h-34 z"/><path d="M2 14 h56 M22 14 v-8 h16 v8 M22 24 v28 M38 24 v28"/></g></g><path class="d d-red" d="M590 98 L636 98"/><path class="d d-red" d="M625.2 103.2 L636 98 L625.2 92.8"/></g><text class="t-s t-red" x="150" y="50" text-anchor="start">“I deleted my project</text><text class="t-s t-red" x="150" y="76" text-anchor="start">by accident! help!”</text><text class="t-head" x="480" y="53" text-anchor="middle" font-size="17">projects</text><text class="t" x="390" y="81" font-size="16">#41 · Garden</text><text class="t t-red" x="390" y="107" font-size="16">#42 · Thesis</text><text class="t" x="390" y="133" font-size="16">#43 · Taxes</text><text class="t-s t-red" x="380" y="200" text-anchor="start">only copy: last night&#x27;s backup</text><text class="t-s t-red" x="380" y="226" text-anchor="start">restore = rewind everyone</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>DELETE is forever. The only way back is a full restore that rewinds everyone.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the recycle bin</span></h2>
+  <p>On your computer, “delete” moves a file to the <b>recycle bin</b>. It's out of sight, but one click brings it back. The bin is <b>emptied after 30 days</b>, and only then is the file truly gone.</p>
+  <ul>
+    <li>Moving to the bin is setting <b>deleted_at</b>.</li>
+    <li>The desktop not showing binned files is your <b>filtered view</b>.</li>
+    <li>Emptying the bin is the <b>purge job</b>, and you need one.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a desktop recycle bin. Throwing a file away moves it to the bin, where it can be restored. Emptying the bin after 30 days deletes it for real."><g class="rough"><g transform="translate(40 60) scale(1.6)"><g class="d"><rect class="f-paper" x="0" y="0" width="64" height="50" rx="2"/><rect x="8" y="8" width="48" height="34"/><path d="M12 38 l14 -14 l10 10 l8 -6 l10 10"/></g></g><path class="d" d="M160 100 L320 100"/><path class="d" d="M309.2 105.2 L320 100 L309.2 94.8"/><g transform="translate(340 50) scale(1.8)"><g class="d"><path class="f-y" d="M8 14 h44 l-5 46 h-34 z"/><path d="M2 14 h56 M22 14 v-8 h16 v8 M22 24 v28 M38 24 v28"/></g></g><path class="d d-dash" d="M470 100 L620 100"/><path class="d" d="M609.2 105.2 L620 100 L609.2 94.8"/><g transform="translate(640 70) scale(1.0)"><g class="d d-red"><path d="M8 8 L52 52 M52 8 L8 52"/></g></g></g><text class="t-s" x="90" y="180" text-anchor="middle">file</text><text class="t-s" x="240" y="86" text-anchor="middle">delete</text><text class="t-s t-green" x="395" y="190" text-anchor="middle">in the bin (restorable)</text><text class="t-s" x="545" y="86" text-anchor="middle">after 30 days</text><text class="t-s t-red" x="670" y="190" text-anchor="middle">gone for real</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The recycle bin: “deleted” files can come back, until the bin is emptied.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Move to the bin</td><td><code>UPDATE … SET deleted_at = now()</code></td></tr>
+      <tr><td>The desktop hides binned files</td><td>A view or default scope: <code>deleted_at IS NULL</code></td></tr>
+      <tr><td>Restore from the bin</td><td><code>SET deleted_at = NULL</code></td></tr>
+      <tr><td>Bin emptied after 30 days</td><td>A scheduled purge with a real DELETE</td></tr>
+      <tr><td>“Who deleted this?”</td><td>An optional <code>deleted_by</code> column</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">a stamp, a filter and a purge</span></h2>
+  <p>Soft delete is three small pieces. The column is easy; the <b>filter everywhere</b> and the <b>purge</b> are what make it safe.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Soft delete flow. Deleting sets deleted_at to now instead of removing the row. A view called active_projects filters deleted_at is null, and the app reads from that view. A restore sets deleted_at back to null. A nightly purge job hard-deletes rows deleted more than 30 days ago."><g class="rough"><rect class="d d-thin f-paper" x="20" y="40" width="250" height="110" rx="4"/><path class="d d-thin f-y" d="M20 44 a4 4 0 0 1 4 -4 h242 a4 4 0 0 1 4 4 v28 h-250 z"/><path class="d d-thin d-soft" d="M26 98 h238"/><path class="d d-thin d-soft" d="M26 124 h238"/><path class="d" d="M276 100 L380 70"/><path class="d" d="M371.1 78.0 L380 70 L368.2 68.0"/><rect class="d f-green" x="386" y="46" width="200" height="60" rx="10"/><path class="d" d="M592 76 L660 76"/><path class="d" d="M649.2 81.2 L660 76 L649.2 70.8"/><g transform="translate(666 50) scale(1.0)"><g class="d"><rect class="f-paper" x="0" y="0" width="64" height="44" rx="4"/><path d="M24 44 l-4 12 h24 l-4 -12"/><path d="M14 30 l10 -10 l8 8 l14 -14"/></g></g><rect class="d f-y" x="40" y="200" width="200" height="54" rx="10"/><rect class="d f-pink d-red" x="300" y="200" width="260" height="54" rx="10"/><path class="d d-dash" d="M140 196 L140 146"/><path class="d" d="M145.2 156.8 L140 146 L134.8 156.8"/><path class="d d-red d-dash" d="M430 196 L260 120"/><path class="d d-red" d="M272.0 119.6 L260 120 L267.7 129.2"/></g><text class="t-head" x="145" y="63" text-anchor="middle" font-size="17">projects</text><text class="t" x="30" y="91" font-size="16">#41 · Garden · null</text><text class="t t-soft" x="30" y="117" font-size="16">#42 · Thesis · 12 Nov</text><text class="t" x="30" y="143" font-size="16">#43 · Taxes · null</text><text class="t-s t-pen" x="145" y="30" text-anchor="middle">deleted_at</text><text class="t-s" x="300" y="36" text-anchor="start">WHERE deleted_at IS NULL</text><text class="t-head" x="486" y="83" text-anchor="middle" font-size="18">active_projects</text><text class="t-head" x="140" y="234" text-anchor="middle" font-size="17">restore: set null</text><text class="t-head t-red" x="430" y="234" text-anchor="middle" font-size="17">purge after 30 days</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Delete = stamp a date. Reads go through a filter. A purge job really deletes old rows.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Add the column</b><p><code>deleted_at timestamptz NULL</code> (a timestamp tells you <i>when</i>, which a boolean can't).</p></li>
+    <li><b>Read through a filter</b><p>A view like <code>active_projects</code>, a row-level policy, or an ORM default scope, so nobody forgets the WHERE.</p></li>
+    <li><b>Fix uniqueness</b><p>Use a <b>partial unique index</b> so a deleted slug can be reused: <code>UNIQUE (slug) WHERE deleted_at IS NULL</code>.</p></li>
+    <li><b>Decide what cascades</b><p>Soft-deleting a project may soft-delete its tasks too; write that rule down.</p></li>
+    <li><b>Purge on a schedule</b><p>Hard-delete rows older than the undo window, and anything a user asked to be erased.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Hard delete</dt><dd>Physically removing the row with DELETE.</dd></div>
+    <div><dt>Soft delete</dt><dd>Marking a row deleted but keeping it.</dd></div>
+    <div><dt>Tombstone</dt><dd>A marker that says “this was deleted”.</dd></div>
+    <div><dt>Partial index</dt><dd>An index over only the rows that match a WHERE.</dd></div>
+    <div><dt>Purge</dt><dd>The real delete that happens later.</dd></div>
+    <div><dt>Right to erasure</dt><dd>GDPR rule: personal data must really go when asked.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>soft_delete.sql</span><span>PostgreSQL</span></div>
+<pre><code><span class="k">ALTER</span> <span class="k">TABLE</span> projects <span class="k">ADD</span> <span class="k">COLUMN</span> deleted_at timestamptz;
+
+<span class="c">-- slugs only need to be unique among live rows</span>
+<span class="k">CREATE</span> <span class="k">UNIQUE</span> <span class="k">INDEX</span> projects_slug_live
+  <span class="k">ON</span> projects (slug) <span class="k">WHERE</span> deleted_at <span class="k">IS</span> <span class="k">NULL</span>;
+
+<span class="k">CREATE</span> <span class="k">VIEW</span> active_projects <span class="k">AS</span>
+  <span class="k">SELECT</span> * <span class="k">FROM</span> projects <span class="k">WHERE</span> deleted_at <span class="k">IS</span> <span class="k">NULL</span>;
+
+<span class="c">-- "delete" and "undo"</span>
+<span class="k">UPDATE</span> projects <span class="k">SET</span> deleted_at = now() <span class="k">WHERE</span> id = 42;
+<span class="k">UPDATE</span> projects <span class="k">SET</span> deleted_at = <span class="k">NULL</span>  <span class="k">WHERE</span> id = 42;
+
+<span class="c">-- nightly purge: the bin really gets emptied</span>
+<span class="k">DELETE</span> <span class="k">FROM</span> projects <span class="k">WHERE</span> deleted_at &lt; now() - interval <span class="s">'30 days'</span>;</code></pre>
+  </div>
+  <p class="aside">tools: Rails <code>discard</code>/<code>paranoia</code>, Laravel <code>SoftDeletes</code>, Django <code>django-safedelete</code>, Prisma middleware, Hibernate <code>@SoftDelete</code>. PostgreSQL row-level security can hide deleted rows for every query.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Undo</b> for users and support.</li><li><b>Related rows stay valid</b>; no surprise cascades.</li><li><b>Audit and reports</b> keep their history.</li><li><b>Cheap deletes</b>: one small UPDATE.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Every query must filter</b>, or deleted data leaks.</li><li><b>Unique constraints get tricky</b> (partial indexes needed).</li><li><b>Tables keep growing</b> until you purge.</li><li><b>Privacy risk</b>: “deleted” personal data that isn't.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Database ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>hard DELETE</b> to <b>soft delete</b> with a filtered view, a partial unique index and a purge job.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="5" data-after="3"><td>Simplicity<small>easy to reason about?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Every query needs to remember the filter.</td></tr>
+      <tr data-before="4" data-after="3"><td>Read speed<small>fast queries?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Dead rows in tables and indexes; partial indexes help.</td></tr>
+      <tr data-before="3" data-after="4"><td>Write speed<small>cheap inserts &amp; updates?</small></td><td class="dcell"></td><td class="score"></td><td class="why">An UPDATE is cheaper than a cascading DELETE.</td></tr>
+      <tr data-before="3" data-after="4"><td>Integrity<small>data stays correct?</small></td><td class="dcell"></td><td class="score"></td><td class="why">References stay valid; but forgotten filters show ghosts.</td></tr>
+      <tr data-before="4" data-after="3"><td>Scalability<small>10× more rows?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tables grow until the purge runs.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low storage cost<small>cheap to keep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Deleted rows still take space for a while.</td></tr>
+      <tr data-before="3" data-after="4"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">You can still ask “what was deleted last week?”</td></tr>
+      <tr data-before="2" data-after="4"><td>Operability<small>calm to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Undo without restoring a backup.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change shape?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral: the filter must follow every new query.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Forgetting the filter</h3><p>A new report counts deleted orders as real. <span class="fix">Fix →</span> read through a view, a default scope or row-level security.</p></li>
+    <li><h3>A boolean is_deleted</h3><p>You know it's deleted, not when, so you can't purge after 30 days. <span class="fix">Fix →</span> use <code>deleted_at</code> (and maybe <code>deleted_by</code>).</p></li>
+    <li><h3>Never purging</h3><p>“Deleted” personal data lives forever and breaks GDPR. <span class="fix">Fix →</span> schedule a purge and honour erasure requests with a real DELETE.</p></li>
+    <li><h3>Plain UNIQUE constraints</h3><p>A user can't recreate the slug they deleted yesterday. <span class="fix">Fix →</span> partial unique index on live rows only.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Users can delete things they may want back (projects, posts, files).</li><li>Rows are referenced by history you need to keep (orders, invoices).</li><li>Support needs to see what was deleted and when.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>High-churn data like sessions, carts or caches.</li><li>Personal data that must be erased on request (purge for real).</li><li>You need full history anyway, so use history tables instead.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>History tables</b></li><li><b>Indexing</b> (partial indexes)</li><li><b>Event sourcing</b> (Vol. 1)</li><li><b>Multitenancy</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why is deleted_at better than is_deleted?</summary><p>It records when the row was deleted, which you need for undo windows, purge jobs and audits.</p></details>
+    <details><summary>How do you stop deleted rows from appearing in reads?</summary><p>Read through a filtered view, an ORM default scope or a row-level security policy.</p></details>
+    <details><summary>What breaks with a normal UNIQUE (slug)?</summary><p>Deleted rows still hold the slug, so it can't be reused; use a partial unique index WHERE deleted_at IS NULL.</p></details>
+    <details><summary>Does soft delete satisfy “delete my data”?</summary><p>No. Personal data must be really erased (or anonymised), so a purge with a hard DELETE is still needed.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Delete means <span class="hl">into the bin</span>. Someone must still <span class="hl">empty the bin</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/03-soft-delete.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Brandur Leach, “Soft Deletion Probably Isn't Worth It” (blog post).</li><li>PostgreSQL docs, “Partial Indexes” and “Row Security Policies”.</li><li>Laravel docs, “Eloquent: Soft Deleting”.</li><li>GDPR Article 17, “Right to erasure”.</li></ul>
+  </div>
+  <p class="folio">03</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="surrogate-keys.html"><small>← previous note</small>02 · Surrogate Keys</a>
+  <a href="history-tables.html"><small>Next note →</small>04 · History Tables (Audit Trail)</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 3 · a student's bullet journal on data &amp; database patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

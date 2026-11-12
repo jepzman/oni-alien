@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Table Partitioning · Jef’s Notes</title>
+<meta name="description" content="Split one huge table into smaller pieces by date or key, inside one database.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-data">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 3 · data &amp; database patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="partitioning">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 15.10.26</span><span class="topic">collection · <b>growing</b></span></div>
+  <p class="kicker">a.k.a. “one drawer per year”</p>
+  <h1><span class="hl">Table Partitioning</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Split one huge table into <b>partitions</b>, smaller tables behind one name, by a <b>key you always filter on</b> (usually time, sometimes tenant or region). Queries <b>touch only the partitions they need</b> (pruning), maintenance runs per partition, and old data is removed by <b>dropping a partition</b> in a second instead of a giant DELETE. All inside one database.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> scaling data</li><li><b>Kinds:</b> range, list, hash</li><li><b>Built in:</b> PostgreSQL 10+, MySQL, SQL Server, Oracle</li><li><b>Not the same as:</b> sharding (many databases)</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Append-heavy tables like events, logs, orders and metrics grow <span class="hl-pink">forever</span>. At billions of rows, everything gets heavy, even the queries that only want last week.</p>
+  <ul>
+    <li>Indexes no longer fit in memory, so “recent” queries slow down too.</li>
+    <li>VACUUM, reindexing and backups take days.</li>
+    <li>Deleting old data with <code>DELETE</code> is slow, bloats the table and floods replicas.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of one giant events table with two billion rows from five years. Queries for last week still wade through huge indexes, vacuum runs for days, and deleting data older than a year means a DELETE of 400 million rows that bloats the table and locks things up."><g class="rough"><rect class="d d-thin f-paper" x="20" y="30" width="330" height="162" rx="4"/><path class="d d-thin f-y" d="M20 34 a4 4 0 0 1 4 -4 h322 a4 4 0 0 1 4 4 v28 h-330 z"/><path class="d d-thin d-soft" d="M26 88 h318"/><path class="d d-thin d-soft" d="M26 114 h318"/><path class="d d-thin d-soft" d="M26 140 h318"/><path class="d d-thin d-soft" d="M26 166 h318"/><rect class="f-hl" x="23" y="168" width="324" height="22" rx="2" style="stroke:none"/></g><text class="t-head" x="185" y="53" text-anchor="middle" font-size="17">events · 2 billion rows</text><text class="t" x="30" y="81" font-size="16">2022 …</text><text class="t" x="30" y="107" font-size="16">2023 …</text><text class="t" x="30" y="133" font-size="16">2024 …</text><text class="t" x="30" y="159" font-size="16">2025 …</text><text class="t" x="30" y="185" font-size="16">2026 · last week ← we want this</text><text class="t-s t-red" x="560" y="50" text-anchor="middle">indexes: 400 GB</text><text class="t-s t-red" x="560" y="90" text-anchor="middle">VACUUM: 3 days</text><text class="t-s t-red" x="560" y="130" text-anchor="middle">DELETE … &lt; 2025:</text><text class="t-s t-red" x="560" y="156" text-anchor="middle">400M rows, hours, bloat</text><text class="t-s t-pen" x="190" y="220" text-anchor="middle">last week = 0.1% of the table</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One table, five years, two billion rows: everything about it is slow, including deleting old data.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the filing cabinet</span></h2>
+  <p>An office files receipts in a cabinet with <b>one drawer per year</b>. Looking for March 2026? Open the 2026 drawer only. Time to throw away 2019? <b>Pull out the whole drawer</b> and empty it, without sorting through the others.</p>
+  <ul>
+    <li>Each drawer is a <b>partition</b>.</li>
+    <li>“Look only in 2026” is <b>partition pruning</b>.</li>
+    <li>Emptying a drawer is <b>DROP / DETACH PARTITION</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a filing cabinet with one drawer per year. To find a March 2026 receipt you open only the 2026 drawer. To throw away 2019 you pull out the whole drawer and empty it, without touching the others."><g class="rough"><g transform="translate(60 30) scale(2.6)"><g class="d"><rect class="f-y" x="4" y="0" width="52" height="64" rx="3"/><path d="M4 21 h52 M4 42 h52"/><rect x="22" y="8" width="16" height="6"/><rect x="22" y="29" width="16" height="6"/><rect x="22" y="50" width="16" height="6"/></g></g><path class="d d-green" d="M240 170 L400 170"/><path class="d d-green" d="M389.2 175.2 L400 170 L389.2 164.8"/><g transform="translate(410 130) scale(1.0)"><g class="d"><path class="f-paper" d="M6 0 h48 v62 l-8 -6 l-8 6 l-8 -6 l-8 6 l-8 -6 l-8 6 z"/><path d="M14 12 h32 M14 22 h24 M14 32 h32 M14 42 h18"/></g></g><path class="d d-red" d="M240 60 L560 60"/><path class="d d-red" d="M549.2 65.2 L560 60 L549.2 54.8"/><g transform="translate(570 30) scale(1.3)"><g class="d"><path class="f-paper" d="M8 14 h44 l-5 46 h-34 z"/><path d="M2 14 h56 M22 14 v-8 h16 v8 M22 24 v28 M38 24 v28"/></g></g></g><text class="t-s" x="140" y="228" text-anchor="middle">2024 · 2025 · 2026</text><text class="t-s t-green" x="320" y="156" text-anchor="middle">open only 2026</text><text class="t-s t-red" x="400" y="46" text-anchor="middle">pull out 2019, bin it</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One drawer per year: open only the drawer you need; throw old years out drawer by drawer.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The cabinet</td><td>The parent table <code>events</code></td></tr>
+      <tr><td>A drawer per year</td><td>A partition per month or year</td></tr>
+      <tr><td>Open only the 2026 drawer</td><td>Partition pruning on <code>WHERE at &gt; …</code></td></tr>
+      <tr><td>Bin the 2019 drawer</td><td><code>DROP TABLE events_2019</code></td></tr>
+      <tr><td>Add a drawer each January</td><td>Create next month's partition ahead of time</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">one name, many smaller tables</span></h2>
+  <p>The app still queries <code>events</code>. The database routes rows to the right partition on insert, and <b>skips partitions</b> that can't match the WHERE clause on read.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Range partitioning by month. The parent table events is split into partitions events_2026_09, events_2026_10 and events_2026_11, each a normal table with its own small indexes. A query for last week is routed only to the November partition, which is called partition pruning. Old months are detached and dropped instantly."><g class="rough"><rect class="d f-y" x="250" y="10" width="260" height="50" rx="10"/><path class="d" d="M380 64 L130 100"/><path class="d" d="M140.0 93.3 L130 100 L141.4 103.6"/><rect class="d f-paper" x="30" y="104" width="200" height="64" rx="10"/><path class="d" d="M380 64 L370 100"/><path class="d" d="M367.9 88.2 L370 100 L377.9 91.0"/><rect class="d f-paper" x="270" y="104" width="200" height="64" rx="10"/><path class="d" d="M380 64 L610 100"/><path class="d" d="M598.5 103.5 L610 100 L600.1 93.2"/><rect class="d f-green" x="510" y="104" width="200" height="64" rx="10"/><rect class="d f-pink d-red" x="30" y="210" width="300" height="56" rx="10"/><path class="d d-red d-dash" d="M130 206 L130 172"/><path class="d d-red" d="M135.2 182.8 L130 172 L124.8 182.8"/></g><text class="t-head" x="380" y="42" text-anchor="middle" font-size="18">events (parent)</text><text class="t-head" x="130" y="132" text-anchor="middle" font-size="16">events_2026_09</text><text class="t" x="130" y="156" text-anchor="middle" font-size="17">own indexes</text><text class="t-head" x="370" y="132" text-anchor="middle" font-size="16">events_2026_10</text><text class="t" x="370" y="156" text-anchor="middle" font-size="17">own indexes</text><text class="t-head" x="610" y="132" text-anchor="middle" font-size="16">events_2026_11</text><text class="t" x="610" y="156" text-anchor="middle" font-size="17">own indexes</text><text class="t-s t-green" x="590" y="200" text-anchor="middle">WHERE at &gt; now() − 7 days</text><text class="t-s t-green" x="590" y="226" text-anchor="middle">→ scans only 2026_11</text><text class="t-head t-red" x="180" y="245" text-anchor="middle" font-size="17">DROP old partition: 1 s</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Split by month: queries touch only the partitions they need; old months are dropped in a second.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Pick the key you always filter on</b><p>Usually time (<code>created_at</code>); queries without it must check every partition.</p></li>
+    <li><b>Pick the size</b><p>Partitions of roughly 10–100 GB, or one per month; hundreds is fine, tens of thousands isn't.</p></li>
+    <li><b>Create partitions ahead of time</b><p>A job (or pg_partman) creates next month's partition before rows arrive; add a DEFAULT partition as a safety net.</p></li>
+    <li><b>Index per partition</b><p>Indexes on the parent are created on every partition and stay small.</p></li>
+    <li><b>Retire old data by dropping</b><p><code>DETACH PARTITION … CONCURRENTLY</code>, archive it, then drop.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Partition</dt><dd>One piece of a partitioned table.</dd></div>
+    <div><dt>Partition key</dt><dd>Column(s) deciding which partition a row goes to.</dd></div>
+    <div><dt>Range / list / hash</dt><dd>Split by ranges, by listed values, or by a hash.</dd></div>
+    <div><dt>Partition pruning</dt><dd>Skipping partitions that can't match the query.</dd></div>
+    <div><dt>Detach</dt><dd>Turning a partition back into a standalone table.</dd></div>
+    <div><dt>Sharding</dt><dd>Partitioning across separate database servers.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>events.sql</span><span>PostgreSQL 14+</span></div>
+<pre><code><span class="k">CREATE</span> <span class="k">TABLE</span> events (
+  id         bigint GENERATED ALWAYS <span class="k">AS</span> IDENTITY,
+  account_id bigint <span class="k">NOT</span> <span class="k">NULL</span>,
+  kind       text   <span class="k">NOT</span> <span class="k">NULL</span>,
+  at         timestamptz <span class="k">NOT</span> <span class="k">NULL</span>,
+  <span class="k">PRIMARY</span> <span class="k">KEY</span> (id, at)                 <span class="c">-- the key must include the partition column</span>
+) <span class="k">PARTITION</span> <span class="k">BY</span> <span class="k">RANGE</span> (at);
+
+<span class="k">CREATE</span> <span class="k">TABLE</span> events_2026_11 <span class="k">PARTITION</span> <span class="k">OF</span> events
+  <span class="k">FOR</span> <span class="k">VALUES</span> <span class="k">FROM</span> (<span class="s">'2026-11-01'</span>) <span class="k">TO</span> (<span class="s">'2026-12-01'</span>);
+<span class="k">CREATE</span> <span class="k">TABLE</span> events_default <span class="k">PARTITION</span> <span class="k">OF</span> events <span class="k">DEFAULT</span>;
+
+<span class="k">CREATE</span> <span class="k">INDEX</span> <span class="k">ON</span> events (account_id, at);   <span class="c">-- created on every partition</span>
+
+<span class="c">-- only events_2026_11 is scanned (see "Partitions removed" in EXPLAIN)</span>
+<span class="k">SELECT</span> count(*) <span class="k">FROM</span> events <span class="k">WHERE</span> at &gt; now() - interval <span class="s">'7 days'</span>;
+
+<span class="c">-- retention: seconds, not hours</span>
+<span class="k">ALTER</span> <span class="k">TABLE</span> events DETACH <span class="k">PARTITION</span> events_2025_10 <span class="k">CONCURRENTLY</span>;
+<span class="k">DROP</span> <span class="k">TABLE</span> events_2025_10;</code></pre>
+  </div>
+  <p class="aside">tools: PostgreSQL declarative partitioning + pg_partman, TimescaleDB hypertables (automatic time partitions), MySQL partitioning, SQL Server partition schemes, BigQuery/Snowflake partitioned and clustered tables, Citus for partitioning across servers.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Fast recent queries</b> thanks to pruning and small indexes.</li><li><b>Instant retention</b>: drop a partition, not 400M rows.</li><li><b>Maintenance per partition</b>: vacuum, reindex, archive.</li><li><b>Cold partitions</b> can move to cheaper storage.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Queries without the key</b> scan every partition.</li><li><b>Unique keys must include</b> the partition column.</li><li><b>Partitions must be created</b> ahead of time.</li><li><b>More objects</b> to manage and monitor.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Database ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>one huge table</b> to the same data <b>range-partitioned by month</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to reason about?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More tables behind one name; key rules to learn.</td></tr>
+      <tr data-before="2" data-after="4"><td>Read speed<small>fast queries?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Pruning skips most of the data for time-filtered queries.</td></tr>
+      <tr data-before="3" data-after="4"><td>Write speed<small>cheap inserts &amp; updates?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Smaller indexes per partition are cheaper to update.</td></tr>
+      <tr data-before="4" data-after="3"><td>Integrity<small>data stays correct?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Global uniqueness needs the partition key.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>10× more rows?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Billions of rows stay workable in one database.</td></tr>
+      <tr data-before="3" data-after="4"><td>Low storage cost<small>cheap to keep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Old partitions are dropped or archived cheaply.</td></tr>
+      <tr data-before="4" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Queries without the key get slower.</td></tr>
+      <tr data-before="2" data-after="5"><td>Operability<small>calm to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Retention and vacuum become small, routine jobs.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change shape?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Changing the partition key later is a big migration.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Partitioning by a column you don't filter on</h3><p>Every query scans all 60 partitions. <span class="fix">Fix →</span> partition by the column in almost every WHERE.</p></li>
+    <li><h3>Too many tiny partitions</h3><p>Daily partitions for 10 years: planning gets slow. <span class="fix">Fix →</span> aim for fewer, bigger partitions.</p></li>
+    <li><h3>Forgetting to create next month</h3><p>Inserts fail at midnight on the 1st. <span class="fix">Fix →</span> automate with pg_partman; keep a DEFAULT partition and alert on it.</p></li>
+    <li><h3>Expecting it to scale writes</h3><p>One server still takes all writes. <span class="fix">Fix →</span> for more write capacity, shard across servers (Vol. 1).</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Time-series, events, logs, metrics, audit and history tables.</li><li>Data with a retention policy (keep 13 months).</li><li>Tables past ~100 GB where most queries hit a recent slice.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Tables that fit comfortably in memory.</li><li>Queries that rarely filter on any one column.</li><li>When you need more write throughput than one server (shard instead).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Indexing</b></li><li><b>History tables</b></li><li><b>Sharding</b> (Vol. 1)</li><li><b>Star schema</b></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What is partition pruning?</summary><p>The planner skipping partitions that can't contain rows matching the WHERE clause.</p></details>
+    <details><summary>Why is dropping a partition better than DELETE for retention?</summary><p>It removes a whole table instantly, with no row-by-row delete, bloat or vacuum.</p></details>
+    <details><summary>How is partitioning different from sharding?</summary><p>Partitioning splits a table within one database server; sharding spreads data across several servers.</p></details>
+    <details><summary>Why must the primary key include the partition column (in PostgreSQL)?</summary><p>Uniqueness is enforced per partition, so the key must determine the partition to be globally unique.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>One <span class="hl">drawer</span> per month. Open only the one you need; <span class="hl">bin</span> old drawers whole.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/12-partitioning.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>PostgreSQL docs, “Table Partitioning”.</li><li>pg_partman documentation.</li><li>Timescale docs, “Hypertables”.</li><li>Markus Winand, “Partitioning” on use-the-index-luke.com.</li></ul>
+  </div>
+  <p class="folio">12</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="change-data-capture.html"><small>← previous note</small>11 · Change Data Capture</a>
+  <a href="multitenancy.html"><small>Next note →</small>13 · Multitenancy</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 3 · a student's bullet journal on data &amp; database patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

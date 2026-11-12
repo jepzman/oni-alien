@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>History Tables (Audit Trail) · Jef’s Notes</title>
+<meta name="description" content="Keep every past version of a row, so you can answer “what was it on that day?”">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-data">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 3 · data &amp; database patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="history-tables">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 17.09.26</span><span class="topic">collection · <b>modelling</b></span></div>
+  <p class="kicker">a.k.a. “the medical chart”</p>
+  <h1><span class="hl">History Tables (Audit Trail)</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Keep the main table for <b>the current state</b>, and file every <b>old version</b> of a row in a <b>history table</b> with <code>valid_from</code>, <code>valid_to</code> and <b>who changed it</b>, usually via a trigger or built-in <b>system-versioned (temporal) tables</b>. Then “what was it on that day, and who changed it?” is a query, not an argument.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> data lifecycle / auditing</li><li><b>Standard:</b> SQL:2011 system-versioned tables</li><li><b>Built in:</b> SQL Server, MariaDB, Db2, Oracle Flashback</li><li><b>Pairs with:</b> soft delete, change data capture</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">An <code>UPDATE</code> <span class="hl-pink">overwrites the past</span>. That's fine for a typo, but terrible for prices, permissions, salaries or contracts, where someone will eventually ask what the value <i>was</i>.</p>
+  <ul>
+    <li>A customer disputes a charge, and you can't prove last week's price.</li>
+    <li>An admin role appeared on an account, and nobody knows who granted it.</li>
+    <li>Reports for last quarter change every time the data is corrected.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a product price row being overwritten: 20 euros becomes 25 euros. A customer complains they were charged 20 last Tuesday, but the table only knows the current price, so nobody can check who changed it or what it was."><g class="rough"><rect class="d d-thin f-paper" x="30" y="40" width="200" height="58" rx="4"/><path class="d d-thin f-y" d="M30 44 a4 4 0 0 1 4 -4 h192 a4 4 0 0 1 4 4 v28 h-200 z"/><path class="d d-red" d="M36 85 h188"/><path class="d d-red" d="M236 76 L330 76"/><path class="d d-red" d="M319.2 81.2 L330 76 L319.2 70.8"/><rect class="d d-thin f-paper" x="340" y="40" width="200" height="58" rx="4"/><path class="d d-thin f-green" d="M340 44 a4 4 0 0 1 4 -4 h192 a4 4 0 0 1 4 4 v28 h-200 z"/></g><text class="t-head" x="130" y="63" text-anchor="middle" font-size="17">products</text><text class="t t-red" x="40" y="91" font-size="16">Lamp · €20</text><text class="t-s t-red" x="283" y="62" text-anchor="middle">UPDATE</text><text class="t-head" x="440" y="63" text-anchor="middle" font-size="17">products</text><text class="t" x="350" y="91" font-size="16">Lamp · €25</text><text class="t-s t-red" x="380" y="160" text-anchor="middle">“I paid €20 on Tuesday!”</text><text class="t-s t-red" x="380" y="190" text-anchor="middle">who changed it? when? from what?</text><text class="t-s t-pen" x="380" y="220" text-anchor="middle">the table only knows “now”</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>UPDATE overwrites the past. “What was it last Tuesday?” has no answer.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the medical chart</span></h2>
+  <p>A doctor never rubs out an old reading. Each visit adds a <b>new dated line</b>. The chart shows today's numbers at the bottom, and the whole story above it.</p>
+  <ul>
+    <li>The bottom line is the <b>current row</b>.</li>
+    <li>Every line above is a <b>history row</b> with a date range.</li>
+    <li>The doctor's signature is <b>changed_by</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a medical chart. The doctor never erases old notes; each visit adds a new dated line with the new reading. To know a patient&#x27;s blood pressure in March, you read the March line."><g class="rough"><g transform="translate(40 40) scale(2.4)"><g class="d"><path class="f-paper" d="M6 0 h48 v62 l-8 -6 l-8 6 l-8 -6 l-8 6 l-8 -6 l-8 6 z"/><path d="M14 12 h32 M14 22 h24 M14 32 h32 M14 42 h18"/></g></g><path class="d" d="M560 120 L440 120"/><path class="d" d="M450.8 114.8 L440 120 L450.8 125.2"/></g><text class="t-s t-pen" x="250" y="70" text-anchor="start">3 Mar · 120/80</text><text class="t-s t-pen" x="250" y="120" text-anchor="start">9 Jun · 130/85</text><text class="t-s t-pen" x="250" y="170" text-anchor="start">1 Nov · 125/82</text><text class="t-s t-green" x="250" y="230" text-anchor="start">nothing erased, only added</text><text class="t-s" x="620" y="112" text-anchor="middle">“what was it in June?”</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A medical chart: you never erase, you add a dated line.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Today's reading</td><td>The current row in <code>products</code></td></tr>
+      <tr><td>Older dated lines</td><td>Rows in <code>products_history</code></td></tr>
+      <tr><td>“Valid from 3 Mar to 9 Jun”</td><td><code>valid_from</code> / <code>valid_to</code> (a time range)</td></tr>
+      <tr><td>The doctor's signature</td><td><code>changed_by</code></td></tr>
+      <tr><td>Never erase, only add</td><td>History is insert-only</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">current table + versioned copies</span></h2>
+  <p>Each change closes the old version's time range and opens a new one. Then <b>any point in time</b> maps to exactly one version.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="History table design. The products table holds the current row. A trigger copies the old version into products_history with valid_from, valid_to and changed_by on every update or delete. Querying history for a date finds the version whose range contains it."><g class="rough"><rect class="d d-thin f-paper" x="20" y="40" width="220" height="84" rx="4"/><path class="d d-thin f-green" d="M20 44 a4 4 0 0 1 4 -4 h212 a4 4 0 0 1 4 4 v28 h-220 z"/><path class="d d-thin d-soft" d="M26 98 h208"/><rect class="f-hl" x="23" y="100" width="214" height="22" rx="2" style="stroke:none"/><path class="d" d="M246 90 L360 90"/><path class="d" d="M349.2 95.2 L360 90 L349.2 84.8"/><rect class="d d-thin f-paper" x="366" y="20" width="360" height="110" rx="4"/><path class="d d-thin f-y" d="M366 24 a4 4 0 0 1 4 -4 h352 a4 4 0 0 1 4 4 v28 h-360 z"/><path class="d d-thin d-soft" d="M372 78 h348"/><rect class="f-hl" x="369" y="80" width="354" height="22" rx="2" style="stroke:none"/><path class="d d-thin d-soft" d="M372 104 h348"/></g><text class="t-head" x="130" y="63" text-anchor="middle" font-size="17">products</text><text class="t" x="30" y="91" font-size="16">id · name · price</text><text class="t" x="30" y="117" font-size="16">7 · Lamp · €25</text><text class="t-s" x="300" y="150" text-anchor="middle">trigger on UPDATE / DELETE</text><text class="t-head" x="546" y="43" text-anchor="middle" font-size="17">products_history</text><text class="t" x="376" y="71" font-size="16">7 · €18 · Jan–Mar · ana</text><text class="t" x="376" y="97" font-size="16">7 · €20 · Mar–Nov · ben</text><text class="t" x="376" y="123" font-size="16">7 · €25 · Nov– · now</text><text class="t-s t-pen" x="546" y="160" text-anchor="middle">valid_from · valid_to · changed_by</text><text class="t-s t-green" x="380" y="230" text-anchor="middle">price on 4 Nov → WHERE &#x27;2026-11-04&#x27; within valid range</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The main table holds “now”; a trigger files every old version, with who and when.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Create the history table</b><p>Same columns as the main table, plus <code>valid_from</code>, <code>valid_to</code>, <code>changed_by</code> and the operation.</p></li>
+    <li><b>Capture every change</b><p>A trigger on UPDATE and DELETE copies the old row; or use built-in system versioning.</p></li>
+    <li><b>Record who</b><p>Pass the app user to the database (for example <code>SET LOCAL app.user = 'ana'</code>) so the trigger can store it.</p></li>
+    <li><b>Query by time</b><p><code>WHERE valid_from &lt;= :t AND :t &lt; valid_to</code>, or <code>FOR SYSTEM_TIME AS OF</code> where supported.</p></li>
+    <li><b>Plan retention</b><p>History grows forever; partition it by month and archive or drop what you no longer need.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Audit trail</dt><dd>A record of who changed what and when.</dd></div>
+    <div><dt>System time</dt><dd>When the database stored the change.</dd></div>
+    <div><dt>Valid (business) time</dt><dd>When the fact was true in the real world.</dd></div>
+    <div><dt>Bitemporal</dt><dd>Tracking both system time and valid time.</dd></div>
+    <div><dt>Temporal table</dt><dd>A table the database versions for you.</dd></div>
+    <div><dt>Insert-only</dt><dd>Rows are added, never updated or deleted.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>history.sql</span><span>PostgreSQL trigger</span></div>
+<pre><code><span class="k">CREATE</span> <span class="k">TABLE</span> products_history (
+  LIKE products,
+  valid_from  timestamptz <span class="k">NOT</span> <span class="k">NULL</span>,
+  valid_to    timestamptz <span class="k">NOT</span> <span class="k">NULL</span> <span class="k">DEFAULT</span> now(),
+  changed_by  text,
+  op          text <span class="k">NOT</span> <span class="k">NULL</span>
+);
+
+<span class="k">CREATE</span> FUNCTION keep_history() RETURNS trigger <span class="k">AS</span> $$
+<span class="k">BEGIN</span>
+  <span class="k">INSERT</span> <span class="k">INTO</span> products_history
+  <span class="k">SELECT</span> OLD.*, OLD.updated_at, now(),            <span class="c">-- products has updated_at</span>
+         current_setting(<span class="s">'app.user'</span>, <span class="k">true</span>), TG_OP;
+  RETURN <span class="k">NULL</span>;
+<span class="k">END</span> $$ LANGUAGE plpgsql;
+
+<span class="k">CREATE</span> TRIGGER products_history AFTER <span class="k">UPDATE</span> <span class="k">OR</span> <span class="k">DELETE</span> <span class="k">ON</span> products
+  <span class="k">FOR</span> EACH <span class="k">ROW</span> EXECUTE FUNCTION keep_history();
+
+<span class="c">-- what did the lamp cost on 4 Nov?</span>
+<span class="k">SELECT</span> price <span class="k">FROM</span> products_history
+<span class="k">WHERE</span> id = 7 <span class="k">AND</span> valid_from &lt;= <span class="s">'2026-11-04'</span> <span class="k">AND</span> <span class="s">'2026-11-04'</span> &lt; valid_to;</code></pre>
+  </div>
+  <p class="aside">tools: SQL Server and MariaDB system-versioned tables, Oracle Flashback, PostgreSQL <code>temporal_tables</code> extension or triggers, Django <code>simple-history</code>, Rails <code>paper_trail</code>, Hibernate Envers. Change data capture (note 11) can feed a history store too.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Answer “what was it then?”</b> for any date.</li><li><b>Who changed what</b>: real audit trails.</li><li><b>Reproducible reports</b> for past periods.</li><li><b>Undo</b> by copying an old version back.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Every write does extra work</b> (the trigger).</li><li><b>Storage grows</b> with every change.</li><li><b>Schema changes</b> must be applied to both tables.</li><li><b>Time-range queries</b> are trickier to write.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Database ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares a table that <b>overwrites in place</b> to the same table with a <b>trigger-filled history table</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to reason about?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A trigger and a second table to understand.</td></tr>
+      <tr data-before="4" data-after="4"><td>Read speed<small>fast queries?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Current reads are untouched.</td></tr>
+      <tr data-before="4" data-after="3"><td>Write speed<small>cheap inserts &amp; updates?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Each update also writes a history row.</td></tr>
+      <tr data-before="3" data-after="5"><td>Integrity<small>data stays correct?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Every change is recorded with who and when.</td></tr>
+      <tr data-before="4" data-after="3"><td>Scalability<small>10× more rows?</small></td><td class="dcell"></td><td class="score"></td><td class="why">History grows with write volume; partition it.</td></tr>
+      <tr data-before="4" data-after="2"><td>Low storage cost<small>cheap to keep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Every version is kept.</td></tr>
+      <tr data-before="2" data-after="5"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Time-travel questions become plain SQL.</td></tr>
+      <tr data-before="3" data-after="4"><td>Operability<small>calm to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Disputes and incidents are easy to investigate.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change shape?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Schema changes touch two tables.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>History in the app only</h3><p>Some code paths (scripts, admin SQL) skip it. <span class="fix">Fix →</span> capture in the database (trigger or system versioning).</p></li>
+    <li><h3>No “who”</h3><p>You know it changed, but not by whom. <span class="fix">Fix →</span> pass the app user into the session and store it.</p></li>
+    <li><h3>Forgetting schema changes</h3><p>A new column exists in products but not in history, so the trigger fails. <span class="fix">Fix →</span> migrate both tables together; test the trigger in CI.</p></li>
+    <li><h3>Unbounded growth</h3><p>A hot table makes history 50× bigger than the data. <span class="fix">Fix →</span> partition history by month; archive old partitions.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Prices, permissions, contracts, salaries, medical or financial data.</li><li>Auditors or regulators ask “who changed this?”</li><li>You need reports “as of” a past date.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Write-heavy, low-value data (sessions, counters, caches).</li><li>Data that's already insert-only (events, logs).</li><li>You're already using event sourcing for that data.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Soft delete</b></li><li><b>Change data capture</b></li><li><b>Table partitioning</b></li><li><b>Event sourcing</b> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why put history capture in a trigger rather than the app?</summary><p>Every write path, including scripts and admin SQL, then records history; the app can't forget.</p></details>
+    <details><summary>How do you find the value at time t?</summary><p>Pick the version where valid_from ≤ t < valid_to (or use FOR SYSTEM_TIME AS OF).</p></details>
+    <details><summary>What's the difference between system time and valid time?</summary><p>System time is when the database recorded it; valid time is when it was true in the real world. Tracking both is bitemporal.</p></details>
+    <details><summary>How do you stop history from growing forever?</summary><p>Partition it by time and archive or drop partitions past the retention period.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Never <span class="hl">rub out</span> the chart. Add a <span class="hl">dated line</span>, and sign it.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/04-history-tables.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>SQL:2011 standard, temporal features (Kulkarni &amp; Michels, SIGMOD Record 2012).</li><li>Microsoft docs, “Temporal tables” (SQL Server).</li><li>Richard Snodgrass, <i>Developing Time-Oriented Database Applications in SQL</i>.</li><li>Martin Fowler, “Temporal Patterns” and “Bitemporal History”.</li></ul>
+  </div>
+  <p class="folio">04</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="soft-delete.html"><small>← previous note</small>03 · Soft Delete</a>
+  <a href="indexing.html"><small>Next note →</small>05 · Indexing</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 3 · a student's bullet journal on data &amp; database patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

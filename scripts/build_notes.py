@@ -47,6 +47,17 @@ FRONTEND_ATTRS = [
     ("Developer experience", "pleasant to build with?", "Fast feedback, clear errors, little boilerplate."),
     ("Team scalability", "many devs at once?", "Teams can work in parallel without stepping on each other."),
 ]
+DATA_ATTRS = [
+    ("Simplicity", "easy to reason about?", "A new teammate can read the schema and the queries and predict what happens."),
+    ("Read speed", "fast queries?", "How quickly the typical reads come back."),
+    ("Write speed", "cheap inserts &amp; updates?", "How much work each insert, update or delete costs."),
+    ("Integrity", "data stays correct?", "Constraints and transactions that stop wrong, duplicate or lost rows."),
+    ("Scalability", "10× more rows?", "Keeps working when tables and traffic grow by 10× or 100×."),
+    ("Low storage cost", "cheap to keep?", "Disk, memory, indexes and backups. High = cheap."),
+    ("Query flexibility", "answer new questions?", "New and ad-hoc questions are easy to ask with plain SQL."),
+    ("Operability", "calm to run?", "Backups, migrations, monitoring and on-call stay boring."),
+    ("Evolvability", "easy to change shape?", "Adding columns, tables and features without big rewrites."),
+]
 
 # ---------------------------------------------------------------- journals
 JOURNALS = [
@@ -56,7 +67,7 @@ JOURNALS = [
         kicker="property of a very caffeinated student",
         lead="My class notes on <span class=\"hl\">distributed design patterns</span>, written up properly. {n} patterns in {c} collections. Each note covers the problem a pattern solves, a real-life analogy with doodles, how it works, what you gain and lose, how it scores on nine architecture characteristics, and the mistakes people make with it.",
         blurb="Resilience, data consistency, communication, scaling data and coordination for systems that run on more than one machine.",
-        attrs=DISTRIBUTED_ATTRS, attrs_title="The nine ratings", attrs_side="architecture characteristics",
+        attrs=DISTRIBUTED_ATTRS, attrs_title="The nine ratings", ratings_h2="Architecture ratings", attrs_side="architecture characteristics",
         handmade={"circuit-breaker", "saga"},
         collections=[
             ("resilience", "Resilience", "keep one failure from becoming everyone's failure"),
@@ -92,7 +103,7 @@ JOURNALS = [
         kicker="sketched between lectures and code reviews",
         lead="My notes on <span class=\"hl\">frontend design patterns</span>: the shapes that keep UIs fast, accessible and easy to change. {n} patterns in {c} collections, with the same eight sections as volume 1, rated on nine <b>frontend</b> qualities like bundle size, accessibility and developer experience. Examples use React + TypeScript, but the ideas travel.",
         blurb="Components, state and data, rendering and performance, and architecture for UIs that stay fast and easy to change.",
-        attrs=FRONTEND_ATTRS, attrs_title="The nine frontend ratings", attrs_side="qualities that matter in the browser",
+        attrs=FRONTEND_ATTRS, attrs_title="The nine frontend ratings", ratings_h2="Ratings", attrs_side="qualities that matter in the browser",
         handmade=set(),
         collections=[
             ("components", "Components", "split the UI into pieces that are easy to reuse"),
@@ -118,21 +129,52 @@ JOURNALS = [
             (15, "error-boundaries", "Error Boundaries", "architecture", "Catch a crashing part of the UI and show a fallback, instead of a blank page."),
         ],
     ),
+    dict(
+        key="data", vol=3, title="Data & Database Patterns", short="data &amp; database patterns",
+        theme="theme-data", subject="databases", term="Fall term · 2026", weekdays=(0, 3), start=date(2026, 9, 7),
+        kicker="written in a ledger, between EXPLAIN plans",
+        lead="My notes on <span class=\"hl\">data &amp; database patterns</span>: how to shape tables, read them fast, change them safely and keep them healthy as they grow. {n} patterns in {c} collections, with the same eight sections as the other volumes, rated on nine <b>database</b> qualities like read speed, write speed, integrity and storage cost. Examples use PostgreSQL, but the ideas work in most SQL databases.",
+        blurb="Modelling, fast reads, safe changes and growing tables: the patterns that keep a database correct, quick and calm to run.",
+        attrs=DATA_ATTRS, attrs_title="The nine database ratings", attrs_side="what a DBA would ask about", ratings_h2="Database ratings",
+        handmade=set(),
+        collections=[
+            ("modelling", "Modelling", "shape the tables before the data piles up"),
+            ("reading", "Reading fast", "get answers back without scanning everything"),
+            ("changing", "Changing safely", "write, migrate and share changes without losing data"),
+            ("growing", "Growing", "keep it healthy at 100× the rows and tenants"),
+        ],
+        catalogue=[
+            (1, "normalization", "Normalization", "modelling", "Store each fact once so it can't disagree with itself; copy it only on purpose."),
+            (2, "surrogate-keys", "Surrogate Keys", "modelling", "Give every row a meaningless, stable id instead of keying on real-world values."),
+            (3, "soft-delete", "Soft Delete", "modelling", "Mark rows as deleted instead of removing them, so they can be restored or audited."),
+            (4, "history-tables", "History Tables (Audit Trail)", "modelling", "Keep every past version of a row, so you can answer “what was it on that day?”"),
+            (5, "indexing", "Indexing", "reading", "Keep a sorted lookup next to the table so queries jump to rows instead of scanning."),
+            (6, "n-plus-one", "Batch Loading (Fixing N+1)", "reading", "Fetch related rows in one query instead of one query per row."),
+            (7, "keyset-pagination", "Keyset Pagination", "reading", "Page with “after this key”, not OFFSET, so page 1,000 is as fast as page 1."),
+            (8, "materialized-views", "Materialized Views", "reading", "Save the result of an expensive query as a table and refresh it on a schedule."),
+            (9, "optimistic-locking", "Optimistic Locking", "changing", "Detect when someone else changed a row first, instead of silently overwriting it."),
+            (10, "expand-contract", "Expand & Contract Migrations", "changing", "Change the schema in small backward-compatible steps, with no downtime."),
+            (11, "change-data-capture", "Change Data Capture", "changing", "Stream every committed change from the database log to other systems."),
+            (12, "partitioning", "Table Partitioning", "growing", "Split one huge table into smaller pieces by date or key, inside one database."),
+            (13, "multitenancy", "Multitenancy", "growing", "Serve many customers from one database while keeping each one's data apart."),
+            (14, "connection-pooling", "Connection Pooling", "growing", "Reuse a small set of open connections instead of opening one per request."),
+            (15, "star-schema", "Star Schema", "growing", "Shape analytics data as facts surrounded by dimensions, for fast reports."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
 PLANNED = [
-    (3, "Testing Patterns", "Test doubles, contract tests, property-based tests, test pyramids and flaky-test hunting."),
-    (4, "Security Patterns", "Zero trust, secrets handling, OAuth flows, input validation and threat modelling for builders."),
-    (5, "Cloud &amp; DevOps Patterns", "Blue–green and canary releases, infrastructure as code, GitOps, observability and cost control."),
-    (6, "Data &amp; Database Patterns", "Indexing, migrations, soft deletes, multitenancy, change data capture and analytics pipelines."),
+    (4, "Testing Patterns", "Test doubles, contract tests, property-based tests, test pyramids and flaky-test hunting."),
+    (5, "Security Patterns", "Zero trust, secrets handling, OAuth flows, input validation and threat modelling for builders."),
+    (6, "Cloud &amp; DevOps Patterns", "Blue–green and canary releases, infrastructure as code, GitOps, observability and cost control."),
     (7, "AI App Patterns", "Retrieval-augmented generation, agents and tools, evaluation, guardrails and cost-aware LLM apps."),
 ]
 FUTURE_LOG = [
-    ("Dec 2026", [("•", "Vol. 3 · Testing Patterns: first notes"), ("•", "Vol. 2 extra notes: Debounce &amp; Throttle, Progressive Enhancement")]),
-    ("Jan 2027", [("•", "Vol. 4 · Security Patterns"), ("•", "Search across every journal")]),
-    ("Feb 2027", [("•", "Vol. 5 · Cloud &amp; DevOps Patterns"), ("•", "One-page printable cheat sheet per collection")]),
-    ("Mar 2027", [("•", "Vol. 6 · Data &amp; Database Patterns"), ("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
+    ("Dec 2026", [("•", "Vol. 4 · Testing Patterns: first notes"), ("•", "Vol. 2 extra notes: Debounce &amp; Throttle, Progressive Enhancement")]),
+    ("Jan 2027", [("•", "Vol. 5 · Security Patterns"), ("•", "Search across every journal")]),
+    ("Feb 2027", [("•", "Vol. 6 · Cloud &amp; DevOps Patterns"), ("•", "One-page printable cheat sheet per collection")]),
+    ("Mar 2027", [("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes"), ("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
     ("Apr 2027", [("•", "Vol. 7 · AI App Patterns"), ("•", "Quiz mode that remembers your score")]),
     ("Someday", [("•", "Static Generation &amp; ISR, Offline-first, Feature Flags (Vol. 2)"), ("•", "A “compare two patterns” page")]),
 ]
@@ -346,7 +388,7 @@ def render_note(j, n):
       {li(n["losses"])}
     </div>
   </div>''',
-        h2(5, "ratings", "Ratings" if j["key"] == "frontend" else "Architecture ratings", "1 = poor · 5 = great"),
+        h2(5, "ratings", j["ratings_h2"], "1 = poor · 5 = great"),
         f'  <p>{n["baseline"]}</p>',
         ratings_table(j, n["ratings"]),
         h2(6, "pitfalls", "Common pitfalls", n.get("pitfalls_side", "the usual ways this goes wrong")),

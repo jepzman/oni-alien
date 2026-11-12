@@ -8,6 +8,7 @@ Live site: https://jepzman.github.io/oni-alien/
 |---|---|---|---|---|
 | 1 | Distributed Design Patterns (`/distributed/`) | 18 | dot grid, mustard / sage / dusty pink | architecture characteristics (simplicity, cost, deployability, testability, scalability, elasticity, fault tolerance, performance, evolvability) |
 | 2 | Frontend Design Patterns (`/frontend/`) | 15 | square grid, lavender / teal / coral | frontend qualities (simplicity, reusability, testability, maintainability, performance, bundle size, accessibility, developer experience, team scalability) |
+| 3 | Data & Database Patterns (`/data/`) | 15 | ledger paper (ruled lines, double red margin), ledger green / burnt orange / sky blue | database qualities (simplicity, read speed, write speed, integrity, scalability, storage cost, query flexibility, operability, evolvability) |
 
 The landing page (`/`) shows the shelf, planned volumes and a “future log” of upcoming work.
 
@@ -21,7 +22,7 @@ The landing page (`/`) shows the shelf, planned volumes and a “future log” o
   - `notes/*.html`, `all.html`: redirects from the old Vol. 1 URLs
 - `content/<journal>/*.py`: note content as data, including the doodles
 - `scripts/build_notes.py`: journal configs (`JOURNALS`, `PLANNED`, `FUTURE_LOG`) and the page templates
-- `scripts/doodle.py`: the hand-drawn SVG helpers, icon library and code highlighter
+- `scripts/doodle.py`: the hand-drawn SVG helpers (including `table()` for database tables), icon library and code highlighter (JS/TS, Python and SQL keywords)
 - `scripts/build-pdf.mjs`: builds `public/<journal>/pdf/` (one PDF per note + the whole journal) with Playwright
 
 ## Editing

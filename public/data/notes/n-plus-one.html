@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Batch Loading (Fixing N+1) · Jef’s Notes</title>
+<meta name="description" content="Fetch related rows in one query instead of one query per row.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css">
+<link rel="stylesheet" href="../../assets/bujo.css">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js" defer></script>
+</head>
+<body class="bujo theme-data">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 3 · data &amp; database patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="n-plus-one">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 24.09.26</span><span class="topic">collection · <b>reading fast</b></span></div>
+  <p class="kicker">a.k.a. “take the shopping list”</p>
+  <h1><span class="hl">Batch Loading (Fixing N+1)</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>The <b>N+1 problem</b>: load a list with one query, then run <b>one more query per row</b> to load something related. Fix it by <b>batch loading</b>: collect the ids and fetch the related rows in <b>one query</b> (a JOIN, <code>WHERE id = ANY(…)</code>, an ORM's eager loading, or a DataLoader). The number of queries stays <b>constant</b> however long the list gets.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> query performance</li><li><b>Usual cause:</b> ORM lazy loading in a loop</li><li><b>Fixes:</b> JOIN, eager loading, IN / ANY, DataLoader</li><li><b>Pairs with:</b> indexing, keyset pagination</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Each query is fast, so nobody notices. But a page that loads 50 posts and then each post's author makes <span class="hl-pink">51 round trips</span>. With comments and likes it's 151. Latency adds up, and the database drowns in tiny queries.</p>
+  <ul>
+    <li>ORMs make it invisible: <code>post.author.name</code> looks like a field, but it's a query.</li>
+    <li>Fine in development with 5 rows; slow in production with 500.</li>
+    <li>GraphQL resolvers make it worse: every field can trigger its own query.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a blog page listing 50 posts. The code loads the posts with one query, then inside a loop loads each post&#x27;s author with another query, so 51 queries go to the database. Each is fast, but together they take 400 milliseconds."><g class="rough"><rect class="d f-blue" x="20" y="30" width="160" height="60" rx="10"/><rect class="d f-y" x="560" y="70" width="170" height="110" rx="10"/><path class="d" d="M186 50 L554 90"/><path class="d" d="M542.7 94.0 L554 90 L543.8 83.6"/><path class="d d-red" d="M186 100 L554 124"/><path class="d d-red" d="M542.9 128.5 L554 124 L543.6 118.1"/><path class="d d-red" d="M186 122 L554 134"/><path class="d d-red" d="M543.0 138.9 L554 134 L543.4 128.4"/><path class="d d-red" d="M186 144 L554 144"/><path class="d d-red" d="M543.2 149.2 L554 144 L543.2 138.8"/><path class="d d-red" d="M186 166 L554 154"/><path class="d d-red" d="M543.4 159.6 L554 154 L543.0 149.1"/><path class="d d-red" d="M186 188 L554 164"/><path class="d d-red" d="M543.6 169.9 L554 164 L542.9 159.5"/></g><text class="t-head" x="100" y="56" text-anchor="middle">app loop</text><text class="t" x="100" y="80" text-anchor="middle" font-size="17">for post in posts</text><text class="t-head" x="645" y="132" text-anchor="middle">database</text><text class="t-s" x="370" y="56" text-anchor="middle">1 · SELECT posts</text><text class="t-s t-red" x="370" y="210" text-anchor="middle">+ 50 × SELECT author WHERE id = ?</text><text class="t-s t-red" x="370" y="240" text-anchor="middle">51 round trips · 400 ms</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>1 query for the list + 1 per row = N+1 round trips.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the shopping list</span></h2>
+  <p>You need 20 things from the shop. You could drive there, buy one, drive home, and repeat twenty times. Or you could take the <b>whole list</b> in one trip. The driving, not the shopping, is what takes time.</p>
+  <ul>
+    <li>Each drive is a <b>round trip</b> to the database.</li>
+    <li>Writing the list first is <b>collecting the ids</b>.</li>
+    <li>Fetching everything at once is <b>batch loading</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a shopper with a list of 20 items who drives to the shop, buys one item, drives home, and repeats twenty times. The smart shopper takes the whole list in one trip."><g class="rough"><g transform="translate(320 30) scale(1.6)"><g class="d"><rect class="f-paper" x="4" y="22" width="60" height="38"/><path class="f-paper" d="M0 22 l8 -16 h52 l8 16 z"/><rect x="26" y="38" width="16" height="22"/></g></g><g transform="translate(20 40) scale(1.4)"><g class="d"><rect class="f-paper" x="6" y="0" width="44" height="64" rx="2"/><circle cx="40" cy="34" r="3"/></g></g><path class="d d-red" d="M100 50 L310 60"/><path class="d d-red" d="M299.0 64.7 L310 60 L299.5 54.3"/><path class="d d-red" d="M100 76 L310 70"/><path class="d d-red" d="M299.3 75.5 L310 70 L299.0 65.1"/><path class="d d-red" d="M100 102 L310 80"/><path class="d d-red" d="M299.8 86.3 L310 80 L298.7 75.9"/><path class="d d-red" d="M100 128 L310 90"/><path class="d d-red" d="M300.3 97.1 L310 90 L298.4 86.8"/><g transform="translate(560 60) scale(1.2)"><g class="d"><rect class="f-y" x="0" y="0" width="48" height="62" rx="3"/><path d="M10 12 h28 M10 22 h20 M10 32 h26 M10 42 h18 M10 52 h24"/></g></g><path class="d d-green" d="M550 100 L436 80"/><path class="d d-green" d="M447.5 76.7 L436 80 L445.7 87.0"/></g><text class="t-s t-pen" x="55" y="150" text-anchor="middle">home</text><text class="t-s t-red" x="160" y="190" text-anchor="middle">20 trips, 1 item each</text><text class="t-s t-green" x="600" y="190" text-anchor="middle">1 trip, whole list</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Twenty trips for twenty items, or one trip with the list.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>One item per trip</td><td>One query per row in a loop</td></tr>
+      <tr><td>The drive</td><td>Network round trip + query overhead</td></tr>
+      <tr><td>Writing the shopping list</td><td>Collecting <code>author_id</code>s from the posts</td></tr>
+      <tr><td>One trip with the list</td><td><code>WHERE id = ANY($1)</code> or a JOIN</td></tr>
+      <tr><td>Unpacking at home</td><td>Matching authors to posts in memory</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">collect, fetch once, match</span></h2>
+  <p>The fix is always the same shape: <b>don't query inside a loop</b>. Either join in SQL, or gather the keys and make one batched query per relationship.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Batch loading. Query one loads 50 posts. The app collects the 50 author ids and sends a second query with WHERE id = ANY of the list. The authors are matched to posts in memory. Two round trips instead of fifty-one."><g class="rough"><rect class="d f-blue" x="20" y="40" width="160" height="60" rx="10"/><rect class="d f-y" x="560" y="60" width="170" height="110" rx="10"/><path class="d d-green" d="M186 60 L554 80"/><path class="d d-green" d="M542.9 84.6 L554 80 L543.5 74.2"/><path class="d d-green" d="M186 90 L554 140"/><path class="d d-green" d="M542.6 143.7 L554 140 L544.0 133.4"/><rect class="d f-green" x="20" y="170" width="300" height="60" rx="10"/></g><text class="t-head" x="100" y="77" text-anchor="middle">app</text><text class="t-head" x="645" y="122" text-anchor="middle">database</text><text class="t-s t-green" x="370" y="52" text-anchor="middle">1 · SELECT posts LIMIT 50</text><text class="t-s t-green" x="370" y="150" text-anchor="middle">2 · authors WHERE id = ANY(…)</text><text class="t-head" x="170" y="207" text-anchor="middle" font-size="17">match author_id → author</text><text class="t-s t-green" x="560" y="230" text-anchor="middle">2 round trips · 9 ms</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Collect the ids, fetch them all at once, match in memory: 2 queries, whatever N is.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Spot it</b><p>Count queries per request (ORM logs, APM traces). A count that grows with the list size is the tell.</p></li>
+    <li><b>Join when it's one-to-one</b><p><code>JOIN authors</code> brings the author along on each post row.</p></li>
+    <li><b>Batch when it's one-to-many</b><p>Comments per post: a second query with <code>WHERE post_id = ANY(…)</code>, avoiding a giant row-multiplying join.</p></li>
+    <li><b>Use the ORM's eager loading</b><p><code>includes</code> (Rails), <code>select_related</code> / <code>prefetch_related</code> (Django), <code>include</code> (Prisma), <code>JOIN FETCH</code> (JPA).</p></li>
+    <li><b>In GraphQL, use DataLoader</b><p>It collects every key requested in one tick and makes one batched call.</p></li>
+    <li><b>Guard it in tests</b><p>Assert the query count for key pages so a regression fails CI.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>N+1 query</dt><dd>1 query for a list + 1 per item.</dd></div>
+    <div><dt>Lazy loading</dt><dd>Related data is fetched when first accessed.</dd></div>
+    <div><dt>Eager loading</dt><dd>Related data is fetched up front, in batches.</dd></div>
+    <div><dt>Round trip</dt><dd>Send a query, wait for the answer.</dd></div>
+    <div><dt>DataLoader</dt><dd>A helper that batches and caches lookups per request.</dd></div>
+    <div><dt>Row explosion</dt><dd>A join that multiplies rows (posts × comments).</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>posts.ts</span><span>node-postgres</span></div>
+<pre><code><span class="c">// ✗ N+1: one query per post</span>
+<span class="k">for</span> (<span class="k">const</span> p <span class="k">of</span> posts) {
+  p.author = (<span class="k">await</span> db.query(<span class="s">"SELECT * FROM authors WHERE id = $1"</span>, [p.author_id])).rows[0];
+}
+
+<span class="c">// ✓ batch: two queries, however many posts</span>
+<span class="k">const</span> posts = (<span class="k">await</span> db.query(<span class="s">"SELECT * FROM posts ORDER BY id DESC LIMIT 50"</span>)).rows;
+<span class="k">const</span> ids = [...<span class="k">new</span> Set(posts.map((p) =&gt; p.author_id))];
+<span class="k">const</span> authors = (<span class="k">await</span> db.query(<span class="s">"SELECT * FROM authors WHERE id = ANY($1)"</span>, [ids])).rows;
+<span class="k">const</span> byId = <span class="k">new</span> Map(authors.map((a) =&gt; [a.id, a]));
+<span class="k">for</span> (<span class="k">const</span> p <span class="k">of</span> posts) p.author = byId.get(p.author_id);
+
+<span class="c">// the same with an ORM (Prisma): include = eager loading</span>
+<span class="k">await</span> prisma.post.findMany({ take: 50, include: { author: <span class="k">true</span> } });</code></pre>
+  </div>
+  <p class="aside">tools: ORM eager loading, GraphQL DataLoader, Bullet (Rails) and nplusone (Django) detectors, Sentry/Datadog “N+1 query” detection, query-count assertions in tests.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Constant query count</b>: 2 queries for 10 or 10,000 rows.</li><li><b>Much lower latency</b>: round trips dominate small queries.</li><li><b>Less database load</b>: fewer parses, fewer connections held.</li><li><b>Predictable pages</b> as data grows.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>A little more code</b> (or ORM hints) per relationship.</li><li><b>Over-fetching</b> if you eager-load things you don't show.</li><li><b>Big joins can multiply rows</b> if used for one-to-many.</li><li><b>Huge id lists</b> need chunking.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Database ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>lazy loading in a loop</b> to the same page with <b>batched / eager loading</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="4"><td>Simplicity<small>easy to reason about?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One more line of ORM hints; same idea everywhere.</td></tr>
+      <tr data-before="1" data-after="5"><td>Read speed<small>fast queries?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Dozens of round trips become two.</td></tr>
+      <tr data-before="3" data-after="3"><td>Write speed<small>cheap inserts &amp; updates?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Integrity<small>data stays correct?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="1" data-after="5"><td>Scalability<small>10× more rows?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Query count no longer grows with the page size.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low storage cost<small>cheap to keep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Batched loaders compose for nested data.</td></tr>
+      <tr data-before="2" data-after="4"><td>Operability<small>calm to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Far fewer tiny queries flooding the database.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change shape?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New relations need their own batch rule.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Eager-loading everything</h3><p>Every request loads comments, likes and tags it never shows. <span class="fix">Fix →</span> load only what the view renders.</p></li>
+    <li><h3>A JOIN for one-to-many</h3><p>Posts × comments returns 50,000 rows for 50 posts. <span class="fix">Fix →</span> use a second batched query for collections.</p></li>
+    <li><h3>Batching without an index</h3><p><code>WHERE post_id = ANY(…)</code> still scans the table. <span class="fix">Fix →</span> index the foreign key column.</p></li>
+    <li><h3>Fixing it once</h3><p>A new field in a template brings the N+1 back. <span class="fix">Fix →</span> assert query counts in tests or use a detector.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Any list page that shows related data.</li><li>GraphQL APIs (use DataLoader by default).</li><li>Background jobs that loop over many rows.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Detail pages that load a single row and its relations.</li><li>Relations that are rarely accessed and expensive to load.</li><li>When a denormalized read model already holds what you need.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><b>Indexing</b></li><li><b>Keyset pagination</b></li><li><b>Materialized views</b></li><li><b>Server-state cache</b> (Vol. 2)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>How do you recognize an N+1 problem?</summary><p>The number of queries per request grows with the number of rows shown.</p></details>
+    <details><summary>JOIN or second query for comments per post?</summary><p>A second batched query: a JOIN multiplies post rows by comment rows.</p></details>
+    <details><summary>What does DataLoader do?</summary><p>Collects all the keys requested during one tick and loads them in one batched call, caching per request.</p></details>
+    <details><summary>Why are 50 fast queries slower than 1 medium one?</summary><p>Each has a network round trip and per-query overhead; latency adds up even if each query is quick.</p></details>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Never <span class="hl">query in a loop</span>. Write the <span class="hl">list</span>, make <span class="hl">one trip</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/06-n-plus-one.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Rails Guides, “Active Record Query Interface: Eager Loading Associations”.</li><li>Django docs, <code>select_related</code> and <code>prefetch_related</code>.</li><li>GraphQL DataLoader README (github.com/graphql/dataloader).</li><li>Sentry docs, “N+1 Queries” performance issue.</li></ul>
+  </div>
+  <p class="folio">06</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="indexing.html"><small>← previous note</small>05 · Indexing</a>
+  <a href="keyset-pagination.html"><small>Next note →</small>07 · Keyset Pagination</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 3 · a student's bullet journal on data &amp; database patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>
