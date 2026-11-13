@@ -164,6 +164,11 @@ class Diagram:
         self.items.append("".join(s))
         return self
 
+    def raw(self, fragment):
+        """Hand-written SVG (e.g. Venn diagrams), drawn with the nodes."""
+        self.items.append(fragment)
+        return self
+
     def text(self, x, y, txt, cls="dt", anchor="start"):
         self.texts.append(f'<text class="{cls}" x="{x}" y="{y}" text-anchor="{anchor}">{esc(txt)}</text>')
         return self
@@ -204,13 +209,14 @@ class Diagram:
 
 
 def code(text, title=None):
-    """A plain code card (YAML, Dockerfile): no prompts; '#' comments dimmed."""
+    """A plain code card (YAML, Dockerfile, SQL): no prompts; '#' and '--' comments dimmed."""
     rows = []
     for line in text.strip("\n").split("\n"):
-        body, sep, com = line.partition("  # ")
-        if line.lstrip().startswith("#"):
+        mark = "  -- " if "  -- " in line else "  # "
+        body, sep, com = line.partition(mark)
+        if line.lstrip().startswith(("#", "--")):
             rows.append(f'<span class="c">{esc(line)}</span>')
         else:
-            rows.append(esc(body) + (f' <span class="c"># {esc(com)}</span>' if sep else ""))
+            rows.append(esc(body) + (f' <span class="c">{mark.strip()} {esc(com)}</span>' if sep else ""))
     head = f'<figcaption>{title}</figcaption>' if title else ""
     return f'<figure class="term plain">{head}<pre><code>' + "\n".join(rows) + "</code></pre></figure>"

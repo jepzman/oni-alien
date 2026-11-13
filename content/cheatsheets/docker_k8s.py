@@ -389,7 +389,7 @@ kubectl get pod <pod> -o yaml  # the real spec + status
 <li><code>--force --grace-period=0</code>: last resort</li>
 </ul>''', "warn"),
         box("No traffic? Walk the path", '''
-<ol class="steps">
+<ol class="cs-steps">
 <li><code>kubectl get endpoints web</code>: empty means the selector doesn't match the pod labels, or no pod is Ready.</li>
 <li><code>port-forward</code> to a pod, then to the Service: which hop fails?</li>
 <li>DNS from inside: <code>kubectl run tmp --rm -it --image=busybox:1.36 -- nslookup web.shop</code></li>

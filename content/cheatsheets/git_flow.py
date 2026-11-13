@@ -160,7 +160,7 @@ git merge origin/develop
 git push
 ''') + '<p class="fine">Do it daily: small syncs = small conflicts.</p>', "dev"),
         box("Resolve a conflict", '''
-<ol class="steps">
+<ol class="cs-steps">
 <li><code>git status</code> lists the conflicted files</li>
 <li>Edit each one: keep the right code, delete the <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code> <code>=======</code> <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> markers</li>
 <li>Run the tests, then <code>git add &lt;file&gt;</code></li>

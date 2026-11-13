@@ -41,6 +41,7 @@ a subway-map branch diagram on top and boxed panels below (3 columns on desktop 
 |---|---|---|
 | Git Flow (`/cheatsheets/git-flow/`) | 4 | the branch map, everyday work and merge strategies, releases and UAT fixes, hotfixes, emergencies and undo |
 | Docker & Kubernetes (`/cheatsheets/docker-kubernetes/`) | 4 | Docker and Compose, the Kubernetes object map and kubectl, rollouts, probes, resources and config, pod troubleshooting |
+| SQL (`/cheatsheets/sql/`) | 4 | query order and NULLs, joins as Venn diagrams, set operations and CTEs, window functions, upserts and paging, indexes, EXPLAIN and transactions |
 
 - Content: `content/cheatsheets/<name>.py` (`PAGES`, each with an optional `figure`, `legend`, `strategies` and a list of `box()` panels).
 - Helpers: `scripts/cheatsheet.py` (`Graph` for git graphs, `Diagram` for box-and-arrow maps, `cmd()` terminal blocks, `code()` YAML/Dockerfile cards, `box()` panels); styles in `public/assets/cheatsheet.css`.
