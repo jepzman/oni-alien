@@ -50,6 +50,7 @@ built from `content/larder/casefile.py`.
 | Sanne | Delivery manager (joins January 2026; narrator of book 3) | the Rotterdam launch: dates, risks, dependencies |
 | Mo | Key account manager, Larder for Business (joins March 2026; narrator of book 4) | Korenwolf, the first business client |
 | Noor | Product designer, ordering & customer apps (joins 9 February 2026) | the moments customers feel; part of Grace's product trio with Ben |
+| Jonas | Product owner, Larder for Business (joins 3 January 2028; takes over from Grace by 28 February 2028) | office managers, service levels, renewals |
 
 Grace came from a hotel-booking start-up. She owns the **ordering journey and the customer apps**: basket,
 checkout, slots and **substitutions**; her team is Ben's orders team plus Dee's mobile team. She reports to Priya.
@@ -167,6 +168,9 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
 | 0024 | One master and one owner per kind of data | 2027-08-02 | Accepted |
 | 0025 | Billing off the ordering path: orders accepted, invoice lines queued | 2027-12-06 | Accepted |
 | 0026 | One region (three zones), pilot light in a second region, with four triggers (revisits 0017) | 2028-01-24 | Accepted |
+| 0027 | Ordering owns its own database; others use events and the Ordering API | 2028-04-21 | Accepted (done 21 Aug 2028) |
+| 0028 | Managed search for the catalogue (go with changes) | 2028-05-19 | Accepted |
+| 0029 | A third payment method (led by Cho) | 2028-09 | Accepted |
 
 ## Book 2, Vol. 1: Grace's facts (October 2025 → January 2026)
 
@@ -410,6 +414,37 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
 - **Larder Plus** (Grace's case 22 Feb; Femke decided 1 Mar 2027): free delivery for €7.99/month, launch June 2027;
   Antwerp French release in May. Measures: Plus members order ≥ 30 % more often; 5,000 members by 1 Sep 2027 (check-in).
 
+## Book 2, Vol. 6: Grace's facts (April → December 2027)
+
+- **City playbook** (5 Apr, for Utrecht 12 Apr): configuration vs local, a launch rhythm, five daily numbers; Utrecht app
+  work 6 days (Rotterdam: 6 weeks); week 1 tickets 2.9 per 100; 2nd orders 46 %. v2 The Hague (Jun), v3 Antwerp (Oct).
+- **Business portal** (live May; review 7 Jun): skip, change, add, see next delivery until 16:00 the day before;
+  approvals above budget; 80 % of changes in the portal by week 4; Mo's re-typing 12 h → 2 h a week; invoice fixes 9 → 1.
+- **Larder Plus pricing** (14 Jun–12 Jul): survey of 1,100 (acceptable €5–€9); new sign-ups A €6.99 / B €7.99, first
+  month free; sign-up 3.4 % vs 3.1 %; revenue per visitor +6 % at €7.99 → €7.99 (A's 610 members keep €6.99 for 12
+  months). 1 Sep: 5,400 members, ordering 34 % more often.
+- **B2B vs B2C** (5 Jul): one ordering core, two front doors. Four office clients (Korenwolf + three).
+- **Substitution platform** (19 Jul): owned by Ben's team; customers: consumer app, portal, Plus, picker app; three
+  copies retired by Oct.
+- **Localisation** (2 Aug): French shipped in May; 40 Antwerp households tested in July and September; Belgian VAT
+  (6 %/21 %), Bancontact first, fr-BE and nl-BE by native writers; Antwerp week 1: 2.4 tickets per 100.
+- **Accessibility** (16 Aug): 41 issues; swap timer fixed (announce at 1:00 and 0:00; "more time"); 5 disabled testers;
+  all fixed by Nov; "more time" used by 6 % of all customers.
+- **Product-led growth** (from 6 Sep): first-order welcome and guaranteed slot (2nd order ≤ 30 days 41 → 49 %); Plus
+  offered after the 2nd good order (trial → paid 62 %); give €10 / get €10 (12 % of new customers); paid cost per new
+  customer −18 %.
+- **Korenwolf Mondays** (13 Sep): stock reserved at 20:00 the evening before for every business account's standing
+  orders, picked first from 06:00; Korenwolf Mondays 96.8 → 99.1 %. Renewal signed December 2027.
+- **Service levels in the portal** (4 Oct): live status, automatic monthly report (contract definition), automatic
+  credits (10 % of a missed delivery); Mo's report work 2 days/month → 0; Korenwolf Q4 99.0 %.
+- **Product principles** (11 Oct): ask don't assume · honest over clever · complete or explained · one product for homes
+  and offices · fast for pickers · less but better. Checkout Plus banner removed (#2).
+- **Product sense** (25 Oct): Grace orders weekly in a rotating city; Antwerp's French swap message rewritten.
+  Prediction log: 31 predictions, 19 right on direction.
+- **Two-year review** (8 Nov) and **hiring** (from 22 Nov): Jonas hired as PO for Larder for Business, starts 3 Jan 2028.
+- **Handover** (plan 13 Dec): state-of-the-product document, introductions, shadow 3–14 Jan, lead 17 Jan–25 Feb, Grace
+  steps out 28 Feb 2028. Grace keeps ordering, apps, Plus, the substitution platform and the 2028 strategy.
+
 ## Book 1, Vol. 4: Ana's facts (March → September 2027)
 
 - **Capability map** (1 Mar): seven areas; red for 2027: city setup, languages (FR, NL), Belgian rules; yellow: stock,
@@ -477,3 +512,25 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
 - **Carbon** (6 Mar): ≈ 9 t CO₂e/year, ≈ 0.9 → 0.6 g per order; answer to Korenwolf's supplier questionnaire.
 - **Utility tree** (20 Mar): (H, H) checkout at 5× with 60k/day; new city in 6 weeks by config. Region failover in 1 h
   (M, H) parked; real-time recommendations dropped.
+
+## Book 1, Vol. 6: Ana's facts (April → September 2028)
+
+- **Organisation**: five product teams, 30 engineers, a reliability team from autumn 2028; Jonas is the business PO.
+  Cities: Ghent opened 19 Jun 2028, Haarlem 11 Sep 2028: eight cities by the 28 Sep board.
+- **Principles** (3 Apr): eight, statement/rationale/implications; questions to Ana ≈ 15 → 4 a week.
+- **Ordering's database** (ADR 0027, design 10–21 Apr): one-way doors decided in two weeks; migration plan 29 May
+  (expand, shadow, Eindhoven first on 3 Jul, all cities by 7 Aug, contract 21 Aug); 0 orders lost; 3 quick rollbacks.
+- **Guardrails** (17 Apr): review board replaced; review triggers: new data store, vendor, trust boundary, published
+  events, principle exception. Lightweight review (from 15 May): ADR 0028, managed search, 4 working days.
+- **Golden path** (8 May): `larder new-service`; new service to first deploy 3 weeks → 1 day; 4 of 5 new services on it.
+- **Fitness functions** (22 May): FF-01…FF-12, incl. FF-10 cost per 1,000 orders ≤ €70 and FF-11 no reads of another
+  module's tables.
+- **Risk register** (24 Apr): 12 risks; #1 architecture depends on Ana (4 × 4 → 2 × 4 by Sep).
+- **Ghent readiness** (12–16 Jun): one red (Dutch help pages), fixed 18 Jun; opened with no day-one surprise.
+- **Station lockers** (workshop 3–4 Jul): pilot with 2 chilled lockers at Utrecht Centraal from 4 Sep, by hand; review 16 Oct.
+- **Haarlem** (17 Jul): moved from 4 to 11 Sep, born on the new database; old replica off the same week (≈ €1,900/month).
+- **Old order export** (TD-21) retired 2 Oct 2028 without escalation (data team's orders_v2 model; ally: Cho).
+- **Architecture backlog** (21 Aug): one list, 20 % of each team, ordered quarterly with Grace and Jonas.
+- **Handover** of Ordering to the reliability team: game days 14 and 21 Sep; pager 1 Oct; first incident 9 Oct, 18 min.
+- **Architects**: Cho (payments + data) and Dee (mobile + customer apps) grown from May; Cho led ADR 0029 alone in Sep;
+  guild every other Thursday; architecture path on the career ladder from Oct.

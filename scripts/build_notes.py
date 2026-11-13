@@ -496,6 +496,42 @@ JOURNALS = [
             (15, "utility-tree", "Quality Attribute Utility Tree", "cost", "Rank the qualities with concrete scenarios, so trade-offs follow what matters most."),
         ],
     ),
+    dict(
+        key="architect-6", vol=6, title="Delivery, Governance & Influence", short="delivery, governance &amp; influence",
+        series=2, book="The Solution Architect's Notebook", narrator="Ana", brand="architect's notebook", title_block=True, sheet_doodles=True,
+        theme="theme-architect", fonts="Architects+Daughter", subject="solution architecture",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Spring term · 2028", weekdays=(1, 3), start=date(2028, 3, 7),
+        kicker="the solution architect's notebook · book 1 · vol. 6",
+        story="<b>April 2028.</b> Larder has five product teams, thirty engineers, six cities and a board plan for eight by the end of the year, with 60,000 orders a day. Ana can no longer review every change, attend every design or carry every decision. This volume follows her from April to September 2028: designing just enough, governing with principles and guardrails instead of gates, taking risks and migrations to go-live and hand-over, and leading through influence, including growing the architects who come after her.",
+        lead="Volume 6 of <span class=\"hl\">The Solution Architect's Notebook</span>, the last: how architects work at scale, through others. {n} notes in {c} collections: architecture in delivery, governance, risk and transition, and influence. Every note follows <b>Ana</b> at <b>Larder</b> from April to September 2028, as the platform grows to eight cities, and ends with a <b>try it</b> exercise for your own project.",
+        blurb="Just-enough design, principles, guardrails, golden paths, risk, migrations, go-live, hand-over and influence.",
+        attrs=ARCHITECT_ATTRS, attrs_title="The nine architect ratings", attrs_side="what a good architecture practice is judged on", ratings_h2="Architect ratings",
+        handmade=set(),
+        collections=[
+            ("delivery", "Architecture in delivery", "design enough, evolve the rest, keep a backlog"),
+            ("governance", "Governance", "principles and guardrails instead of gates"),
+            ("risk", "Risk & transition", "from risk list to migration, go-live and hand-over"),
+            ("influence", "Influence", "lead without authority, and grow the next architects"),
+        ],
+        catalogue=[
+            (1, "just-enough-design", "Just-Enough Up-Front Design", "delivery", "Decide the hard-to-change things before building; leave the rest to learn while building."),
+            (2, "evolutionary-architecture", "Evolutionary Architecture", "delivery", "Design for change: small steps, fitness functions that guard what matters, and room to turn."),
+            (3, "architecture-backlog", "The Architecture Backlog", "delivery", "One ordered list of architecture work, planned with product, with capacity agreed."),
+            (4, "architecture-principles", "Architecture Principles", "governance", "A handful of rules with reasons and implications, so teams decide alike without asking."),
+            (5, "guardrails-not-gates", "Guardrails Not Gates", "governance", "Automate the checks that matter and review only one-way doors, so teams move without waiting."),
+            (6, "lightweight-review", "Lightweight Architecture Review", "governance", "A short, written-first review for decisions that are hard to undo, with a clear outcome."),
+            (7, "golden-paths", "Golden Paths", "governance", "Make the right way the easy way: templates and platforms that start a service well."),
+            (8, "risk-register", "Risk Register", "risk", "A short, owned list of risks with likelihood, impact, actions and a date to look again."),
+            (9, "migration-planning", "Migration Planning", "risk", "Move a live system in reversible steps, each with a test, a rollback and a stop point."),
+            (10, "go-live-readiness", "Go-Live Readiness", "risk", "Agree in advance what “ready” means, check it with evidence, and decide go or no-go."),
+            (11, "handover-to-operations", "Handover to Operations", "risk", "Hand a system to the people who'll run it with runbooks, alerts, practice and a warranty period."),
+            (12, "influencing-without-authority", "Influencing Without Authority", "influence", "Change what teams do by making it their idea, their win and the easy path."),
+            (13, "negotiating-with-stakeholders", "Negotiating with Stakeholders", "influence", "Trade on interests and options when architecture needs time, money or a change of plan."),
+            (14, "discovery-workshops", "Discovery Workshops", "influence", "Bring business, product and engineering into one room to explore a new idea before deciding."),
+            (15, "growing-architects", "Growing Other Architects", "influence", "Spread architecture thinking: pairing, katas, decision ownership and a path for engineers."),
+        ],
+    ),
     # ---- Series 2 · Book 2 · The Product Owner's Notebook (Grace). Plan: docs/HANDOFF-product-owner.md ----
     dict(
         key="product-1", vol=1, title="Discovering the Problem", short="discovering the problem",
@@ -682,6 +718,43 @@ JOURNALS = [
             (15, "disagree-and-commit", "Disagree and Commit", "hard", "Argue your case once, clearly; once decided, commit fully, and agree how you'll know."),
         ],
     ),
+    dict(
+        key="product-6", vol=6, title="Growing the Product", short="growing the product",
+        series=2, book="The Product Owner's Notebook", narrator="Grace", brand="product owner's notebook", book_no=2,
+        title_block=True, sheet_doodles="product",
+        theme="theme-product", fonts="Permanent+Marker", subject="product ownership",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the product",
+        term="Spring term · 2028", weekdays=(1, 4), start=date(2028, 3, 7),
+        kicker="the product owner's notebook · book 2 · vol. 6",
+        story="<b>April 2027.</b> Utrecht opens, Antwerp is coming, Larder Plus is about to launch and business customers want more than standing orders. Grace's product has grown from one problem into several products, and she has grown with it. This volume follows her from April to December 2027: launching cities and a country, serving business and consumer customers without splitting the product, scaling it with principles and platforms, and finally hiring the product owner who takes part of it over.",
+        lead="Volume 6 of <span class=\"hl\">The Product Owner's Notebook</span>, the last: how a product owner grows a product, and themselves. {n} notes in {c} collections: new markets, business customers, scaling the product, and growing yourself. Every note follows <b>Grace</b> at <b>Larder</b> from April to December 2027, in the same months as Ana's fourth and fifth notebooks, and ends with a <b>try it</b> exercise for your own product.",
+        blurb="New cities and a new country, pricing, B2B vs B2C, service levels, platforms, accessibility, principles and handing over.",
+        attrs=PRODUCT_ATTRS, attrs_title="The nine product ratings", attrs_side="what a good product practice is judged on", ratings_h2="Product ratings",
+        handmade=set(),
+        collections=[
+            ("markets", "New markets", "a city, a country and a price"),
+            ("business", "Business customers", "one product for offices and households"),
+            ("scaling", "Scaling the product", "platforms, principles and a product for everyone"),
+            ("growing", "Growing yourself", "judgment, a career, a hire and a hand-over"),
+        ],
+        catalogue=[
+            (1, "launching-new-city", "Launching a New City", "markets", "A repeatable playbook: what's configuration, what's local, and what to measure in the first weeks."),
+            (2, "localisation", "Localisation for a New Country", "markets", "More than translation: language, money, rules, habits and testing with local customers."),
+            (3, "pricing-experiments", "Pricing Experiments", "markets", "Find the price with research and careful tests, and watch what customers do, not just say."),
+            (4, "b2b-vs-b2c", "B2B vs B2C Products", "business", "Business customers buy differently: buyers, users, contracts and service levels."),
+            (5, "account-needs-vs-vision", "Account Needs vs Product Vision", "business", "Serve a big client without letting them steer the whole product."),
+            (6, "service-levels-as-features", "Service Levels as Features", "business", "Make promises visible and measurable in the product: status, reports and automatic credits."),
+            (7, "business-self-service", "Self-Service for Business Customers", "business", "Let office managers do it themselves, and free the account manager for the relationship."),
+            (8, "platform-thinking", "Platform Thinking", "scaling", "Turn a capability several products need into one shared, owned, documented platform."),
+            (9, "accessibility", "Accessibility as Product Quality", "scaling", "Build for everyone from the start, test with real users, and meet the law as a minimum."),
+            (10, "product-led-growth", "Product-Led Growth", "scaling", "Let the product win and keep customers: a great first order, a trial, and sharing that works."),
+            (11, "product-principles", "Writing Product Principles", "scaling", "A few beliefs with trade-offs that help a growing team decide like you would."),
+            (12, "product-sense", "Product Sense", "growing", "Judgment you can train: customer empathy, taste, and seeing the whole system."),
+            (13, "growing-as-po", "Growing as a Product Owner", "growing", "Look back, ask for feedback, and choose what to get better at next."),
+            (14, "hiring-a-po", "Hiring a Product Owner", "growing", "Hire for judgment and curiosity, with a work sample that looks like the real job."),
+            (15, "handing-over", "Handing Over a Product Area", "growing", "Pass on the why, the people and the open bets, then step back on purpose."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
@@ -690,10 +763,8 @@ PLANNED = [
 ]
 # Planned volumes of Series 2, book 1 (see docs/HANDOFF-solution-architect.md).
 PLANNED_2 = [
-    (6, "Delivery, Governance & Influence", "Just-enough design, principles, guardrails, risk, go-live, and influencing without authority."),
 ]
 PLANNED_PRODUCT = [
-    (6, "Growing the Product", "New cities, Antwerp, the Korenwolf account and growing as a product owner."),
 ]
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
@@ -701,7 +772,7 @@ FUTURE_LOG = [
     ("Feb 2027", [("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
     ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b> (Sanne, the Rotterdam launch): planning, estimation, risks and dependencies, delivery rhythms, status that tells the truth"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
-    ("Mid 2027", [("★", "Book 1, vol. 6 · delivery, governance and influence; Book 2, vol. 6 · growing the product")]),
+    ("Mid 2027", [("•", "A Series 2 index: every Larder note from both books in one timeline")]),
     ("Someday", [("•", "Extra notes for Vols. 2, 5 and 6: Debounce &amp; Throttle, Passkeys, Signed Webhooks, Chaos Engineering, Service Catalogues"), ("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
 

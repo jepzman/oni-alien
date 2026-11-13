@@ -1,6 +1,6 @@
 # Handoff: The Product Owner's Notebook (Series 2, Book 2)
 
-Status as of 2026-11-13: **Vols. 1–5 written and deployed (15 notes each).** Decisions in section 7.
+Status as of 2026-11-13: **Complete: vols. 1–6 written and deployed (15 notes each).** Decisions in section 7.
 
 Story facts: `docs/larder-casebook.md` (source of truth) and the public case file `/larder/`.
 Book 1's plan, for comparison: `docs/HANDOFF-solution-architect.md`.
@@ -26,7 +26,7 @@ spike/prototype/PoC note; Grace's backlog notes link the walking skeleton.
 | 3 | From Idea to Backlog (done) | Feb → Jun 2026 | **Shaping work**: Story Mapping, Thin Slices of Value, MVP vs MLP, Pre-mortem (added) · **Writing it down**: User Stories that Work, Example Mapping, Definition of Ready & Done · **Working with the team**: The Product Trio, Sprint Goals, Refinement that Isn't a Meeting Marathon, Talking Tech Debt with Engineers · **Shipping**: Launch Checklist (Rotterdam), Dark Launches & Rollouts, Hypercare after Launch (added), Release Notes & Customer Comms (added). Release Planning dropped: Vol. 2's roadmap vs release plan covers it. |
 | 4 | Measuring & Learning | May → Oct 2026 | **Instrumenting**: Event Tracking Plan ★, Funnels ★, Cohorts & Retention Curves, Dashboards That Get Used (added) · **Experimenting**: A/B Tests ★, Sample Size & Test Duration (added), Guardrail Metrics, Reading Results Honestly · **Listening**: Support Tickets as Data, Feedback Loops with Operations, Customer Advisory Panel · **Goals**: OKRs ★, Vanity vs Actionable Metrics, Post-Launch Review, Killing a Feature (done) |
 | 5 | Stakeholders & Influence (done; + Quarterly Product Review, Working with Account Managers) | Oct 2026 → Mar 2027 | **Communicating**: Product Update that Gets Read ★, Demos that Land ★, The One-Page PRD · **Managing up and across**: Managing Up (Priya), Pitching to the CEO ★, Dependencies across Teams · **Partners inside**: Operations as a Customer (Joost) ★, Working with Legal & Privacy (Lena), Working with the Architect (Ana) ★ · **Hard moments**: Negotiating Scope, When the Date Is Fixed, Delivering Bad News, Disagree and Commit |
-| 6 | Growing the Product | Sep 2026 → 2027 | **New markets**: Launching a New City ★, Localisation for Antwerp, Pricing Experiments · **Business customers**: B2B vs B2C Products (Korenwolf) ★, Account Needs vs Product Vision, Service Levels as Features · **Scaling the product**: Platform Thinking, Accessibility as Product Quality, Product-Led Growth · **Growing yourself**: Product Sense, Writing Product Principles, Growing as a PO ★, Handing Over a Product Area |
+| 6 | Growing the Product (done; + Self-Service for Business Customers, Hiring a Product Owner) | Apr → Dec 2027 | **New markets**: Launching a New City ★, Localisation for Antwerp, Pricing Experiments · **Business customers**: B2B vs B2C Products (Korenwolf) ★, Account Needs vs Product Vision, Service Levels as Features · **Scaling the product**: Platform Thinking, Accessibility as Product Quality, Product-Led Growth · **Growing yourself**: Product Sense, Writing Product Principles, Growing as a PO ★, Handing Over a Product Area |
 
 Each volume: 4 collections, 15 notes, like Book 1.
 
@@ -160,3 +160,12 @@ Each book has its own skin; Book 2 should feel like a **product team's wall**:
 - Meanwhile links: pitching to the CEO ↔ Ana's presenting to executives; working with the architect ↔ explaining
   trade-offs; negotiating scope ↔ solution design document.
 - Next for book 2: Vol. 6, Growing the Product.
+
+## 13. Vol. 6 notes on the build (2026-11-13)
+
+- `product-6` journal; content in `content/product-6/01_markets.py`, `02_business.py`, `03_scaling.py`, `04_growing.py`.
+  The plan listed 13 topics; **Self-Service for Business Customers** and **Hiring a Product Owner** were added.
+- Story runs **April → December 2027**, alongside Ana's Vols. 4–5. New character: **Jonas** (business PO, from Jan 2028).
+- Meanwhile links: launching a new city ↔ capability map; localisation ↔ data ownership; B2B vs B2C ↔ canonical data
+  model; business self-service ↔ backend for frontend.
+- The book is complete.
