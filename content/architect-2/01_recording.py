@@ -22,7 +22,7 @@ adr_analogy.arrow(470, 180, 536, 180, dash=True, label="later", lx=503, ly=166)
 adr_analogy.box(540, 150, 210, 60, "no. 12 overrules no. 7", "pink", size=15)
 adr_analogy.note(655, 240, "on purpose, with reasons", "green")
 
-adr_how = Doodle(760, 300, "Life of an ADR at Larder. A significant decision appears, such as how orders reach the delivery service. Someone writes ADR 0007 as a pull request with context, options, decision and consequences, status proposed. The people affected review it. When merged it becomes accepted and lives in the repository next to the code. Later, ADR 0015 supersedes it; 0007 is kept but marked superseded, with a link to its successor.",
+adr_how = Doodle(760, 300, "Life of an ADR at Larder. A significant decision appears, such as how orders reach the delivery service. Someone writes ADR 0007 as a pull request with context, options, decision and consequences, status proposed. The people affected review it. When merged it becomes accepted and lives in the repository next to the code. Later, a hypothetical ADR 0031 supersedes it; 0007 is kept but marked superseded, with a link to its successor.",
                  "One short file per decision, reviewed as a pull request, kept forever next to the code; replaced only by a newer record.")
 adr_how.box(20, 40, 170, 70, "a decision", "y", sub="hard to reverse?")
 adr_how.arrow(196, 75, 256, 75)
@@ -30,7 +30,7 @@ adr_how.box(262, 30, 210, 90, "ADR 0007", "blue", sub="proposed · as a PR")
 adr_how.arrow(478, 75, 548, 75, color="green", label="review", lx=513, ly=61)
 adr_how.box(554, 30, 190, 90, "accepted", "green", sub="docs/adr/ in the repo")
 adr_how.arrow(649, 124, 649, 184, dash=True, label="2 years later", lx=662, ly=160, anchor="start")
-adr_how.box(470, 188, 270, 64, "0015 supersedes 0007", "pink", size=16)
+adr_how.box(470, 188, 270, 64, "0031 supersedes 0007", "pink", size=16)
 adr_how.note(220, 200, "context · options · decision · consequences", "pen")
 adr_how.note(220, 230, "one page, plain words", "pen")
 

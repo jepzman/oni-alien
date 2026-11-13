@@ -388,6 +388,42 @@ JOURNALS = [
             (15, "revisiting-decisions", "Revisiting Decisions", "living", "Give every decision a review trigger, and check them on purpose instead of re-arguing at random."),
         ],
     ),
+    dict(
+        key="architect-3", vol=3, title="Communicating Architecture", short="communicating architecture",
+        series=2, book="The Solution Architect's Notebook", narrator="Ana", brand="architect's notebook", title_block=True, sheet_doodles=True,
+        theme="theme-architect", fonts="Architects+Daughter", subject="solution architecture",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Summer term · 2027", weekdays=(1, 3), start=date(2027, 5, 4),
+        kicker="the solution architect's notebook · book 1 · vol. 3",
+        story="<b>October 2026.</b> Larder runs two cities, Korenwolf has signed for three offices, and four more cities are planned for 2027. The team has grown to 18 engineers, and the architecture now lives in too many diagrams, documents and heads. This volume follows Ana from October 2026 to February 2027: drawing the system so people can read it, writing documents people use, explaining choices to people who don't build software, and keeping all of it current.",
+        lead="Volume 3 of <span class=\"hl\">The Solution Architect's Notebook</span>: how architects make a system understandable to the people who build it, run it, pay for it and depend on it. {n} notes in {c} collections: diagrams with clear rules, documents people actually read, conversations with engineers and executives, and keeping it all current. Every note follows <b>Ana</b> at <b>Larder</b> from October 2026 to February 2027, and ends with a <b>try it</b> exercise for your own project.",
+        blurb="C4 and other views, one-pagers, docs as code, presenting to executives, explaining trade-offs and keeping diagrams alive.",
+        attrs=ARCHITECT_ATTRS, attrs_title="The nine architect ratings", attrs_side="what a good architecture practice is judged on", ratings_h2="Architect ratings",
+        handmade=set(),
+        collections=[
+            ("diagrams", "Diagrams", "pictures with rules, for the question being asked"),
+            ("documents", "Documents", "pages people read, kept next to the code"),
+            ("conversations", "Conversations", "explain, present and practise, in the room"),
+            ("current", "Keeping it current", "diagrams, plans and words that don't go stale"),
+        ],
+        catalogue=[
+            (1, "c4-model", "C4 Model", "diagrams", "Four zoom levels (context, containers, components, code), with labelled boxes and arrows."),
+            (2, "views-viewpoints", "Views & Viewpoints (4+1)", "diagrams", "A drawing for each stakeholder's question, tied together by a few scenarios."),
+            (3, "sequence-flow", "Sequence & Flow Diagrams", "diagrams", "Lifelines across, time down: show what happens in what order, and on what trigger."),
+            (4, "deployment-diagrams", "Deployment Diagrams", "diagrams", "Where everything runs and how it's reached: on-call's first page."),
+            (5, "architecture-one-pager", "Architecture One-Pager", "documents", "The whole architecture on one page: purpose, picture, key decisions, numbers, risks."),
+            (6, "arc42", "arc42 Template", "documents", "Twelve sections that give every architecture document the same shape; fill only what's needed."),
+            (7, "docs-as-code", "Docs as Code", "documents", "Write docs and diagrams as text in the repo, review them in pull requests, publish from CI."),
+            (8, "solution-design-document", "Solution Design Document Done Right", "documents", "Write the design document a client asks for around their questions, not the template's."),
+            (9, "whiteboard-sessions", "Whiteboard Sessions", "conversations", "A question on top, one marker, a legend, a timebox and a photo that becomes a record."),
+            (10, "presenting-to-executives", "Presenting to Executives", "conversations", "Answer first, options in money, risk and time, then the ask: in ten minutes."),
+            (11, "explaining-trade-offs", "Explaining Trade-offs to Non-Engineers", "conversations", "Turn a technical trade-off into the things the listener cares about: money, minutes, risk."),
+            (12, "architecture-katas", "Architecture Katas", "conversations", "Small teams practise designing a system in 90 minutes, then present and get feedback."),
+            (13, "living-diagrams", "Living Diagrams", "current", "Generate diagrams from code, infrastructure and traces, so they can't drift."),
+            (14, "architecture-roadmap", "Architecture Roadmap", "current", "The steps from today's architecture to the one the business needs, as transition states."),
+            (15, "glossary", "Glossary & Ubiquitous Language", "current", "One list of the words that matter, what each means where, used in code, docs and meetings."),
+        ],
+    ),
     # ---- Series 2 · Book 2 · The Product Owner's Notebook (Grace). Plan: docs/HANDOFF-product-owner.md ----
     dict(
         key="product-1", vol=1, title="Discovering the Problem", short="discovering the problem",
@@ -471,7 +507,6 @@ PLANNED = [
 ]
 # Planned volumes of Series 2, book 1 (see docs/HANDOFF-solution-architect.md).
 PLANNED_2 = [
-    (3, "Communicating Architecture", "C4 and other views, one-pagers, docs as code, presenting to executives, explaining trade-offs."),
     (4, "Integration & the Enterprise", "Integration styles, anti-corruption layers, capability maps, portfolios and strangler-fig migrations."),
     (5, "Designing for Qualities", "Back-of-the-envelope estimates, availability maths, security reviews and total cost of ownership."),
     (6, "Delivery, Governance & Influence", "Just-enough design, principles, guardrails, risk, go-live, and influencing without authority."),
@@ -488,7 +523,7 @@ FUTURE_LOG = [
     ("Feb 2027", [("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
     ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b> (Sanne, the Rotterdam launch): planning, estimation, risks and dependencies, delivery rhythms, status that tells the truth"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
-    ("Mid 2027", [("★", "Book 1, vols. 3–6 · communicating architecture, integration, designing for qualities, governance and influence")]),
+    ("Mid 2027", [("★", "Book 1, vols. 4–6 · integration, designing for qualities, governance and influence")]),
     ("Someday", [("•", "Extra notes for Vols. 2, 5 and 6: Debounce &amp; Throttle, Passkeys, Signed Webhooks, Chaos Engineering, Service Catalogues"), ("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
 

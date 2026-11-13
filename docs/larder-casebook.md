@@ -153,7 +153,10 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
 | 0011 | Run the Korenwolf pilot on manual standing orders | 2026-04-15 | Superseded by 0014 |
 | 0012 | Routing Engine A (open source, self-hosted) for Dispatch | 2026-05-26 | Accepted (on watch, Sep 2026) |
 | 0013 | Buy a billing service for Larder for Business invoices | 2026-06-08 | Accepted |
-| 0014 | Scheduled orders on business accounts, in Ordering | 2026-09-21 | Proposed |
+| 0014 | Scheduled orders on business accounts, in Ordering | 2026-10-05 | Accepted (proposed 21 Sep) |
+| 0015 | Vans are a courier type in Dispatch (routes planned the evening before by Engine A) | 2026-11-02 | Accepted |
+| 0016 | Move warehouse management from StockPilot to WMS B by Sep 2027, store by store | 2026-12-15 | Accepted |
+| 0017 | Protect the critical windows (Friday 17:00–20:00, business 07:00–09:00) instead of a second region | 2027-01-12 | Accepted |
 
 ## Book 2, Vol. 1: Grace's facts (October 2025 → January 2026)
 
@@ -262,3 +265,41 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
 - **Bets, not promises** (board 16 Apr): approvals (high confidence) 6.2 % → ~3.5 % by end June; flag (medium) ≈ −0.5
   point, signal: used on ≥ 8 % of orders; live updates (low), Q3. Message: 3–4 % by June, 2 % by December. (The November
   target of 2 % by end Q2 is now not expected.)
+
+## Book 1, Vol. 3: Ana's facts (October 2026 → February 2027)
+
+- **Team**: 18 engineers (four hired in 2026); Ana is still the only architect. Tech leads: Ben (orders), Cho
+  (payments), Dee (mobile), Eli (platform).
+- **Diagrams** (6 Oct): eleven inconsistent wiki diagrams (one still showed Dispatch inside Core) replaced by four C4
+  diagrams. Containers: customer apps, picker app, Larder Core, Dispatch (+ Engine A), managed Postgres, managed Kafka;
+  external: StockPilot, PSP ×2, billing service, helpdesk.
+- **Views** (13 Oct): logical, process, development, physical and a data view for Lena; scenarios S1 express order with a
+  swap, S2 Korenwolf's standing order, S3 Noord's Wi-Fi drops.
+- **Vans** (whiteboard 13 Oct failed, 20 Oct worked): vans become a courier type in Dispatch, capacity in crates, windows
+  07:00–09:00, routes planned the evening before (ADR 0015, Eli).
+- **Standing-order bug** (Oct): billing lines were created on "placed"; Korenwolf was invoiced for 3 items never delivered
+  (credit notes, Ruben's first complaint). Fixed: billing listens for order.delivered.
+- **Incident 29 Oct**: a network rule change cut Dispatch off from Postgres for 25 minutes; couriers assigned by hand.
+  Deployment: EU region (Frankfurt), one private network; Dispatch (2–6 copies) and Engine A on managed containers;
+  Larder Core on 3 VMs; managed Postgres primary + replica; managed Kafka, 3 brokers; stores on Wi-Fi + 4G backup via VPN.
+- **Numbers, November 2026**: ~5,800 orders a day; peak 2.6 orders/s; express on time 94 % Amsterdam, 92 % Rotterdam;
+  cost per order €3.60.
+- **Docs**: one-pager (10 Nov), arc42 skeleton in docs/architecture/ (17 Nov), docs as code with Structurizr DSL and
+  Mermaid (24 Nov).
+- **Korenwolf three offices** (contract Sep 2026): service from January 2027. Korenwolf IT's solution design document
+  (40-section template) answered in 14 pages, approved 18 Dec. Data held: office managers' names and emails, office
+  addresses, order history; no staff data. SSO for office managers. The Utrecht office is served by van from Zuid until
+  Larder's Utrecht store opens.
+- **Warehouse decision** (2 Dec presentation failed; 9 Dec approved): renew StockPilot ≈ €252k a year (today ≈ €84k);
+  WMS B ≈ €118k a year + ≈ €90k migration; own stock service ≈ €60k a year + ≈ €300k. Choice: WMS B, store by store;
+  Marco agreed a 3-month bridge with StockPilot (to Sep 2027) at today's price (ADR 0016).
+- **Christmas peak**: 18 Dec 2026, 18:05, a database failover took checkout down for 38 minutes (≈ 900 orders lost or
+  late). Femke asked for 99.99 %; option B chosen on 12 Jan (≈ €1,500 a month, six weeks; failover under 2 minutes, no
+  changes in the critical windows, business orders picked the evening before; ADR 0017). Second region: ≈ €9,000 a month
+  + 2 engineers, revisit at Antwerp.
+- **Katas**: monthly from 19 Jan 2027; the first brief was Larder in Antwerp.
+- **Living diagrams** (26 Jan): first run found a direct HTTP call Customer Care → Dispatch (added Dec) and two unused topics.
+- **Planning dates for 2027** (not commitments, 2 Feb): Utrecht April, The Hague June, Antwerp September, Eindhoven
+  November. Transition states T1–T3 in docs/architecture/roadmap-2027.md; T3 = load-tested for 40,000 orders a day.
+- **Korenwolf January report**: 96.1 % "complete deliveries" counted per crate; per the contract (everything for one
+  office on one morning) it was 98.6 %. Glossary written 9 Feb (arc42 section 12).

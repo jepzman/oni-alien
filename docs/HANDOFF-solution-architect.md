@@ -1,6 +1,6 @@
 # Handoff: The Solution Architect's Notebook (Series 2, Book 1)
 
-Status as of 2026-11-12: **Vols. 1 and 2 written (15 notes each). Vol. 1 is deployed; Vol. 2 is on the working branch, not yet deployed.**
+Status as of 2026-11-13: **Vols. 1–3 written (15 notes each). Vols. 1–2 are deployed; Vol. 3 is on the working branch.**
 
 - Shareable plan (Claude Docs, private until shared by the owner): https://claude.ai/artifact/GF641a5WavDf4mpNx8bKH1
 - Sample chapter (draft, unlisted): `public/architect-2/notes/adr.html` — preview with `npm run serve`, then open http://localhost:8080/architect-2/notes/adr.html
@@ -79,7 +79,7 @@ Drafting sheet, vibrant version (owner asked for more colour and depth):
        covers using `--cover-architect` / `--band-architect` and labels “book 1 · vol. N”.
 3. [x] Keys are `architect-1`, `architect-2`, … (decided). Rename keys if wanted (`architect-1` … `architect-6`; URLs `/architect-N/`). Keys must stay flat:
        page depth assumptions (`../`) break with nested folders.
-4. [~] For each volume (Vols. 1 and 2 done): add the `JOURNALS` entry (copy `architect-2`, remove `draft=True` when ready),
+4. [~] For each volume (Vols. 1–3 done): add the `JOURNALS` entry (copy `architect-2`, remove `draft=True` when ready),
        full 15-note catalogue, write `content/architect-N/01_….py` … `04_….py` (4 collections).
 5. [x] Write `docs/larder-casebook.md` first, then Vol. 1 (done), then Vol. 2 (ADR note already done).
 6. [x] Update `PLANNED` / `FUTURE_LOG`, README volume table.
@@ -138,3 +138,14 @@ Drafting sheet, vibrant version (owner asked for more colour and depth):
 - Open threads for later volumes: ADR 0014 (business ordering, proposed Sep 2026), ADR 0012 on watch (Rotterdam 91 % on
   time), StockPilot renewal decision by 31 Dec 2026, Antwerp decision calendar, TD-1 before Utrecht prep (Oct 2026).
 - Next for book 1: Vol. 3, Communicating Architecture (after Grace's Vol. 2).
+
+## 10. Vol. 3 notes on the build (2026-11-13)
+
+- `architect-3` journal; content in `content/architect-3/01_diagrams.py`, `02_documents.py`, `03_conversations.py`,
+  `04_current.py`. Story runs **October 2026 → February 2027**; facts in the casebook, “Book 1, Vol. 3”, including
+  ADRs 0015–0017 and the 2027 planning dates (Utrecht Apr, The Hague Jun, Antwerp Sep, Eindhoven Nov).
+- The ADR sample's hypothetical “0015 supersedes 0007” became “0031” so it doesn't clash with the real ADR 0015.
+- No `meanwhile` links: Grace's notes don't reach these months yet. Candidates for her Vol. 5–6: Pitching to the CEO ↔
+  presenting to executives; Working with the architect ↔ explaining trade-offs; B2B vs B2C (Korenwolf) ↔ glossary or the
+  solution design document; Launching a new city ↔ architecture roadmap.
+- Next for book 1: Vol. 4, Integration & the Enterprise Landscape (after Grace's Vol. 3).
