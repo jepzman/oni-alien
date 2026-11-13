@@ -222,3 +222,43 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
   Larder's own stock service (~6 months). Marco goes into the autumn renewal talks with a costed alternative (outcome open).
 - **Decision review** (21 Sep 2026): peak 2.6 orders/s across two cities; stock mismatch 0.4 %; 3 services; on time
   Amsterdam 93 %, Rotterdam 91 % → ADR 0012 on watch (re-check 19 Oct); Korenwolf signed for three offices → ADR 0014 proposed.
+
+## Book 2, Vol. 2: Grace's facts (January → April 2026)
+
+- **Strategy on a page** (drafted 19 Jan, agreed with Priya 26 Jan): serve tonight-dinner parents and Sunday planners
+  (offices later); win with honest substitutions and on-time delivery; three bets for 2026: approvals in the app
+  (2-minute window), the "no swaps" flag per item, live order updates; not this year: recipe ideas, meal kits, non-food;
+  we'll know by: perfect orders 82 % → 88 % by December 2026, substitution refund tickets 6.2 % → 2 %.
+- **RICE** (2 Feb, per quarter; 28,000 orders/week × 13 = 364,000; 21 % have a swap = 76,000): approvals 15,200;
+  faster picking screen 9,100 (another outcome → Joost); "no swaps" flag 7,500; live order update 4,750; auto-refund
+  button 3,000; recipe ideas 1,500. 23 idea cards on the Q2 wall.
+- **Roadmap** (6 Feb): the 2025 Gantt chart (14 features, 9 late) replaced by now / next / later; updated monthly.
+- **Sizing Larder for Business** (9 Feb): ~1,500 offices of 50+ staff in Amsterdam and Rotterdam zones × ~120 staff ×
+  €5 pantry per person per week × 48 weeks ≈ €43M a year; 2 % by end 2027 = 30 offices ≈ €0.9M; Korenwolf alone ≈ €0.6M;
+  consumer orders ≈ €55M a year. Femke's report: office catering NL ≈ €50M. Decision: a pilot, not a team.
+- **Cost of delay** (9 Feb): flag ≈ €12k/month, 0.5 month, CD3 24; approvals ≈ €30k/month, 2 months, CD3 15; live
+  update ≈ €6k/month, 1 month, CD3 6. Rotterdam app work: fixed date, done by 20 Apr. **Flag live 23 Feb.**
+- **Business case** (approved 12 Feb by Priya, Marco consulted): build 8 person-weeks × €6k ≈ €48k; running ≈ 10 s extra
+  picking per swap order × ~25k a month ≈ €1.8k/month; benefit ≈ €30k/month; payback ≈ 2 months. Web orders ≈ 20 %.
+- **Kano survey** (16–20 Feb, in-app, 212 answers): approvals performance 48 %; flag must-be 41 % (74 % among 38 allergy
+  households); live order update attractive 39 %; recipe ideas indifferent 62 %.
+- **Saying no** (board 24 Feb; message to Femke 25 Feb): recipe ideas parked; small yes: 3 recipe links in the weekly
+  newsletter for 4 weeks; result late March: 2.1 % clicked, 0.3 % added an item → stays parked; review July (Q3 planning).
+- **Request triage** (from 2 Mar; Mondays 10:00, 30 min, with Ben and Dee): 47 backlog requests → 9 joined an
+  opportunity, 6 quick fixes (Tomás's picker font size, shipped 4 Mar), 21 parked, 11 declined. Sam's auto-refund
+  button parked (review 1 Jun).
+- **Rotterdam app scope** (MoSCoW, 3 Mar, with Sanne, Joost, Priya): 19 items, 14 Musts → 6 Musts (zones and slots,
+  prices and VAT, opening hours, iDEAL and cards, order tracking, store in the app); approvals in Rotterdam a Should.
+- **Release plan** (Sanne with Grace, 9 Mar): R1 staff test at Noord 30 Mar (90 %); R2 all Amsterdam express behind a
+  flag 13 Apr (80 %); R3 Rotterdam June (moved from 27 Apr after the trade-off sliders on 31 Mar). Sanne had told Joost
+  approvals would be in Rotterdam at launch (a misread); corrected 9 Mar.
+- **Business banner test** (10–17 Mar, 10 % of app users): order conversion 9.5 % without, 9.1 % with the banner;
+  3 leads. Moved to the account menu and newsletter; leads to Mo (18 Mar).
+- **Outcome roadmap** for the board (23 Mar): now: refund tickets 6.2 % → 4 % by end June; next: "where is my order?"
+  tickets −30 % by end September; later: 3 offices ordering without phoning Mo.
+- **Opportunity cost** (25 Mar): Mo asks for office ordering in the app (~4 weeks of Ben's team); it would push
+  approvals to mid-May (≈ €30k) and remove Rotterdam's slack. Cheaper yes: the pilot by hand → Ana's options analysis.
+- **Approvals live in Amsterdam on 13 April** (R2). First three days: 79 % answered within two minutes.
+- **Bets, not promises** (board 16 Apr): approvals (high confidence) 6.2 % → ~3.5 % by end June; flag (medium) ≈ −0.5
+  point, signal: used on ≥ 8 % of orders; live updates (low), Q3. Message: 3–4 % by June, 2 % by December. (The November
+  target of 2 % by end Q2 is now not expected.)
