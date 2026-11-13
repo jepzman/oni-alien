@@ -158,6 +158,13 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
 | 0015 | Vans are a courier type in Dispatch (routes planned the evening before by Engine A) | 2026-11-02 | Accepted |
 | 0016 | Move warehouse management from StockPilot to WMS B by Sep 2027, store by store | 2026-12-15 | Accepted |
 | 0017 | Protect the critical windows (Friday 17:00–20:00, business 07:00–09:00) instead of a second region | 2027-01-12 | Accepted |
+| 0018 | Integrate WMS B with a style per need (webhooks, API, nightly file) behind the Stock adapter | 2027-03-08 | Accepted |
+| 0019 | Business API, contract first (OpenAPI), /business/v1 | 2027-03-15 | Accepted (live May 2027) |
+| 0020 | Events are owned, registered contracts; compatible changes only, CI checks | 2027-04-19 | Accepted |
+| 0021 | One identity per person (SSO, SCIM); federate with business clients | 2027-05-24 | Accepted |
+| 0022 | One backend for each kind of client (mobile BFF, portal BFF) | 2027-06-07 | Accepted |
+| 0023 | No canonical order model; a small published language instead | 2027-07-05 | Accepted |
+| 0024 | One master and one owner per kind of data | 2027-08-02 | Accepted |
 
 ## Book 2, Vol. 1: Grace's facts (October 2025 → January 2026)
 
@@ -335,3 +342,36 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
   product number. Picker sync conflicts (12/week at Noord) cause wrong swaps packed.
 - **Approvals in Rotterdam** (8 Jun): email the day before, intro card on the first swap, "What's new", Sam's macros, a
   briefing for Rotterdam's pickers. First week: 1.4 tickets per 1,000 approvals.
+
+## Book 1, Vol. 4: Ana's facts (March → September 2027)
+
+- **Capability map** (1 Mar): seven areas; red for 2027: city setup, languages (FR, NL), Belgian rules; yellow: stock,
+  vans, business self-service, data.
+- **WMS B integration** (ADR 0018): webhooks → stock.changed (< 1 min), API for pick lists and goods received, nightly
+  file by 06:00 for finance; database view rejected. Rate limit 20 req/s (Larder queues at 15).
+- **Business API** (ADR 0019): contract first (/business/v1, standing orders, cost centres, delivery windows), reviewed
+  with Korenwolf's IT and Mo, mock server, live in May 2027. Korenwolf orders from its facilities system; two more office
+  clients use it by June. v1 + optional lines[].cost_centre (Jun); v2 with deliveries[] per office ships September;
+  v1 runs 12 months after v2, 6 months' notice, Sunset header.
+- **Anti-corruption layer** (22 Mar): WMS B article → product, bin → store location, wave → pick batch, units → items;
+  fitness function FF-07 keeps the WMS B client inside the Stock adapter.
+- **Strangler migration** (plan 29 Mar): router per store; shadow week (≤ 0.5 % diff) → switch → two weeks StockPilot
+  read-only. Zuid 19 Apr, Noord 24 May, The Hague opened on WMS B 14 Jun, Rotterdam 21 Jun, Utrecht 26 Jul;
+  StockPilot off 15 Sep 2027 (bridge contract ended 30 Sep). **Utrecht opened 12 Apr 2027** (on StockPilot);
+  **The Hague opened 14 Jun 2027**.
+- **Events** (ADR 0020, 19 Apr): order.placed's field store renamed to store_id broke billing silently for two days
+  (9 consumers). Schema registry, catalogue, compatible changes only; order.placed v2, v1 removed 19 Jul.
+- **Settlement files** (10 May): two providers' daily files by 05:00, checksum + trailer, loaded once, alert at 07:00,
+  mismatch report for finance (one file had been counted twice in April, one noticed a week late in May).
+- **Identity** (ADR 0021, 24 May): 14 staff tools; a support leaver kept helpdesk and billing access 3 weeks (Lena's
+  review). One IdP, SSO, SCIM for 11 tools; federation with business clients; personal picker badges by July.
+- **BFFs** (ADR 0022, 7 Jun): business portal for office managers since May; order screen 7 calls / 2.8 s → 1 / 0.6 s.
+- **No canonical model** (ADR 0023, 5 Jul): published language = order.placed, stock.changed, delivery.completed.
+- **Application portfolio** (19 Jul): 23 applications ≈ €61k a month; eliminate survey tool, second chat tool, old
+  cron, legacy reporting DB (≈ €2.3k a month); migrate StockPilot and Mo's spreadsheet CRM (to a CRM by Dec).
+- **Data ownership** (ADR 0024, 2 Aug): Antwerp test found 212 products disagreeing across Catalogue, WMS B and billing
+  (names, VAT). Product master = Catalogue (Grace's team), with FR/NL names and VAT category.
+- **Transition states** (16 Aug): temporary bridges T1–T3 for the warehouse move (TD-14–16), removed by 30 Sep; sweep
+  found three 2026 Dispatch leftovers (courier cron fallback, a Core DB view, a nightly copy job), removed by 30 Sep.
+- **Vendor checklist** (6 Sep): billing webhooks silent for 9 hours on 31 Aug (Korenwolf shown unpaid); poll every 15
+  min, silence alerts, queue below rate limits, production contract checks, status page alerts.

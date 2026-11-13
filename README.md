@@ -20,6 +20,7 @@ Live site: https://jepzman.github.io/oni-alien/
 | 1 · 1 | From Requirements to Architecture (`/architect-1/`) | 15 | architect ratings (clarity, stakeholder alignment, decision speed, risk reduction, adaptability, traceability, cost awareness, low overhead, team autonomy) |
 | 1 · 2 | Decisions & Trade-offs (`/architect-2/`) | 15 | architect ratings |
 | 1 · 3 | Communicating Architecture (`/architect-3/`) | 15 | architect ratings |
+| 1 · 4 | Integration & the Enterprise Landscape (`/architect-4/`) | 15 | architect ratings |
 | 2 · 1 | Discovering the Problem (`/product-1/`) | 15 | product ratings (customer value, business impact, evidence, learning speed, focus, shared understanding, stakeholder trust, flow, low overhead) |
 | 2 · 2 | Deciding What to Build (`/product-2/`) | 15 | product ratings |
 | 2 · 3 | From Idea to Backlog (`/product-3/`) | 15 | product ratings |

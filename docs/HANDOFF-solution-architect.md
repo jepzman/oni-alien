@@ -1,6 +1,6 @@
 # Handoff: The Solution Architect's Notebook (Series 2, Book 1)
 
-Status as of 2026-11-13: **Vols. 1–3 written (15 notes each). Vols. 1–2 are deployed; Vol. 3 is on the working branch.**
+Status as of 2026-11-13: **Vols. 1–4 written (15 notes each). Vols. 1–3 are deployed; Vol. 4 is on the working branch.**
 
 - Shareable plan (Claude Docs, private until shared by the owner): https://claude.ai/artifact/GF641a5WavDf4mpNx8bKH1
 - Sample chapter (draft, unlisted): `public/architect-2/notes/adr.html` — preview with `npm run serve`, then open http://localhost:8080/architect-2/notes/adr.html
@@ -79,7 +79,7 @@ Drafting sheet, vibrant version (owner asked for more colour and depth):
        covers using `--cover-architect` / `--band-architect` and labels “book 1 · vol. N”.
 3. [x] Keys are `architect-1`, `architect-2`, … (decided). Rename keys if wanted (`architect-1` … `architect-6`; URLs `/architect-N/`). Keys must stay flat:
        page depth assumptions (`../`) break with nested folders.
-4. [~] For each volume (Vols. 1–3 done): add the `JOURNALS` entry (copy `architect-2`, remove `draft=True` when ready),
+4. [~] For each volume (Vols. 1–4 done): add the `JOURNALS` entry (copy `architect-2`, remove `draft=True` when ready),
        full 15-note catalogue, write `content/architect-N/01_….py` … `04_….py` (4 collections).
 5. [x] Write `docs/larder-casebook.md` first, then Vol. 1 (done), then Vol. 2 (ADR note already done).
 6. [x] Update `PLANNED` / `FUTURE_LOG`, README volume table.
@@ -149,3 +149,12 @@ Drafting sheet, vibrant version (owner asked for more colour and depth):
   presenting to executives; Working with the architect ↔ explaining trade-offs; B2B vs B2C (Korenwolf) ↔ glossary or the
   solution design document; Launching a new city ↔ architecture roadmap.
 - Next for book 1: Vol. 4, Integration & the Enterprise Landscape (after Grace's Vol. 3).
+
+## 11. Vol. 4 notes on the build (2026-11-13)
+
+- `architect-4` journal; content in `content/architect-4/01_styles.py`, `02_boundaries.py`, `03_landscape.py`,
+  `04_changing.py`. Story runs **March → September 2027**; facts in the casebook, “Book 1, Vol. 4”, with ADRs 0018–0024.
+- Utrecht (12 Apr) and The Hague (14 Jun) are now actual openings; Antwerp (Sep) and Eindhoven (Nov) stay planning dates.
+- No `meanwhile` links: Grace's notes don't reach 2027 yet (her Vol. 6 might: launching a new city ↔ strangler fig or
+  capability map; B2B vs B2C ↔ API-first design or API versioning).
+- Next for book 1: Vol. 5, Designing for Qualities (after Grace's Vol. 4).

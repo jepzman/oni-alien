@@ -60,7 +60,7 @@ CAST = [
 
 # (book, title, narrator, period, status, summary, link or None)
 BOOKS = [
-    ("Book 1", "The Solution Architect's Notebook", "Ana", "Oct 2025 →", "vols. 1–3 out",
+    ("Book 1", "The Solution Architect's Notebook", "Ana", "Oct 2025 →", "vols. 1–4 out",
      "How Ana turns a one-line brief into an architecture that can grow to six cities: understanding the problem, finding the "
      "requirements that matter, choosing first shapes, testing risky ideas early, then recording decisions and living with them.",
      "../architect-1/index.html"),
@@ -189,8 +189,29 @@ TIMELINE = [
                              ('Living diagrams find a hidden call, 26 Jan', '../architect-3/notes/living-diagrams.html', '1')]),
     ("2027-02", "Feb 2027", [('Architecture roadmap for 2027, 2 Feb', '../architect-3/notes/architecture-roadmap.html', '1'),
                              ('Glossary after the Korenwolf report, 9 Feb', '../architect-3/notes/glossary.html', '1')]),
-    ("2027", "Later in 2027", [('Utrecht (Apr), The Hague (Jun), Eindhoven (Nov): planning dates', None, 's'),
-                             ('Antwerp, the first city abroad (Sep, planning)', None, 's'),
+    ("2027-03", "Mar 2027", [('Capability map for 2027, 1 Mar', '../architect-4/notes/capability-map.html', '1'),
+                             ('WMS B: a style per need, ADR 0018, 8 Mar', '../architect-4/notes/integration-style.html', '1'),
+                             ('Business API, contract first, 15 Mar', '../architect-4/notes/api-first.html', '1'),
+                             ('Anti-corruption layer for WMS B, 22 Mar', '../architect-4/notes/anti-corruption-layer.html', '1'),
+                             ('Warehouse move, store by store, 29 Mar', '../architect-4/notes/strangler-fig.html', '1')]),
+    ("2027-04", "Apr 2027", [('Utrecht opens, 12 Apr', None, 's'),
+                             ('Zuid moves to WMS B, 19 Apr', None, 's'),
+                             ('Event contracts after a silent break, 19 Apr', '../architect-4/notes/event-driven-integration.html', '1')]),
+    ("2027-05", "May 2027", [('Settlement files done properly, 10 May', '../architect-4/notes/batch-file-transfer.html', '1'),
+                             ('One identity per person, ADR 0021, 24 May', '../architect-4/notes/identity-federation.html', '1'),
+                             ('Business API live; Noord moves to WMS B, 24 May', None, 's')]),
+    ("2027-06", "Jun 2027", [('Backends for frontends, ADR 0022, 7 Jun', '../architect-4/notes/backend-for-frontend.html', '1'),
+                             ('The Hague opens on WMS B, 14 Jun', None, 's'),
+                             ('API versioning policy, 21 Jun', '../architect-4/notes/api-versioning.html', '1')]),
+    ("2027-07", "Jul 2027", [('No canonical order, ADR 0023, 5 Jul', '../architect-4/notes/canonical-data-model.html', '1'),
+                             ('Application portfolio (TIME), 19 Jul', '../architect-4/notes/application-portfolio.html', '1'),
+                             ('Utrecht moves to WMS B, 26 Jul', None, 's')]),
+    ("2027-08", "Aug 2027", [('One master per kind of data, ADR 0024, 2 Aug', '../architect-4/notes/data-ownership.html', '1'),
+                             ('Transition states and old bridges, 16 Aug', '../architect-4/notes/transition-architectures.html', '1')]),
+    ("2027-09", "Sep 2027", [('Vendor integration checklist, 6 Sep', '../architect-4/notes/saas-integration.html', '1'),
+                             ('StockPilot switched off, 15 Sep', None, 's')]),
+    ("2027", "Later in 2027", [('Antwerp, the first city abroad (Sep, planning)', None, 's'),
+                             ('Eindhoven (Nov, planning)', None, 's'),
                              ('Korenwolf renewal', None, 's')]),
 ]
 
