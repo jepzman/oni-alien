@@ -1,16 +1,16 @@
-# Shell, network & connectivity diagnostics · a laminated reference card in four pages.
+# Shell, network & connectivity diagnostics · a laminated reference card in five pages.
 # Rendered by scripts/build_notes.py (render_cheatsheet); Graph, Diagram, cmd, code and box come from scripts/cheatsheet.py.
 # Linux first; macOS and Windows equivalents on the last card.
 # Boxes flow into a 3-column grid (dense packing), so order them to fill rows: wide (2) + narrow (1).
 
 SLUG = "shell-network"
 TITLE = "Shell & Network"
-SUBTITLE = "shell power tools, connectivity diagnostics, HTTP, TLS and DNS"
-DESC = ("A four-page cheat sheet for shell and network diagnostics: pipes and text tools, processes and disk, walking the "
-        "network layers from DNS to the app, ports, curl timings, TLS certificates, tcpdump and an error-message decoder.")
+SUBTITLE = "shell power tools, connectivity diagnostics, HTTP, TLS, DNS and SSH tunnels"
+DESC = ("A five-page cheat sheet for shell and network diagnostics: pipes and text tools, processes and disk, walking the "
+        "network layers from DNS to the app, ports, curl timings, TLS certificates, tcpdump, an error-message decoder and SSH tunnels.")
 VERSION = "v1 · Nov 2026"
-BLURB = ("Four laminated pages: shell pipes and power tools, walking the network layers from DNS to the app, HTTP and "
-         "TLS with curl and openssl, and a decoder for the error messages you actually see.")
+BLURB = ("Five laminated pages: shell pipes and power tools, walking the network layers from DNS to the app, HTTP and "
+         "TLS with curl and openssl, a decoder for the error messages you actually see, and SSH tunnels.")
 LOGO = ('<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="8" fill="#FFFFFF" fill-opacity=".1"/>'
         '<path d="M7 11l5 4-5 4" fill="none" stroke="var(--b-feat)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>'
         '<path d="M14 21h6" stroke="var(--b-feat)" stroke-width="2.4" stroke-linecap="round"/>'
@@ -336,4 +336,97 @@ kubectl get endpoints api -n shop
     ],
 )
 
-PAGES = [PAGE_SHELL, PAGE_LAYERS, PAGE_HTTP, PAGE_DECODE]
+# ---------------------------------------------------------------- page 5 · ssh & tunnels
+def tunnels():
+    d = Diagram("SSH tunnels. Local forward: a port on your laptop reaches a private database through a bastion. Remote "
+                "forward: a port on the server reaches a service on your laptop. Dynamic forward: a SOCKS proxy on your "
+                "laptop sends any traffic out through the server. Jump host: SSH to a private host through a bastion.",
+                880, 246)
+    rows = [
+        ("-L  local", "ssh -L 5432:db.internal:5432 bastion", "laptop", "localhost:5432", "bastion", "ssh :22",
+         "db.internal", ":5432 (private)", "dev"),
+        ("-R  remote", "ssh -R 8080:localhost:3000 server", "server", "localhost:8080", "ssh link", "back to you",
+         "laptop", "localhost:3000", "feat"),
+        ("-D  dynamic", "ssh -D 1080 bastion", "browser / curl", "SOCKS 127.0.0.1:1080", "bastion", "ssh :22",
+         "any host", "the bastion can reach", "rel"),
+        ("-J  jump", "ssh -J bastion app.internal", "laptop", "ssh", "bastion", "relays :22",
+         "app.internal", "shell on a private host", "hot"),
+    ]
+    for i, (kind, cmdline, a, asub, b, bsub, c, csub, tone) in enumerate(rows):
+        y = 6 + i * 60
+        d.node(f"k{i}", 14, y + 3, 112, 38, kind, None, tone, "chip")
+        d.node(f"a{i}", 150, y, 150, 44, a, asub, tone, "soft")
+        d.node(f"b{i}", 400, y, 150, 44, b, bsub, "ink", "soft")
+        d.node(f"c{i}", 650, y, 216, 44, c, csub, tone)
+        d.arrow(f"a{i}", f"b{i}", "encrypted", tone=tone, ly=y + 16)
+        d.arrow(f"b{i}", f"c{i}", "plain", tone=tone, ly=y + 16)
+        d.text(150, y + 56, cmdline, "dt strong")
+    return d.svg()
+
+
+PAGE_SSH = dict(
+    title="SSH &amp; tunnels",
+    kicker="reach private hosts safely; forward ports both ways",
+    figure=tunnels(),
+    boxes=[
+        box("Tunnels", cmd('''
+ssh -N -L 5432:db.internal:5432 bastion  # then: psql -h localhost -p 5432
+ssh -N -L 8443:10.0.1.20:443 -L 6379:redis.internal:6379 bastion  # several at once
+ssh -N -R 8080:localhost:3000 server  # show your laptop's :3000 on server:8080
+ssh -N -D 1080 bastion  # then: curl --socks5-hostname localhost:1080 http://intranet/
+ssh -J bastion app.internal  # jump; chain: -J bastion1,bastion2
+ssh -f -N -o ExitOnForwardFailure=yes -L 5432:db.internal:5432 bastion  # background
+autossh -M 0 -N -o ServerAliveInterval=30 -L 5432:db.internal:5432 bastion  # reconnects
+'''), "dev", "wide", "-N = no shell, just the tunnel"),
+        box("Read a forward", '''
+<p><code>-L <b>5432</b>:<b>db.internal</b>:<b>5432</b> bastion</code></p>
+<dl class="kv">
+<dt>1st</dt><dd>port opened <b>on your side</b></dd>
+<dt>2nd</dt><dd>target host, resolved <b>by the bastion</b></dd>
+<dt>3rd</dt><dd>target port</dd>
+<dt>last</dt><dd>the SSH server in the middle</dd>
+</dl>
+<p class="fine"><code>-R</code> is the mirror: the 1st port opens on the <b>server</b>, the target is reached from <b>your</b> side. Tunnels listen on 127.0.0.1 unless you say otherwise.</p>''', "ink"),
+        box("~/.ssh/config", code('''
+Host bastion
+    HostName bastion.example.com
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes
+
+Host *.internal
+    ProxyJump bastion  # every internal host via the bastion
+
+Host db-tunnel
+    HostName bastion.example.com
+    LocalForward 5432 db.internal:5432
+    SessionType none  # OpenSSH 8.7+ (older: ssh -N)
+'''), "feat", "", "then: ssh db-tunnel"),
+        box("Keys &amp; basics", cmd('''
+ssh-keygen -t ed25519 -C "jef@laptop"
+ssh-copy-id -i ~/.ssh/id_ed25519.pub user@host
+ssh-add ~/.ssh/id_ed25519  # load into the agent
+ssh -i key.pem -p 2222 user@host
+scp -J bastion file app.internal:/tmp/
+rsync -avz -e "ssh -J bastion" dir/ app.internal:/srv/dir/
+ssh -vvv host  # debug: which keys, where it stops
+'''), "rel"),
+        box("SSH errors decoded", '''
+<dl class="kv stack">
+<dt>Permission denied (publickey)</dt><dd>wrong user or key; <code>chmod 700 ~/.ssh</code>, <code>600</code> on the key; check <code>ssh -v</code></dd>
+<dt>Host key verification failed</dt><dd>the host changed (rebuilt?) or something is in the middle. Verify, then <code>ssh-keygen -R host</code></dd>
+<dt>Too many authentication failures</dt><dd>the agent offers every key: <code>IdentitiesOnly yes</code></dd>
+<dt>bind: Address already in use</dt><dd>local port taken: <code>lsof -i :5432</code>, pick another</dd>
+<dt>channel open failed: administratively prohibited</dt><dd>server has <code>AllowTcpForwarding no</code></dd>
+<dt>connect failed: Connection refused</dt><dd>the <b>bastion</b> can't reach the target host:port</dd>
+</dl>''', "main", "wide"),
+        box("Safer habits", '''
+<ul class="checks">
+<li><code>-J</code> instead of <code>-A</code>: agent forwarding lets the bastion use your keys</li>
+<li>Keep forwards on <code>127.0.0.1</code>; <code>GatewayPorts</code> only on purpose</li>
+<li>Close tunnels when done: <code>~.</code> quits a stuck session</li>
+<li>Cloud options without open port 22: AWS SSM, <code>gcloud … --tunnel-through-iap</code>, Azure Bastion, <code>kubectl port-forward</code></li>
+</ul>''', "warn"),
+    ],
+)
+
+PAGES = [PAGE_SHELL, PAGE_LAYERS, PAGE_HTTP, PAGE_DECODE, PAGE_SSH]
