@@ -426,6 +426,43 @@ JOURNALS = [
             (15, "prototype-testing", "Prototype Testing with Users", "testing", "Put a clickable fake in front of five real users and watch where they stumble."),
         ],
     ),
+    dict(
+        key="product-2", vol=2, title="Deciding What to Build", short="deciding what to build",
+        series=2, book="The Product Owner's Notebook", narrator="Grace", brand="product owner's notebook", book_no=2,
+        title_block=True, sheet_doodles="product",
+        theme="theme-product", fonts="Permanent+Marker", subject="product ownership",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the product",
+        term="Spring term · 2027", weekdays=(1, 4), start=date(2027, 3, 2),
+        kicker="the product owner's notebook · book 2 · vol. 2",
+        story="<b>January 2026.</b> Grace knows the problem now: substitutions, 6 % of orders ending in a refund ticket, and customers who mind not being asked. Her tests say approvals in the app will work. But Rotterdam opens on 27 April, Femke has met an office client at a trade fair, and every stakeholder has an idea for the next quarter. This volume follows Grace from January to April 2026: choosing what to build, saying no to the rest, and turning it into a strategy and a roadmap people trust.",
+        lead="Volume 2 of <span class=\"hl\">The Product Owner's Notebook</span>: how a product owner decides what to build, and what not to. {n} notes in {c} collections: prioritise with evidence, say no without burning bridges, put strategy and roadmaps on a page, and make the case for the bets you choose. Every note follows <b>Grace</b> at <b>Larder</b> from January to April 2026, in the same weeks as Ana's notebook, and ends with a <b>try it</b> exercise for your own product.",
+        blurb="Prioritising with evidence, saying no, strategy on a page, now / next / later roadmaps and business cases.",
+        attrs=PRODUCT_ATTRS, attrs_title="The nine product ratings", attrs_side="what a good product practice is judged on", ratings_h2="Product ratings",
+        handmade=set(),
+        collections=[
+            ("prioritising", "Prioritising", "compare ideas with evidence, and order them by time and value"),
+            ("saying-no", "Saying no", "protect the focus, keep the relationships"),
+            ("roadmaps", "Strategy & roadmaps", "one page of strategy, a roadmap people can trust"),
+            ("case", "Making the case", "size it, price it, and bet instead of promising"),
+        ],
+        catalogue=[
+            (1, "rice-ice-scoring", "RICE & ICE Scoring", "prioritising", "Score every idea the same way (reach, impact, confidence, effort), then argue about the numbers, not the sponsors."),
+            (2, "cost-of-delay", "Cost of Delay", "prioritising", "Price each week of waiting and divide by duration, so short, valuable work doesn't queue behind long work."),
+            (3, "kano-model", "Kano Model", "prioritising", "Ask customers which features are basic, more-is-better or delightful, instead of guessing."),
+            (4, "moscow", "MoSCoW and Its Traps", "prioritising", "Must, Should, Could, Won't, with a strict Must test, room to spare and the Won'ts written down."),
+            (5, "saying-no", "Saying No Without Burning Bridges", "saying-no", "A clear no with the reason, what you're doing instead, a small yes and a date to look again."),
+            (6, "hippo", "Handling the HiPPO", "saying-no", "Turn the most senior opinion in the room into a hypothesis, and test it."),
+            (7, "opportunity-cost", "Opportunity Cost", "saying-no", "Every yes is a no to the next best thing; name that thing and its price."),
+            (8, "request-triage", "Feature Request Triage", "saying-no", "One front door for requests and a weekly triage, so everyone gets an answer within a week."),
+            (9, "strategy-on-a-page", "Product Strategy on a Page", "roadmaps", "Where we are, who we serve, how we win, what we bet on and what we won't do, on one page."),
+            (10, "now-next-later", "Now / Next / Later Roadmap", "roadmaps", "Three columns instead of a Gantt chart: sure now, likely next, possible later."),
+            (11, "outcome-roadmaps", "Outcome-Based Roadmaps", "roadmaps", "Put the result you're after on the roadmap, with the features as current bets."),
+            (12, "roadmap-vs-release-plan", "Roadmap vs Release Plan", "roadmaps", "Keep the why-and-order roadmap apart from the dated release plan, and update both."),
+            (13, "opportunity-sizing", "Opportunity Sizing", "case", "Size a market bottom-up from customers you can count, not from a big top-down number."),
+            (14, "business-case", "Business Case One-Pager", "case", "Problem, benefit, cost, payback, risks and the ask, on one page someone will read."),
+            (15, "bets-not-promises", "Bets, Not Promises", "case", "Present plans as bets with confidence and signals, not promises you don't control."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
@@ -440,7 +477,6 @@ PLANNED_2 = [
     (6, "Delivery, Governance & Influence", "Just-enough design, principles, guardrails, risk, go-live, and influencing without authority."),
 ]
 PLANNED_PRODUCT = [
-    (2, "Deciding What to Build", "Prioritising, saying no, strategy on a page and now / next / later roadmaps."),
     (3, "From Idea to Backlog", "Story maps, thin slices, example mapping, tech-debt talks and the Rotterdam launch."),
     (4, "Measuring & Learning", "Tracking plans, funnels, A/B tests, guardrails and OKRs."),
     (5, "Stakeholders & Influence", "Updates, demos, pitching to the CEO, and working with operations, legal and the architect."),
@@ -449,7 +485,7 @@ PLANNED_PRODUCT = [
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
     ("Jan 2027", [("•", "One-page printable cheat sheet per collection")]),
-    ("Feb 2027", [("★", "Book 2, vol. 2 · <b>Deciding What to Build</b> (Grace): prioritising, saying no, strategy on a page, now / next / later roadmaps"), ("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
+    ("Feb 2027", [("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
     ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b> (Sanne, the Rotterdam launch): planning, estimation, risks and dependencies, delivery rhythms, status that tells the truth"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
     ("Mid 2027", [("★", "Book 1, vols. 3–6 · communicating architecture, integration, designing for qualities, governance and influence")]),
