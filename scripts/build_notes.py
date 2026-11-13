@@ -424,6 +424,42 @@ JOURNALS = [
             (15, "glossary", "Glossary & Ubiquitous Language", "current", "One list of the words that matter, what each means where, used in code, docs and meetings."),
         ],
     ),
+    dict(
+        key="architect-4", vol=4, title="Integration & the Enterprise Landscape", short="integration &amp; the enterprise",
+        series=2, book="The Solution Architect's Notebook", narrator="Ana", brand="architect's notebook", title_block=True, sheet_doodles=True,
+        theme="theme-architect", fonts="Architects+Daughter", subject="solution architecture",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Autumn term · 2027", weekdays=(1, 3), start=date(2027, 9, 7),
+        kicker="the solution architect's notebook · book 1 · vol. 4",
+        story="<b>March 2027.</b> Larder is moving its warehouses from StockPilot to WMS B, store by store, while Utrecht and The Hague open and Antwerp gets ready for September. Korenwolf wants to order from its own systems, a second billing flow is live, and the landscape now holds more than twenty applications. This volume follows Ana from March to September 2027: connecting systems without tangling them, drawing honest boundaries, mapping the landscape, and changing it while the business keeps running.",
+        lead="Volume 4 of <span class=\"hl\">The Solution Architect's Notebook</span>: how architects connect systems, protect their boundaries, see the whole landscape and change it safely. {n} notes in {c} collections: integration styles, boundaries, the landscape, and changing it. Every note follows <b>Ana</b> at <b>Larder</b> from March to September 2027, through a warehouse migration and three city launches, and ends with a <b>try it</b> exercise for your own project.",
+        blurb="Integration styles, anti-corruption layers, capability maps, portfolios, master data and strangler-fig migrations.",
+        attrs=ARCHITECT_ATTRS, attrs_title="The nine architect ratings", attrs_side="what a good architecture practice is judged on", ratings_h2="Architect ratings",
+        handmade=set(),
+        collections=[
+            ("styles", "Integration styles", "a style per need: events, APIs, files"),
+            ("boundaries", "Boundaries", "keep other models out, and change contracts safely"),
+            ("landscape", "The landscape", "see every capability, application and owner"),
+            ("changing", "Changing the landscape", "move piece by piece while the business runs"),
+        ],
+        catalogue=[
+            (1, "integration-style", "Choosing an Integration Style", "styles", "Shared database, files, APIs or events: choose per need, and mix them behind one adapter."),
+            (2, "api-first", "API-First Design", "styles", "Write the contract first, in the consumer's words, review it with them, and build against it."),
+            (3, "event-driven-integration", "Event-Driven Integration", "styles", "Treat events as owned, registered contracts with known consumers and compatible changes."),
+            (4, "batch-file-transfer", "Batch & File Transfer", "styles", "Files on a schedule, done properly: checked, loaded once, and loud when late."),
+            (5, "anti-corruption-layer", "Anti-Corruption Layer", "boundaries", "Translate another system's model at the border so it never leaks into yours."),
+            (6, "backend-for-frontend", "Backend for Frontend", "boundaries", "One small backend per kind of client, shaped for what that client needs."),
+            (7, "api-versioning", "API Versioning Strategy", "boundaries", "Add without breaking, version when you must, and retire old versions on a schedule."),
+            (8, "canonical-data-model", "Canonical Data Model (and Its Traps)", "boundaries", "Why one model for everything fails, and the small shared language that works instead."),
+            (9, "capability-map", "Capability Map", "landscape", "What the business must be able to do, mapped and coloured, independent of systems."),
+            (10, "application-portfolio", "Application Portfolio (TIME)", "landscape", "Every application sorted into tolerate, invest, migrate or eliminate."),
+            (11, "data-ownership", "Data Ownership & Master Data", "landscape", "One owner per kind of data, one master copy, and everyone else subscribes."),
+            (12, "identity-federation", "Identity Federation & SSO", "landscape", "One identity per person, trusted across tools and partners, removed in one place."),
+            (13, "strangler-fig", "Strangler Fig Migration", "changing", "Replace a system piece by piece behind a router, until the old one can be switched off."),
+            (14, "transition-architectures", "Transition Architectures", "changing", "Design the in-between states of a migration, including the temporary bridges and their end dates."),
+            (15, "saas-integration", "SaaS & Vendor Integration", "changing", "Integrate with services you don't control: webhooks, limits, sandboxes, outages and exits."),
+        ],
+    ),
     # ---- Series 2 · Book 2 · The Product Owner's Notebook (Grace). Plan: docs/HANDOFF-product-owner.md ----
     dict(
         key="product-1", vol=1, title="Discovering the Problem", short="discovering the problem",
@@ -536,6 +572,43 @@ JOURNALS = [
             (15, "release-notes", "Release Notes & Customer Comms", "shipping", "Tell customers and staff what changed, why, and what to do, before they ask."),
         ],
     ),
+    dict(
+        key="product-4", vol=4, title="Measuring & Learning", short="measuring &amp; learning",
+        series=2, book="The Product Owner's Notebook", narrator="Grace", brand="product owner's notebook", book_no=2,
+        title_block=True, sheet_doodles="product",
+        theme="theme-product", fonts="Permanent+Marker", subject="product ownership",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the product",
+        term="Autumn term · 2027", weekdays=(1, 4), start=date(2027, 9, 7),
+        kicker="the product owner's notebook · book 2 · vol. 4",
+        story="<b>May 2026.</b> Approvals is live in Amsterdam and coming to Rotterdam, the “no swaps” flag is used every day, and the board has been promised a range, not a number. Now Grace has to find out what's really working. This volume follows her from May to October 2026: measuring properly, running honest experiments, listening to support, operations and customers, and setting goals the team can actually steer by, including stopping what doesn't work.",
+        lead="Volume 4 of <span class=\"hl\">The Product Owner's Notebook</span>: how a product owner finds out what's working and learns from it. {n} notes in {c} collections: instrument the product, experiment honestly, listen to the people closest to customers, and set goals worth steering by. Every note follows <b>Grace</b> at <b>Larder</b> from May to October 2026, after the approvals launch, and ends with a <b>try it</b> exercise for your own product.",
+        blurb="Tracking plans, funnels, cohorts, A/B tests, guardrails, listening loops, OKRs and knowing when to stop.",
+        attrs=PRODUCT_ATTRS, attrs_title="The nine product ratings", attrs_side="what a good product practice is judged on", ratings_h2="Product ratings",
+        handmade=set(),
+        collections=[
+            ("instrumenting", "Instrumenting", "measure properly before you judge"),
+            ("experimenting", "Experimenting", "test changes fairly, and read the results honestly"),
+            ("listening", "Listening", "hear support, operations and customers, regularly"),
+            ("goals", "Goals", "steer by outcomes, review honestly, stop what doesn't work"),
+        ],
+        catalogue=[
+            (1, "event-tracking-plan", "Event Tracking Plan", "instrumenting", "One table of events: name, when it fires, properties, owner, the same on every platform."),
+            (2, "funnels", "Funnels", "instrumenting", "Count users at every step to see where they drop out, before guessing why."),
+            (3, "cohorts-retention", "Cohorts & Retention Curves", "instrumenting", "Compare groups that share a starting point to see whether customers come back."),
+            (4, "dashboards", "Dashboards That Get Used", "instrumenting", "One page with the north star, its inputs and guardrails, reviewed weekly."),
+            (5, "ab-tests", "A/B Tests", "experimenting", "Split customers at random, change one thing, and compare on the metric you chose in advance."),
+            (6, "sample-size", "Sample Size & Test Duration", "experimenting", "Work out how many and how long before you start, so the answer means something."),
+            (7, "guardrail-metrics", "Guardrail Metrics", "experimenting", "The numbers that mustn't get worse while you chase the one you want to improve."),
+            (8, "reading-results", "Reading Results Honestly", "experimenting", "No peeking, no fishing in segments, ranges not points, and decisions you set in advance."),
+            (9, "support-tickets-data", "Support Tickets as Data", "listening", "Tag tickets consistently and read them as a weekly signal of what hurts customers."),
+            (10, "operations-feedback", "Feedback Loops with Operations", "listening", "A regular, easy channel from pickers and couriers to the team, with answers going back."),
+            (11, "advisory-panel", "Customer Advisory Panel", "listening", "A small, varied group of customers for depth and early reactions, not for votes."),
+            (12, "okrs", "OKRs", "goals", "An objective in words and a few measurable key results per quarter, graded honestly."),
+            (13, "vanity-metrics", "Vanity vs Actionable Metrics", "goals", "Prefer numbers that change decisions over numbers that only look good."),
+            (14, "post-launch-review", "Post-Launch Review", "goals", "Compare what you expected with what happened, and decide what to do next."),
+            (15, "killing-a-feature", "Killing a Feature", "goals", "Remove features that don't earn their keep, carefully and on purpose."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
@@ -544,12 +617,10 @@ PLANNED = [
 ]
 # Planned volumes of Series 2, book 1 (see docs/HANDOFF-solution-architect.md).
 PLANNED_2 = [
-    (4, "Integration & the Enterprise", "Integration styles, anti-corruption layers, capability maps, portfolios and strangler-fig migrations."),
     (5, "Designing for Qualities", "Back-of-the-envelope estimates, availability maths, security reviews and total cost of ownership."),
     (6, "Delivery, Governance & Influence", "Just-enough design, principles, guardrails, risk, go-live, and influencing without authority."),
 ]
 PLANNED_PRODUCT = [
-    (4, "Measuring & Learning", "Tracking plans, funnels, A/B tests, guardrails and OKRs."),
     (5, "Stakeholders & Influence", "Updates, demos, pitching to the CEO, and working with operations, legal and the architect."),
     (6, "Growing the Product", "New cities, Antwerp, the Korenwolf account and growing as a product owner."),
 ]
@@ -559,7 +630,7 @@ FUTURE_LOG = [
     ("Feb 2027", [("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
     ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b> (Sanne, the Rotterdam launch): planning, estimation, risks and dependencies, delivery rhythms, status that tells the truth"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
-    ("Mid 2027", [("★", "Book 1, vols. 4–6 · integration, designing for qualities, governance and influence")]),
+    ("Mid 2027", [("★", "Book 1, vols. 5–6 · designing for qualities, governance and influence")]),
     ("Someday", [("•", "Extra notes for Vols. 2, 5 and 6: Debounce &amp; Throttle, Passkeys, Signed Webhooks, Chaos Engineering, Service Catalogues"), ("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
 
