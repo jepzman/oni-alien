@@ -1428,7 +1428,7 @@ def render_casefile():
 
 
 # ---------------------------------------------------------------- cheat sheets (laminated reference cards)
-CHEATSHEETS = ["git_flow", "docker_k8s", "sql"]
+CHEATSHEETS = ["git_flow", "docker_k8s", "sql", "nfr"]
 CS_FONTS = "IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400"
 CS_LOGO = ('<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="8" fill="#FFFFFF" fill-opacity=".1"/>'
            '<path d="M10 7v20" stroke="var(--b-main)" stroke-width="3" stroke-linecap="round" fill="none"/>'

@@ -177,7 +177,7 @@ class Diagram:
         x, y, w, h = self.nodes[nid]
         return {"r": (x + w, y + h / 2), "l": (x, y + h / 2), "t": (x + w / 2, y), "b": (x + w / 2, y + h)}[side]
 
-    def arrow(self, a, b, label=None, sides="rl", dashed=False, tone="ink", lx=None, ly=None):
+    def arrow(self, a, b, label=None, sides="rl", dashed=False, tone="ink", lx=None, ly=None, both=False):
         (x1, y1), (x2, y2) = self._pt(a, sides[0]), self._pt(b, sides[1])
         if sides in ("rl", "lr"):
             dx = (x2 - x1) * 0.5
@@ -188,7 +188,8 @@ class Diagram:
         else:
             d = f"M{x1} {y1} L{x2} {y2}"
         dash = " dashed" if dashed else ""
-        self.arrows.append(f'<path class="ar t-{tone}{dash}" d="{d}" marker-end="url(#ah-{tone})"/>')
+        start = f' marker-start="url(#ah-{tone})"' if both else ""
+        self.arrows.append(f'<path class="ar t-{tone}{dash}" d="{d}" marker-end="url(#ah-{tone})"{start}/>')
         if label:
             mx = lx if lx is not None else (x1 + x2) / 2
             my = ly if ly is not None else (y1 + y2) / 2 - 5
