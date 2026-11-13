@@ -30,6 +30,19 @@ Live site: https://jepzman.github.io/oni-alien/
 
 The landing page (`/`) shows two shelves (Series 1: design patterns; Series 2: practitioner's notebooks, with `series=2` in `JOURNALS`), planned volumes (`PLANNED`, `PLANNED_2`) and a “future log” of upcoming work.
 
+## Cheat sheets
+
+Laminated reference cards (`/cheatsheets/<slug>/`), listed on the landing page under **Cheat sheets**. Each is a few A4 pages:
+a subway-map branch diagram on top and boxed panels below (3 columns on desktop and in print, 1 on phones), with its own PDF.
+
+| Cheat sheet | Cards | Content |
+|---|---|---|
+| Git Flow (`/cheatsheets/git-flow/`) | 4 | the branch map, everyday work and merge strategies, releases and UAT fixes, hotfixes, emergencies and undo |
+
+- Content: `content/cheatsheets/<name>.py` (`PAGES`, each with an optional `figure`, `legend`, `strategies` and a list of `box()` panels).
+- Helpers: `scripts/cheatsheet.py` (`Graph` for git graphs, `cmd()` terminal blocks, `box()` panels); styles in `public/assets/cheatsheet.css`.
+- Add one: write the content file, add its name to `CHEATSHEETS` in `scripts/build_notes.py`, build. It is added to `journals.json`, so the workflow builds its PDF.
+
 ## Handoff
 
 Start with `docs/HANDOFF.md`: current state, next steps, how to build, verify and deploy.
