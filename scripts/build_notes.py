@@ -1428,7 +1428,7 @@ def render_casefile():
 
 
 # ---------------------------------------------------------------- cheat sheets (laminated reference cards)
-CHEATSHEETS = ["git_flow"]
+CHEATSHEETS = ["git_flow", "docker_k8s", "sql", "nfr"]
 CS_FONTS = "IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400"
 CS_LOGO = ('<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="8" fill="#FFFFFF" fill-opacity=".1"/>'
            '<path d="M10 7v20" stroke="var(--b-main)" stroke-width="3" stroke-linecap="round" fill="none"/>'
@@ -1441,7 +1441,7 @@ def load_cheatsheet(name):
     f = CONTENT / "cheatsheets" / f"{name}.py"
     spec = importlib.util.spec_from_file_location(f"cheatsheet_{name}", f)
     mod = importlib.util.module_from_spec(spec)
-    mod.__dict__.update(Graph=cheatsheet.Graph, cmd=cheatsheet.cmd, box=cheatsheet.box)
+    mod.__dict__.update(Graph=cheatsheet.Graph, Diagram=cheatsheet.Diagram, cmd=cheatsheet.cmd, code=cheatsheet.code, box=cheatsheet.box)
     spec.loader.exec_module(mod)
     return mod
 
@@ -1462,7 +1462,7 @@ def render_cheatsheet(cs):
             body.append('<ul class="cs-legend">' + "".join(
                 f'<li><i style="--c:var(--b-{c})"></i><b>{esc(name)}</b> {esc(what)}</li>' for c, name, what in p["legend"]) + "</ul>")
         if p.get("strategies"):
-            body.append('<h3 class="cs-strat-h">Merge strategies: pick per target branch</h3>')
+            body.append(f'<h3 class="cs-strat-h">{p.get("strategies_title", "Merge strategies: pick per target branch")}</h3>')
             body.append('<div class="cs-strats">' + "".join(
                 f'<section class="cs-strat"><h3>{t} <code>{esc(flag)}</code></h3>{svg}<p>{what}</p><p>{use}</p></section>'
                 for t, flag, svg, what, use in p["strategies"]) + "</div>")
@@ -1473,7 +1473,7 @@ def render_cheatsheet(cs):
             r"(<dt>.*?</dt>\s*<dd>.*?</dd>)", r"<div>\1</div>", m.group(1), flags=re.S) + "</dl>", html, flags=re.S)
         pages.append(f'''<article class="cs-page" id="p{i}" aria-labelledby="p{i}-h">
 <header class="cs-head">
-  <div class="cs-logo">{CS_LOGO}<span>{esc(cs.TITLE)}<br>cheat sheet</span></div>
+  <div class="cs-logo">{getattr(cs, "LOGO", CS_LOGO)}<span>{esc(cs.TITLE)}<br>cheat sheet</span></div>
   <h2 id="p{i}-h">{p["title"]}<small>{p["kicker"]}</small></h2>
   <div class="cs-num"><b>{i}/{n}</b>card</div>
 </header>

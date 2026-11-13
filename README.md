@@ -40,9 +40,12 @@ a subway-map branch diagram on top and boxed panels below (3 columns on desktop 
 | Cheat sheet | Cards | Content |
 |---|---|---|
 | Git Flow (`/cheatsheets/git-flow/`) | 4 | the branch map, everyday work and merge strategies, releases and UAT fixes, hotfixes, emergencies and undo |
+| Docker & Kubernetes (`/cheatsheets/docker-kubernetes/`) | 4 | Docker and Compose, the Kubernetes object map and kubectl, rollouts, probes, resources and config, pod troubleshooting |
+| SQL (`/cheatsheets/sql/`) | 4 | query order and NULLs, joins as Venn diagrams, set operations and CTEs, window functions, upserts and paging, indexes, EXPLAIN and transactions |
+| NFR Checklists (`/cheatsheets/nfr-checklists/`) | 4 | writing measurable NFRs, then questions, measures and typical targets per quality attribute, and the common trade-offs |
 
 - Content: `content/cheatsheets/<name>.py` (`PAGES`, each with an optional `figure`, `legend`, `strategies` and a list of `box()` panels).
-- Helpers: `scripts/cheatsheet.py` (`Graph` for git graphs, `cmd()` terminal blocks, `box()` panels); styles in `public/assets/cheatsheet.css`.
+- Helpers: `scripts/cheatsheet.py` (`Graph` for git graphs, `Diagram` for box-and-arrow maps, `cmd()` terminal blocks, `code()` YAML/Dockerfile cards, `box()` panels); styles in `public/assets/cheatsheet.css`.
 - Add one: write the content file, add its name to `CHEATSHEETS` in `scripts/build_notes.py`, build. It is added to `journals.json`, so the workflow builds its PDF.
 
 ## Handoff
