@@ -60,7 +60,7 @@ CAST = [
 
 # (book, title, narrator, period, status, summary, link or None)
 BOOKS = [
-    ("Book 1", "The Solution Architect's Notebook", "Ana", "Oct 2025 →", "vols. 1–2 out",
+    ("Book 1", "The Solution Architect's Notebook", "Ana", "Oct 2025 →", "vols. 1–3 out",
      "How Ana turns a one-line brief into an architecture that can grow to six cities: understanding the problem, finding the "
      "requirements that matter, choosing first shapes, testing risky ideas early, then recording decisions and living with them.",
      "../architect-1/index.html"),
@@ -155,7 +155,24 @@ TIMELINE = [
     ("2026-07", "Jul 2026", [("StockPilot exit plan, 6 Jul", "../architect-2/notes/exit-plans.html", "1")]),
     ("2026-09", "Sep 2026", [("Korenwolf signs for three offices", None, "s"),
                              ("Decision review, ADR 0014 proposed, 21 Sep", "../architect-2/notes/revisiting-decisions.html", "1")]),
-    ("2027", "2027", [("Utrecht, The Hague, Eindhoven", None, "s"), ("Antwerp: the first city abroad", None, "s"), ("Korenwolf renewal", None, "s")]),
+    ("2026-10", "Oct 2026", [("C4 diagrams replace eleven, 6 Oct", "../architect-3/notes/c4-model.html", "1"),
+                             ("Views for Lena, Joost, Ben and Eli, 13 Oct", "../architect-3/notes/views-viewpoints.html", "1"),
+                             ("Whiteboard: vans in Dispatch, 20 Oct", "../architect-3/notes/whiteboard-sessions.html", "1"),
+                             ("The standing-order sequence, 27 Oct", "../architect-3/notes/sequence-flow.html", "1")]),
+    ("2026-11", "Nov 2026", [("Deployment diagram after an incident, 3 Nov", "../architect-3/notes/deployment-diagrams.html", "1"),
+                             ("Architecture one-pager for the board, 10 Nov", "../architect-3/notes/architecture-one-pager.html", "1"),
+                             ("arc42 skeleton, 17 Nov", "../architect-3/notes/arc42.html", "1"),
+                             ("Docs as code, 24 Nov", "../architect-3/notes/docs-as-code.html", "1")]),
+    ("2026-12", "Dec 2026", [("Korenwolf solution design, 1–18 Dec", "../architect-3/notes/solution-design-document.html", "1"),
+                             ("Warehouse decision for executives, 9 Dec", "../architect-3/notes/presenting-to-executives.html", "1"),
+                             ("Checkout down 38 minutes at the Christmas peak, 18 Dec", None, "s")]),
+    ("2027-01", "Jan 2027", [("Korenwolf: three offices live", None, "s"),
+                             ("99.99 %? Explaining the trade-off, 12 Jan", "../architect-3/notes/explaining-trade-offs.html", "1"),
+                             ("First architecture kata: Antwerp, 19 Jan", "../architect-3/notes/architecture-katas.html", "1"),
+                             ("Living diagrams find a hidden call, 26 Jan", "../architect-3/notes/living-diagrams.html", "1")]),
+    ("2027-02", "Feb 2027", [("Architecture roadmap for 2027, 2 Feb", "../architect-3/notes/architecture-roadmap.html", "1"),
+                             ("Glossary after the Korenwolf report, 9 Feb", "../architect-3/notes/glossary.html", "1")]),
+    ("2027", "Later in 2027", [("Utrecht (Apr), The Hague (Jun), Eindhoven (Nov): planning dates", None, "s"), ("Antwerp, the first city abroad (Sep, planning)", None, "s"), ("Korenwolf renewal", None, "s")]),
 ]
 
 # ------------------------------------------------------------------ doodles
