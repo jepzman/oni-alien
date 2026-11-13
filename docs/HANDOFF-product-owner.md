@@ -1,6 +1,6 @@
 # Handoff: The Product Owner's Notebook (Series 2, Book 2)
 
-Status as of 2026-11-13: **Vols. 1–3 written (15 notes each). Vols. 1–2 are deployed; Vol. 3 is on the working branch.** Decisions in section 7.
+Status as of 2026-11-13: **Vols. 1–4 written and deployed (15 notes each).** Decisions in section 7.
 
 Story facts: `docs/larder-casebook.md` (source of truth) and the public case file `/larder/`.
 Book 1's plan, for comparison: `docs/HANDOFF-solution-architect.md`.
@@ -24,7 +24,7 @@ spike/prototype/PoC note; Grace's backlog notes link the walking skeleton.
 | 1 | Discovering the Problem | Oct 2025 → Jan 2026 | **Understanding customers**: Customer Interviews ★, Jobs to Be Done ★, Proto-Personas, Customer Journey Map · **Framing the problem**: Problem Statements, Opportunity Solution Tree ★, Assumption Mapping, Outcomes over Outputs · **Measuring what matters**: North Star Metric ★, Leading vs Lagging Indicators, Baseline Before You Build · **Testing ideas cheaply**: Fake Door Test ★, Concierge & Wizard-of-Oz MVP ★, Prototype Testing with Users |
 | 2 | Deciding What to Build (done) | Jan → Apr 2026 | **Prioritising**: RICE & ICE Scoring, Cost of Delay, Kano Model, MoSCoW and Its Traps · **Saying no**: Saying No Without Burning Bridges, Handling the HiPPO, Opportunity Cost, Feature Request Triage (added) · **Strategy & roadmaps**: Product Strategy on a Page, Now / Next / Later Roadmap, Outcome-Based Roadmaps, Roadmap vs Release Plan · **Making the case**: Opportunity Sizing (added), Business Case One-Pager, Bets Not Promises |
 | 3 | From Idea to Backlog (done) | Feb → Jun 2026 | **Shaping work**: Story Mapping, Thin Slices of Value, MVP vs MLP, Pre-mortem (added) · **Writing it down**: User Stories that Work, Example Mapping, Definition of Ready & Done · **Working with the team**: The Product Trio, Sprint Goals, Refinement that Isn't a Meeting Marathon, Talking Tech Debt with Engineers · **Shipping**: Launch Checklist (Rotterdam), Dark Launches & Rollouts, Hypercare after Launch (added), Release Notes & Customer Comms (added). Release Planning dropped: Vol. 2's roadmap vs release plan covers it. |
-| 4 | Measuring & Learning | May → Oct 2026 | **Instrumenting**: Event Tracking Plan ★, Funnels ★, Cohorts & Retention Curves · **Experimenting**: A/B Tests ★, Guardrail Metrics, Reading Results Honestly · **Listening**: Support Tickets as Data, Feedback Loops with Operations, Customer Advisory Panel · **Goals**: OKRs ★, Vanity vs Actionable Metrics, Post-Launch Review, Killing a Feature |
+| 4 | Measuring & Learning | May → Oct 2026 | **Instrumenting**: Event Tracking Plan ★, Funnels ★, Cohorts & Retention Curves, Dashboards That Get Used (added) · **Experimenting**: A/B Tests ★, Sample Size & Test Duration (added), Guardrail Metrics, Reading Results Honestly · **Listening**: Support Tickets as Data, Feedback Loops with Operations, Customer Advisory Panel · **Goals**: OKRs ★, Vanity vs Actionable Metrics, Post-Launch Review, Killing a Feature (done) |
 | 5 | Stakeholders & Influence | all year | **Communicating**: Product Update that Gets Read ★, Demos that Land ★, The One-Page PRD · **Managing up and across**: Managing Up (Priya), Pitching to the CEO ★, Dependencies across Teams · **Partners inside**: Operations as a Customer (Joost) ★, Working with Legal & Privacy (Lena), Working with the Architect (Ana) ★ · **Hard moments**: Negotiating Scope, When the Date Is Fixed, Delivering Bad News, Disagree and Commit |
 | 6 | Growing the Product | Sep 2026 → 2027 | **New markets**: Launching a New City ★, Localisation for Antwerp, Pricing Experiments · **Business customers**: B2B vs B2C Products (Korenwolf) ★, Account Needs vs Product Vision, Service Levels as Features · **Scaling the product**: Platform Thinking, Accessibility as Product Quality, Product-Led Growth · **Growing yourself**: Product Sense, Writing Product Principles, Growing as a PO ★, Handing Over a Product Area |
 
@@ -140,3 +140,12 @@ Each book has its own skin; Book 2 should feel like a **product team's wall**:
 - Skin fix (PR #12): the product sheet's ruled lines never rendered (a 20 px background tile from the base sheet style
   clipped them); now set explicitly, plus the cork desk. Shelf covers now match every volume of a book (PR #11).
 - Next for book 2: Vol. 4, Measuring & Learning (May → Oct 2026).
+
+## 11. Vol. 4 notes on the build (2026-11-13)
+
+- `product-4` journal; content in `content/product-4/01_instrumenting.py`, `02_experimenting.py`, `03_listening.py`,
+  `04_goals.py`. The plan listed 13 topics; **Dashboards That Get Used** and **Sample Size & Test Duration** were added.
+- Story runs **May → October 2026**. New facts: casebook, “Book 2, Vol. 4” (funnel and Android fix, 3-minute window
+  test, Q3 OKRs graded, advisory panel, slot waitlist removed 5 Oct).
+- Meanwhile link: killing a feature ↔ Ana's revisiting decisions (21 Sep).
+- Next for book 2: Vol. 5 (see §2).

@@ -343,6 +343,39 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
 - **Approvals in Rotterdam** (8 Jun): email the day before, intro card on the first swap, "What's new", Sam's macros, a
   briefing for Rotterdam's pickers. First week: 1.4 tickets per 1,000 approvals.
 
+## Book 2, Vol. 4: Grace's facts (May → October 2026)
+
+- **Tracking plan** (4 May, Grace and Dee): four approval events (offered, seen, answered, applied) with the same names on
+  iOS, Android and web; "tracking events firing as in the plan" joins the definition of done. Real answer rate in May: 77 %.
+- **Swap funnel** (18 May): offered 100 → seen 88 → opened 82 → answered 77 → applied 76. The drop was seen → opened on
+  Android (71 % vs iOS 96 %): Android grouped Larder's notifications. Fixed 1 June; answers rose to 82 %.
+- **Ticket review** (from 15 Jun, Mondays, Grace and Sam, per 1,000 orders): where is my order 11.2, missing item 6.4,
+  late delivery 4.1, swap refund 3.4 (was 6.2), damaged 2.0; contact rate 31 per 1,000 (38 in April). Sam's auto-refund
+  button (R-22) closed. Swap refund tickets as % of orders: April 5.1 %, May 4.0 %, June 3.4 %.
+- **3-minute window test** (sample size set 15 Jun; ran 22 Jun–6 Jul, Amsterdam): ~1,300 swaps per group, two full weeks.
+  Answered 82 % (2 min) vs 88 % (3 min), +6 points (95 % interval +3.8 to +8.2); picking +7 s vs +11 s. Day-three lead
+  was 9 points. Shipped 13 Jul.
+- **Board slide** (22 Jun): vanity totals (120,000 swaps approved, 180,000 downloads) replaced by swap refunds per 100 orders,
+  answered share (82 %) and repeat ordering 8 weeks after a swap (71 %).
+- **Q3 OKRs** (set 29 Jun, graded 30 Sep): O "Every customer trusts their order"; KR1 swap refund tickets 3.4 → 2.5 %
+  (2.7 %, 0.8); KR2 "where is my order?" −30 % (−31 %, 1.0); KR3 perfect orders 84 → 86 % (85.5 %, 0.75). Slot reminders
+  and the payment screen migration dropped.
+- **Cohorts** (6 Jul): still ordering 8 weeks after the first swap: refund ticket 58 %, approved swap 71 %, no swap 69 %.
+- **Approvals post-launch review** (6 Jul): outcomes as expected (3.4 %, 82 %, +7 s, ≈ €28k a month); effort 11
+  person-weeks, not 8 → +30 % buffer for work touching iOS, Android and web.
+- **Ordering health page** (13 Jul): north star, four inputs, three guardrails; Mondays 15 min with Priya; twelve
+  dashboards archived.
+- **Operations feedback loop** (from 20 Jul): idea button on the handhelds, fortnightly 20 min at Noord and Rotterdam,
+  "you said, we did" board. 14 items in three weeks; suggestions sorted by similarity (shipped 3 Aug): swaps accepted
+  71 % → 78 %. Tomás: "first time anyone wrote back".
+- **Live order updates**: round 1 tripped the opt-out guardrail (24 Aug) and wasn't shipped; Noor's redesign (two pushes
+  plus an in-app timeline) cut "where is my order?" tickets 31 % with opt-outs +0.2 points. Shipped 21 Sep.
+- **Customer advisory panel** (first session 21 Sep): 12 customers (4 dinner parents, 3 Sunday planners, 2 allergy
+  households, 2 office managers, 1 lapsed; Amsterdam 8, Rotterdam 4), quarterly 90 min, €25 voucher, a third rotate yearly.
+- **Slot waitlist** (built for Rotterdam, June): 1.1 % use, 9 % of those ordered, two bugs, ≈ 2 engineer-days a month.
+  Sunset agreed 21 Sep with Priya and Sam; top 12 users offered email slot alerts; switched off 5 Oct, code and data
+  deleted by 9 Oct.
+
 ## Book 1, Vol. 4: Ana's facts (March → September 2027)
 
 - **Capability map** (1 Mar): seven areas; red for 2027: city setup, languages (FR, NL), Belgian rules; yellow: stock,

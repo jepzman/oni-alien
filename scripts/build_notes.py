@@ -572,6 +572,43 @@ JOURNALS = [
             (15, "release-notes", "Release Notes & Customer Comms", "shipping", "Tell customers and staff what changed, why, and what to do, before they ask."),
         ],
     ),
+    dict(
+        key="product-4", vol=4, title="Measuring & Learning", short="measuring &amp; learning",
+        series=2, book="The Product Owner's Notebook", narrator="Grace", brand="product owner's notebook", book_no=2,
+        title_block=True, sheet_doodles="product",
+        theme="theme-product", fonts="Permanent+Marker", subject="product ownership",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the product",
+        term="Autumn term · 2027", weekdays=(1, 4), start=date(2027, 9, 7),
+        kicker="the product owner's notebook · book 2 · vol. 4",
+        story="<b>May 2026.</b> Approvals is live in Amsterdam and coming to Rotterdam, the “no swaps” flag is used every day, and the board has been promised a range, not a number. Now Grace has to find out what's really working. This volume follows her from May to October 2026: measuring properly, running honest experiments, listening to support, operations and customers, and setting goals the team can actually steer by, including stopping what doesn't work.",
+        lead="Volume 4 of <span class=\"hl\">The Product Owner's Notebook</span>: how a product owner finds out what's working and learns from it. {n} notes in {c} collections: instrument the product, experiment honestly, listen to the people closest to customers, and set goals worth steering by. Every note follows <b>Grace</b> at <b>Larder</b> from May to October 2026, after the approvals launch, and ends with a <b>try it</b> exercise for your own product.",
+        blurb="Tracking plans, funnels, cohorts, A/B tests, guardrails, listening loops, OKRs and knowing when to stop.",
+        attrs=PRODUCT_ATTRS, attrs_title="The nine product ratings", attrs_side="what a good product practice is judged on", ratings_h2="Product ratings",
+        handmade=set(),
+        collections=[
+            ("instrumenting", "Instrumenting", "measure properly before you judge"),
+            ("experimenting", "Experimenting", "test changes fairly, and read the results honestly"),
+            ("listening", "Listening", "hear support, operations and customers, regularly"),
+            ("goals", "Goals", "steer by outcomes, review honestly, stop what doesn't work"),
+        ],
+        catalogue=[
+            (1, "event-tracking-plan", "Event Tracking Plan", "instrumenting", "One table of events: name, when it fires, properties, owner, the same on every platform."),
+            (2, "funnels", "Funnels", "instrumenting", "Count users at every step to see where they drop out, before guessing why."),
+            (3, "cohorts-retention", "Cohorts & Retention Curves", "instrumenting", "Compare groups that share a starting point to see whether customers come back."),
+            (4, "dashboards", "Dashboards That Get Used", "instrumenting", "One page with the north star, its inputs and guardrails, reviewed weekly."),
+            (5, "ab-tests", "A/B Tests", "experimenting", "Split customers at random, change one thing, and compare on the metric you chose in advance."),
+            (6, "sample-size", "Sample Size & Test Duration", "experimenting", "Work out how many and how long before you start, so the answer means something."),
+            (7, "guardrail-metrics", "Guardrail Metrics", "experimenting", "The numbers that mustn't get worse while you chase the one you want to improve."),
+            (8, "reading-results", "Reading Results Honestly", "experimenting", "No peeking, no fishing in segments, ranges not points, and decisions you set in advance."),
+            (9, "support-tickets-data", "Support Tickets as Data", "listening", "Tag tickets consistently and read them as a weekly signal of what hurts customers."),
+            (10, "operations-feedback", "Feedback Loops with Operations", "listening", "A regular, easy channel from pickers and couriers to the team, with answers going back."),
+            (11, "advisory-panel", "Customer Advisory Panel", "listening", "A small, varied group of customers for depth and early reactions, not for votes."),
+            (12, "okrs", "OKRs", "goals", "An objective in words and a few measurable key results per quarter, graded honestly."),
+            (13, "vanity-metrics", "Vanity vs Actionable Metrics", "goals", "Prefer numbers that change decisions over numbers that only look good."),
+            (14, "post-launch-review", "Post-Launch Review", "goals", "Compare what you expected with what happened, and decide what to do next."),
+            (15, "killing-a-feature", "Killing a Feature", "goals", "Remove features that don't earn their keep, carefully and on purpose."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
@@ -584,7 +621,6 @@ PLANNED_2 = [
     (6, "Delivery, Governance & Influence", "Just-enough design, principles, guardrails, risk, go-live, and influencing without authority."),
 ]
 PLANNED_PRODUCT = [
-    (4, "Measuring & Learning", "Tracking plans, funnels, A/B tests, guardrails and OKRs."),
     (5, "Stakeholders & Influence", "Updates, demos, pitching to the CEO, and working with operations, legal and the architect."),
     (6, "Growing the Product", "New cities, Antwerp, the Korenwolf account and growing as a product owner."),
 ]
