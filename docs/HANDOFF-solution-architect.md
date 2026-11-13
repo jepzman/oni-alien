@@ -1,6 +1,6 @@
 # Handoff: The Solution Architect's Notebook (Series 2, Book 1)
 
-Status as of 2026-11-13: **Vols. 1–5 written and deployed (15 notes each).**
+Status as of 2026-11-13: **Complete: vols. 1–6 written and deployed (15 notes each).**
 
 - Shareable plan (Claude Docs, private until shared by the owner): https://claude.ai/artifact/GF641a5WavDf4mpNx8bKH1
 - Sample chapter (draft, unlisted): `public/architect-2/notes/adr.html` — preview with `npm run serve`, then open http://localhost:8080/architect-2/notes/adr.html
@@ -25,7 +25,7 @@ and should reuse everything built here.
 | 3 | Communicating Architecture | **Diagrams**: C4 Model ★, Views & Viewpoints (4+1), Sequence & Flow Diagrams, Deployment Diagrams · **Documents**: Architecture One-Pager ★, arc42 Template, Docs as Code, Solution Design Document Done Right · **Conversations**: Whiteboard Sessions, Presenting to Executives ★, Explaining Trade-offs to Non-Engineers, Architecture Katas · **Keeping it current**: Living Diagrams, Architecture Roadmap, Glossary & Ubiquitous Language |
 | 4 | Integration & the Enterprise Landscape | **Integration styles**: Choosing an Integration Style ★, API-First Design, Event-Driven Integration, Batch & File Transfer · **Boundaries**: Anti-Corruption Layer ★, Backend for Frontend, API Versioning Strategy, Canonical Data Model (and its traps) · **The landscape**: Capability Map ★, Application Portfolio (TIME), Data Ownership & Master Data, Identity Federation & SSO · **Changing the landscape**: Strangler Fig Migration ★, Transition Architectures, SaaS & Vendor Integration |
 | 5 | Designing for Qualities (done) | **Size & speed**: Back-of-the-Envelope Estimation ★, Capacity Planning, Load Profiles, Performance Budgets · **Availability**: Availability Maths ★, Failure Mode Analysis, DR Tiers, When to Go Multi-Region · **Security & compliance**: Security Architecture Review ★, Data Classification & Residency, Compliance by Design · **Cost & balance**: Total Cost of Ownership ★, Cost-Aware Architecture, Green Software, Quality Attribute Utility Tree |
-| 6 | Delivery, Governance & Influence | **Architecture in delivery**: Just-Enough Up-Front Design ★, Evolutionary Architecture, The Architecture Backlog · **Governance**: Architecture Principles ★, Guardrails Not Gates ★, Lightweight Architecture Review, Golden Paths · **Risk & transition**: Risk Register, Migration Planning, Go-Live Readiness, Handover to Operations · **Influence**: Influencing Without Authority ★, Negotiating with Stakeholders, Discovery Workshops, Growing Other Architects |
+| 6 | Delivery, Governance & Influence (done) | **Architecture in delivery**: Just-Enough Up-Front Design ★, Evolutionary Architecture, The Architecture Backlog · **Governance**: Architecture Principles ★, Guardrails Not Gates ★, Lightweight Architecture Review, Golden Paths · **Risk & transition**: Risk Register, Migration Planning, Go-Live Readiness, Handover to Operations · **Influence**: Influencing Without Authority ★, Negotiating with Stakeholders, Discovery Workshops, Growing Other Architects |
 
 Rule: don't repeat pattern-shelf notes (CQRS, saga, SLOs, threat modelling, IaC…). Architect notes cover
 *when and why* to choose them and link the pattern note for *how*.
@@ -168,3 +168,11 @@ Drafting sheet, vibrant version (owner asked for more colour and depth):
 - No `meanwhile` links (Grace's notes end in 2027). Reverse references: compliance by design → Grace's “working with
   legal & privacy”.
 - Next for book 1: Vol. 6, Delivery, Governance & Influence.
+
+## 13. Vol. 6 notes on the build (2026-11-13)
+
+- `architect-6` journal; content in `content/architect-6/01_delivery.py`, `02_governance.py`, `03_risk.py`,
+  `04_influence.py`. Story runs **April → September 2028**; facts in the casebook, “Book 1, Vol. 6”, ADRs 0027–0029.
+- New character: **Jonas**, product owner for Larder for Business (from Grace's Vol. 6). Cho and Dee grow into architects.
+- No `meanwhile` links (Grace's book ends in December 2027); cross-references to Grace's notes in “related”.
+- The book is complete.
