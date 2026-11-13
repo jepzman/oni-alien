@@ -20,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from doodle import Doodle, esc, highlight  # noqa: E402
+import cheatsheet  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC = ROOT / "public"
@@ -1290,7 +1291,7 @@ def book_items(journals, planned, series=1, book=1, casefile=False):
     return "\n".join(books)
 
 
-def render_landing():
+def render_landing(sheets=()):
     series1 = [j for j in shelf() if j.get("series", 1) == 1]
     series2 = [j for j in shelf() if j.get("series", 1) == 2]
     months = []
@@ -1299,7 +1300,7 @@ def render_landing():
         months.append(f'    <div class="month"><h3>{month}</h3><ul>{lis}</ul></div>')
     total = sum(len(j["catalogue"]) for j in shelf())
     return "\n".join([
-        head("Jef’s Notes", "A shelf of student bullet journals on software design patterns and the work around the code, with doodles, analogies, trade-offs and ratings.", 0, "Architects+Daughter&family=Permanent+Marker"),
+        head("Jef’s Notes", "A shelf of student bullet journals on software design patterns and the work around the code, with doodles, analogies, trade-offs and ratings.", 0, "Architects+Daughter&family=Permanent+Marker&family=IBM+Plex+Sans+Condensed:wght@700"),
         body_open(),
         '<a class="skip-link" href="#main">Skip to the shelf</a>',
         bar(None, 0, "shelf"),
@@ -1317,6 +1318,9 @@ def render_landing():
         f'  <ul class="shelf shelf-series">\n{book_items([j for j in series2 if j.get("book_no", 1) == 1], PLANNED_2, series=2, book=1, casefile=True)}\n  </ul>',
         '  <h3 class="shelf-book">Book 2 · The Product Owner\'s Notebook <span>narrated by Grace</span></h3>',
         f'  <ul class="shelf shelf-series">\n{book_items([j for j in series2 if j.get("book_no", 1) == 2], PLANNED_PRODUCT, series=2, book=2)}\n  </ul>',
+        '  <h2 id="cheatsheets"><span class="num">⌘</span>Cheat sheets <span class="side">laminated reference cards</span></h2>',
+        '  <p>Short, dense, printable: the commands and decisions you look up twice a week, on a few A4 cards. Reads fine on a phone too.</p>',
+        f'  <ul class="shelf shelf-series">\n{cheatsheet_items(sheets)}\n  </ul>',
         AUTHOR_NOTE,
         '  <h2 id="future"><span class="num">→</span>Future log <span class="side">plans, not promises</span></h2>',
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
@@ -1423,6 +1427,113 @@ def render_casefile():
     ])
 
 
+# ---------------------------------------------------------------- cheat sheets (laminated reference cards)
+CHEATSHEETS = ["git_flow"]
+CS_FONTS = "IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400"
+CS_LOGO = ('<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="8" fill="#FFFFFF" fill-opacity=".1"/>'
+           '<path d="M10 7v20" stroke="var(--b-main)" stroke-width="3" stroke-linecap="round" fill="none"/>'
+           '<path d="M10 22c0-6 14-4 14-11" stroke="var(--b-feat)" stroke-width="3" stroke-linecap="round" fill="none"/>'
+           '<circle cx="10" cy="27" r="3.4" fill="var(--b-main)"/><circle cx="10" cy="8" r="3.4" fill="var(--b-main)"/>'
+           '<circle cx="24" cy="10" r="3.4" fill="var(--b-feat)"/></svg>')
+
+
+def load_cheatsheet(name):
+    f = CONTENT / "cheatsheets" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"cheatsheet_{name}", f)
+    mod = importlib.util.module_from_spec(spec)
+    mod.__dict__.update(Graph=cheatsheet.Graph, cmd=cheatsheet.cmd, box=cheatsheet.box)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def cheatsheet_pdf(cs):
+    return f"{cs.SLUG}-cheat-sheet.pdf"
+
+
+def render_cheatsheet(cs):
+    n = len(cs.PAGES)
+    pages = []
+    for i, p in enumerate(cs.PAGES, 1):
+        body = []
+        if p.get("figure"):
+            body.append(f'<figure class="cs-fig">{p["figure"]}</figure>')
+            body.append('<p class="cs-swipe">← swipe the diagram →</p>')
+        if p.get("legend"):
+            body.append('<ul class="cs-legend">' + "".join(
+                f'<li><i style="--c:var(--b-{c})"></i><b>{esc(name)}</b> {esc(what)}</li>' for c, name, what in p["legend"]) + "</ul>")
+        if p.get("strategies"):
+            body.append('<h3 class="cs-strat-h">Merge strategies: pick per target branch</h3>')
+            body.append('<div class="cs-strats">' + "".join(
+                f'<section class="cs-strat"><h3>{t} <code>{esc(flag)}</code></h3>{svg}<p>{what}</p><p>{use}</p></section>'
+                for t, flag, svg, what, use in p["strategies"]) + "</div>")
+        body.append('<div class="cs-grid">\n' + "\n".join(p["boxes"]) + "\n</div>")
+        html = "\n".join(body)
+        # scenario lists: keep each question with its answer
+        html = re.sub(r'<dl class="scen">(.*?)</dl>', lambda m: '<dl class="scen">' + re.sub(
+            r"(<dt>.*?</dt>\s*<dd>.*?</dd>)", r"<div>\1</div>", m.group(1), flags=re.S) + "</dl>", html, flags=re.S)
+        pages.append(f'''<article class="cs-page" id="p{i}" aria-labelledby="p{i}-h">
+<header class="cs-head">
+  <div class="cs-logo">{CS_LOGO}<span>{esc(cs.TITLE)}<br>cheat sheet</span></div>
+  <h2 id="p{i}-h">{p["title"]}<small>{p["kicker"]}</small></h2>
+  <div class="cs-num"><b>{i}/{n}</b>card</div>
+</header>
+<div class="cs-body">
+{html}
+</div>
+<footer class="cs-foot"><span>Jef’s Notes · cheat sheets · {esc(cs.TITLE.lower())}</span><span>{esc(cs.VERSION)} · by {AUTHOR}</span></footer>
+</article>''')
+    toc = "".join(f'<li><a href="#p{i}"><b>{i}</b>{p["title"]}</a></li>' for i, p in enumerate(cs.PAGES, 1))
+    return "\n".join([
+        head(f"{cs.TITLE} cheat sheet · Jef’s Notes", cs.DESC, 2, CS_FONTS).replace(
+            "</head>", f'<link rel="stylesheet" href="../../{asset("cheatsheet.css")}">\n</head>'),
+        '<body class="bujo cheat">',
+        '<a class="skip-link" href="#main">Skip to the cheat sheet</a>',
+        f'''<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>cheat sheet · {esc(cs.TITLE.lower())}</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../../index.html#cheatsheets">Cheat sheets</a>
+      <a class="btn" href="pdf/{cheatsheet_pdf(cs)}" download>{DL}PDF</a>
+    </nav>
+  </div>
+</header>''',
+        '<main id="main" class="desk">',
+        '<div class="cs-main">',
+        f'''<section class="cs-intro" aria-labelledby="cs-title">
+  <p class="kicker">a laminated reference card · {n} pages · A4</p>
+  <h1 id="cs-title"><span>{esc(cs.TITLE)}</span> cheat sheet</h1>
+  <p class="lead">{esc(cs.SUBTITLE[0].upper() + cs.SUBTITLE[1:])}. Each card is one printed page: diagram on top, copy-paste commands below.</p>
+  <div class="cs-actions"><a class="btn" href="pdf/{cheatsheet_pdf(cs)}" download>{DL}Download the PDF</a><button class="btn btn--ghost" type="button" data-print>Print</button></div>
+  <ul class="cs-toc">{toc}</ul>
+</section>''',
+        *pages,
+        '</div>',
+        foot().replace("a shelf of student bullet journals on software design", f"cheat sheet · {esc(cs.TITLE.lower())}"),
+        '</main>',
+        '</body>',
+        '</html>',
+        '',
+    ])
+
+
+def cheatsheet_items(sheets):
+    out = []
+    for cs in sheets:
+        href = f"cheatsheets/{cs.SLUG}/index.html"
+        out.append(f'''    <li class="book book--cheat">
+      <a class="book-cover" href="{href}" aria-label="Open the {esc(cs.TITLE)} cheat sheet">
+        <span class="book-band" aria-hidden="true"></span>
+        <span class="book-label"><small>cheat sheet</small><b>{esc(cs.TITLE)}</b><i>{len(cs.PAGES)} cards · A4</i></span>
+      </a>
+      <div class="book-meta">
+        <p>{cs.BLURB}</p>
+        <p class="book-actions"><a class="btn" href="{href}">Open cheat sheet</a><a class="btn btn--ghost" href="cheatsheets/{cs.SLUG}/pdf/{cheatsheet_pdf(cs)}">{DL}PDF</a></p>
+      </div>
+    </li>''')
+    return "\n".join(out)
+
+
 def redirect(to):
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Moved</title>'
             f'<meta http-equiv="refresh" content="0; url={to}"><link rel="canonical" href="{to}"></head>'
@@ -1474,7 +1585,15 @@ def main():
                                         pdf=f"{key}/pdf/{pdf_name(c[0], c[1])}") for c in ready]))
     (PUBLIC / "larder").mkdir(exist_ok=True)
     (PUBLIC / "larder" / "index.html").write_text(render_casefile(), encoding="utf-8")
-    (PUBLIC / "index.html").write_text(render_landing(), encoding="utf-8")
+    sheets = [load_cheatsheet(name) for name in CHEATSHEETS]
+    for cs in sheets:
+        out = PUBLIC / "cheatsheets" / cs.SLUG
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "index.html").write_text(render_cheatsheet(cs), encoding="utf-8")
+        listing.append(dict(key=f"cheatsheets/{cs.SLUG}", title=f"{cs.TITLE} cheat sheet", all=f"cheatsheets/{cs.SLUG}/index.html",
+                            pdf=f"cheatsheets/{cs.SLUG}/pdf/{cheatsheet_pdf(cs)}", notes=[]))
+        print(f"[cheatsheets] wrote {cs.SLUG} ({len(cs.PAGES)} cards)")
+    (PUBLIC / "index.html").write_text(render_landing(sheets), encoding="utf-8")
     (PUBLIC / "journals.json").write_text(json.dumps(listing, indent=1), encoding="utf-8")
     # old links from before the shelf existed (everything was the distributed journal)
     old = PUBLIC / "notes"
