@@ -1,7 +1,7 @@
 # Handoff: Jef's Notes (start here)
 
-Status as of **2026-11-13**. Book 1 Vol. 4 (Ana) and Book 2 Vol. 4 (Grace) are written and deployed together
-(PR #14). Working branch: `claude/design-patterns-notebook-site-6p22em`.
+Status as of **2026-11-13**. Book 1 Vol. 5 (Ana) and Book 2 Vol. 5 (Grace) are written and deployed together
+(PR #15). Working branch: `claude/design-patterns-notebook-site-6p22em`.
 
 Read in this order:
 1. This file: state, next steps, how to build/verify/deploy, gotchas.
@@ -20,12 +20,14 @@ Read in this order:
 | Series 2 · Book 1 (Ana) | `architect-2` | Decisions & Trade-offs | 15 (Mar → Sep 2026) |
 | Series 2 · Book 1 (Ana) | `architect-3` | Communicating Architecture | 15 (Oct 2026 → Feb 2027) |
 | Series 2 · Book 1 (Ana) | `architect-4` | Integration & the Enterprise Landscape | 15 (Mar → Sep 2027) |
+| Series 2 · Book 1 (Ana) | `architect-5` | Designing for Qualities | 15 (Oct 2027 → Mar 2028) |
 | Series 2 · Book 2 (Grace) | `product-1` | Discovering the Problem | 15 |
 | Series 2 · Book 2 (Grace) | `product-2` | Deciding What to Build | 15 (Jan → Apr 2026) |
 | Series 2 · Book 2 (Grace) | `product-3` | From Idea to Backlog | 15 (Feb → Jun 2026) |
 | Series 2 · Book 2 (Grace) | `product-4` | Measuring & Learning | 15 (May → Oct 2026) |
+| Series 2 · Book 2 (Grace) | `product-5` | Stakeholders & Influence | 15 (Oct 2026 → Mar 2027) |
 
-Planned: Book 1 vols. 5–6 (`PLANNED_2`), Book 2 vols. 5–6 (`PLANNED_PRODUCT`), Series 1 Vol. 7 AI App Patterns
+Planned: Book 1 vol. 6 (`PLANNED_2`), Book 2 vol. 6 (`PLANNED_PRODUCT`), Series 1 Vol. 7 AI App Patterns
 (`PLANNED`), Books 3–4 (Sanne: project management; Mo: client management, Korenwolf) in the future log.
 
 ## 2. Next steps (owner's decisions)
@@ -33,9 +35,10 @@ Planned: Book 1 vols. 5–6 (`PLANNED_2`), Book 2 vols. 5–6 (`PLANNED_PRODUCT`
 1. **Open item:** the owner reported Grace's cover and pages looked broken right after PR #7. Locally they render
    fine; the likely cause was a stale cached `bujo.css`, fixed in PR #8 (content-hash `?v=` on assets). **Ask the owner
    to confirm** it now looks right; if not, ask for a screenshot (the sandbox can't open github.io).
-2. **Alternate volumes between the books.** Both Vol. 4s are deployed (PR #14).
-3. Next: **Ana's Vol. 5, Designing for Qualities** (`architect-5`; topics in `docs/HANDOFF-solution-architect.md`),
-   then Grace's Vol. 5 (`product-5`; topics in `docs/HANDOFF-product-owner.md` §2).
+2. **Alternate volumes between the books.** Both Vol. 5s are deployed (PR #15).
+3. Next (the last volume of each book): **Ana's Vol. 6, Delivery, Governance & Influence** (`architect-6`) and
+   **Grace's Vol. 6, Growing the Product** (`product-6`, Sep 2026 → 2027; meanwhile links into Ana's Vol. 4 are
+   possible). Topics in each book's handoff §2.
    New journal keys get their shelf cover automatically (CSS matches `book--architect-*` / `book--product-*`).
 4. For each new volume: add every note to the case file `TIMELINE` (`content/larder/casefile.py`, tag `"1"` or `"2"`),
    add `meanwhile` links where the two books share a scene, record new facts in the casebook, update the future log.
@@ -94,3 +97,4 @@ Planned: Book 1 vols. 5–6 (`PLANNED_2`), Book 2 vols. 5–6 (`PLANNED_PRODUCT`
 | #12 | Product skin: cork desk and index-card rules (they never rendered before) |
 | #13 | Book 2 Vol. 3 (Grace): 15 notes, Noor, timeline, casebook facts |
 | #14 | Book 1 Vol. 4 (Ana, ADRs 0018–0024) + Book 2 Vol. 4 (Grace): 30 notes, timeline, casebook |
+| #15 | Book 1 Vol. 5 (Ana, ADRs 0025–0026) + Book 2 Vol. 5 (Grace): 30 notes, timeline, casebook |
