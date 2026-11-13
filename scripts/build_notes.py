@@ -460,6 +460,42 @@ JOURNALS = [
             (15, "saas-integration", "SaaS & Vendor Integration", "changing", "Integrate with services you don't control: webhooks, limits, sandboxes, outages and exits."),
         ],
     ),
+    dict(
+        key="architect-5", vol=5, title="Designing for Qualities", short="designing for qualities",
+        series=2, book="The Solution Architect's Notebook", narrator="Ana", brand="architect's notebook", title_block=True, sheet_doodles=True,
+        theme="theme-architect", fonts="Architects+Daughter", subject="solution architecture",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Winter term · 2028", weekdays=(1, 3), start=date(2028, 1, 4),
+        kicker="the solution architect's notebook · book 1 · vol. 5",
+        story="<b>October 2027.</b> The warehouse move is done, Antwerp opens in October and Eindhoven in November, and Larder heads into its busiest season with five times the orders of two years ago. Femke wants to know it will hold, Marco wants the cloud bill down, Lena wants Belgian data handled properly, and Korenwolf asks for an emissions figure. This volume follows Ana from October 2027 to March 2028: sizing, availability, security, compliance and cost, done with numbers instead of hope.",
+        lead="Volume 5 of <span class=\"hl\">The Solution Architect's Notebook</span>: how architects design for the qualities that don't show up in a feature list. {n} notes in {c} collections: size and speed, availability, security and compliance, and cost and balance. Every note follows <b>Ana</b> at <b>Larder</b> from October 2027 to March 2028, through two city launches and a peak season, and ends with a <b>try it</b> exercise for your own project.",
+        blurb="Back-of-the-envelope maths, capacity, availability, DR tiers, security reviews, data residency, TCO and cloud cost.",
+        attrs=ARCHITECT_ATTRS, attrs_title="The nine architect ratings", attrs_side="what a good architecture practice is judged on", ratings_h2="Architect ratings",
+        handmade=set(),
+        collections=[
+            ("size", "Size & speed", "estimate, plan and budget before the peak arrives"),
+            ("availability", "Availability", "do the maths, find the failures, plan the recovery"),
+            ("security", "Security & compliance", "review the design, know the data, build the rules in"),
+            ("cost", "Cost & balance", "what it really costs, and which qualities matter most"),
+        ],
+        catalogue=[
+            (1, "back-of-envelope", "Back-of-the-Envelope Estimation", "size", "Rough numbers from a few known facts, in minutes, to see which part of a design matters."),
+            (2, "capacity-planning", "Capacity Planning", "size", "Forecast demand, find the first thing to run out, and add capacity before it does."),
+            (3, "load-profiles", "Load Profiles", "size", "Test with the real mix and shape of traffic: the ramp, the spike, the push, not a flat line."),
+            (4, "performance-budgets", "Performance Budgets", "size", "Agree limits on speed and size, check them in CI, and treat a breach like a failing test."),
+            (5, "availability-maths", "Availability Maths", "availability", "Multiply the chain, add the spares, and turn nines into minutes a month."),
+            (6, "failure-mode-analysis", "Failure Mode Analysis", "availability", "List how each part can fail, what happens then, and fix the worst first."),
+            (7, "dr-tiers", "DR Tiers", "availability", "Sort systems into recovery tiers with RTO and RPO, and prove them with restore tests."),
+            (8, "multi-region", "When to Go Multi-Region", "availability", "A second region is a big, ongoing cost: decide with numbers and agreed triggers."),
+            (9, "security-architecture-review", "Security Architecture Review", "security", "Walk the design's trust boundaries with a checklist and threats, before attackers do."),
+            (10, "data-classification", "Data Classification & Residency", "security", "Label data by sensitivity, know where every copy lives, and let the label set the rules."),
+            (11, "compliance-by-design", "Compliance by Design", "security", "Turn legal rules into platform features and automatic evidence, not yearly scrambles."),
+            (12, "total-cost-of-ownership", "Total Cost of Ownership", "cost", "Count every cost over years, people included, before comparing options."),
+            (13, "cost-aware-architecture", "Cost-Aware Architecture", "cost", "Know the cost per order of each part, and design and tune with that number in view."),
+            (14, "green-software", "Green Software", "cost", "Measure the platform's carbon, then use less, use it when it's cleaner, and use cleaner places."),
+            (15, "utility-tree", "Quality Attribute Utility Tree", "cost", "Rank the qualities with concrete scenarios, so trade-offs follow what matters most."),
+        ],
+    ),
     # ---- Series 2 · Book 2 · The Product Owner's Notebook (Grace). Plan: docs/HANDOFF-product-owner.md ----
     dict(
         key="product-1", vol=1, title="Discovering the Problem", short="discovering the problem",
@@ -609,6 +645,43 @@ JOURNALS = [
             (15, "killing-a-feature", "Killing a Feature", "goals", "Remove features that don't earn their keep, carefully and on purpose."),
         ],
     ),
+    dict(
+        key="product-5", vol=5, title="Stakeholders & Influence", short="stakeholders &amp; influence",
+        series=2, book="The Product Owner's Notebook", narrator="Grace", brand="product owner's notebook", book_no=2,
+        title_block=True, sheet_doodles="product",
+        theme="theme-product", fonts="Permanent+Marker", subject="product ownership",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the product",
+        term="Winter term · 2028", weekdays=(1, 4), start=date(2028, 1, 4),
+        kicker="the product owner's notebook · book 2 · vol. 5",
+        story="<b>October 2026.</b> Korenwolf has signed for three offices from January, the board expects swap refunds at 2 % by December, and Grace's work now depends on Dispatch, billing, operations and legal as much as on her own team. This volume follows her from October 2026 to March 2027: keeping people informed, managing up and across, treating operations, legal and the architect as partners, and handling fixed dates, bad news and decisions she disagrees with.",
+        lead="Volume 5 of <span class=\"hl\">The Product Owner's Notebook</span>: how a product owner works with the people around the product. {n} notes in {c} collections: communicate so people read it, manage up and across, partner with operations, legal and architecture, and handle the hard moments. Every note follows <b>Grace</b> at <b>Larder</b> from October 2026 to March 2027, in the same months as Ana's third notebook, and ends with a <b>try it</b> exercise for your own product.",
+        blurb="Updates that get read, demos, one-page PRDs, managing up, pitching, partners inside, fixed dates and bad news.",
+        attrs=PRODUCT_ATTRS, attrs_title="The nine product ratings", attrs_side="what a good product practice is judged on", ratings_h2="Product ratings",
+        handmade=set(),
+        collections=[
+            ("communicating", "Communicating", "write and show so people actually take it in"),
+            ("managing", "Managing up and across", "your manager, the CEO, and the teams you depend on"),
+            ("partners", "Partners inside", "operations, legal and architecture as partners, not gates"),
+            ("hard", "Hard moments", "scope, fixed dates, bad news and decisions you disagree with"),
+        ],
+        catalogue=[
+            (1, "product-update", "Product Update that Gets Read", "communicating", "A short weekly update: outcomes first, then shipped, learned, next and the asks."),
+            (2, "demos", "Demos that Land", "communicating", "Show the customer's story with real data, to the people it changes, and ask for reactions."),
+            (3, "one-page-prd", "The One-Page PRD", "communicating", "Problem, outcome, users, scope in and out, and open questions, on a single page."),
+            (4, "quarterly-review", "The Quarterly Product Review", "communicating", "Once a quarter, leaders see outcomes against goals, what was learned and the next bets."),
+            (5, "managing-up", "Managing Up", "managing", "No surprises: a regular, short channel with decisions, risks and wins for your manager."),
+            (6, "pitching-to-ceo", "Pitching to the CEO", "managing", "Answer first, in the CEO's terms, with a small ask and a way to learn fast."),
+            (7, "dependencies", "Dependencies across Teams", "managing", "See them early, ask in person, agree dates both sides track, and remove them when you can."),
+            (8, "operations-as-customer", "Operations as a Customer", "partners", "Treat the pickers' and couriers' tools as a product with its own outcomes and roadmap."),
+            (9, "legal-privacy", "Working with Legal & Privacy", "partners", "Bring legal in early with a clear question, and design privacy in rather than bolting it on."),
+            (10, "working-with-architect", "Working with the Architect", "partners", "The product owner brings the why and the outcome; the architect brings the constraints and options."),
+            (11, "account-managers", "Working with Account Managers", "partners", "Turn a big client's requests into problems the whole product can solve, without a custom fork."),
+            (12, "negotiating-scope", "Negotiating Scope", "hard", "Trade on interests, not lists: find what each side really needs and split the rest into later."),
+            (13, "fixed-date", "When the Date Is Fixed", "hard", "Fix the date, flex the scope: cut lines, buffers and an early first release."),
+            (14, "bad-news", "Delivering Bad News", "hard", "Early, in person, with the facts, the cause, the options and what you'll do."),
+            (15, "disagree-and-commit", "Disagree and Commit", "hard", "Argue your case once, clearly; once decided, commit fully, and agree how you'll know."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
@@ -617,11 +690,9 @@ PLANNED = [
 ]
 # Planned volumes of Series 2, book 1 (see docs/HANDOFF-solution-architect.md).
 PLANNED_2 = [
-    (5, "Designing for Qualities", "Back-of-the-envelope estimates, availability maths, security reviews and total cost of ownership."),
     (6, "Delivery, Governance & Influence", "Just-enough design, principles, guardrails, risk, go-live, and influencing without authority."),
 ]
 PLANNED_PRODUCT = [
-    (5, "Stakeholders & Influence", "Updates, demos, pitching to the CEO, and working with operations, legal and the architect."),
     (6, "Growing the Product", "New cities, Antwerp, the Korenwolf account and growing as a product owner."),
 ]
 FUTURE_LOG = [
@@ -630,7 +701,7 @@ FUTURE_LOG = [
     ("Feb 2027", [("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
     ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b> (Sanne, the Rotterdam launch): planning, estimation, risks and dependencies, delivery rhythms, status that tells the truth"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
-    ("Mid 2027", [("★", "Book 1, vols. 5–6 · designing for qualities, governance and influence")]),
+    ("Mid 2027", [("★", "Book 1, vol. 6 · delivery, governance and influence; Book 2, vol. 6 · growing the product")]),
     ("Someday", [("•", "Extra notes for Vols. 2, 5 and 6: Debounce &amp; Throttle, Passkeys, Signed Webhooks, Chaos Engineering, Service Catalogues"), ("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
 

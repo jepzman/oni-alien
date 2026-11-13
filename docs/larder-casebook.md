@@ -165,6 +165,8 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
 | 0022 | One backend for each kind of client (mobile BFF, portal BFF) | 2027-06-07 | Accepted |
 | 0023 | No canonical order model; a small published language instead | 2027-07-05 | Accepted |
 | 0024 | One master and one owner per kind of data | 2027-08-02 | Accepted |
+| 0025 | Billing off the ordering path: orders accepted, invoice lines queued | 2027-12-06 | Accepted |
+| 0026 | One region (three zones), pilot light in a second region, with four triggers (revisits 0017) | 2028-01-24 | Accepted |
 
 ## Book 2, Vol. 1: Grace's facts (October 2025 → January 2026)
 
@@ -376,6 +378,38 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
   Sunset agreed 21 Sep with Priya and Sam; top 12 users offered email slot alerts; switched off 5 Oct, code and data
   deleted by 9 Oct.
 
+## Book 2, Vol. 5: Grace's facts (October 2026 → March 2027)
+
+- **Weekly update** (from 5 Oct, Fridays 16:00): outcomes, shipped (≤ 3 lines), learned, next, asks with names and
+  dates. Readers 6 → 24 of 31 in six weeks.
+- **One-page PRD** for business standing orders (12 Oct): in for 4 Jan = weekly standing order per office, cost centre
+  per invoice line, skip a week; out = self-service editing (spring), API, custom invoice layout. Ruben's 14-page
+  requirements became an appendix.
+- **Managing up** (19 Oct): shared 1:1 doc with Priya (decisions needed, risks, decisions made, wins); "no surprises".
+- **Demo at Noord, 06:00** (2 Nov): Tomás found the van loading list in picking order; fixed 9 Nov.
+- **Live timeline privacy** (9–16 Nov, with Lena): courier first name or nickname; map only in the last 10 minutes;
+  nothing kept after delivery; couriers told first. Launched on the web on time. Monthly privacy office hour.
+- **Dependency board** (from 16 Nov): billing lines (Cho, done 4 Dec), van routes (Eli, slipped 7 → 14 Dec), picking
+  from 06:00 (Joost), SSO for office managers (Eli, 18 Dec); cost-centre form removed (built in Ordering).
+- **Korenwolf scope** (23 Nov, signed 26 Nov, with Hanna and Ruben): five things for 4 Jan; portal in spring; no
+  custom invoice layout. Changes by email to Mo before 08:00 until the portal.
+- **Order-editing pitch** (30 Nov): 8 % of express customers place a second order within 30 min (≈ 4,900 a month,
+  ≈ €4.50 each ≈ €22k a month). Femke: yes to a test (Amsterdam, February; window closes before release to store).
+- **Fixed date** (plan 1 Dec): cut line; above done 11 Dec; Larder's own office orders from 14 Dec; the 18 Dec outage
+  cost two days of testing; **Korenwolf live 4 Jan 2027**; first week 98.6 % complete by 09:00.
+- **Bad news** (7 Dec forecast ≈ 2.4 % vs the 2 % promised for December): Priya told 7 Dec, Femke 8 Dec, board 14 Dec
+  given 2.3–2.5 % and a plan. 63 % of remaining swap refunds were Rotterdam slot orders (41 % notifications off there).
+  December ended at 2.4 %; in-app banner + SMS fallback → **2.0 % in March 2027**.
+- **Q4 review** (11 Jan, 45 min, two-page pre-read): Q1 bets agreed, editing test confirmed, 2.0 % moved to March.
+  Perfect orders 86.1 % in December.
+- **Grace ↔ Ana** weekly, Tuesdays 14:00, from 12 Jan (after ADR 0017 clashed with the editing test plan).
+- **Picker app as a product** (from 18 Jan, with Joost): 20 % of Dee's team; Tomás as rep. By 31 Mar: wrong swaps
+  packed 12 → 1 a week; picking per order 6:40 → 6:05; wrong items 4.2 → 1.8 per 1,000.
+- **Account requests** (22 Feb, monthly with Mo): 17 Korenwolf requests → 5 built as settings for all business
+  accounts (cost-centre split, approval threshold, delivery photos…), 4 by process, 8 declined.
+- **Larder Plus** (Grace's case 22 Feb; Femke decided 1 Mar 2027): free delivery for €7.99/month, launch June 2027;
+  Antwerp French release in May. Measures: Plus members order ≥ 30 % more often; 5,000 members by 1 Sep 2027 (check-in).
+
 ## Book 1, Vol. 4: Ana's facts (March → September 2027)
 
 - **Capability map** (1 Mar): seven areas; red for 2027: city setup, languages (FR, NL), Belgian rules; yellow: stock,
@@ -408,3 +442,38 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
   found three 2026 Dispatch leftovers (courier cron fallback, a Core DB view, a nightly copy job), removed by 30 Sep.
 - **Vendor checklist** (6 Sep): billing webhooks silent for 9 hours on 31 Aug (Korenwolf shown unpaid); poll every 15
   min, silence alerts, queue below rate limits, production contract checks, status page alerts.
+
+## Book 1, Vol. 5: Ana's facts (October 2027 → March 2028)
+
+- **Openings**: Antwerp 18 Oct 2027 (slipped from September), Eindhoven 22 Nov 2027. Board plan for 2028 (20 Mar):
+  eight cities, 60,000 orders a day by end 2028.
+- **Estimate** (4 Oct): December forecast 27,000 orders/day; Friday peak ≈ 0.045 % of the day per second ≈ 12/s
+  (today ≈ 5.4/s); design point 5× = 60/s; ≈ 400 API calls and ≈ 30 DB writes per order → 1,800 writes/s vs ≈ 2,400
+  measured. Last Christmas the primary was resized in a hurry on 16 Dec 2026.
+- **Capacity plan** (18 Oct): DB connections 310/400 (out at 1.3×), DB CPU 55 % (1.8×); pooler 1 Nov, browse replica
+  8 Nov, primary one size up 15 Nov, freeze 13 Dec–3 Jan; ≈ €2,100/month more.
+- **Load profiles** (1 Nov): mix 78/12/6/4; shapes Friday ramp, push spike (300,000 devices), business morning, soak.
+  8 Nov: workers exhausted at 2.6× (home screen per request); 15 Nov: 5× passed, checkout p95 640 ms.
+- **Performance budgets** (15 Nov): web home 3.4 s → 2.2 s after lazy-loading languages; budgets 2.5 s, 300 KB JS,
+  checkout 800 ms, search 300 ms, picker 1 s; owners Dee, Ben, Eli.
+- **Security review** (11 Oct): 11 findings, 3 high (non-expiring business API keys, other office's orders by ID,
+  unsigned billing webhooks), fixed by 22 Oct.
+- **Data classes** (25 Oct, with Lena): public, internal, confidential, restricted; 14 stores of customer data found;
+  product analytics moved to its EU instance by 30 Nov; staging data masked; FF-09 requires a class for new tables.
+- **Compliance features** (8 Nov): age checks by city (BE 16 beer/wine, 18 spirits; NL 18) storing yes/no only;
+  customer.erasure.requested → 9 systems (3 days/month by hand → 4 hours automatic from 6 Dec); retention per class;
+  Belgian structured e-invoices via billing.
+- **Availability** (29 Nov): business ordering path 99.69 % → 99.79 % with billing off the path (ADR 0025); measured
+  99.81 %. Korenwolf renewal: 99.8 %/month for ordering with credits; 99.9 % joint goal for 2028.
+- **FMEA** (6 Dec): top risk PSP slow (RPN 216); 3 s timeout, breaker, automatic switch to PSP B. 17 Dec 2027: PSP A
+  slow for 22 min, switched in 40 s, no failed orders.
+- **DR tiers** (10 Jan 2028): first full restore took 3 h 40; tiers 1–4 (RTO 15 min / 1 h / 1 day / rebuild); backups
+  copied to Paris; 18 Apr drill: 22 min.
+- **Multi-region** (ADR 0026, 24 Jan): second region ≈ €300k/year vs expected loss well under €100k; pilot light in
+  Paris ≈ €1,200/month, RTO 4 h; triggers: 60k orders/day, region outage > 1 h, a contract requiring it, a non-EU city.
+- **Routing TCO** (7 Feb): Engine A ≈ €243k vs managed service ≈ €297k over 3 years; keep Engine A, fund 0.5 engineer.
+- **Cloud cost** (21 Feb): cost per order €3.05 at end 2027 (target €2.80); cloud bill €78k → €58k/month; cloud cost
+  per order ≈ 9.6 → 7.1 cents.
+- **Carbon** (6 Mar): ≈ 9 t CO₂e/year, ≈ 0.9 → 0.6 g per order; answer to Korenwolf's supplier questionnaire.
+- **Utility tree** (20 Mar): (H, H) checkout at 5× with 60k/day; new city in 6 weeks by config. Region failover in 1 h
+  (M, H) parked; real-time recommendations dropped.

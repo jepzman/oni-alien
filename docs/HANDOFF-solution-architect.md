@@ -1,6 +1,6 @@
 # Handoff: The Solution Architect's Notebook (Series 2, Book 1)
 
-Status as of 2026-11-13: **Vols. 1–4 written (15 notes each). Vols. 1–3 are deployed; Vol. 4 is on the working branch.**
+Status as of 2026-11-13: **Vols. 1–5 written and deployed (15 notes each).**
 
 - Shareable plan (Claude Docs, private until shared by the owner): https://claude.ai/artifact/GF641a5WavDf4mpNx8bKH1
 - Sample chapter (draft, unlisted): `public/architect-2/notes/adr.html` — preview with `npm run serve`, then open http://localhost:8080/architect-2/notes/adr.html
@@ -24,7 +24,7 @@ and should reuse everything built here.
 | 2 | Decisions & Trade-offs | **Recording decisions**: Architecture Decision Records ★ (DONE, sample), Decision Log, RFCs & Design Docs, Decision Rights (RACI/DACI) · **Choosing well**: Options Analysis ★, Trade-off Sliders, One-way vs Two-way Doors ★, Last Responsible Moment · **Big choices**: Build vs Buy vs Open Source ★, Technology Evaluation, Choosing a Cloud Service Model, Technology Radar · **Living with decisions**: Technical Debt Register, Exit Plans & Reversibility, Revisiting Decisions |
 | 3 | Communicating Architecture | **Diagrams**: C4 Model ★, Views & Viewpoints (4+1), Sequence & Flow Diagrams, Deployment Diagrams · **Documents**: Architecture One-Pager ★, arc42 Template, Docs as Code, Solution Design Document Done Right · **Conversations**: Whiteboard Sessions, Presenting to Executives ★, Explaining Trade-offs to Non-Engineers, Architecture Katas · **Keeping it current**: Living Diagrams, Architecture Roadmap, Glossary & Ubiquitous Language |
 | 4 | Integration & the Enterprise Landscape | **Integration styles**: Choosing an Integration Style ★, API-First Design, Event-Driven Integration, Batch & File Transfer · **Boundaries**: Anti-Corruption Layer ★, Backend for Frontend, API Versioning Strategy, Canonical Data Model (and its traps) · **The landscape**: Capability Map ★, Application Portfolio (TIME), Data Ownership & Master Data, Identity Federation & SSO · **Changing the landscape**: Strangler Fig Migration ★, Transition Architectures, SaaS & Vendor Integration |
-| 5 | Designing for Qualities | **Size & speed**: Back-of-the-Envelope Estimation ★, Capacity Planning, Load Profiles, Performance Budgets · **Availability**: Availability Maths ★, Failure Mode Analysis, DR Tiers, When to Go Multi-Region · **Security & compliance**: Security Architecture Review ★, Data Classification & Residency, Compliance by Design · **Cost & balance**: Total Cost of Ownership ★, Cost-Aware Architecture, Green Software, Quality Attribute Utility Tree |
+| 5 | Designing for Qualities (done) | **Size & speed**: Back-of-the-Envelope Estimation ★, Capacity Planning, Load Profiles, Performance Budgets · **Availability**: Availability Maths ★, Failure Mode Analysis, DR Tiers, When to Go Multi-Region · **Security & compliance**: Security Architecture Review ★, Data Classification & Residency, Compliance by Design · **Cost & balance**: Total Cost of Ownership ★, Cost-Aware Architecture, Green Software, Quality Attribute Utility Tree |
 | 6 | Delivery, Governance & Influence | **Architecture in delivery**: Just-Enough Up-Front Design ★, Evolutionary Architecture, The Architecture Backlog · **Governance**: Architecture Principles ★, Guardrails Not Gates ★, Lightweight Architecture Review, Golden Paths · **Risk & transition**: Risk Register, Migration Planning, Go-Live Readiness, Handover to Operations · **Influence**: Influencing Without Authority ★, Negotiating with Stakeholders, Discovery Workshops, Growing Other Architects |
 
 Rule: don't repeat pattern-shelf notes (CQRS, saga, SLOs, threat modelling, IaC…). Architect notes cover
@@ -158,3 +158,13 @@ Drafting sheet, vibrant version (owner asked for more colour and depth):
 - No `meanwhile` links: Grace's notes don't reach 2027 yet (her Vol. 6 might: launching a new city ↔ strangler fig or
   capability map; B2B vs B2C ↔ API-first design or API versioning).
 - Next for book 1: Vol. 5, Designing for Qualities (after Grace's Vol. 4).
+
+## 12. Vol. 5 notes on the build (2026-11-13)
+
+- `architect-5` journal; content in `content/architect-5/01_size.py`, `02_availability.py`, `03_security.py`,
+  `04_cost.py`. The Security & compliance collection has 3 notes (as planned), so the volume has 15.
+- Story runs **October 2027 → March 2028**; facts in the casebook, “Book 1, Vol. 5”, with ADRs 0025 (billing off the
+  ordering path) and 0026 (one region with triggers, revisits ADR 0017). Antwerp opened 18 Oct 2027, Eindhoven 22 Nov 2027.
+- No `meanwhile` links (Grace's notes end in 2027). Reverse references: compliance by design → Grace's “working with
+  legal & privacy”.
+- Next for book 1: Vol. 6, Delivery, Governance & Influence.
