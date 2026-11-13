@@ -9,6 +9,7 @@ Helpers:
   box()   one panel on a card (coloured title tab + body)
 """
 from html import escape as esc
+from zlib import crc32
 
 
 def mono_w(text, size):
@@ -132,3 +133,84 @@ def box(title, body, tone="", span="", tag=None):
     cls = " ".join(x for x in ["box", f"t-{tone}" if tone else "", span] if x)
     t = f'<span class="box-tag">{tag}</span>' if tag else ""
     return f'<section class="{cls}"><h3>{title}{t}</h3>\n<div class="box-in">{body}</div></section>'
+
+
+class Diagram:
+    """A box-and-arrow diagram (architecture maps, flowcharts). Tones: main / dev / feat / bug / rel / hot / warn / ink.
+    node styles: "fill" (filled title + subtitle), "soft" (outlined), "ghost" (dashed, faded), "chip" (small, one line)."""
+
+    def __init__(self, title, width=880, height=300):
+        self.title, self.width, self.height = title, width, height
+        self.items, self.nodes, self.arrows, self.texts = [], {}, [], []
+
+    def group(self, gid, x, y, w, h, label, tone="ink"):
+        self.nodes[gid] = (x, y, w, h)
+        self.items.append(f'<g class="grp t-{tone}"><rect x="{x}" y="{y}" width="{w}" height="{h}" rx="10"/>'
+                          f'<text x="{x + 10}" y="{y + 16}">{esc(label)}</text></g>')
+        return self
+
+    def node(self, nid, x, y, w, h, label, sub=None, tone="ink", style="fill"):
+        self.nodes[nid] = (x, y, w, h)
+        cx = x + w / 2
+        if sub:
+            ty, sy = y + h / 2 - 3, y + h / 2 + 12
+        else:
+            ty, sy = y + h / 2 + 4.5, None
+        s = [f'<g class="nd {style} t-{tone}"><rect x="{x}" y="{y}" width="{w}" height="{h}" rx="7"/>',
+             f'<text class="nl" x="{cx}" y="{ty}">{esc(label)}</text>']
+        if sub:
+            s.append(f'<text class="ns" x="{cx}" y="{sy}">{esc(sub)}</text>')
+        s.append("</g>")
+        self.items.append("".join(s))
+        return self
+
+    def text(self, x, y, txt, cls="dt", anchor="start"):
+        self.texts.append(f'<text class="{cls}" x="{x}" y="{y}" text-anchor="{anchor}">{esc(txt)}</text>')
+        return self
+
+    def _pt(self, nid, side):
+        x, y, w, h = self.nodes[nid]
+        return {"r": (x + w, y + h / 2), "l": (x, y + h / 2), "t": (x + w / 2, y), "b": (x + w / 2, y + h)}[side]
+
+    def arrow(self, a, b, label=None, sides="rl", dashed=False, tone="ink", lx=None, ly=None):
+        (x1, y1), (x2, y2) = self._pt(a, sides[0]), self._pt(b, sides[1])
+        if sides in ("rl", "lr"):
+            dx = (x2 - x1) * 0.5
+            d = f"M{x1} {y1} C{x1 + dx} {y1} {x2 - dx} {y2} {x2} {y2}"
+        elif sides in ("tb", "bt"):
+            dy = (y2 - y1) * 0.5
+            d = f"M{x1} {y1} C{x1} {y1 + dy} {x2} {y2 - dy} {x2} {y2}"
+        else:
+            d = f"M{x1} {y1} L{x2} {y2}"
+        dash = " dashed" if dashed else ""
+        self.arrows.append(f'<path class="ar t-{tone}{dash}" d="{d}" marker-end="url(#ah-{tone})"/>')
+        if label:
+            mx = lx if lx is not None else (x1 + x2) / 2
+            my = ly if ly is not None else (y1 + y2) / 2 - 5
+            self.arrows.append(f'<text class="al" x="{mx}" y="{my}">{esc(label)}</text>')
+        return self
+
+    def svg(self):
+        tones = ["main", "dev", "feat", "bug", "rel", "hot", "warn", "ink"]
+        marks = "".join(f'<marker id="ah-{t}" class="t-{t}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" '
+                        f'orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"/></marker>' for t in tones)
+        # marker ids must be unique per page when several diagrams share it
+        uid = crc32(self.title.encode()) % 100000
+        body = "".join(self.items) + "".join(self.arrows) + "".join(self.texts)
+        marks = marks.replace('id="ah-', f'id="ah{uid}-')
+        body = body.replace("url(#ah-", f"url(#ah{uid}-")
+        return (f'<svg class="gg dg" viewBox="0 0 {self.width} {self.height}" role="img" aria-label="{esc(self.title)}">'
+                f"<defs>{marks}</defs>{body}</svg>")
+
+
+def code(text, title=None):
+    """A plain code card (YAML, Dockerfile): no prompts; '#' comments dimmed."""
+    rows = []
+    for line in text.strip("\n").split("\n"):
+        body, sep, com = line.partition("  # ")
+        if line.lstrip().startswith("#"):
+            rows.append(f'<span class="c">{esc(line)}</span>')
+        else:
+            rows.append(esc(body) + (f' <span class="c"># {esc(com)}</span>' if sep else ""))
+    head = f'<figcaption>{title}</figcaption>' if title else ""
+    return f'<figure class="term plain">{head}<pre><code>' + "\n".join(rows) + "</code></pre></figure>"
