@@ -49,6 +49,7 @@ built from `content/larder/casefile.py`.
 | Jasper | Co-founder and first CTO (left August 2025) | appears only in old code, old chats and old decisions |
 | Sanne | Delivery manager (joins January 2026; narrator of book 3) | the Rotterdam launch: dates, risks, dependencies |
 | Mo | Key account manager, Larder for Business (joins March 2026; narrator of book 4) | Korenwolf, the first business client |
+| Noor | Product designer, ordering & customer apps (joins 9 February 2026) | the moments customers feel; part of Grace's product trio with Ben |
 
 Grace came from a hotel-booking start-up. She owns the **ordering journey and the customer apps**: basket,
 checkout, slots and **substitutions**; her team is Ben's orders team plus Dee's mobile team. She reports to Priya.
@@ -303,3 +304,34 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
   November. Transition states T1–T3 in docs/architecture/roadmap-2027.md; T3 = load-tested for 40,000 orders a day.
 - **Korenwolf January report**: 96.1 % "complete deliveries" counted per crate; per the contract (everything for one
   office on one morning) it was 98.6 %. Glossary written 9 Feb (arc42 section 12).
+
+## Book 2, Vol. 3: Grace's facts (February → June 2026)
+
+- **Noor**, product designer, joins on 9 February 2026. Product trio: Grace (value), Noor (usability), Ben (feasibility):
+  a customer interview together every Thursday 16:00, Noord every other Tuesday at peak, the tree on Fridays.
+- **Story map** (16 Feb): the approvals backlog had 41 tickets; backbone: item runs out → picker picks a swap →
+  customer told → customer decides → picker packs → customer receives; nine new cards found. Rewritten to 17 stories (18 Feb).
+- **Slices** (23 Feb): 1 express, one swap, Noord staff (R1, 30 Mar); 2 all Amsterdam express, up to three swaps, price
+  difference, answer applied at packing (R2, 13 Apr); 3 slot orders, "never swap" inline (May); 4 Rotterdam and the web
+  shop (June). Slice 1 taught that pickers waiting for answers slowed packing (Ben saw it on a store visit).
+- **Example map EM-03** (25 Feb): R1 2 minutes to answer; R2 no answer → keep the substitute, unless the customer's
+  setting says "refund me if I don't answer"; R3 more than €2 extra → must answer; R4 a flagged allergen → never default.
+- **MVP vs MLP** (2 Mar): lovable swap screen (photo, price difference, big countdown) and glove-sized picker buttons;
+  viable support table, reports and settings.
+- **Definitions of ready and done** (4 Mar), **refinement rhythm** (from 23 Mar: Monday pre-read, three-amigos sessions,
+  45-minute Thursday; 18 → ~8 person-hours a week, 2 → 6–8 stories ready), **sprint 7 goal** (16–27 Mar).
+- **Pre-mortem** (16 Mar): 37 % of app users have notifications switched off → in-app banner + default when there's no
+  answer; answers applied at packing; allergen warning; clearer price wording ("€0.40 more than ordered").
+- **Zuid's opening day** (Nov 2024): 340 products without a price, support heard from customers, a push to the wrong area.
+- **Rotterdam launch checklist** (from 30 Mar; go / no-go 24 Apr): eight areas with owners; two reds (Saturday slot
+  capacity, Dutch help pages) fixed by 26 Apr. Waitlist push to 4,100 people on launch morning. Grace and Ben at the store.
+- **Approvals rollout, Amsterdam**: dark (picker side) from 6 Apr; 10 % on 13 Apr, 25 % on 15 Apr, 50 % on 17 Apr,
+  100 % on 20 Apr. Guardrails: picking +≤15 s per swap order, answers ≥70 % in 2 min, crash-free ≥99.5 %. Friday 17 Apr:
+  Zuid picking +18 s → hold; handheld lag fixed. First week of approvals: 140 support tickets (6.1 per 1,000 approvals).
+- **Rotterdam hypercare** (27 Apr–11 May, daily 09:00): orders 310 → 540 a day in week 1; on time 82–86 %; tickets per
+  100 orders 7.1 → 2.6. Fixed: three streets missing from zone RTM-2, Saturday slots full by Thursday, an iDEAL error for
+  one bank. Exit: tickets < 3 per 100 for two days and no P1 for five days.
+- **Tech-debt deal** (8 Jun, Grace and Ben): 20 % of every sprint, ordered by product impact, each item reported with a
+  product number. Picker sync conflicts (12/week at Noord) cause wrong swaps packed.
+- **Approvals in Rotterdam** (8 Jun): email the day before, intro card on the first swap, "What's new", Sam's macros, a
+  briefing for Rotterdam's pickers. First week: 1.4 tickets per 1,000 approvals.

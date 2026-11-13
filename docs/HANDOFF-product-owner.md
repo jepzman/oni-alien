@@ -1,6 +1,6 @@
 # Handoff: The Product Owner's Notebook (Series 2, Book 2)
 
-Status as of 2026-11-13: **Vols. 1 and 2 written (15 notes each). Vol. 1 is deployed; Vol. 2 is on the working branch.** Decisions in section 7.
+Status as of 2026-11-13: **Vols. 1–3 written (15 notes each). Vols. 1–2 are deployed; Vol. 3 is on the working branch.** Decisions in section 7.
 
 Story facts: `docs/larder-casebook.md` (source of truth) and the public case file `/larder/`.
 Book 1's plan, for comparison: `docs/HANDOFF-solution-architect.md`.
@@ -23,7 +23,7 @@ spike/prototype/PoC note; Grace's backlog notes link the walking skeleton.
 | --- | --- | --- | --- |
 | 1 | Discovering the Problem | Oct 2025 → Jan 2026 | **Understanding customers**: Customer Interviews ★, Jobs to Be Done ★, Proto-Personas, Customer Journey Map · **Framing the problem**: Problem Statements, Opportunity Solution Tree ★, Assumption Mapping, Outcomes over Outputs · **Measuring what matters**: North Star Metric ★, Leading vs Lagging Indicators, Baseline Before You Build · **Testing ideas cheaply**: Fake Door Test ★, Concierge & Wizard-of-Oz MVP ★, Prototype Testing with Users |
 | 2 | Deciding What to Build (done) | Jan → Apr 2026 | **Prioritising**: RICE & ICE Scoring, Cost of Delay, Kano Model, MoSCoW and Its Traps · **Saying no**: Saying No Without Burning Bridges, Handling the HiPPO, Opportunity Cost, Feature Request Triage (added) · **Strategy & roadmaps**: Product Strategy on a Page, Now / Next / Later Roadmap, Outcome-Based Roadmaps, Roadmap vs Release Plan · **Making the case**: Opportunity Sizing (added), Business Case One-Pager, Bets Not Promises |
-| 3 | From Idea to Backlog | Feb → Jun 2026 | **Shaping work**: Story Mapping ★, Thin Slices of Value ★, MVP vs MLP · **Writing it down**: User Stories that Work, Example Mapping ★, Definition of Ready & Done · **Working with the team**: The Product Trio, Sprint Goals, Refinement that Isn't a Meeting Marathon, Talking Tech Debt with Engineers ★ · **Shipping**: Release Planning, Launch Checklist (Rotterdam) ★, Dark Launches & Rollouts |
+| 3 | From Idea to Backlog (done) | Feb → Jun 2026 | **Shaping work**: Story Mapping, Thin Slices of Value, MVP vs MLP, Pre-mortem (added) · **Writing it down**: User Stories that Work, Example Mapping, Definition of Ready & Done · **Working with the team**: The Product Trio, Sprint Goals, Refinement that Isn't a Meeting Marathon, Talking Tech Debt with Engineers · **Shipping**: Launch Checklist (Rotterdam), Dark Launches & Rollouts, Hypercare after Launch (added), Release Notes & Customer Comms (added). Release Planning dropped: Vol. 2's roadmap vs release plan covers it. |
 | 4 | Measuring & Learning | May → Oct 2026 | **Instrumenting**: Event Tracking Plan ★, Funnels ★, Cohorts & Retention Curves · **Experimenting**: A/B Tests ★, Guardrail Metrics, Reading Results Honestly · **Listening**: Support Tickets as Data, Feedback Loops with Operations, Customer Advisory Panel · **Goals**: OKRs ★, Vanity vs Actionable Metrics, Post-Launch Review, Killing a Feature |
 | 5 | Stakeholders & Influence | all year | **Communicating**: Product Update that Gets Read ★, Demos that Land ★, The One-Page PRD · **Managing up and across**: Managing Up (Priya), Pitching to the CEO ★, Dependencies across Teams · **Partners inside**: Operations as a Customer (Joost) ★, Working with Legal & Privacy (Lena), Working with the Architect (Ana) ★ · **Hard moments**: Negotiating Scope, When the Date Is Fixed, Delivering Bad News, Disagree and Commit |
 | 6 | Growing the Product | Sep 2026 → 2027 | **New markets**: Launching a New City ★, Localisation for Antwerp, Pricing Experiments · **Business customers**: B2B vs B2C Products (Korenwolf) ★, Account Needs vs Product Vision, Service Levels as Features · **Scaling the product**: Platform Thinking, Accessibility as Product Quality, Product-Led Growth · **Growing yourself**: Product Sense, Writing Product Principles, Growing as a PO ★, Handing Over a Product Area |
@@ -130,3 +130,13 @@ Each book has its own skin; Book 2 should feel like a **product team's wall**:
   roadmap vs release plan ↔ Ana's trade-off sliders; now / next / later ↔ Ana's walking skeleton.
 - Open threads for Vol. 3 (From Idea to Backlog, Feb → Jun 2026): approvals in Rotterdam (June), live order updates
   (bet 3, Q3), the Rotterdam launch checklist, Sam's auto-refund button review (1 Jun), recipe review (July).
+
+## 10. Vol. 3 notes on the build (2026-11-13)
+
+- `product-3` journal; content in `content/product-3/01_shaping.py`, `02_writing.py`, `03_team.py`, `04_shipping.py`.
+  New character: **Noor**, product designer (joins 9 Feb 2026). Facts in the casebook, “Book 2, Vol. 3”.
+- Meanwhile links: tech-debt talks ↔ Ana's debt register; launch checklist ↔ Ana's one-way doors; hypercare ↔ Ana's
+  technology evaluation (Rotterdam's 84 % on time).
+- Skin fix (PR #12): the product sheet's ruled lines never rendered (a 20 px background tile from the base sheet style
+  clipped them); now set explicitly, plus the cork desk. Shelf covers now match every volume of a book (PR #11).
+- Next for book 2: Vol. 4, Measuring & Learning (May → Oct 2026).

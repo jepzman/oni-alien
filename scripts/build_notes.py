@@ -499,6 +499,43 @@ JOURNALS = [
             (15, "bets-not-promises", "Bets, Not Promises", "case", "Present plans as bets with confidence and signals, not promises you don't control."),
         ],
     ),
+    dict(
+        key="product-3", vol=3, title="From Idea to Backlog", short="from idea to backlog",
+        series=2, book="The Product Owner's Notebook", narrator="Grace", brand="product owner's notebook", book_no=2,
+        title_block=True, sheet_doodles="product",
+        theme="theme-product", fonts="Permanent+Marker", subject="product ownership",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the product",
+        term="Summer term · 2027", weekdays=(1, 4), start=date(2027, 5, 4),
+        kicker="the product owner's notebook · book 2 · vol. 3",
+        story="<b>February 2026.</b> The business case for substitution approvals is approved, the “no swaps” flag ships in a fortnight, and Rotterdam opens on 27 April. Now an idea has to become software that pickers and customers actually use. This volume follows Grace from February to June 2026, with Noor, the new product designer, and the engineers: shaping the work, writing it down, working as one team, and shipping it safely, in Amsterdam and in a brand-new city.",
+        lead="Volume 3 of <span class=\"hl\">The Product Owner's Notebook</span>: how a product owner turns a good idea into working software, with the team. {n} notes in {c} collections: shape the work into thin slices, write it down so everyone means the same thing, work as one team without meeting marathons, and ship it safely. Every note follows <b>Grace</b> at <b>Larder</b> from February to June 2026, through the approvals launch and Rotterdam's opening, and ends with a <b>try it</b> exercise for your own product.",
+        blurb="Story maps, thin slices, example mapping, the product trio, tech-debt talks, launch checklists and safe rollouts.",
+        attrs=PRODUCT_ATTRS, attrs_title="The nine product ratings", attrs_side="what a good product practice is judged on", ratings_h2="Product ratings",
+        handmade=set(),
+        collections=[
+            ("shaping", "Shaping work", "turn an idea into slices that work end to end"),
+            ("writing", "Writing it down", "so everyone means the same thing"),
+            ("team", "Working with the team", "one team, short meetings, honest trade-offs"),
+            ("shipping", "Shipping", "release safely, watch closely, tell people"),
+        ],
+        catalogue=[
+            (1, "story-mapping", "Story Mapping", "shaping", "Lay the user's journey across the top, hang stories underneath, and draw release lines across."),
+            (2, "thin-slices", "Thin Slices of Value", "shaping", "Cut features into thin slices that work end to end, riskiest first, not into layers."),
+            (3, "mvp-vs-mlp", "MVP vs MLP", "shaping", "Ask “minimum for what?”: lovable where customers form trust, viable where only staff see it."),
+            (4, "pre-mortem", "Pre-mortem", "shaping", "Imagine the launch failed, write down why, and turn the top reasons into actions."),
+            (5, "user-stories", "User Stories that Work", "writing", "A real user, a real need and a reason, as a card, a conversation and a confirmation."),
+            (6, "example-mapping", "Example Mapping", "writing", "Rules, examples and questions on coloured cards, in 25 minutes with the three amigos."),
+            (7, "definition-ready-done", "Definition of Ready & Done", "writing", "Short, shared checklists for starting work and calling it finished: live, measured, supported."),
+            (8, "product-trio", "The Product Trio", "team", "Product, design and engineering discover together, every week, instead of handing over."),
+            (9, "sprint-goals", "Sprint Goals", "team", "One sentence of value per sprint, so the team can make trade-offs without asking."),
+            (10, "refinement", "Refinement that Isn't a Meeting Marathon", "team", "Small groups, short sessions, pre-reads: refine just enough, just in time."),
+            (11, "tech-debt-talks", "Talking Tech Debt with Engineers", "team", "Translate debt into product terms, agree a share of capacity, and track what it buys."),
+            (12, "launch-checklist", "Launch Checklist", "shipping", "Everything a launch needs beyond the code, with owners, and a go / no-go."),
+            (13, "dark-launches", "Dark Launches & Rollouts", "shipping", "Ship behind a flag, turn it on for a few, watch guardrails, then widen."),
+            (14, "hypercare", "Hypercare after Launch", "shipping", "Two weeks of daily watching and fast fixes after a launch, with clear exit criteria."),
+            (15, "release-notes", "Release Notes & Customer Comms", "shipping", "Tell customers and staff what changed, why, and what to do, before they ask."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
@@ -512,7 +549,6 @@ PLANNED_2 = [
     (6, "Delivery, Governance & Influence", "Just-enough design, principles, guardrails, risk, go-live, and influencing without authority."),
 ]
 PLANNED_PRODUCT = [
-    (3, "From Idea to Backlog", "Story maps, thin slices, example mapping, tech-debt talks and the Rotterdam launch."),
     (4, "Measuring & Learning", "Tracking plans, funnels, A/B tests, guardrails and OKRs."),
     (5, "Stakeholders & Influence", "Updates, demos, pitching to the CEO, and working with operations, legal and the architect."),
     (6, "Growing the Product", "New cities, Antwerp, the Korenwolf account and growing as a product owner."),

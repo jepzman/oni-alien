@@ -22,6 +22,7 @@ Live site: https://jepzman.github.io/oni-alien/
 | 1 · 3 | Communicating Architecture (`/architect-3/`) | 15 | architect ratings |
 | 2 · 1 | Discovering the Problem (`/product-1/`) | 15 | product ratings (customer value, business impact, evidence, learning speed, focus, shared understanding, stakeholder trust, flow, low overhead) |
 | 2 · 2 | Deciding What to Build (`/product-2/`) | 15 | product ratings |
+| 2 · 3 | From Idea to Backlog (`/product-3/`) | 15 | product ratings |
 
 The landing page (`/`) shows two shelves (Series 1: design patterns; Series 2: practitioner's notebooks, with `series=2` in `JOURNALS`), planned volumes (`PLANNED`, `PLANNED_2`) and a “future log” of upcoming work.
 
