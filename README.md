@@ -43,6 +43,7 @@ a subway-map branch diagram on top and boxed panels below (3 columns on desktop 
 | Docker & Kubernetes (`/cheatsheets/docker-kubernetes/`) | 4 | Docker and Compose, the Kubernetes object map and kubectl, rollouts, probes, resources and config, pod troubleshooting |
 | SQL (`/cheatsheets/sql/`) | 4 | query order and NULLs, joins as Venn diagrams, set operations and CTEs, window functions, upserts and paging, indexes, EXPLAIN and transactions |
 | NFR Checklists (`/cheatsheets/nfr-checklists/`) | 4 | writing measurable NFRs, then questions, measures and typical targets per quality attribute, and the common trade-offs |
+| Shell & Network (`/cheatsheets/shell-network/`) | 4 | shell pipes and power tools, walking the network layers (DNS, ports, firewalls), HTTP and TLS with curl and openssl, an error-message decoder |
 
 - Content: `content/cheatsheets/<name>.py` (`PAGES`, each with an optional `figure`, `legend`, `strategies` and a list of `box()` panels).
 - Helpers: `scripts/cheatsheet.py` (`Graph` for git graphs, `Diagram` for box-and-arrow maps, `cmd()` terminal blocks, `code()` YAML/Dockerfile cards, `box()` panels); styles in `public/assets/cheatsheet.css`.
