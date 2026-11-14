@@ -1354,7 +1354,7 @@ def render_landing(sheets=(), dives=()):
 
 # ---------------------------------------------------------------- deep dives (series 3)
 # One long chaptered page per topic: content/deep-dives/<name>.py, rendered by scripts/dive.py.
-DIVES = ["saga"]
+DIVES = ["saga", "reliable_messaging"]
 DEEPER = {}   # (journal key, note slug) -> (dive slug, title); filled by load_dive
 
 

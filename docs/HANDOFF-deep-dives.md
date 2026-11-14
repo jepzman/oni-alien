@@ -1,7 +1,10 @@
 # Plan: Series 3 · Deep Dives
 
-Status **2026-11-14**: format approved and built. **Deep dive 01 · Saga is complete** (10 chapters,
-about 5,200 words) at `/deep-dives/saga/`. Not deployed yet (deploy = merge to `main`, only when the owner asks).
+Status **2026-11-14**: format approved and built. Written: **01 Saga** (, 26 min) and
+**02 Reliable Messaging** (, 29 min). Next: 03 The Resilience Stack.
+
+**Length rule (owner, 14 Nov): every deep dive is about a 30-minute full read**, which is roughly 5,800–6,200
+words. The build prints the reading time in the page's fact bar; check it before committing.
 
 Owner's decisions (13 Nov): annotated-textbook style; keep the Season 1 list for now; each dive keeps its
 note's own example (no Larder); one long page with a chapter strip, with easy navigation on phones.
@@ -9,7 +12,7 @@ note's own example (no Larder); one long page with a chapter strip, with easy na
 ## 1. The idea
 
 A Series 1 note answers “what is this pattern and when do I use it?” in about 2,400 words.
-A deep dive answers **“what happens when I actually build and run it?”** in 7,000–9,000 words.
+A deep dive answers **“what happens when I actually build and run it?”** in about 6,000 words (a 30-minute read).
 It starts where the note stops, never repeats it (chapter 1 is a 60-second recap with a link back),
 and follows one concrete example from the note all the way through.
 
@@ -102,6 +105,6 @@ margin notes and code. The choice is remembered in the browser.
 ## 7. Next
 
 1. Owner reviews Saga on a phone and on desktop; adjust the format before writing more.
-2. Then one dive per PR, in the Season 1 order (02 Reliable Messaging next). For each: write the content file,
+2. Then one dive per PR, in the Season 1 order (03 The Resilience Stack next). For each: write the content file,
    add its name to `DIVES`, build, and run the verify routine in `docs/HANDOFF.md` §4 (figures, 375 px, dark, PDF).
 3. Ideas not built: per-chapter PDFs, a printable one-page checklist card, Doodle-style wobbly figures.
