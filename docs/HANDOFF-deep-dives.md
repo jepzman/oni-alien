@@ -1,7 +1,7 @@
 # Plan: Series 3 · Deep Dives
 
-Status **2026-11-14**: format approved and built. Written: **01 Saga** (, 26 min) and
-**02 Reliable Messaging** (, 29 min). Next: 03 The Resilience Stack.
+Status **2026-11-14**: format approved and built. Written: **01 Saga** (`/deep-dives/saga/`, 26 min) and
+**02 Reliable Messaging** (`/deep-dives/reliable-messaging/`, 29 min). Next: 03 The Resilience Stack.
 
 **Length rule (owner, 14 Nov): every deep dive is about a 30-minute full read**, which is roughly 5,800–6,200
 words. The build prints the reading time in the page's fact bar; check it before committing.
