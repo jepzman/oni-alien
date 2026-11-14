@@ -1,9 +1,9 @@
 # Plan: Series 3 · Deep Dives
 
-Status **2026-11-14**: format approved and built. Live: **01 Saga** (26 min), **02 Reliable Messaging** (29 min),
-**03 The Resilience Stack** (30 min), **04 Event Sourcing & CQRS** (30 min), deployed with PRs #21 and #22.
-On the branch, not deployed: **05 Caching** (`/deep-dives/caching/`, 30 min). Next: 06 Zero-Downtime Change,
-the last of Season 1.
+Status **2026-11-14**: **Season 1 is written: six deep dives**, each ten chapters and about a 30-minute read.
+Live (PRs #21, #22): 01 Saga, 02 Reliable Messaging, 03 The Resilience Stack, 04 Event Sourcing & CQRS.
+On the branch, not deployed: 05 Caching (`/deep-dives/caching/`) and 06 Zero-Downtime Change
+(`/deep-dives/zero-downtime-change/`). Next, if the owner wants more: the Season 2 candidates in section 2.
 
 **Length rule (owner, 14 Nov): every deep dive is about a 30-minute full read**, which is roughly 5,800–6,200
 words. The build prints the reading time in the page's fact bar; check it before committing.
@@ -107,6 +107,6 @@ margin notes and code. The choice is remembered in the browser.
 ## 7. Next
 
 1. Owner reviews Saga on a phone and on desktop; adjust the format before writing more.
-2. Then one dive per PR, in the Season 1 order (06 Zero-Downtime Change next). For each: write the content file,
+2. Then one dive per PR, in the Season 1 order (Season 2 next, if wanted). For each: write the content file,
    add its name to `DIVES`, build, and run the verify routine in `docs/HANDOFF.md` §4 (figures, 375 px, dark, PDF).
 3. Ideas not built: per-chapter PDFs, a printable one-page checklist card, Doodle-style wobbly figures.
