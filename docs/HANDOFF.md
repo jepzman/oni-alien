@@ -33,7 +33,7 @@ Planned: nothing left in Books 1–2 (`PLANNED_2` and `PLANNED_PRODUCT` are empt
 (`PLANNED`), Books 3–4 (Sanne: project management; Mo: client management, Korenwolf) in the future log.
 
 **Series 3 · Deep dives** started on 14 Nov 2026: Season 1 is written (`/deep-dives/<slug>/`): Saga, Reliable Messaging, The Resilience Stack, Event Sourcing & CQRS
-(deployed), Caching and Zero-Downtime Change (on the branch until the owner asks to deploy). Working branch `claude/design-patterns-deep-dive-ggw0on`. Read `docs/HANDOFF-deep-dives.md` for the plan and format.
+Caching and Zero-Downtime Change, all deployed. Working branch `claude/design-patterns-deep-dive-ggw0on`. Read `docs/HANDOFF-deep-dives.md` for the plan and format.
 
 ## 2. Next steps (owner's decisions)
 

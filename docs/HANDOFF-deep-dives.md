@@ -1,9 +1,12 @@
 # Plan: Series 3 · Deep Dives
 
-Status **2026-11-14**: **Season 1 is written: six deep dives**, each ten chapters and about a 30-minute read.
-Live (PRs #21, #22): 01 Saga, 02 Reliable Messaging, 03 The Resilience Stack, 04 Event Sourcing & CQRS.
-On the branch, not deployed: 05 Caching (`/deep-dives/caching/`) and 06 Zero-Downtime Change
-(`/deep-dives/zero-downtime-change/`). Next, if the owner wants more: the Season 2 candidates in section 2.
+Status **2026-11-14**: **Season 1 is written and live: six deep dives**, each ten chapters and about a
+30-minute read: 01 Saga, 02 Reliable Messaging, 03 The Resilience Stack, 04 Event Sourcing & CQRS, 05 Caching,
+06 Zero-Downtime Change. Next, if the owner wants more: the Season 2 candidates in section 2 (also in the future log).
+
+The landing page was reworked in the same release: the author's note is on top and covers all four formats,
+each section has a one-line hook, and the practitioner books and cheat sheets are stored spine-out
+(`spine_shelf()` in `scripts/build_notes.py`, styles at the end of `bujo.css`, clicks in `notebook.js`).
 
 **Length rule (owner, 14 Nov): every deep dive is about a 30-minute full read**, which is roughly 5,800–6,200
 words. The build prints the reading time in the page's fact bar; check it before committing.

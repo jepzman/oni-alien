@@ -770,11 +770,11 @@ PLANNED_PRODUCT = [
 ]
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
-    ("Jan 2027", [("•", "One-page printable cheat sheet per collection")]),
+    ("Jan 2027", [("↓", "Deep dives, season 2: Replication &amp; Leader Election, Sharding &amp; Partitioning, Indexes &amp; Query Plans"), ("•", "One-page printable cheat sheet per collection")]),
     ("Feb 2027", [("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
     ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b> (Sanne, the Rotterdam launch): planning, estimation, risks and dependencies, delivery rhythms, status that tells the truth"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
-    ("Mid 2027", [("•", "A Series 2 index: every Larder note from both books in one timeline")]),
+    ("Mid 2027", [("↓", "More deep dives: Sign-in &amp; Tokens, Observability &amp; SLOs, Rendering on the Web, Multitenancy"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
     ("Someday", [("•", "Extra notes for Vols. 2, 5 and 6: Debounce &amp; Throttle, Passkeys, Signed Webhooks, Chaos Engineering, Service Catalogues"), ("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
 
@@ -1340,14 +1340,14 @@ def render_landing(sheets=(), dives=()):
     total = sum(len(j["catalogue"]) for j in shelf())
     n1 = sum(len(j["catalogue"]) for j in series1)
     return "\n".join([
-        head("Jef’s Notes", "A shelf of student bullet journals on software design patterns and the work around the code, with doodles, analogies, trade-offs and ratings.", 0, "Architects+Daughter&family=Permanent+Marker&family=IBM+Plex+Sans+Condensed:wght@700"),
+        head("Jef’s Notes", "Software design in sizes that fit a working day: ten-minute pattern notes with doodles and trade-offs, thirty-minute deep dives, two practitioner notebooks that follow one start-up, and printable cheat sheets.", 0, "Architects+Daughter&family=Permanent+Marker&family=IBM+Plex+Sans+Condensed:wght@700"),
         body_open(),
         '<a class="skip-link" href="#main">Skip to the shelf</a>',
         bar(None, 0, "shelf"),
         '<main id="main" class="desk">',
         '<article class="sheet landing">',
         '  <div class="page-meta"><span class="day">The shelf · 2026</span><span class="topic">series · <b>software design</b></span></div>',
-        '  <p class="kicker">hand-written field journals, one subject per volume</p>',
+        '  <p class="kicker">pattern notes, deep dives, two notebooks and a stack of cheat sheets</p>',
         '  <h1 class="cover-title"><span class="hl">Jef’s Notes</span></h1>',
         f'  <p class="lead">Software design, in sizes that fit a working day: <b>{n1} pattern notes, {len(dives)} deep dives, {total - n1} notes from two practitioners and {len(sheets)} cheat sheets</b>. More on the way.</p>',
         AUTHOR_NOTE,
@@ -1371,18 +1371,14 @@ def render_landing(sheets=(), dives=()):
         spine_shelf(cheatsheet_items(sheets), "cheat", "Cheat sheets"),
         '  <h2 id="future"><span class="num">→</span>Future log <span class="side">plans, not promises</span></h2>',
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
-        '  <p class="aside">series 2 (★) has begun with the solution architect\'s notebook. Next come notebooks for product managers, project managers and anyone who manages clients. Same format: the problem, an analogy, how it works, trade-offs, pitfalls and a quiz.</p>',
+        '  <p class="aside">the architect\'s and the product owner\'s notebooks are complete, six volumes each. Next in that story (★): the project manager and the client manager. The deep dives get a second season too.</p>',
         f'  <div class="future">\n{chr(10).join(months)}\n  </div>',
-        '  <h2 id="inside"><span class="num">?</span>What\'s inside every note <span class="side">same eight sections</span></h2>',
+        '  <h2 id="inside"><span class="num">?</span>What\'s inside <span class="side">four formats, same idea</span></h2>',
         '''  <ol class="how-to">
-    <li><b>The problem</b> the pattern solves, with a doodle.</li>
-    <li><b>A real-life analogy</b> and a “translate to code” table.</li>
-    <li><b>How it works</b>: diagrams, steps, vocabulary, a code card.</li>
-    <li><b>Gains vs losses</b>, side by side.</li>
-    <li><b>Nine ratings</b> picked for each journal's subject.</li>
-    <li><b>Common pitfalls</b> and their fixes.</li>
-    <li><b>When to use it</b>, and when not to.</li>
-    <li><b>A self-check quiz.</b></li>
+    <li><b>A pattern note</b> has eight sections: the problem, a real-life analogy, how it works, gains vs losses, nine ratings, common pitfalls, when to use it, and a self-check quiz.</li>
+    <li><b>A deep dive</b> has ten chapters: a recap of the notes, the real mechanism, failure drills, the hard problem, numbers, testing, running it, tools, a lab and a review checklist. Every chapter opens with its gist.</li>
+    <li><b>A practitioner's note</b> has the same eight sections as a pattern note, set inside the Larder story, plus a template to copy and a “try it” exercise.</li>
+    <li><b>A cheat sheet</b> is a few A4 cards: a map on top, boxed panels below, and a PDF to print.</li>
   </ol>''',
         '  <p class="folio">✦</p>',
         '</article>',
