@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Caching · Deep dive · Jef’s Notes</title>
+<meta name="description" content="A deep dive on caching: the cache as a bet, read and write patterns, six failure drills, invalidation, TTL maths and stale-while-revalidate, browser, CDN and in-process layers, operations and testing.">
+<meta name="theme-color" content="#E4E1D9">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,700;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/dive.css?v=2b16c30ec1">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/dive.js?v=03c39c00d2" defer></script>
+</head>
+<body class="dive">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah" d="M0 0 L10 4 L0 8z"/></marker><marker id="ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah-r" d="M0 0 L10 4 L0 8z"/></marker></defs></svg>
+<a class="skip-link" href="#main">Skip to the text</a>
+<header class="site" id="top">
+  <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>deep dive 05</small></a>
+  <a class="site-link" href="../../index.html#deep-dives">Shelf</a>
+</header>
+<div class="strip" data-strip>
+  <div class="strip-in">
+    <nav aria-label="Chapters"><a href="#recap" data-ch="0"><b>1</b> Recap</a><a href="#bet" data-ch="1"><b>2</b> The bet</a><a href="#patterns" data-ch="2"><b>3</b> Patterns</a><a href="#drills" data-ch="3"><b>4</b> Failure drills</a><a href="#invalidation" data-ch="4"><b>5</b> Invalidation</a><a href="#numbers" data-ch="5"><b>6</b> TTL &amp; numbers</a><a href="#layers" data-ch="6"><b>7</b> Layers</a><a href="#running" data-ch="7"><b>8</b> Running it</a><a href="#testing" data-ch="8"><b>9</b> Testing</a><a href="#tools" data-ch="9"><b>10</b> When &amp; lab</a></nav>
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+  </div>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+</div>
+
+<main id="main" class="wrap"><article class="page"><div class="col">
+<p class="eyebrow">Deep dive 05 · builds on Vol. 1, note 17 and Vol. 2, note 06</p>
+<h1><span>Caching</span></h1>
+<p class="sub">A copy of the truth in five places: how stale each may be, how each finds out it is wrong, and what happens the day they are all empty.</p>
+<ul class="facts"><li><b>Full read</b> about 30 min</li><li><b>Skim</b> about 16 min: yellow boxes, tables and drill rules</li><li><b>Example</b> the product page for product 42, key <code>product:42</code></li></ul>
+<nav class="toc" aria-label="Contents">
+  <h2 class="toc-h">In this deep dive</h2>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Two notes in sixty seconds</span><span class="m">1 min</span></a></li><li><a href="#bet" data-ch="1"><span class="n">2</span><span class="t">A cache is a bet</span><span class="m">2 min</span></a></li><li><a href="#patterns" data-ch="2"><span class="n">3</span><span class="t">Five ways to read and write</span><span class="m">2 min</span></a></li><li><a href="#drills" data-ch="3"><span class="n">4</span><span class="t">Failure drills</span><span class="m">5 min</span></a></li><li><a href="#invalidation" data-ch="4"><span class="n">5</span><span class="t">Invalidation: the hard problem</span><span class="m">3 min</span></a></li><li><a href="#numbers" data-ch="5"><span class="n">6</span><span class="t">TTLs, worked out</span><span class="m">3 min</span></a></li><li><a href="#layers" data-ch="6"><span class="n">7</span><span class="t">The layers, from browser to database</span><span class="m">3 min</span></a></li><li><a href="#running" data-ch="7"><span class="n">8</span><span class="t">Running it: graphs and runbooks</span><span class="m">3 min</span></a></li><li><a href="#testing" data-ch="8"><span class="n">9</span><span class="t">Testing a cache</span><span class="m">2 min</span></a></li><li><a href="#tools" data-ch="9"><span class="n">10</span><span class="t">When not to cache, a lab and the checklist</span><span class="m">5 min</span></a></li></ol>
+  <p class="toc-src">Read first: <a href="../../distributed/notes/cache-aside.html">Cache-Aside</a><a href="../../frontend/notes/server-state-cache.html">Server-State Cache</a></p>
+</nav>
+<section id="recap" data-title="Recap">
+<p class="ch">chapter 1 <span>· 1 min</span></p>
+<h2>Two notes in sixty seconds</h2>
+<div class="gist"><p><b>Gist</b> Cache-aside keeps a copy of hot data next to the database, with an expiry, and deletes it on a write. The server-state cache does the same in the browser. This deep dive is about what the copies do to the whole system: the database shrinks to fit, five layers expire at five different times, and some of them you cannot clear.</p></div>
+
+<p>The cache-aside note was about a fridge. Product 42, the mug, is read thousands of times a minute and changes about once a month, so the app keeps a copy in Redis under <code>product:42</code> for five minutes. A read checks Redis first. A write updates the database and deletes the key.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Note</th><th scope="col">In one line</th></tr></thead><tbody><tr><td>Cache-Aside</td><td>check the cache; on a miss read the database and keep a copy with an expiry; on a write, delete the copy</td></tr><tr><td>Server-State Cache</td><td>the browser shows the copy it has at once and fetches a fresh one in the background</td></tr></tbody></table></div><figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 200" role="img" aria-label="The caches a product page passes on its way to the database: the browser, which serves one shopper; the CDN, which serves everyone nearby; the app&#x27;s own memory, one instance; Redis, shared by all instances; and the database, the truth, which takes 40 milliseconds. A request stops at the first layer that has a copy. The cache-aside note covered only the step between Redis and the database.">
+  <rect class="bx" x="10" y="50" width="110" height="64" rx="8"/><text class="lbl" x="65" y="78" text-anchor="middle">browser</text><text class="soft" x="65" y="100" text-anchor="middle">one shopper</text>
+  <rect class="bx" x="160" y="50" width="110" height="64" rx="8"/><text class="lbl" x="215" y="78" text-anchor="middle">CDN</text><text class="soft" x="215" y="100" text-anchor="middle">everyone nearby</text>
+  <rect class="bx" x="310" y="50" width="110" height="64" rx="8"/><text class="lbl" x="365" y="78" text-anchor="middle">app memory</text><text class="soft" x="365" y="100" text-anchor="middle">one instance</text>
+  <rect class="bx-y" x="460" y="50" width="110" height="64" rx="8"/><text class="lbl" x="515" y="78" text-anchor="middle">Redis</text><text class="soft" x="515" y="100" text-anchor="middle">all instances</text>
+  <rect class="bx-g" x="630" y="50" width="120" height="64" rx="8"/><text class="lbl" x="690" y="78" text-anchor="middle">database</text><text class="soft" x="690" y="100" text-anchor="middle">the truth · 40 ms</text>
+  <path class="ln" d="M120 82 H158" marker-end="url(#a)"/><path class="ln" d="M270 82 H308" marker-end="url(#a)"/><path class="ln" d="M420 82 H458" marker-end="url(#a)"/><path class="ln" d="M570 82 H628" marker-end="url(#a)"/>
+  <text class="soft" x="290" y="26" text-anchor="middle">a request stops at the first layer that has a copy</text>
+  <text class="soft" x="65" y="140" text-anchor="middle">0 ms</text><text class="soft" x="215" y="140" text-anchor="middle">~20 ms</text><text class="soft" x="365" y="140" text-anchor="middle">~0 ms</text><text class="soft" x="515" y="140" text-anchor="middle">~1 ms</text>
+  <path class="ln-d" d="M440 150 V172 H590 V150"/><text class="soft" x="515" y="192" text-anchor="middle">the cache-aside note lived here</text>
+</svg></div><figcaption>Five places hold a copy of the mug's price. Four of them can be wrong.</figcaption></figure><aside class="mn">Both notes are the same idea at different distances from the database.</aside>
+<p class="full">The notes showed the happy path and named the famous problem, invalidation. This deep dive is about what a cache does to a system once it is there: the database gets sized for the traffic the cache lets through, copies in five places expire at five different times, and a fix deployed at noon is still invisible to some shoppers at a quarter past. A cache is easy to add and hard to remove, so it is worth knowing the cost first.</p>
+
+
+<a class="next" href="#bet"><small>next · chapter 2</small>A cache is a bet →</a>
+</section>
+<section id="bet" data-title="The bet">
+<p class="ch">chapter 2 <span>· 2 min</span></p>
+<h2>A cache is a bet</h2>
+<div class="gist"><p><b>Gist</b> Caching bets that an answer will be asked for again before it changes. Every cached item needs three decisions: how old it may be, how it learns it changed, and what a miss costs. The database feels the miss rate, not the hit ratio, and a system that cannot run without its cache has turned it into a database.</p></div>
+
+<p>A cache is a bet: this answer will be asked for again before it changes. When the bet wins, you skip the work. When it loses, you either did extra work for nothing, or you served an answer that is no longer true. Every cached thing needs three decisions.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Question</th><th scope="col">For <code>product:42</code></th></tr></thead><tbody><tr><td>How old may the copy be?</td><td>a description may be hours old; a price, a minute; the price used to charge a card, zero</td></tr><tr><td>How do we learn that it changed?</td><td>wait for it to expire, or be told</td></tr><tr><td>What happens when the copy is missing?</td><td>one 40 ms query, or five hundred of them at once</td></tr></tbody></table></div><aside class="mn">If nobody can answer question 1 for a piece of data, it is not ready to be cached.</aside>
+<h3>The number that matters is the miss rate</h3>
+<p>People quote the hit ratio. The database only feels the misses.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Hit ratio</th><th scope="col">Typical read</th><th scope="col">Reads reaching the database, of 2,000 a second</th></tr></thead><tbody><tr class=hot><td>0 % (no cache)</td><td>40 ms</td><td>2,000. It can do 400</td></tr><tr><td>90 %</td><td>about 5 ms</td><td>200</td></tr><tr><td>95 %</td><td>about 3 ms</td><td>100</td></tr><tr><td>99 %</td><td>about 1.4 ms</td><td>20</td></tr></tbody></table></div>
+<p>From 95 % to 99 % looks like a small step. It is five times less load on the database. And the first row is the important one: without the cache, this shop does not work at all.</p>
+<div class="full">
+<h3>When a cache becomes load-bearing</h3>
+<p>A cache starts as an optimisation. Traffic grows, and nobody resizes the database, because the cache is absorbing the growth. One day the database can serve a fifth of the read traffic, and the cache is no longer an optimisation. It is a part the system cannot run without, and it was never designed as one: it has no backup, it starts empty, and the code treats it as optional.</p>
+<p>Two honest positions exist.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Position</th><th scope="col">Means</th></tr></thead><tbody><tr><td><b>The cache is optional</b></td><td>the database can carry all the traffic, slowly. Losing the cache is a bad afternoon</td></tr><tr><td><b>The cache is required</b></td><td>treat it like a database: replicas, a warm-up plan, load shedding for when it is empty (drill 3)</td></tr></tbody></table></div><p>The dangerous place is in between: required in fact, optional in everyone's head. A yearly test that switches the cache off in a load-test environment tells you which position you are really in.</p>
+<h3>What a cache does not fix</h3>
+<p>If a query takes 40 ms because an index is missing, the cache hides the slow query from most users and leaves it in place for the rest, including every user after a restart. Fix the query first. Cache what is still too slow or too frequent after that.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>The hit ratio improves from 98 % to 99 %. What happens to database load from reads?</summary><p>It halves: misses go from 2 % to 1 % of reads.</p></details><details><summary>How do you find out whether your cache is optional or required?</summary><p>Switch it off, or start it empty, under realistic load in a test environment, and see whether the database carries the traffic.</p></details></div>
+<a class="next" href="#patterns"><small>next · chapter 3</small>Five ways to read and write →</a>
+</section>
+<section id="patterns" data-title="Patterns">
+<p class="ch">chapter 3 <span>· 2 min</span></p>
+<h2>Five ways to read and write</h2>
+<div class="gist"><p><b>Gist</b> Cache-aside and read-through load on a miss and leave the database as the truth. Write-through and write-behind send writes through the cache, and write-behind can lose confirmed data. Refresh-ahead reloads popular keys before they expire. For most data, use cache-aside and delete the key on a write.</p></div>
+
+<p>Cache-aside is one of five arrangements. They differ in who talks to the database and when the copy is written.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Pattern</th><th scope="col">Read</th><th scope="col">Write</th><th scope="col">Main risk</th></tr></thead><tbody><tr><td><b>Cache-aside</b></td><td>app checks cache, then database, then fills the cache</td><td>app writes database, deletes the key</td><td>the app must remember every key it affects</td></tr><tr><td><b>Read-through</b></td><td>app asks the cache; the cache loads from the database itself</td><td>as cache-aside</td><td>the cache needs to know how to load each kind of data</td></tr><tr><td><b>Write-through</b></td><td>from the cache</td><td>app writes the cache; the cache writes the database before answering</td><td>every write pays for both; the cache fills with data nobody reads</td></tr><tr class=hot><td><b>Write-behind</b></td><td>from the cache</td><td>app writes the cache; the database is updated later, in batches</td><td>a cache crash loses writes that were already confirmed</td></tr><tr><td><b>Refresh-ahead</b></td><td>from the cache</td><td>as cache-aside</td><td>the cache reloads popular keys before they expire; wasted work on keys that stop being popular</td></tr></tbody></table></div><aside class="mn">Write-behind makes the cache the source of truth for a while. Only for data you can afford to lose, like view counters.</aside>
+<h3>Which to use</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Situation</th><th scope="col">Choose</th></tr></thead><tbody><tr><td>Most application data</td><td>cache-aside, or read-through if your library offers it. Only data that is asked for gets cached, and a cache failure leaves the database correct</td></tr><tr><td>A few very hot keys that are slow to rebuild</td><td>add refresh-ahead for those keys (chapter 6)</td></tr><tr><td>Counters, “last seen”, statistics</td><td>write-behind is acceptable; say so in the code</td></tr><tr><td>Money, stock, anything a decision is based on</td><td>do not read it from a cache when deciding (chapter 5)</td></tr></tbody></table></div><div class="full">
+<h3>Why “delete”, not “update”, on a write</h3>
+<p>The note said to delete the key after a write and not to set the new value. The reason is two writers.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Time</th><th scope="col">Writer A (price 25)</th><th scope="col">Writer B (price 26)</th><th scope="col">Cache holds</th></tr></thead><tbody><tr><td>1</td><td>updates database to 25</td><td></td><td>24.50</td></tr><tr><td>2</td><td></td><td>updates database to 26</td><td>24.50</td></tr><tr><td>3</td><td></td><td>sets cache to 26</td><td>26</td></tr><tr class=hot><td>4</td><td>sets cache to 25</td><td></td><td><b>25</b>, and the database says 26</td></tr></tbody></table></div><p>The cache writes arrived in a different order from the database writes, and the wrong value stays until the TTL. A delete has no value to get wrong: whoever deletes last, the key is gone and the next read loads the truth. Deleting does leave one smaller race, between a reader and a writer. That is drill 1.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why does cache-aside delete the key on a write and not set the new value?</summary><p>Two writers can update the cache in a different order from the database, leaving the older value cached. A delete has no value to get wrong.</p></details><details><summary>Page-view counters are written through the cache and flushed every minute. What is the risk, and is it acceptable?</summary><p>A cache crash loses up to a minute of counts. For view counters that is usually fine; for orders it would not be.</p></details></div>
+<a class="next" href="#drills"><small>next · chapter 4</small>Failure drills →</a>
+</section>
+<section id="drills" data-title="Failure drills">
+<p class="ch">chapter 4 <span>· 5 min</span></p>
+<h2>Failure drills</h2>
+<div class="gist"><p><b>Gist</b> Six things that will happen: a reader puts an old value back after a write, hundreds of requests rebuild the same key at once, the cache restarts empty, a delete is lost, requests for things that do not exist bypass the cache, and a value is stored under a key that says too little.</p></div>
+<aside class="mn">Guess first. Each of these has happened to a shop like ours.</aside>
+<ul class="drill-index" aria-label="The six drills">
+  <li><a href="#drill-1">1 · stale put-back</a></li><li><a href="#drill-2">2 · stampede</a></li><li><a href="#drill-3">3 · cold start</a></li>
+  <li><a href="#drill-4">4 · lost delete</a></li><li><a href="#drill-5">5 · missing things</a></li><li><a href="#drill-6">6 · wrong key</a></li>
+</ul>
+<div class="drill" id="drill-1"><header><span>Drill 1</span><h3>The reader puts the old price back</h3></header><dl><dt>Timeline</dt><dd>The key has just expired. A reader misses and reads the price from the database: 24.50. Before it can fill the cache, an admin changes the price to 26 and deletes the key, which is already empty. Then the reader writes its 24.50 into the cache.</dd><dt class="full">What you see</dt><dd class="full">The database says 26 and the product page says 24.50 for the next five minutes. The delete happened, the logs say so, and the page is still wrong.</dd><dt>What saves you</dt><dd>The TTL is the safety net: it bounds the damage to five minutes, which is why every key has one. To narrow the race further, delete the key a second time about a second after the write, or store the row's version with the value and let the cache accept a write only if its version is newer.</dd></dl><p class="rule">Rule: delete-on-write still has a race. A TTL on every key is what makes it a small problem.</p></div><div class="drill" id="drill-2"><header><span>Drill 2</span><h3>Five hundred requests rebuild the same thing</h3></header><dl><dt>Timeline</dt><dd>The home page shows “bestsellers”, a query that takes 2 seconds. It is cached for ten minutes and requested 500 times a second. The key expires. For the next two seconds every request misses, and each one starts the 2-second query.</dd><dt class="full">What you see</dt><dd class="full">A thousand copies of the heaviest query in the system, all at once. The database slows down, so the queries take longer, so more requests pile in. Every ten minutes the site stutters.</dd><dt>What saves you</dt><dd>Let <b>one</b> request rebuild the value while the others wait for it or are given the old value. This is called single flight. Combine it with a soft expiry, so the old value is still there to serve, and with a random spread on TTLs so that many keys do not expire in the same second (chapter 6).</dd></dl><p class="rule">Rule: a miss on a hot key must cause one rebuild, not one per waiting request.</p></div><div class="drill" id="drill-3"><header><span>Drill 3</span><h3>The cache restarts empty</h3></header><dl><dt>Timeline</dt><dd>Redis is restarted for an upgrade and comes back with nothing in it. The hit ratio is zero. All 2,000 reads a second go to a database that can serve 400.</dd><dt class="full">What you see</dt><dd class="full">The database is overloaded. Queries time out, so nothing is written to the cache, so the cache stays empty. The system cannot warm itself up: a metastable failure, as in the Resilience Stack deep dive.</dd><dt>What saves you</dt><dd>Plan for an empty cache as a normal event. Keep a replica so a restart does not empty it. Warm the top few thousand keys from a script before taking traffic. And put a limit on concurrent cache-miss queries, so that the database serves 400 a second well and the rest get a fast “try again” while the cache fills.</dd></dl><p class="rule">Rule: if the system cannot start with an empty cache, the cache is a database and needs to be run like one.</p></div><div class="drill" id="drill-4"><header><span>Drill 4</span><h3>The delete never arrived</h3></header><dl><dt>Timeline</dt><dd>The admin changes the price. The database commits. The <code>DEL product:42</code> that follows hits a two-second network blip and fails. The request has already told the admin “saved”.</dd><dt class="full">Why</dt><dd class="full">Two systems were written one after the other with no transaction around them. It is the dual-write problem from the outbox note, with a cache where the broker was.</dd><dt>What saves you</dt><dd>The TTL, again, limits it to five minutes. To do better, take the delete out of the request: write an invalidation record in the same transaction as the price, or let change data capture read the database's log, and have a small worker delete keys with retries. That also covers changes made by scripts and by hand, which never ran your application code.</dd></dl><p class="rule">Rule: invalidation that happens after the commit can be lost. Make it retryable, and keep the TTL.</p></div><div class="drill" id="drill-5"><header><span>Drill 5</span><h3>Asking for things that do not exist</h3></header><dl><dt>Timeline</dt><dd>A crawler requests <code>/product/900001</code>, <code>/product/900002</code> and so on. None exist. Each request misses the cache, queries the database, finds nothing, and stores nothing. The next request for the same id does it all again.</dd><dt class="full">What you see</dt><dd class="full">Database load that grows with junk traffic. The hit ratio falls and nobody changed anything. A related case: a real lookup fails with an error, and the error page is cached for five minutes.</dd><dt>What saves you</dt><dd>Cache the answer “not found” too, with a short TTL such as 30 seconds. Reject ids that cannot be valid before any lookup. And never cache a failure as if it were data: a timeout or a 500 is not an answer.</dd></dl><p class="rule">Rule: “nothing” is an answer worth caching briefly. An error is not an answer at all.</p></div><div class="drill" id="drill-6"><header><span>Drill 6</span><h3>The right value under the wrong key</h3></header><dl><dt>Timeline</dt><dd>Trade customers get the mug for 19.00. The page for product 42 is rendered for a logged-in trade customer and stored under <code>product:42</code>. For the next five minutes every shopper sees the trade price. The same thing at the CDN is worse: a page containing “Hello, Sam” and Sam's saved address, served to strangers.</dd><dt class="full">Why</dt><dd class="full">The key named less than the value depended on. Anything that changes the answer and is missing from the key is a leak waiting for the right request order.</dd><dt>What saves you</dt><dd>The key lists everything the value depends on: <code>product:42:price-list:trade</code>. Cache the shared parts and the personal parts separately. Mark personal responses <code>Cache-Control: private</code> or <code>no-store</code> so that no shared cache keeps them.</dd></dl><p class="rule">Rule: a cache key must contain everything that can change the answer. Personal data never goes in a shared cache.</p></div><div class="full">
+<h3>What the six drills add up to</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Decision</th><th scope="col">Drill</th></tr></thead><tbody><tr><td>every key has a TTL, with a random spread</td><td>1, 2, 4</td></tr><tr><td>one rebuild per key at a time; the old value served meanwhile</td><td>2</td></tr><tr><td>a plan for an empty cache: replica, warm-up, a cap on miss queries</td><td>3</td></tr><tr><td>invalidation that survives a failed delete</td><td>4</td></tr><tr><td>“not found” is cached briefly; errors are never cached</td><td>5</td></tr><tr><td>keys name everything the value depends on</td><td>6</td></tr></tbody></table></div>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>A key has no TTL “because we always delete on write”. Which drills make that dangerous?</summary><p>Drills 1 and 4. A stale put-back or a lost delete then stays wrong for ever, with nothing to correct it.</p></details><details><summary>After a cache restart the database is overloaded and the hit ratio stays near zero. Why does it not recover by itself?</summary><p>Queries time out under the load, so no results are written to the cache, so every read stays a miss.</p></details></div>
+<a class="next" href="#invalidation"><small>next · chapter 5</small>Invalidation: the hard problem →</a>
+</section>
+<section id="invalidation" data-title="Invalidation">
+<p class="ch">chapter 5 <span>· 3 min</span></p>
+<h2>Invalidation: the hard problem</h2>
+<div class="gist"><p><b>Gist</b> One change has many copies: the item, the lists that contain it, search results, rendered pages. Combine five strategies: expiry, delete on write, events, versioned keys and tags. Agree with the business how stale each kind of data may be, and never make a decision on a cached value.</p></div>
+
+<p>The old joke says there are two hard things in computing, and cache invalidation is one of them. It is hard for a plain reason: the code that changes the data has to know about every copy of it, and the copies were added later, by other people, for other screens.</p>
+<h3>One price change, five copies</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Where the mug's price appears</th><th scope="col">Key</th></tr></thead><tbody><tr><td>its product page</td><td><code>product:42</code></td></tr><tr><td>the “Mugs” category list</td><td><code>category:mugs:page:1</code></td></tr><tr><td>search results for “mug”</td><td><code>search:mug:page:1</code></td></tr><tr><td>bestsellers on the home page</td><td><code>bestsellers</code></td></tr><tr><td>baskets that contain it</td><td><code>basket:c-7</code>, and many more</td></tr></tbody></table></div><aside class="mn">The first key is obvious. The other four are how stale prices actually reach customers.</aside>
+<h3>Five ways to invalidate</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Strategy</th><th scope="col">How</th><th scope="col">Good for</th><th scope="col">Weak at</th></tr></thead><tbody><tr><td><b>Expiry only</b></td><td>a TTL and nothing else</td><td>data where “a few minutes old” is fine: bestsellers, counts</td><td>anything that must change quickly</td></tr><tr><td><b>Delete on write</b></td><td>the code that writes also deletes the keys</td><td>single-item keys such as <code>product:42</code></td><td>derived keys; writers that bypass the code</td></tr><tr><td><b>Events</b></td><td>a worker hears “price of 42 changed” (outbox or CDC) and deletes keys, with retries</td><td>many keys per change; changes from anywhere</td><td>you still need to know which keys</td></tr><tr><td><b>Versioned keys</b></td><td>the key contains a version: <code>product:42:v17</code>. A change makes a new key; the old one is never read again and expires</td><td>immutable content; build assets; avoiding the races entirely</td><td>readers must learn the current version from somewhere</td></tr><tr><td><b>Tags</b></td><td>each entry is labelled with what it contains: this list page “contains 42”. Invalidate everything tagged 42</td><td>lists, search results, rendered pages</td><td>needs a cache or CDN that supports it</td></tr></tbody></table></div><div class="full">
+<p>Real systems mix them. For the shop: the product page is deleted on write through an event worker. List and search pages carry tags, or simply a short TTL of a minute. Bestsellers expire on their own. Static files such as scripts and images get versioned names and are cached for a year, because a new version is a new name.</p>
+<h3>Decide the staleness, then the mechanism</h3>
+<p>The useful conversation is with the business, about question 1 from chapter 2.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Data</th><th scope="col">May be stale for</th><th scope="col">So</th></tr></thead><tbody><tr><td>Product description, photos</td><td>an hour</td><td>long TTL, delete on write</td></tr><tr><td>Price shown on a page</td><td>a minute</td><td>short TTL plus event-driven delete</td></tr><tr><td>“In stock” label</td><td>a minute, and it may be wrong</td><td>short TTL; the label is a hint</td></tr><tr><td>Bestsellers</td><td>ten minutes</td><td>expiry only</td></tr><tr class=hot><td>Price and stock <b>at checkout</b></td><td>not at all</td><td>read from the database, inside the transaction</td></tr></tbody></table></div><h3>The rule that removes most of the fear</h3>
+<p><mark>Cache what is shown. Never decide on a cached value.</mark> The product page may show 24.50 from a copy that is forty seconds old. The checkout reads the price from the database when it creates the order, and if it has changed, tells the shopper. With that one rule, a stale cache can produce a surprised customer, and it cannot produce a wrong charge. Stock works the same way: the page says “in stock” from a cache, and the reservation is made against the real number.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>The product page shows the new price and the category page shows the old one. What kind of key was missed?</summary><p>A derived key: a list that contains the product. The writer only invalidated the item's own key.</p></details><details><summary>Why can static files be cached for a year?</summary><p>Their names contain a version or content hash. A change produces a new name, so the old copy is never asked for again.</p></details></div>
+<a class="next" href="#numbers"><small>next · chapter 6</small>TTLs, worked out →</a>
+</section>
+<section id="numbers" data-title="TTL &amp; numbers">
+<p class="ch">chapter 6 <span>· 3 min</span></p>
+<h2>TTLs, worked out</h2>
+<div class="gist"><p><b>Gist</b> A key's hit ratio is about one minus one over its reads per TTL. Hot keys reach 99.9 % with a TTL of seconds, and cold keys gain nothing from any TTL. Use a soft expiry so stale values are served while one request refreshes, spread expiries randomly, and size the cache for the hot few.</p></div>
+
+<p>A TTL is usually picked by feel: “five minutes sounds right”. It can be worked out, from how often the key is read.</p>
+<p><mark>Hit ratio of one key ≈ 1 − 1 ÷ (reads per second × TTL in seconds)</mark></p>
+<p>In each TTL period the first read misses and the rest hit.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Key</th><th scope="col">Reads</th><th scope="col">TTL</th><th scope="col">Reads per TTL</th><th scope="col">Hit ratio</th></tr></thead><tbody><tr><td>product 42, the popular mug</td><td>80 a second</td><td>5 min</td><td>24,000</td><td>99.996 %</td></tr><tr class=hot><td>the same</td><td>80 a second</td><td>10 s</td><td>800</td><td>99.9 %</td></tr><tr><td>a typical product</td><td>1 a minute</td><td>5 min</td><td>5</td><td>80 %</td></tr><tr class=hot><td>a rarely viewed product</td><td>1 an hour</td><td>5 min</td><td>0.08</td><td>about 0 %</td></tr></tbody></table></div><aside class="mn">Row 2 is the surprise: for a hot key, ten seconds is plenty.</aside>
+<p>Two lessons. For a hot key a very short TTL already gives nearly all the benefit, so you can have fresh data and a high hit ratio together. For a cold key no reasonable TTL helps: it is written to the cache, never read and evicted. Most catalogues have a few hot items and a long tail of cold ones, and the cache earns its keep on the hot few.</p>
+<h3>Soft and hard expiry</h3>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 160" role="img" aria-label="The life of one cached value. From zero to five minutes it is fresh and is served. Between the soft TTL at five minutes and the hard TTL at seven minutes it is stale: it is still served, and one background refresh is started. After seven minutes it is gone and a read is a miss.">
+  <text class="lbl" x="20" y="26">one cached value over time</text>
+  <rect class="bx-g" x="20" y="44" width="430" height="46" rx="6"/><text class="lbl" x="235" y="73" text-anchor="middle">fresh: serve it</text>
+  <rect class="bx-y" x="450" y="44" width="170" height="46" rx="6"/><text class="lbl" x="535" y="64" text-anchor="middle">stale: serve it,</text><text class="lbl" x="535" y="82" text-anchor="middle">refresh once</text>
+  <rect class="bx-r" x="620" y="44" width="120" height="46" rx="6"/><text class="lbl" x="680" y="73" text-anchor="middle">gone: miss</text>
+  <path class="ln" d="M20 104 H740"/>
+  <text class="soft" x="20" y="126">0</text><text class="soft" x="450" y="126" text-anchor="middle">5 min</text><text class="soft" x="620" y="126" text-anchor="middle">7 min</text>
+  <text class="soft" x="450" y="148" text-anchor="middle">soft TTL</text><text class="soft" x="620" y="148" text-anchor="middle">hard TTL</text>
+</svg></div><figcaption>Between the two expiries, readers get the old value at once and one of them triggers a refresh.</figcaption></figure><div class="card"><div class="card-head"><span>get-product.ts</span><span>serve stale, refresh once</span></div><pre><code><span class="k">const</span> inFlight = <span class="k">new</span> Map&lt;string, Promise&lt;Product&gt;&gt;();      <span class="c">// single flight, per instance</span>
+
+<span class="k">export</span> <span class="k">async</span> <span class="k">function</span> getProduct(id: string): Promise&lt;Product&gt; {
+  <span class="k">const</span> key = <span class="s">`product:${id}`</span>;
+  <span class="k">const</span> hit = <span class="k">await</span> cache.get(key);                        <span class="c">// { value, softExpiry }</span>
+  <span class="k">if</span> (hit &amp;&amp; Date.now() &lt; hit.softExpiry) <span class="k">return</span> hit.value;  <span class="c">// fresh</span>
+  <span class="k">if</span> (hit) { refresh(key, id); <span class="k">return</span> hit.value; }           <span class="c">// stale: serve, refresh behind</span>
+  <span class="k">return</span> refresh(key, id);                                   <span class="c">// gone: wait for the load</span>
+}
+
+<span class="k">function</span> refresh(key: string, id: string) {
+  <span class="k">if</span> (!inFlight.has(key)) {
+    inFlight.set(key, loadAndStore(key, id).<span class="k">finally</span>(() =&gt; inFlight.delete(key)));
+  }
+  <span class="k">return</span> inFlight.get(key)!;                                 <span class="c">// everyone shares one load</span>
+}</code></pre></div><div class="full">
+<p>This is the fix for drill 2, and it is the same idea as the browser's stale-while-revalidate from the server-state cache note. No shopper waits for a rebuild unless the value is entirely gone, and there is one rebuild however many are asking. Across several app instances, a short lock in Redis keeps it to one rebuild in total.</p>
+<h3>Spread the expiries</h3>
+<p>If ten thousand keys are written in the same minute, for instance after a deploy or a warm-up script, they expire in the same minute too. Add a random part to every TTL, such as five minutes plus or minus thirty seconds, so the reloads arrive as a trickle.</p>
+<h3>Sizing the memory</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Quantity</th><th scope="col">Reasoning</th><th scope="col">Value</th></tr></thead><tbody><tr><td>Entries worth caching</td><td>the products that get most of the views; not all 200,000</td><td>about 20,000</td></tr><tr><td>Size of one entry</td><td>the product as JSON</td><td>about 2 KB</td></tr><tr><td>Memory needed</td><td>20,000 × 2 KB, plus overhead</td><td>about 60 MB</td></tr><tr><td>When full</td><td>evict what was used least recently</td><td>LRU</td></tr></tbody></table></div><p>A cache that is too small evicts entries that would have been hits. The sign is a rising eviction count together with a falling hit ratio. A cache that is far too big only costs money, with one exception: very large single values, such as a 5 MB list under one key, slow every read of that key and are better split up.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>A key is read 10 times a second with a 30-second TTL. Hit ratio?</summary><p>1 − 1/300, about 99.7 %.</p></details><details><summary>Product wants prices at most 10 seconds old. Does that ruin the hit ratio for popular products?</summary><p>No. At 80 reads a second a 10-second TTL still gives 99.9 %. It only costs anything on rarely read products, which were not benefiting anyway.</p></details></div>
+<a class="next" href="#layers"><small>next · chapter 7</small>The layers, from browser to database →</a>
+</section>
+<section id="layers" data-title="Layers">
+<p class="ch">chapter 7 <span>· 3 min</span></p>
+<h2>The layers, from browser to database</h2>
+<div class="gist"><p><b>Gist</b> Browser, CDN, app memory and Redis each hold a copy with its own expiry. Their staleness adds up, so the TTLs together must fit what the business agreed. You can clear Redis and the CDN but not a browser, so the browser gets the shortest life. Files named by version can be cached for a year.</p></div>
+
+<p>Chapter 1 showed five places that hold a copy. Each is a cache with its own expiry, its own key and its own way of being wrong.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Layer</th><th scope="col">Shared by</th><th scope="col">Who can clear it</th><th scope="col">Typical risk</th></tr></thead><tbody><tr><td><b>Browser</b></td><td>one person</td><td>nobody but that person</td><td>you cannot take back what you allowed it to keep</td></tr><tr><td><b>CDN</b></td><td>everyone in a region</td><td>you, with a purge call</td><td>personal pages cached for all (drill 6)</td></tr><tr><td><b>App memory</b></td><td>one app instance</td><td>a restart, or its own TTL</td><td>two instances disagree; a refresh flips the price back and forth</td></tr><tr><td><b>Redis</b></td><td>all app instances</td><td>your code</td><td>the drills in chapter 4</td></tr><tr><td><b>Database</b></td><td></td><td></td><td>its own internal caches. Leave them to it</td></tr></tbody></table></div><aside class="mn">The further a cache is from the database, the less control you have over it. Give the far ones the shortest lives.</aside>
+<h3>The staleness adds up</h3>
+<p>Five minutes in Redis, five at the CDN and five in the browser is not five minutes. A copy can be read from Redis at the end of its life, stored by the CDN for five more, and then kept by the browser for five more.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Layer</th><th scope="col">TTL</th><th scope="col">Worst-case age when the shopper sees it</th></tr></thead><tbody><tr><td>Redis</td><td>5 min</td><td>5 min</td></tr><tr><td>+ CDN</td><td>5 min</td><td>10 min</td></tr><tr class=hot><td>+ browser</td><td>5 min</td><td><b>15 min</b></td></tr></tbody></table></div>
+<p>If the business said “one minute” in chapter 5, the three TTLs together must fit in one minute, or the outer layers must be invalidated as well.</p>
+<div class="full">
+<h3>Speaking to the outer layers</h3>
+<p>The browser and the CDN are controlled by response headers. A handful covers most needs.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Header</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>Cache-Control: max-age=60</code></td><td>anyone may keep this for 60 seconds</td></tr><tr><td><code>s-maxage=300</code></td><td>shared caches such as the CDN may keep it for 300; overrides max-age for them</td></tr><tr><td><code>stale-while-revalidate=30</code></td><td>after expiry, serve the old copy for up to 30 s more while fetching a new one</td></tr><tr><td><code>private</code></td><td>only the person's own browser may keep it; no shared cache</td></tr><tr><td><code>no-store</code></td><td>nobody keeps it. For anything personal or secret</td></tr><tr><td><code>ETag</code> with <code>If-None-Match</code></td><td>“has it changed since version abc?” The server answers 304 with no body if not</td></tr></tbody></table></div><p>A good pattern for a product page: a short <code>max-age</code> for browsers, a longer <code>s-maxage</code> for the CDN, and a purge of the CDN when the price changes. The CDN is the outer layer you can clear, so let it hold the page longest, and give the browser, which you cannot clear, very little.</p>
+<h3>Files that never change</h3>
+<p>Scripts, styles and images are the easy case, if they are named by their content: <code>app.3f9a1c.js</code>. The file under that name never changes, so it can be cached for a year with <code>immutable</code>. A new build produces a new name. This is the versioned-key strategy from chapter 5, and it is the only kind of invalidation with no race in it.</p>
+<h3>The cache inside the app</h3>
+<p>A small in-memory cache in each app instance, in front of Redis, removes even the 1 ms network hop and protects Redis from a very hot key. Keep its TTL tiny, one to five seconds. Each instance expires on its own schedule, so for those seconds two instances can give different answers, and a shopper who refreshes may see the price change and change back.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Redis 60 s, CDN 60 s, browser 60 s. How old can the price on screen be?</summary><p>Up to three minutes.</p></details><details><summary>Two app instances each cache the price in memory for 5 seconds. What might a shopper notice?</summary><p>Refreshing the page can show the new price, then the old one again, as requests land on different instances.</p></details></div>
+<a class="next" href="#running"><small>next · chapter 8</small>Running it: graphs and runbooks →</a>
+</section>
+<section id="running" data-title="Running it">
+<p class="ch">chapter 8 <span>· 3 min</span></p>
+<h2>Running it: graphs and runbooks</h2>
+<div class="gist"><p><b>Gist</b> Watch the hit ratio per key family, the miss queries reaching the database, evictions and refresh failures. For stale data, walk outward from the database to find the layer holding the old copy, and clear from the inside out. For a cache outage: short timeouts, a capped fallback, and a warm start.</p></div>
+
+<p>A cache fails in two ways. Loudly, when it is down. And quietly, when it is up and serving the wrong thing, or serving very little. The quiet failures need graphs.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Metric</th><th scope="col">Healthy</th><th scope="col">It means trouble when</th></tr></thead><tbody><tr><td><b>Hit ratio</b>, per kind of key</td><td>steady, high for hot data</td><td>it drops: keys changed, TTLs shortened, junk traffic (drill 5), or the cache is too small</td></tr><tr><td><b>Miss queries</b> reaching the database</td><td>a small, steady stream</td><td>spikes on a regular beat: stampedes (drill 2)</td></tr><tr><td><b>Evictions</b></td><td>few</td><td>many, with a falling hit ratio: not enough memory</td></tr><tr><td><b>Stale serves</b> and refresh failures</td><td>some stale serves, no failures</td><td>refreshes failing: the cache is hiding a database problem</td></tr><tr><td><b>Cache response time</b></td><td>about a millisecond</td><td>it rises: a huge value, a hot key, or the cache server is saturated</td></tr><tr><td><b>Age of served data</b>, where you can measure it</td><td>within what was agreed</td><td>older than the business said was acceptable</td></tr></tbody></table></div><aside class="mn">Split the hit ratio by key family. One overall number hides a broken family behind a healthy one.</aside>
+<h3>Runbook: “customers still see the old price”</h3>
+<ol class="keep">
+  <li><b>Check the truth.</b> What does the database say? If it is wrong there, this is not a cache problem.</li>
+  <li><b>Walk outward.</b> Read the key in Redis. Request the page from an app instance directly. Request it through the CDN and look at its <code>Age</code> header. The first layer that shows the old value is where the copy is stuck.</li>
+  <li><b>Clear from the inside out.</b> Redis first, then the CDN. Clearing the CDN first only makes it refill from a stale Redis.</li>
+  <li><b>Accept what you cannot clear.</b> Browsers keep their copy until it expires. That is why their TTL was short.</li>
+  <li><b>Find the missed key.</b> Which copy was not invalidated, and why did the writer not know about it? That is the real fix (chapter 5).</li>
+</ol>
+<div class="full">
+<h3>Runbook: the cache is down or slow</h3>
+<ol>
+  <li><b>The app must not hang on it.</b> Cache calls have a short timeout, tens of milliseconds, and a circuit breaker. A slow cache is worse than no cache, exactly as in the Resilience Stack deep dive.</li>
+  <li><b>Fall back with a limit.</b> On a cache failure the app reads the database, through the cap on miss queries from drill 3. Without the cap, the fallback is what takes the database down.</li>
+  <li><b>Bring it back warm.</b> Run the warm-up script for the hottest keys before sending full traffic.</li>
+</ol>
+<h3>Hot keys and big keys</h3>
+<p>Two shapes cause trouble at scale. A <b>hot key</b> takes a large share of all reads: the home page, or one product in a television advert. In a cache split over several servers, that one server gets the whole load. The cure is the tiny in-memory layer from chapter 7 for those keys. A <b>big key</b> holds megabytes: a whole category in one value. Every read moves all of it. Split it into pages, or cache ids and fetch the items separately.</p>
+<h3>Flushing everything</h3>
+<p>“Just flush the cache” fixes a stale-data incident and starts drill 3. If you must, do it by key family, one at a time, with the miss cap in place, at a quiet hour.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why clear Redis before the CDN?</summary><p>The CDN refills from the app. If Redis still holds the old value, the CDN caches the old page again.</p></details><details><summary>Miss queries spike every ten minutes exactly. What is happening?</summary><p>A hot key with a ten-minute TTL expires and many requests rebuild it together: a stampede.</p></details></div>
+<a class="next" href="#testing"><small>next · chapter 9</small>Testing a cache →</a>
+</section>
+<section id="testing" data-title="Testing">
+<p class="ch">chapter 9 <span>· 2 min</span></p>
+<h2>Testing a cache</h2>
+<div class="gist"><p><b>Gist</b> Cache bugs need a second read or two things at once. Test read-after-write for every copy of the data, one database query for many concurrent misses, and two audiences on the same key. Run the whole suite with the cache switched off, and run one load test from an empty cache.</p></div>
+
+<p>Cache bugs hide from ordinary tests, because a test usually reads once and writes once, and a cache only misbehaves on the second read, or when two things happen at once.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Test</th><th scope="col">How</th><th scope="col">Catches</th></tr></thead><tbody><tr><td><b>Read after write</b></td><td>read, change the price, read again: the second read shows the new price</td><td>a forgotten invalidation</td></tr><tr><td><b>Every copy</b></td><td>after a price change, read the product page, the category list and the search result</td><td>derived keys nobody invalidates (chapter 5)</td></tr><tr><td><b>One rebuild</b></td><td>100 concurrent reads of a cold key: the database sees one query</td><td>stampedes (drill 2)</td></tr><tr><td><b>Reader against writer</b></td><td>pause a reader between its database read and its cache write; run a write; resume</td><td>the stale put-back (drill 1)</td></tr><tr><td><b>Not found</b></td><td>ask twice for a missing id: one database query</td><td>drill 5</td></tr><tr><td><b>Two audiences</b></td><td>read as a trade customer, then as a guest</td><td>keys missing a dimension (drill 6)</td></tr><tr><td><b>Cache off</b></td><td>run the whole test suite with the cache disabled</td><td>code that only works because of what is cached</td></tr><tr><td><b>Cache down</b></td><td>make every cache call time out: pages still load, within the time limit</td><td>a missing timeout or fallback</td></tr></tbody></table></div><aside class="mn">“Cache off” is the cheapest and finds the most. The app must be correct with no cache at all.</aside><div class="card"><div class="card-head"><span>product-cache.test.ts</span><span>the stampede, as a test</span></div><pre><code>test(<span class="s">"a cold hot key causes one database query"</span>, <span class="k">async</span> () =&gt; {
+  <span class="k">await</span> cache.delete(<span class="s">"product:42"</span>);
+  db.resetQueryCount();
+
+  <span class="k">await</span> Promise.all(Array.<span class="k">from</span>({ length: 100 }, () =&gt; getProduct(<span class="s">"42"</span>)));
+
+  expect(db.queryCount(<span class="s">"products"</span>)).toBe(1);
+});</code></pre></div><div class="full">
+<h3>Test with a cold cache under load</h3>
+<p>Load tests are nearly always run warm, because the test has been running for a while by the time anyone looks. Add one run that starts with an empty cache at full traffic. It answers the question from chapter 2: is the cache optional or required? If the system does not recover by itself, you have found drill 3 on a quiet afternoon instead of during an upgrade.</p>
+<h3>Make stale data visible</h3>
+<p>In test and staging environments, have responses say where they came from: a header such as <code>X-Cache: hit, age=212</code>. The runbook in chapter 8 becomes a matter of reading headers, and testers can tell a caching bug from a data bug without asking a developer.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>The suite fails with the cache switched off. What does that tell you?</summary><p>Some code depends on a cached value being there, for correctness. The cache has become a source of truth by accident.</p></details><details><summary>Why does a normal load test miss drill 3?</summary><p>By the time results are read, the cache is warm. Only a run that starts empty at full traffic shows whether the system can recover.</p></details></div>
+<a class="next" href="#tools"><small>next · chapter 10</small>When not to cache, a lab and the checklist →</a>
+</section>
+<section id="tools" data-title="When &amp; lab">
+<p class="ch">chapter 10 <span>· 5 min</span></p>
+<h2>When not to cache, a lab and the checklist</h2>
+<div class="gist"><p><b>Gist</b> Fix the query, add a replica or build a summary table before adding a cache. Do not cache what decisions are made on, what is rarely read or what is personal in a shared cache. The lab designs caching for a category page with a one-minute freshness rule, and the checklist turns the deep dive into review questions.</p></div>
+
+<h3>Before you add a cache</h3>
+<p>A cache adds a second copy of the truth and every problem in this deep dive. Try the cheaper things first.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Symptom</th><th scope="col">Try first</th></tr></thead><tbody><tr><td>one slow query</td><td>an index, or a better query</td></tr><tr><td>many reads, the database is busy</td><td>a read replica</td></tr><tr><td>an expensive sum or join, read often</td><td>a materialised view or a summary table, updated on write</td></tr><tr><td>the same data fetched many times in one request</td><td>load it once per request</td></tr><tr><td>still too slow or too frequent after those</td><td>now a cache</td></tr></tbody></table></div>
+<h3>What not to cache</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Data</th><th scope="col">Why not</th></tr></thead><tbody><tr><td>anything a decision is made on: balance, stock at checkout, permissions being changed</td><td>a stale value becomes a wrong action</td></tr><tr><td>data read less often than it changes</td><td>the bet from chapter 2 loses every time</td></tr><tr><td>rarely read data</td><td>hit ratio near zero (chapter 6)</td></tr><tr><td>personal data, in a shared cache</td><td>drill 6</td></tr><tr><td>results that are cheap to compute</td><td>the cache round trip costs more than the work</td></tr></tbody></table></div><aside class="mn">Permissions are the classic trap: revoke someone's access, and the cache keeps letting them in for five minutes.</aside><div class="full">
+<h3>Tools</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Layer</th><th scope="col">Examples</th><th scope="col">Note</th></tr></thead><tbody><tr><td>Shared cache</td><td>Redis, Valkey, Memcached</td><td>Redis and Valkey add data structures, locks and replication; Memcached is simpler</td></tr><tr><td>In-process</td><td>Caffeine (Java), an LRU map in most languages</td><td>always bounded in size and with a TTL</td></tr><tr><td>HTTP</td><td>a CDN; a reverse proxy such as Varnish or nginx</td><td>tags and purge calls differ by product</td></tr><tr><td>Browser data</td><td>TanStack Query, SWR</td><td>the server-state cache note</td></tr></tbody></table></div>
+</div>
+<h3>Lab</h3>
+<p>The “Mugs” category page lists 24 products with names, photos and prices. It is requested 300 times a second. Its query takes 400 ms. Prices change a few times a day and the business wants a change visible within one minute. Trade customers see different prices.</p>
+<ol class="keep">
+  <li>What is the cache key?</li>
+  <li>How is the page invalidated when one mug's price changes?</li>
+  <li>What TTLs do you set in Redis, at the CDN and in the browser?</li>
+  <li>What happens when the key expires at 300 requests a second?</li>
+  <li>A shopper adds a mug to the basket at the listed price. Where does the checkout get the price?</li>
+</ol>
+<div class="check quiz"><h3>model answer</h3>
+<details><summary>1 · The key</summary><p><code>category:mugs:page:1:prices:retail</code>. It names the category, the page and the price list. Without the price list in the key, trade prices leak to everyone (drill 6). Better still, cache the list of product ids and names once, and the prices per price list separately.</p></details>
+<details><summary>2 · Invalidation</summary><p>The writer of a price does not know which lists contain the product, so delete-on-write is not enough. Either tag the entry with the product ids it contains and invalidate by tag from an event worker, or rely on a short TTL. With “within one minute” as the requirement, a 30-second TTL alone is acceptable and much simpler.</p></details>
+<details><summary>3 · TTLs</summary><p>They must add up to under a minute. For example Redis 20 s, CDN 20 s for the retail page, browser 10 s. The trade version is marked <code>private</code> and is not stored by the CDN at all. At 300 requests a second, a 20-second TTL still gives a hit ratio of 99.98 %.</p></details>
+<details><summary>4 · Expiry under load</summary><p>Without protection, 400 ms × 300 a second is about 120 copies of the query at once. With single flight and a soft expiry, shoppers keep getting the old page for those 400 ms and exactly one query runs.</p></details>
+<details><summary>5 · Checkout</summary><p>From the database, inside the transaction that creates the order. If it differs from what the page showed, the shopper is told before paying. The cached price was for display only.</p></details>
+</div>
+<h3>The review checklist</h3>
+<div class="checklist"><div class="cl"><h3>Before caching</h3><ul><li>The slow query was fixed or indexed first</li><li>Someone has said how stale this data may be</li><li>No decision is made on the cached value; checkout and permissions read the source</li><li>It is known whether the system can run without the cache</li></ul></div><div class="cl"><h3>Keys and values</h3><ul><li>The key names everything the answer depends on</li><li>Shared and personal data are cached separately</li><li>Personal responses are private or no-store</li><li>“Not found” is cached briefly; errors are never cached</li><li>No single value is megabytes in size</li></ul></div><div class="cl"><h3>Expiry and rebuild</h3><ul><li>Every key has a TTL with a random spread</li><li>Hot keys use a soft expiry and one rebuild at a time</li><li>TTLs across layers add up to less than the agreed staleness</li><li>The browser gets the shortest TTL; static files have versioned names</li></ul></div><div class="cl"><h3>Invalidation</h3><ul><li>Writes delete keys; they do not set them</li><li>Every copy of the data is listed: item, lists, search, pages</li><li>Invalidation is retried, through an outbox or the database's log</li><li>Changes made outside the application also invalidate</li></ul></div><div class="cl"><h3>Failure</h3><ul><li>Cache calls have a short timeout and a breaker</li><li>Miss queries to the database are capped</li><li>There is a warm-up script and a replica</li><li>Nobody flushes everything during business hours</li></ul></div><div class="cl"><h3>Tests and operations</h3><ul><li>The test suite passes with the cache switched off</li><li>A test shows one database query for many concurrent misses</li><li>A load test starts from an empty cache</li><li>Hit ratio per key family, miss queries and evictions are on a dashboard</li><li>Responses can say which layer served them and how old the copy is</li></ul></div></div>
+
+<a class="next" href="#top"><small>the end</small>Back to the top ↑</a>
+</section>
+<p class="sources"><b>Sources.</b> Nishtala and others, “Scaling Memcache at Facebook” (2013), for leases, stampedes and cold clusters. Vattani, Chierichetti and Lowenstein, “Optimal Probabilistic Cache Stampede Prevention” (2015). Matt Brinkley and Jas Chhabra, “Caching challenges and strategies”, Amazon Builders' Library. RFC 9111, “HTTP Caching”, and RFC 5861 for stale-while-revalidate. Martin Kleppmann, <i>Designing Data-Intensive Applications</i>, chapters 5 and 11, on derived data.</p>
+</div></article>
+<footer class="foot"><span>Jef’s Notes · deep dive 05 · Caching</span></footer>
+</main>
+
+<div class="dock" data-dock>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+  <div class="dock-in">
+    <a class="dock-arrow" data-prev href="#top" aria-label="Previous chapter">‹</a>
+    <button class="dock-mid" type="button" data-open aria-haspopup="dialog" aria-expanded="false">
+      <small data-count>1 / 10</small><span data-current>Recap</span><i aria-hidden="true">☰</i>
+    </button>
+    <a class="dock-arrow" data-next href="#bet" aria-label="Next chapter">›</a>
+  </div>
+</div>
+<div class="sheet-back" data-close hidden></div>
+<div class="sheet" data-sheet role="dialog" aria-modal="true" aria-label="Chapters" hidden>
+  <div class="sheet-head"><b>Chapters</b><button type="button" data-close aria-label="Close">×</button></div>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Two notes in sixty seconds</span><span class="m">1 min</span></a></li><li><a href="#bet" data-ch="1"><span class="n">2</span><span class="t">A cache is a bet</span><span class="m">2 min</span></a></li><li><a href="#patterns" data-ch="2"><span class="n">3</span><span class="t">Five ways to read and write</span><span class="m">2 min</span></a></li><li><a href="#drills" data-ch="3"><span class="n">4</span><span class="t">Failure drills</span><span class="m">5 min</span></a></li><li><a href="#invalidation" data-ch="4"><span class="n">5</span><span class="t">Invalidation: the hard problem</span><span class="m">3 min</span></a></li><li><a href="#numbers" data-ch="5"><span class="n">6</span><span class="t">TTLs, worked out</span><span class="m">3 min</span></a></li><li><a href="#layers" data-ch="6"><span class="n">7</span><span class="t">The layers, from browser to database</span><span class="m">3 min</span></a></li><li><a href="#running" data-ch="7"><span class="n">8</span><span class="t">Running it: graphs and runbooks</span><span class="m">3 min</span></a></li><li><a href="#testing" data-ch="8"><span class="n">9</span><span class="t">Testing a cache</span><span class="m">2 min</span></a></li><li><a href="#tools" data-ch="9"><span class="n">10</span><span class="t">When not to cache, a lab and the checklist</span><span class="m">5 min</span></a></li></ol>
+  <div class="sheet-foot">
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+    <a href="#top" data-close>Top of page ↑</a>
+  </div>
+</div>
+</body>
+</html>
