@@ -1,8 +1,10 @@
 # Plan: Series 3 · Deep Dives
 
-Status **2026-11-13**: proposal, waiting for the owner's choices (§6). One sample exists:
-`docs/drafts/deep-dive-saga.html` (chapters 1–4 of 10, written as a standalone page; it has no
-`<html>`/`<body>` wrapper because it was published as a preview artifact).
+Status **2026-11-14**: format approved and built. **Deep dive 01 · Saga is complete** (10 chapters,
+about 5,200 words) at `/deep-dives/saga/`. Not deployed yet (deploy = merge to `main`, only when the owner asks).
+
+Owner's decisions (13 Nov): annotated-textbook style; keep the Season 1 list for now; each dive keeps its
+note's own example (no Larder); one long page with a chapter strip, with easy navigation on phones.
 
 ## 1. The idea
 
@@ -76,18 +78,30 @@ The notes are a student's handwritten journal. The deep dive is **the printed te
 - Alternatives considered: (b) keep the full handwritten skin, split into many short pages: cheapest, but
   long reading in Patrick Hand is hard; (c) lab-manual skin (numbered experiments): fits the drills, loses the family look.
 
-## 6. Decisions for the owner
+## 6. How it is built
 
-1. Style: annotated textbook (recommended), or (b)/(c)?
-2. Season 1 list: the six above, or swap any for a Season 2 candidate?
-3. Example: keep each note's own example (recommended, Series 1 has no Larder), or move the dives to Larder?
-4. One long page with a chapter strip (recommended, as in the sample), or one page per chapter?
+- Content: `content/deep-dives/<slug>.py` defines `DIVE` (title, `no`, `notes`, `chapters`). Each chapter has
+  `id`, `nav` (short name for the strip and dock), `title`, `gist`, `body` (HTML) and optional `check` questions.
+- Helpers injected into content files (from `scripts/dive.py`): `tbl()`, `drill()`, `mn()` margin note, `full()`
+  (hidden in skim mode), `code()`, `fig()` (raw SVG using the `bx`/`ln`/`lbl` classes), `checklist()`.
+- `scripts/dive.py` renders the page; `scripts/build_notes.py` has `DIVES`, the landing shelf (`#deep-dives`),
+  the `journals.json` entry (so the workflow builds the PDF) and the “go deeper →” link on notes listed in `notes`
+  (the hand-made `saga.html` has that link typed in).
+- Styles `public/assets/dive.css`, script `public/assets/dive.js`. The page does not load `notebook.css`/`bujo.css`.
+- Reading times are computed from word counts (200 words a minute), per chapter and for skim mode.
+- `dive.render_preview(d, css, js)` returns one self-contained file for sharing a draft.
 
-## 7. Build plan once approved
+**Navigation.** Wide screens: sticky chapter strip with the current chapter highlighted, progress line, skim button.
+Phones (≤ 760 px): a bottom dock with previous / next arrows and a middle button showing “3 / 10 · Failure drills”;
+tapping it opens a chapter sheet (titles, minutes, skim toggle, top of page). Every chapter ends with a
+“next chapter” link, chapter 3 has jump chips for the five drills, and the contents list works without JavaScript.
 
-1. `scripts/build_notes.py`: a `DEEP_DIVES` list and `render_dive()`; content in `content/deep-dives/<slug>.py`
-   as a list of chapters (`gist`, blocks, `drills`, `checkpoint`), figures via `Doodle`.
-2. `public/assets/dive.css` from the sample's inline styles; skim toggle into `notebook.js`.
-3. Landing page: a third shelf, “Deep dives”; each source note gets a “go deeper →” link.
-4. Add to `journals.json` so the workflow builds PDFs; same verify routine as `docs/HANDOFF.md` §4.
-5. Finish Saga chapters 5–10 first, review with the owner, then one dive per PR.
+**Skim mode** shows gists, figures, tables, drill timelines, fixes and rules, and checklists; it hides prose,
+margin notes and code. The choice is remembered in the browser.
+
+## 7. Next
+
+1. Owner reviews Saga on a phone and on desktop; adjust the format before writing more.
+2. Then one dive per PR, in the Season 1 order (02 Reliable Messaging next). For each: write the content file,
+   add its name to `DIVES`, build, and run the verify routine in `docs/HANDOFF.md` §4 (figures, 375 px, dark, PDF).
+3. Ideas not built: per-chapter PDFs, a printable one-page checklist card, Doodle-style wobbly figures.
