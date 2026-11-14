@@ -1,7 +1,9 @@
 # Plan: Series 3 · Deep Dives
 
-Status **2026-11-14**: format approved and built. Written: **01 Saga** (`/deep-dives/saga/`, 26 min) and
-**02 Reliable Messaging** (`/deep-dives/reliable-messaging/`, 29 min). Next: 03 The Resilience Stack.
+Status **2026-11-14**: format approved and built. Written and live: **01 Saga** (`/deep-dives/saga/`, 26 min),
+**02 Reliable Messaging** (`/deep-dives/reliable-messaging/`, 29 min), **03 The Resilience Stack**
+(`/deep-dives/resilience-stack/`, 30 min) and **04 Event Sourcing & CQRS** (`/deep-dives/event-sourcing-cqrs/`,
+30 min). 01–02 went out with PR #21, 03–04 with the next PR. Next: 05 Caching.
 
 **Length rule (owner, 14 Nov): every deep dive is about a 30-minute full read**, which is roughly 5,800–6,200
 words. The build prints the reading time in the page's fact bar; check it before committing.
@@ -89,7 +91,7 @@ The notes are a student's handwritten journal. The deep dive is **the printed te
   (hidden in skim mode), `code()`, `fig()` (raw SVG using the `bx`/`ln`/`lbl` classes), `checklist()`.
 - `scripts/dive.py` renders the page; `scripts/build_notes.py` has `DIVES`, the landing shelf (`#deep-dives`),
   the `journals.json` entry (so the workflow builds the PDF) and the “go deeper →” link on notes listed in `notes`
-  (the hand-made `saga.html` has that link typed in).
+  (the hand-made `saga.html` and `circuit-breaker.html` have that link typed in).
 - Styles `public/assets/dive.css`, script `public/assets/dive.js`. The page does not load `notebook.css`/`bujo.css`.
 - Reading times are computed from word counts (200 words a minute), per chapter and for skim mode.
 - `dive.render_preview(d, css, js)` returns one self-contained file for sharing a draft.
@@ -105,6 +107,6 @@ margin notes and code. The choice is remembered in the browser.
 ## 7. Next
 
 1. Owner reviews Saga on a phone and on desktop; adjust the format before writing more.
-2. Then one dive per PR, in the Season 1 order (03 The Resilience Stack next). For each: write the content file,
+2. Then one dive per PR, in the Season 1 order (05 Caching next). For each: write the content file,
    add its name to `DIVES`, build, and run the verify routine in `docs/HANDOFF.md` §4 (figures, 375 px, dark, PDF).
 3. Ideas not built: per-chapter PDFs, a printable one-page checklist card, Doodle-style wobbly figures.

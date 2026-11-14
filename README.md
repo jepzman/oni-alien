@@ -36,7 +36,7 @@ The landing page (`/`) shows two shelves (Series 1: design patterns; Series 2: p
 
 Long, chaptered pages that start where a note stops (`/deep-dives/<slug>/`): the real mechanism, failure drills,
 testing, operations and tools, in the “annotated textbook” skin with a skim mode and a phone chapter dock.
-Written so far: **Saga** and **Reliable Messaging** (10 chapters each, about a 30-minute read). Content `content/deep-dives/<slug>.py`, renderer `scripts/dive.py`, styles and
+Written so far: **Saga**, **Reliable Messaging**, **The Resilience Stack** and **Event Sourcing & CQRS** (10 chapters each, about a 30-minute read). Content `content/deep-dives/<slug>.py`, renderer `scripts/dive.py`, styles and
 script `public/assets/dive.css` / `dive.js`. Plan and format: `docs/HANDOFF-deep-dives.md`.
 
 ## Cheat sheets
