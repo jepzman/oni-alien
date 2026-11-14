@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Event Sourcing &amp; CQRS · Deep dive · Jef’s Notes</title>
+<meta name="description" content="A deep dive on event sourcing and CQRS: the event store, decide and evolve, six failure drills, projections and lag, versioning events, snapshots and closing the books, corrections and erasure, testing and operations.">
+<meta name="theme-color" content="#E4E1D9">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,700;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/dive.css?v=2b16c30ec1">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/dive.js?v=03c39c00d2" defer></script>
+</head>
+<body class="dive">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah" d="M0 0 L10 4 L0 8z"/></marker><marker id="ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah-r" d="M0 0 L10 4 L0 8z"/></marker></defs></svg>
+<a class="skip-link" href="#main">Skip to the text</a>
+<header class="site" id="top">
+  <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>deep dive 04</small></a>
+  <a class="site-link" href="../../index.html#deep-dives">Shelf</a>
+</header>
+<div class="strip" data-strip>
+  <div class="strip-in">
+    <nav aria-label="Chapters"><a href="#recap" data-ch="0"><b>1</b> Recap</a><a href="#store" data-ch="1"><b>2</b> The store</a><a href="#decide" data-ch="2"><b>3</b> Decide & evolve</a><a href="#drills" data-ch="3"><b>4</b> Failure drills</a><a href="#projections" data-ch="4"><b>5</b> Projections</a><a href="#versioning" data-ch="5"><b>6</b> Versioning</a><a href="#snapshots" data-ch="6"><b>7</b> Snapshots</a><a href="#deleting" data-ch="7"><b>8</b> Fix & erase</a><a href="#testing" data-ch="8"><b>9</b> Testing</a><a href="#tools" data-ch="9"><b>10</b> When & lab</a></nav>
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+  </div>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+</div>
+
+<main id="main" class="wrap"><article class="page"><div class="col">
+<p class="eyebrow">Deep dive 04 · builds on Vol. 1, notes 08 and 09</p>
+<h1><span>Event Sourcing &amp; CQRS</span></h1>
+<p class="sub">What it is like to live with a table you may only add to: old events, lagging read models, long streams and the right to be forgotten.</p>
+<ul class="facts"><li><b>Full read</b> about 30 min</li><li><b>Skim</b> about 13 min: yellow boxes, tables and drill rules</li><li><b>Example</b> bank account acc-1 and its passbook</li></ul>
+<nav class="toc" aria-label="Contents">
+  <h2 class="toc-h">In this deep dive</h2>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Two notes in sixty seconds</span><span class="m">1 min</span></a></li><li><a href="#store" data-ch="1"><span class="n">2</span><span class="t">The event store, for real</span><span class="m">3 min</span></a></li><li><a href="#decide" data-ch="2"><span class="n">3</span><span class="t">Decide and evolve</span><span class="m">3 min</span></a></li><li><a href="#drills" data-ch="3"><span class="n">4</span><span class="t">Failure drills</span><span class="m">5 min</span></a></li><li><a href="#projections" data-ch="4"><span class="n">5</span><span class="t">Projections and the lag</span><span class="m">3 min</span></a></li><li><a href="#versioning" data-ch="5"><span class="n">6</span><span class="t">Versioning: events are forever</span><span class="m">3 min</span></a></li><li><a href="#snapshots" data-ch="6"><span class="n">7</span><span class="t">Snapshots and closing the books</span><span class="m">2 min</span></a></li><li><a href="#deleting" data-ch="7"><span class="n">8</span><span class="t">Correcting and erasing</span><span class="m">3 min</span></a></li><li><a href="#testing" data-ch="8"><span class="n">9</span><span class="t">Testing it and running it</span><span class="m">3 min</span></a></li><li><a href="#tools" data-ch="9"><span class="n">10</span><span class="t">When to use it, a lab and the checklist</span><span class="m">5 min</span></a></li></ol>
+  <p class="toc-src">Read first: <a href="../../distributed/notes/event-sourcing.html">Event Sourcing</a><a href="../../distributed/notes/cqrs.html">CQRS</a></p>
+</nav>
+<section id="recap" data-title="Recap">
+<p class="ch">chapter 1 <span>· 1 min</span></p>
+<h2>Two notes in sixty seconds</h2>
+<div class="gist"><p><b>Gist</b> Event sourcing stores every change as an event and works out the current state by replaying them. CQRS reads from separate models that are filled from those events. The notes gave the reasons. This deep dive is about the long-term cost: old events, lagging views, long streams and deletion.</p></div>
+
+<p>The note used a bank passbook. Account <code>acc-1</code> has no “balance” cell that gets overwritten. It has lines: opened, deposited 100, withdrew 30. The balance, 70, is those lines added up.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Note</th><th scope="col">In one line</th></tr></thead><tbody><tr><td>Event Sourcing</td><td>store every change as an event that is never altered; work out the current state by replaying them</td></tr><tr><td>CQRS</td><td>one model for changing data, with the rules; separate models for reading, shaped for each screen</td></tr></tbody></table></div><figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 200" role="img" aria-label="The flow of one command. A Withdraw 50 command reaches the write side, which loads and replays the stream for account acc-1, decides, and appends. The stream holds four events: Opened, Deposited 100, Withdrew 30 and the new Withdrew 50. A moment later, projections read the new event and update two read models, a balances table and a statement. Queries read only the read models.">
+  <rect class="bx" x="10" y="70" width="110" height="50" rx="8"/><text class="lbl" x="65" y="92" text-anchor="middle">command</text><text class="soft" x="65" y="112" text-anchor="middle">Withdraw 50</text>
+  <rect class="bx-y" x="160" y="40" width="150" height="110" rx="8"/><text class="lbl" x="235" y="64" text-anchor="middle">write side</text>
+  <text x="235" y="90" text-anchor="middle">1 load + replay</text><text x="235" y="112" text-anchor="middle">2 decide</text><text x="235" y="134" text-anchor="middle">3 append</text>
+  <rect class="bx" x="350" y="20" width="150" height="150" rx="8"/><text class="lbl" x="425" y="44" text-anchor="middle">stream acc-1</text>
+  <text class="soft" x="425" y="70" text-anchor="middle">1 Opened</text><text class="soft" x="425" y="92" text-anchor="middle">2 Deposited 100</text><text class="soft" x="425" y="114" text-anchor="middle">3 Withdrew 30</text>
+  <rect class="bx-g" x="364" y="126" width="122" height="30" rx="5"/><text x="425" y="147" text-anchor="middle">4 Withdrew 50</text>
+  <rect class="bx" x="540" y="30" width="100" height="50" rx="8"/><text class="lbl" x="590" y="61" text-anchor="middle">projections</text>
+  <rect class="bx-y" x="540" y="110" width="100" height="36" rx="6"/><text x="590" y="134" text-anchor="middle">balances</text>
+  <rect class="bx-y" x="540" y="154" width="100" height="36" rx="6"/><text x="590" y="178" text-anchor="middle">statement</text>
+  <rect class="bx" x="670" y="126" width="80" height="50" rx="8"/><text class="lbl" x="710" y="157" text-anchor="middle">query</text>
+  <path class="ln" d="M120 95 H158" marker-end="url(#a)"/><path class="ln" d="M310 95 H348" marker-end="url(#a)"/>
+  <path class="ln" d="M500 55 H538" marker-end="url(#a)"/><path class="ln" d="M590 80 V108" marker-end="url(#a)"/>
+  <path class="ln" d="M670 150 H642" marker-end="url(#a)"/>
+  <text class="soft" x="235" y="176" text-anchor="middle">rules live here</text><text class="soft" x="590" y="20" text-anchor="middle">a moment later</text>
+</svg></div><figcaption>Writes go left to right through the stream. Reads never touch it.</figcaption></figure><aside class="mn">The two patterns are separate ideas. They show up together because an event log is hard to query.</aside>
+<p class="full">The notes explained why you might want this. They left out what it is like to live with: a table you may only add to, code that must still understand events written five years ago, read models that are always a little behind, and a privacy law that says “delete” to a design that never deletes. Those are the chapters.</p>
+
+
+<a class="next" href="#store"><small>next · chapter 2</small>The event store, for real →</a>
+</section>
+<section id="store" data-title="The store">
+<p class="ch">chapter 2 <span>· 3 min</span></p>
+<h2>The event store, for real</h2>
+<div class="gist"><p><b>Gist</b> An event store is an insert-only table with two orderings: a version inside each stream and a position across all of them. One unique constraint on stream and version is the whole concurrency control. A stream holds one thing that enforces its own rules, and it should have an end.</p></div>
+
+<p>An event store can be a specialised database or one table. The table shows what the specialised products do for you.</p>
+<div class="card"><div class="card-head"><span>events.sql</span><span>the whole write model</span></div><pre><code><span class="k">CREATE</span> <span class="k">TABLE</span> events (
+  position   BIGSERIAL <span class="k">PRIMARY</span> <span class="k">KEY</span>,   <span class="c">-- order across all streams</span>
+  stream_id  TEXT <span class="k">NOT</span> <span class="k">NULL</span>,           <span class="c">-- 'acc-1'</span>
+  version    INT  <span class="k">NOT</span> <span class="k">NULL</span>,           <span class="c">-- 1, 2, 3... within the stream</span>
+  event_id   UUID <span class="k">NOT</span> <span class="k">NULL</span>,
+  <span class="k">type</span>       TEXT <span class="k">NOT</span> <span class="k">NULL</span>,           <span class="c">-- 'Withdrew'</span>
+  data       JSONB <span class="k">NOT</span> <span class="k">NULL</span>,          <span class="c">-- {"amount": 30}</span>
+  meta       JSONB <span class="k">NOT</span> <span class="k">NULL</span>,          <span class="c">-- who, when, which command</span>
+  <span class="k">UNIQUE</span> (stream_id, version)
+);</code></pre></div><div class="tbl"><table><thead><tr><th scope="col">position</th><th scope="col">stream</th><th scope="col">version</th><th scope="col">type</th><th scope="col">data</th></tr></thead><tbody><tr><td class=mono>1040</td><td class=mono>acc-1</td><td class=mono>1</td><td>Opened</td><td class=mono>{"owner": "c-7"}</td></tr><tr><td class=mono>1041</td><td class=mono>acc-1</td><td class=mono>2</td><td>Deposited</td><td class=mono>{"amount": 100}</td></tr><tr><td class=mono>1077</td><td class=mono>acc-2</td><td class=mono>1</td><td>Opened</td><td class=mono>{"owner": "c-9"}</td></tr><tr><td class=mono>1102</td><td class=mono>acc-1</td><td class=mono>3</td><td>Withdrew</td><td class=mono>{"amount": 30}</td></tr></tbody></table></div><aside class="mn">Two orderings: version inside one account, position across all of them. Writers care about the first, projections about the second.</aside>
+<h3>The one constraint that does the work</h3>
+<p><code>UNIQUE (stream_id, version)</code> is the concurrency control for the whole write side. A writer that loaded the account at version 3 appends its event as version 4. If someone else got there first, version 4 already exists and the insert fails. The writer never needs a lock. It reloads and decides again (drill 1).</p>
+<div class="card"><div class="card-head"><span>append.sql</span><span>append with an expected version</span></div><pre><code><span class="k">INSERT</span> <span class="k">INTO</span> events (stream_id, version, event_id, <span class="k">type</span>, data, meta)
+<span class="k">VALUES</span> (<span class="s">'acc-1'</span>, 4, <span class="s">'e-71c2'</span>, <span class="s">'Withdrew'</span>, <span class="s">'{"amount": 50}'</span>,
+        <span class="s">'{"by": "c-7", "command": "cmd-88"}'</span>);
+<span class="c">-- unique violation = someone else wrote version 4 first</span></code></pre></div><div class="full">
+<h3>What a stream is</h3>
+<p>A stream holds the events of one <b>aggregate</b>: one thing whose rules must be checked together. For a bank that is one account, because “the balance may not go below zero” is a rule about one account. A transfer between two accounts is two streams and therefore two appends, which is the Saga deep dive's subject and not something an event store solves.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Stream too big</th><th scope="col">Stream too small</th></tr></thead><tbody><tr><td>“all accounts of customer c-7” in one stream: every deposit conflicts with every other, and the stream grows without end</td><td>“one stream per transaction”: no place where the balance rule can be checked</td></tr></tbody></table></div><p>Rule of thumb: a stream is the smallest thing that can enforce its own rules, and it should have an end. An account that lives for thirty years is a problem that chapter 7 solves.</p>
+<h3>Three rules of the table</h3>
+<ul>
+  <li><b>Insert only.</b> No <code>UPDATE</code>, no <code>DELETE</code>. Take the permission away from the application's database user so that it is a fact and not a habit.</li>
+  <li><b>Events record what was decided, not what was asked.</b> <code>Withdrew 50</code>, not <code>WithdrawRequested 50</code>. A rejected command leaves no event in the account's stream.</li>
+  <li><b>Put who, when and why in <code>meta</code>.</b> The user, the time and the id of the command that caused the event. This is the audit trail you were promised, and it only exists if you write it.</li>
+</ul>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why is a money transfer between two accounts not a single append?</summary><p>It touches two streams, and the expected-version check protects one stream at a time. Coordinating the two is a saga.</p></details><details><summary>A rejected withdrawal: is there an event in the account's stream?</summary><p>No. Events record what was decided and happened. A refused command changes nothing.</p></details></div>
+<a class="next" href="#decide"><small>next · chapter 3</small>Decide and evolve →</a>
+</section>
+<section id="decide" data-title="Decide &amp; evolve">
+<p class="ch">chapter 3 <span>· 3 min</span></p>
+<h2>Decide and evolve</h2>
+<div class="gist"><p><b>Gist</b> The write side is two plain functions. decide takes the state and a command and returns new events or a rejection. evolve takes the state and an event and returns the next state, and it must never fail, read the clock or cause side effects, because it runs again on every load for ever.</p></div>
+
+<p>The note's code had three steps in one function: replay, decide, append. In a real codebase the first two become two small functions with no database in them, and that separation is the best thing event sourcing gives a programmer.</p>
+<div class="card"><div class="card-head"><span>account.ts</span><span>the whole business logic of an account</span></div><pre><code><span class="k">type</span> State = { open: boolean; balance: number };
+<span class="k">const</span> initial: State = { open: <span class="k">false</span>, balance: 0 };
+
+<span class="c">// evolve: what an event does to the state. Never fails, never decides.</span>
+<span class="k">const</span> evolve = (s: State, e: Event): State =&gt; {
+  <span class="k">switch</span> (e.<span class="k">type</span>) {
+    <span class="k">case</span> <span class="s">"Opened"</span>:    <span class="k">return</span> { open: <span class="k">true</span>, balance: 0 };
+    <span class="k">case</span> <span class="s">"Deposited"</span>: <span class="k">return</span> { ...s, balance: s.balance + e.amount };
+    <span class="k">case</span> <span class="s">"Withdrew"</span>:  <span class="k">return</span> { ...s, balance: s.balance - e.amount };
+    <span class="k">default</span>:          <span class="k">return</span> s;            <span class="c">// unknown event: ignore</span>
+  }
+};
+
+<span class="c">// decide: given the state, is this command allowed, and what happened?</span>
+<span class="k">const</span> decide = (s: State, c: Command): Event[] =&gt; {
+  <span class="k">if</span> (!s.open) <span class="k">throw</span> <span class="k">new</span> Rejected(<span class="s">"No such account"</span>);
+  <span class="k">if</span> (c.<span class="k">type</span> === <span class="s">"Withdraw"</span>) {
+    <span class="k">if</span> (c.amount &gt; s.balance) <span class="k">throw</span> <span class="k">new</span> Rejected(<span class="s">"Insufficient funds"</span>);
+    <span class="k">return</span> [{ <span class="k">type</span>: <span class="s">"Withdrew"</span>, amount: c.amount }];
+  }
+  <span class="k">return</span> [{ <span class="k">type</span>: <span class="s">"Deposited"</span>, amount: c.amount }];
+};</code></pre></div><div class="tbl"><table><thead><tr><th scope="col"></th><th scope="col"><code>decide</code></th><th scope="col"><code>evolve</code></th></tr></thead><tbody><tr><td>Input</td><td>state + command</td><td>state + event</td></tr><tr><td>Output</td><td>new events, or a rejection</td><td>new state</td></tr><tr><td>May say no?</td><td>yes, that is its job</td><td>never. The event already happened</td></tr><tr><td>Runs</td><td>once, when the command arrives</td><td>every time the stream is loaded, for ever</td></tr></tbody></table></div><aside class="mn">A command is a request and can be refused. An event is a fact and can't.</aside><div class="full">
+<h3>Why <code>evolve</code> must be boring</h3>
+<p><code>evolve</code> will run on the same event thousands of times over the years: on every load, on every replay. It has to give the same answer each time. Three things are forbidden in it.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Forbidden in <code>evolve</code></th><th scope="col">What goes wrong</th></tr></thead><tbody><tr><td>Rejecting or throwing</td><td>an account that loaded yesterday cannot be loaded today, and no command can fix it</td></tr><tr><td>Reading the clock, a config value or another service</td><td>replaying the same events gives a different state on Tuesday than on Monday</td></tr><tr><td>Side effects: sending, calling, writing</td><td>they happen again on every load (drill 6)</td></tr></tbody></table></div><p>If a rule changes, say the bank now allows an overdraft of 200, the change goes in <code>decide</code>. Old events stay valid, because they were legal under the rule of their day. <code>evolve</code> does not re-judge the past.</p>
+<h3>The handler around them</h3>
+<div class="card"><div class="card-head"><span>handle.ts</span><span>load, decide, append, retry on conflict</span></div><pre><code><span class="k">export</span> <span class="k">async</span> <span class="k">function</span> handle(streamId: string, command: Command) {
+  <span class="k">for</span> (<span class="k">let</span> attempt = 1; attempt &lt;= 3; attempt++) {
+    <span class="k">const</span> { events, version } = <span class="k">await</span> store.load(streamId);
+    <span class="k">const</span> state = events.reduce(evolve, initial);
+    <span class="k">const</span> newEvents = decide(state, command);          <span class="c">// may throw Rejected</span>
+    <span class="k">try</span> {
+      <span class="k">return</span> <span class="k">await</span> store.append(streamId, newEvents, { expectedVersion: version });
+    } <span class="k">catch</span> (err) {
+      <span class="k">if</span> (!(err instanceof VersionConflict)) <span class="k">throw</span> err;  <span class="c">// someone else wrote: go round again</span>
+    }
+  }
+  <span class="k">throw</span> <span class="k">new</span> Busy(<span class="s">"Account is being changed, try again"</span>);
+}</code></pre></div><p>This function is the same for every aggregate in the system. All the thinking is in <code>decide</code> and <code>evolve</code>, which can be tested without a database (chapter 9).</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>The bank raises the minimum balance from 0 to 10. Where does the change go, and what happens to accounts already below 10?</summary><p>In decide. Old events stay valid; those accounts simply cannot withdraw until they are above 10.</p></details><details><summary>Why may evolve not throw on an event it dislikes?</summary><p>The event is already stored and will be replayed on every load. If evolve throws, the aggregate can never be loaded again.</p></details></div>
+<a class="next" href="#drills"><small>next · chapter 4</small>Failure drills →</a>
+</section>
+<section id="drills" data-title="Failure drills">
+<p class="ch">chapter 4 <span>· 5 min</span></p>
+<h2>Failure drills</h2>
+<div class="gist"><p><b>Gist</b> Six things that will happen: two commands on the same version, a projection that crashes halfway, a user who reads before the projection has caught up, an old event that today's code misreads, a stream with two million events, and a rebuild that repeats side effects.</p></div>
+<aside class="mn">Cover the bottom of each card. What would you expect to happen?</aside>
+<ul class="drill-index" aria-label="The six drills">
+  <li><a href="#drill-1">1 · two withdrawals</a></li><li><a href="#drill-2">2 · projection crash</a></li><li><a href="#drill-3">3 · stale read</a></li>
+  <li><a href="#drill-4">4 · old event, new code</a></li><li><a href="#drill-5">5 · endless stream</a></li><li><a href="#drill-6">6 · replayed emails</a></li>
+</ul>
+<div class="drill" id="drill-1"><header><span>Drill 1</span><h3>Two withdrawals at the same moment</h3></header><dl><dt>Timeline</dt><dd>The balance is 70. The owner withdraws 50 at a cash machine while a card payment of 50 arrives. Both handlers load version 3, both see 70, both decide “allowed”.</dd><dt class="full">Without the constraint</dt><dd class="full">Both append. The stream now says: deposited 100, withdrew 30, withdrew 50, withdrew 50. The balance is −30 and every rule was checked.</dd><dt>What saves you</dt><dd>Both try to write version 4. One insert succeeds; the other hits <code>UNIQUE (stream_id, version)</code>. That handler reloads, sees a balance of 20, runs <code>decide</code> again and rejects the payment: insufficient funds.</dd></dl><p class="rule">Rule: every append names the version it expects. A decision made on old state is never written.</p></div><div class="drill" id="drill-2"><header><span>Drill 2</span><h3>The projection crashes halfway</h3></header><dl><dt>Timeline</dt><dd>The balances projection reads <code>Deposited 100</code> at position 1041, adds 100 to the balances table, and crashes before it records that 1041 is done. After the restart it reads 1041 again and adds another 100.</dd><dt class="full">What you see</dt><dd class="full">The read model says 200. The event stream says 100. Nothing in the stream is wrong, which makes this confusing to investigate.</dd><dt>What saves you</dt><dd>The projection keeps a <b>checkpoint</b>, the last position it applied, and writes it in the <b>same transaction</b> as the change to the read model. Either both happen or neither. It is the idempotent consumer from the Reliable Messaging deep dive, with a position where the event id was.</dd></dl><p class="rule">Rule: a projection's checkpoint and its data are committed together.</p></div><div class="drill" id="drill-3"><header><span>Drill 3</span><h3>“I just paid in, where is my money?”</h3></header><dl><dt>Timeline</dt><dd>The owner deposits 100. The command succeeds and the page reloads. The balances projection is 400 ms behind. The page shows the old balance.</dd><dt class="full">Why</dt><dd class="full">The write went to the stream. The read came from a table that a separate process fills. Between the two there is always a gap; usually milliseconds, sometimes more.</dd><dt class="full">The tempting mistake</dt><dd class="full">Make the projection synchronous “just for now”, or have the page read the stream directly. Both quietly undo the split, one screen at a time.</dd><dt>What saves you</dt><dd>The command returns the position of the event it wrote. The page passes that position with its next query, and the read side waits briefly until its checkpoint has reached it. Chapter 5 has this and two other options.</dd></dl><p class="rule">Rule: the lag is part of the design. Decide, screen by screen, what the user sees during it.</p></div><div class="drill" id="drill-4"><header><span>Drill 4</span><h3>A two-year-old event meets today's code</h3></header><dl><dt>Timeline</dt><dd>Last spring the team changed amounts from dollars to cents and renamed the field: new events say <code>{"amountCents": 3000}</code>. Today someone rebuilds the statement projection from the beginning. It reads a 2025 event, <code>{"amount": 30}</code>, finds no <code>amountCents</code>, and writes a withdrawal of nothing.</dd><dt class="full">What you see</dt><dd class="full">No error. Statements for the years before the change are wrong, and balances rebuilt from them are wrong by large amounts.</dd><dt>What saves you</dt><dd>Old events are never rewritten, so the code must keep understanding them. An <b>upcaster</b> converts each old shape to the current one as events are read, before any other code sees them. And a test replays a sample of every event shape ever stored (chapters 6 and 9).</dd></dl><p class="rule">Rule: every event shape you have ever written is part of your codebase for ever.</p></div><div class="drill" id="drill-5"><header><span>Drill 5</span><h3>The stream that never ends</h3></header><dl><dt>Timeline</dt><dd>A business account receives two thousand payments a day. After three years its stream holds two million events. Every command for that account now starts by loading and replaying all of them.</dd><dt class="full">What you see</dt><dd class="full">One customer, your largest, has payments that take eight seconds. All other accounts are fast, so averages look healthy.</dd><dt>What saves you</dt><dd>A <b>snapshot</b>: the state at version 2,000,000 stored on the side, so a load reads the snapshot and only the events after it. Better, where the business allows it, give streams an end: close the account's books each month and start a new stream from the closing balance (chapter 7).</dd></dl><p class="rule">Rule: load time grows with stream length. Plan the end of a stream when you design its beginning.</p></div><div class="drill" id="drill-6"><header><span>Drill 6</span><h3>The rebuild that emailed everyone</h3></header><dl><dt>Timeline</dt><dd>A handler listens for <code>Deposited</code> and emails “you received a payment”. It was written like a projection. Someone resets its checkpoint to zero to fix a bug, and it replays three years of deposits.</dd><dt class="full">What you see</dt><dd class="full">Every customer receives an email for every deposit they have ever had.</dd><dt>What saves you</dt><dd>Keep two kinds of event handler apart. A <b>projection</b> only writes its own read model, so it can be replayed any number of times. A <b>reactor</b> does something in the outside world, so it must never be replayed: its checkpoint only moves forward, and it is idempotent in the way chapter 6 of the Reliable Messaging dive describes.</dd></dl><p class="rule">Rule: projections are replayable and reactors are not. Never let one handler be both.</p></div><div class="full">
+<h3>What the six drills add up to</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Part</th><th scope="col">Its duty</th><th scope="col">Drill</th></tr></thead><tbody><tr><td>Write side</td><td>append with an expected version; retry by deciding again</td><td>1</td></tr><tr><td>Projection</td><td>checkpoint and data in one transaction; no outside effects</td><td>2, 6</td></tr><tr><td>Reactor</td><td>forward-only checkpoint; idempotent effects</td><td>6</td></tr><tr><td>Screens</td><td>a chosen behaviour for the lag</td><td>3</td></tr><tr><td>Event shapes</td><td>old versions upcast on read, and tested</td><td>4</td></tr><tr><td>Streams</td><td>a snapshot, or an end</td><td>5</td></tr></tbody></table></div>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>After drill 1's conflict, why does the handler run decide again and not simply retry the insert with version 5?</summary><p>The state changed. The decision was made on a balance of 70; it must be made again on 20, and this time it is a rejection.</p></details><details><summary>A handler updates a search index and also notifies a partner's API. What is wrong with it?</summary><p>It is a projection and a reactor in one. Rebuilding the index would notify the partner again for all of history. Split it in two.</p></details></div>
+<a class="next" href="#projections"><small>next · chapter 5</small>Projections and the lag →</a>
+</section>
+<section id="projections" data-title="Projections">
+<p class="ch">chapter 5 <span>· 3 min</span></p>
+<h2>Projections and the lag</h2>
+<div class="gist"><p><b>Gist</b> A projection reads events by position, updates a read model and saves its checkpoint in the same transaction. Run the one or two views that must be current inline, and the rest asynchronously. Choose per screen how to handle the lag. Any read model can be thrown away and rebuilt beside the old one.</p></div>
+
+<p>A projection is a loop: read the next event by position, change a table, save the position. Everything a user ever sees comes out of such loops, so their behaviour is the behaviour of the product.</p>
+<div class="card"><div class="card-head"><span>balances-projection.sql</span><span>one event, one transaction</span></div><pre><code><span class="k">BEGIN</span>;
+<span class="k">UPDATE</span> balances <span class="k">SET</span> balance = balance - 50, version = 4
+<span class="k">WHERE</span> account_id = <span class="s">'acc-1'</span>;
+
+<span class="k">UPDATE</span> checkpoints <span class="k">SET</span> position = 1130
+<span class="k">WHERE</span> projection = <span class="s">'balances'</span> <span class="k">AND</span> position = 1102;   <span class="c">-- 0 rows? someone else is running: stop</span>
+<span class="k">COMMIT</span>;</code></pre></div>
+<h3>Two ways to run one</h3>
+<div class="tbl"><table><thead><tr><th scope="col"></th><th scope="col">Inline</th><th scope="col">Asynchronous</th></tr></thead><tbody><tr><td>Runs</td><td>inside the transaction that appends the event</td><td>in its own process, a moment later</td></tr><tr><td>Read model is</td><td>always up to date</td><td>slightly behind</td></tr><tr><td>Cost</td><td>every write waits for every inline projection; only works in the same database</td><td>the lag, and a process to run and watch</td></tr><tr><td>Use for</td><td>the one or two views that must never be stale, such as the balance shown before a withdrawal</td><td>everything else: search, statements, reports, other databases</td></tr></tbody></table></div><aside class="mn">Inline is not cheating. One strictly consistent view plus ten lagging ones is a very common shape.</aside>
+<h3>Living with the lag</h3>
+<p>Drill 3 has three honest answers. Choose per screen.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Option</th><th scope="col">How</th><th scope="col">Fits</th></tr></thead><tbody><tr><td><b>Wait for my write</b></td><td>the command returns its position; the query says “not before position 1130”; the read side waits up to half a second</td><td>the screen straight after an action</td></tr><tr><td><b>Show it optimistically</b></td><td>the client already knows what it did, so it displays the new balance and reconciles on the next load</td><td>simple changes with a predictable result</td></tr><tr><td><b>Say it is in progress</b></td><td>“Deposit received. Your balance will update in a moment.”</td><td>slow or multi-step results</td></tr></tbody></table></div><div class="full">
+<h3>The superpower: throw it away and rebuild</h3>
+<p>A read model contains nothing that is not in the events. So when a projection has a bug, or a screen needs a new column, you do not migrate the table. You fix the code and build the table again from position zero. This is the real reason to accept the rest of the cost.</p>
+<p>A rebuild on a live system is done beside the old table, not in place.</p>
+<ol>
+  <li>Deploy the new projection as <code>balances_v2</code> with its own checkpoint at zero.</li>
+  <li>Let it replay. The old table keeps serving queries.</li>
+  <li>When <code>balances_v2</code> has caught up, point the queries at it.</li>
+  <li>Stop the old projection and drop the old table a few days later.</li>
+</ol>
+<p>Know how long step 2 takes. A projection that handles 5,000 events a second replays 400 million events in about 22 hours. If that is too long to wait during an incident, the options are faster replay (batch the writes, run streams in parallel where order allows) or snapshots of the read model itself.</p>
+<h3>Order and gaps</h3>
+<p>A projection needs events in a stable order and must not skip any. Asking the table for “position greater than my checkpoint” has the same hole as the outbox relay in the Reliable Messaging dive: positions are handed out at insert and become visible at commit, so a slow transaction can surface behind your checkpoint. Purpose-built event stores handle this for you. On a plain table you must either serialise appends or read only up to a position that is known to be complete. It is the main reason a home-made store is harder than its one table suggests.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Product wants a new column on the dashboard. What is the process?</summary><p>Change the projection, deploy it as a new version with a checkpoint at zero, let it replay beside the old table, switch queries when it has caught up.</p></details><details><summary>Why can't every projection be inline?</summary><p>Each one adds work to every write, and inline only works when the read model is in the same database. Search or a reporting store cannot join that transaction.</p></details></div>
+<a class="next" href="#versioning"><small>next · chapter 6</small>Versioning: events are forever →</a>
+</section>
+<section id="versioning" data-title="Versioning">
+<p class="ch">chapter 6 <span>· 3 min</span></p>
+<h2>Versioning: events are forever</h2>
+<div class="gist"><p><b>Gist</b> Old events are never rewritten, so code must keep understanding every shape ever stored. Give each event a version, convert old shapes to the newest with upcasters as they are read, and use a new event type when the meaning changes. Publish separate integration events so your internal ones stay free to change.</p></div>
+
+<p>In an ordinary system, when the shape of the data changes you run a migration and the old shape is gone. Here the old shape is in the log for good, and the log is the source of truth. Changing your mind is the hardest part of event sourcing, and it comes to every system that lives longer than a year.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Change</th><th scope="col">What to do</th><th scope="col">Risk</th></tr></thead><tbody><tr><td>Add an optional field</td><td>nothing in old events; the reader supplies a default when it is missing</td><td>low</td></tr><tr><td>Rename a field, change a unit</td><td>new events use the new shape, with a version number; an upcaster converts old ones on read</td><td>medium</td></tr><tr><td>Split one event into two, or merge two</td><td>an upcaster that turns one stored event into several, or the reverse</td><td>medium</td></tr><tr class=hot><td>The <i>meaning</i> changes</td><td>a new event type with a new name. The old type keeps its old meaning for ever</td><td>high if you reuse the name</td></tr><tr><td>An event was simply wrong</td><td>append a correcting event (chapter 8). Never edit</td><td>low, if you resist the urge</td></tr></tbody></table></div><div class="card"><div class="card-head"><span>upcast.ts</span><span>runs on every event as it is read</span></div><pre><code><span class="k">const</span> upcast = (e: Stored): Stored =&gt; {
+  <span class="k">if</span> (e.<span class="k">type</span> === <span class="s">"Withdrew"</span> &amp;&amp; e.v === 1) {
+    <span class="c">// v1 stored dollars as "amount"; v2 stores cents as "amountCents"</span>
+    <span class="k">return</span> { ...e, v: 2, data: { amountCents: e.data.amount * 100 } };
+  }
+  <span class="k">return</span> e;
+};</code></pre></div><aside class="mn">decide, evolve and every projection only ever see the newest shape. The mess stays in one file.</aside><div class="full">
+<p>Upcasters chain: a version 1 event is converted to 2, then 2 to 3. Each one is small and none is ever deleted, because the version 1 events are still in the table.</p>
+<h3>Habits that make later changes cheaper</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Habit</th><th scope="col">Why</th></tr></thead><tbody><tr><td>Name events after what happened in the business: <code>Withdrew</code>, <code>AccountFrozen</code></td><td>business facts change meaning rarely. <code>AccountUpdated</code> with a list of changed fields will need changing every sprint</td></tr><tr><td>Store what was decided, with its inputs: the amount, the fee charged, the rate applied</td><td>replay must not recompute the fee with today's price list</td></tr><tr><td>Put a version number in every event from the first day</td><td>the upcaster needs something to switch on</td></tr><tr><td>Read tolerantly: ignore unknown fields and unknown event types</td><td>old code survives new events during a rolling deploy</td></tr><tr><td>Keep events small and specific</td><td>a change touches one event type, not all of them</td></tr></tbody></table></div><h3>Inside events and outside events</h3>
+<p>The events in your store are your private data model. Other services should not read them directly, for the same reason they should not read your tables: you lose the freedom to change. Publish a separate, smaller set of <b>integration events</b>, translated from the internal ones by a reactor and sent through an outbox. The internal <code>Withdrew</code> v3 can then change shape without anyone outside noticing, and the contract rules of the Reliable Messaging dive apply only to what you chose to publish.</p>
+<h3>The last resort</h3>
+<p>Sometimes the upcasters become a tangle, or a design mistake runs through years of events. Then you can build a new store: read every event from the old one, transform it, write it to the new one, and switch. This is a project with a rehearsal and a rollback plan. Needing it once in the life of a system is normal. Needing it yearly means the events are modelled at the wrong level.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary><code>Withdrew</code> used to mean cash only and now also covers card payments. Version bump or new type?</summary><p>A new type, such as <code>CardPaymentMade</code>. The meaning changed, and old <code>Withdrew</code> events must keep meaning cash.</p></details><details><summary>Why store the fee amount in the event when it could be looked up?</summary><p>Replay must reproduce what was decided then. A lookup would use today's fee and change history.</p></details></div>
+<a class="next" href="#snapshots"><small>next · chapter 7</small>Snapshots and closing the books →</a>
+</section>
+<section id="snapshots" data-title="Snapshots">
+<p class="ch">chapter 7 <span>· 2 min</span></p>
+<h2>Snapshots and closing the books</h2>
+<div class="gist"><p><b>Gist</b> Load time grows with stream length. A snapshot caches the state at some version so a load replays only what came after. Better where the business has natural periods: close the stream with its final balance and open a new one, so no stream grows for ever.</p></div>
+
+<p>Loading an account means replaying its stream. That is instant for 50 events and painful for two million (drill 5). There are two remedies, and the second is the better one.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 190" role="img" aria-label="A stream with two million events followed by 340 newer ones. A snapshot stored on the side holds the state at event two million: a balance of 18,420.55. Loading the account reads the snapshot and then replays only the 340 events after it.">
+  <text class="lbl" x="20" y="28">stream acc-9 (a busy account)</text>
+  <rect class="bx" x="20" y="44" width="540" height="40" rx="6"/>
+  <text class="soft" x="290" y="70" text-anchor="middle">events 1 … 2,000,000</text>
+  <rect class="bx-g" x="570" y="44" width="170" height="40" rx="6"/><text x="655" y="70" text-anchor="middle">2,000,001 … 2,000,340</text>
+  <rect class="bx-y" x="440" y="120" width="240" height="46" rx="8"/><text class="lbl" x="560" y="140" text-anchor="middle">snapshot at 2,000,000</text><text class="soft" x="560" y="158" text-anchor="middle">balance 18,420.55</text>
+  <path class="ln-d" d="M560 86 V118" marker-end="url(#a)"/>
+  <path class="ln" d="M680 143 H716 V88" marker-end="url(#a)"/>
+  <text class="soft" x="150" y="150" text-anchor="middle">without: replay 2,000,340 events</text><text class="soft" x="150" y="172" text-anchor="middle">with: read 1 row + replay 340</text>
+</svg></div><figcaption>A snapshot is a saved answer to “what does evolve give for the first two million events?”</figcaption></figure>
+<h3>Remedy 1: snapshots</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Question</th><th scope="col">Answer</th></tr></thead><tbody><tr><td>What is it?</td><td>the output of <code>evolve</code> at some version, stored in a separate table with that version</td></tr><tr><td>Is it the truth?</td><td>no. It is a cache. The events are the truth, and any snapshot can be deleted and recomputed</td></tr><tr><td>When to take one?</td><td>every few hundred or thousand events, in the background, never inside a command</td></tr><tr><td>When does it go stale?</td><td>when <code>evolve</code> or the shape of the state changes. Store a schema number with each snapshot and ignore snapshots from older code</td></tr></tbody></table></div><aside class="mn">Don't add snapshots on day one. Add them when a real stream is slow to load.</aside><div class="full">
+<p>Snapshots have a cost that is easy to miss. They are a second copy of the state with its own versioning problem, and a bug in snapshot code produces wrong state that looks correct. Keep the rule strict: loading with the snapshot and loading without it must give the same state, and a test checks it.</p>
+</div>
+<h3>Remedy 2: close the books</h3>
+<p>Accountants solved this long ago. At the end of a period they total the ledger, write the closing balance as the first line of a new book and put the old book on a shelf.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Stream</th><th scope="col">Events</th></tr></thead><tbody><tr><td><code>acc-9-2026-10</code></td><td>… <code>Withdrew</code>, <code>Deposited</code>, <b><code>PeriodClosed {balance: 18,420.55}</code></b></td></tr><tr class=hot><td><code>acc-9-2026-11</code></td><td><b><code>PeriodOpened {balance: 18,420.55}</code></b>, <code>Deposited</code>, …</td></tr></tbody></table></div><div class="full">
+<p>The closing event is a real business fact, written by <code>decide</code>, not a technical cache. Every stream is now at most a month long. Old months can move to cheaper storage. And an event shape that changes only has to be understood for as long as open periods can contain it, which also softens chapter 6.</p>
+<p>It needs one thing from the business: a natural period. Months for an account, a trip for a taxi, a visit for a patient, an order for a shop. Most things that run for a long time are really a series of shorter things, and modelling them that way removes the long stream instead of working around it.</p>
+<div class="tbl"><table><thead><tr><th scope="col"></th><th scope="col">Snapshot</th><th scope="col">Closing the books</th></tr></thead><tbody><tr><td>Kind of thing</td><td>a cache</td><td>a business event</td></tr><tr><td>Stream length</td><td>still grows</td><td>bounded</td></tr><tr><td>Extra risk</td><td>stale or wrong snapshots</td><td>a period boundary to design</td></tr><tr><td>Choose when</td><td>streams are long and have no natural period</td><td>the business already thinks in periods</td></tr></tbody></table></div>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>A deploy changes evolve. What must happen to existing snapshots?</summary><p>They are ignored or deleted, because they were computed by the old code. A schema number stored with each snapshot makes that automatic.</p></details><details><summary>Why is closing the books a business event and a snapshot is not?</summary><p>The closing balance is decided and recorded as a fact that statements and auditors use. A snapshot is a private cache that can be deleted at any time without anyone noticing.</p></details></div>
+<a class="next" href="#deleting"><small>next · chapter 8</small>Correcting and erasing →</a>
+</section>
+<section id="deleting" data-title="Fix &amp; erase">
+<p class="ch">chapter 8 <span>· 3 min</span></p>
+<h2>Correcting and erasing</h2>
+<div class="gist"><p><b>Gist</b> Mistakes are fixed by appending a correcting event that says what it reverses and why, never by editing. Personal data is best kept out of events altogether; if it must be in them, encrypt it with a key per person and erase by deleting the key. Decide this before the first personal field is stored.</p></div>
+
+<p>The table may only be added to. Two everyday needs seem to contradict that: fixing a mistake, and erasing a person's data when the law requires it.</p>
+<h3>Fixing a mistake</h3>
+<p>A teller types a deposit of 1,000 where the slip said 100. In an ordinary system someone edits the row. Here the passbook rule applies: the wrong line stays, and a correcting line is added.</p>
+<div class="tbl"><table><thead><tr><th scope="col">version</th><th scope="col">type</th><th scope="col">data</th><th scope="col">meta</th></tr></thead><tbody><tr><td class=mono>7</td><td>Deposited</td><td class=mono>{"amount": 1000}</td><td>by teller t-4</td></tr><tr class=hot><td class=mono>8</td><td>DepositReversed</td><td class=mono>{"amount": 1000, "reverses": 7}</td><td>by supervisor s-1, reason: keying error</td></tr><tr><td class=mono>9</td><td>Deposited</td><td class=mono>{"amount": 100}</td><td>by supervisor s-1</td></tr></tbody></table></div><aside class="mn">The audit trail now shows the error, who fixed it and why. An edited row would show none of that.</aside>
+<p>The balance comes out right, the statement shows what happened, and every projection receives the correction through the normal path with no special rebuild.</p>
+<div class="full">
+<p>The same applies when the mistake was a bug in <code>decide</code> that wrote wrong events for a week. Write a one-off script that appends correcting events through the normal command path, with <code>meta</code> saying which incident caused them. Editing the stored events to hide the bug would also change what every projection and every other service has already seen and acted on, without telling them.</p>
+</div>
+<h3>Erasing personal data</h3>
+<p>A customer closes their account and asks for their data to be erased. Their name and address are inside events that must never change. There are three approaches, in order of preference.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Approach</th><th scope="col">How</th><th scope="col">Cost</th></tr></thead><tbody><tr class=hot><td><b>Keep it out</b></td><td>events carry a customer id only; name and address live in an ordinary table that can be updated and deleted</td><td>none later. Needs the discipline from day one</td></tr><tr><td><b>Forget the key</b></td><td>personal fields in events are encrypted with a key kept per customer; erasing means deleting that key, and the fields become unreadable everywhere, backups included</td><td>a key store to run; every reader must cope with “no longer readable”</td></tr><tr><td><b>Rewrite the stream</b></td><td>copy the stream without the personal data, replace the original</td><td>breaks the rule of the table; every projection must be rebuilt; a last resort</td></tr></tbody></table></div><div class="full">
+<p>The first approach is far the cheapest and is mostly a modelling habit: an event says <i>that</i> customer c-7 changed their address, and the address itself is stored where personal data normally lives. Money events rarely need a name in them at all.</p>
+<p>Whether deleting a key satisfies the law in your situation is a question for your data protection officer, not for a design pattern. Ask it before the first personal field goes into an event, because afterwards only the expensive options remain.</p>
+<p>Read models hold copies of personal data too. They are ordinary tables, so they are deleted in the ordinary way, and a rebuild must not bring the data back. With either of the first two approaches it cannot.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why not edit the wrong event when nobody has noticed yet?</summary><p>Projections and other services have already consumed it. Editing it changes the source without telling them, and the audit trail no longer shows the error or its fix.</p></details><details><summary>A customer is erased and a read model is rebuilt next month. What stops their name coming back?</summary><p>The name was never in the events (approach one), or its key is gone and the field cannot be decrypted (approach two).</p></details></div>
+<a class="next" href="#testing"><small>next · chapter 9</small>Testing it and running it →</a>
+</section>
+<section id="testing" data-title="Testing">
+<p class="ch">chapter 9 <span>· 3 min</span></p>
+<h2>Testing it and running it</h2>
+<div class="gist"><p><b>Gist</b> Rules are tested as given events, when command, then events, with no database. Keep a sample of every event type and version ever stored and replay it in every build. Watch projection lag, version conflicts and stream length, and never repair a read model by hand.</p></div>
+
+<p>Because <code>decide</code> and <code>evolve</code> are plain functions, the business rules of an event-sourced system are easier to test than most. Tests read as three lines: given these events, when this command, then these events.</p>
+<div class="card"><div class="card-head"><span>account.test.ts</span><span>given, when, then</span></div><pre><code>test(<span class="s">"cannot withdraw more than the balance"</span>, () =&gt; {
+  given([opened(), deposited(100), withdrew(30)])
+    .when(withdraw(80))
+    .thenRejected(<span class="s">"Insufficient funds"</span>);
+});
+
+test(<span class="s">"a withdrawal within the balance is recorded"</span>, () =&gt; {
+  given([opened(), deposited(100), withdrew(30)])
+    .when(withdraw(50))
+    .then([withdrew(50)]);
+});</code></pre></div><aside class="mn">No database, no mocks, a few milliseconds each. Hundreds of these are cheap.</aside><div class="tbl"><table><thead><tr><th scope="col">What</th><th scope="col">Test</th><th scope="col">Catches</th></tr></thead><tbody><tr><td>Rules</td><td>given events, when command, then events or a rejection</td><td>wrong decisions</td></tr><tr><td>Projections</td><td>given events, then these rows in the read model</td><td>wrong sums, missing cases</td></tr><tr><td>Projection twice</td><td>apply the same event twice with the same checkpoint</td><td>drill 2</td></tr><tr><td>Every event shape</td><td>one stored sample of each type and version, loaded through the upcasters and <code>evolve</code></td><td>drill 4</td></tr><tr><td>Snapshot</td><td>state with snapshot equals state without</td><td>stale or wrong snapshots</td></tr><tr><td>Concurrency</td><td>two commands on the same version: one is written, one decides again</td><td>drill 1</td></tr></tbody></table></div><div class="full">
+<h3>The test that earns its keep</h3>
+<p>Keep a folder of sample events: one real example of every type and every version that has ever been stored, with personal data removed. A test loads them all through the current code. The day someone changes <code>evolve</code> in a way that breaks a 2025 event, this test fails in the build, a year before a rebuild would have found it in production. Where it is allowed, also replay a full copy of production events through new projection code before each release.</p>
+<h3>What to watch</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Metric</th><th scope="col">Healthy</th><th scope="col">It means trouble when</th></tr></thead><tbody><tr><td><b>Projection lag</b>, per projection, in time</td><td>under a second</td><td>it grows: the projection is stuck on one event or too slow for the write rate</td></tr><tr><td><b>Version conflicts</b> as a share of commands</td><td>well under 1 %</td><td>it climbs: a stream is too coarse, and unrelated changes collide</td></tr><tr><td><b>Stream length</b>, the longest and the 99th percentile</td><td>hundreds</td><td>thousands and rising: drill 5 is on its way</td></tr><tr><td><b>Load time</b> of an aggregate, slow case</td><td>milliseconds</td><td>it tracks stream length</td></tr><tr><td><b>Rebuild time</b> of each projection</td><td>known, and acceptable</td><td>nobody knows it</td></tr></tbody></table></div><h3>Runbook: “the read model is wrong”</h3>
+<ol>
+  <li><b>Compare with the stream.</b> Load the aggregate's events and work out the right answer by hand. The stream is the truth.</li>
+  <li><b>Stream right, read model wrong?</b> It is a projection bug or a skipped event. Fix the projection, rebuild it beside the old one, switch (chapter 5).</li>
+  <li><b>Stream wrong too?</b> It is a bug in <code>decide</code>, or wrong input. Fix the code, then append correcting events (chapter 8). The projections follow by themselves.</li>
+  <li><b>Read model merely behind?</b> Check the lag graph. A projection stuck on one position usually means an event it cannot handle: look at that event before touching the checkpoint.</li>
+</ol>
+<p>Never fix a read model by editing its rows. The next rebuild will put the error back, and you will have lost the evidence of what caused it.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Version conflicts jump from 0.1 % to 8 % after a release. Likely cause?</summary><p>Something now writes to the same streams much more often, or a stream was made coarser, so unrelated changes collide. Look at which streams conflict.</p></details><details><summary>The balances table is wrong for one account and the stream is right. Why not just correct the row?</summary><p>The projection bug that caused it remains, and the next rebuild will bring the error back. Fix the projection and rebuild.</p></details></div>
+<a class="next" href="#tools"><small>next · chapter 10</small>When to use it, a lab and the checklist →</a>
+</section>
+<section id="tools" data-title="When &amp; lab">
+<p class="ch">chapter 10 <span>· 5 min</span></p>
+<h2>When to use it, a lab and the checklist</h2>
+<div class="gist"><p><b>Gist</b> Most of a system needs one model. A few heavy screens need light CQRS. Event sourcing is for the core where history is the business, such as money or stock, and usually for one or two aggregates. The lab adds an overdraft to the account, and the checklist turns the deep dive into review questions.</p></div>
+
+<h3>When to use which</h3>
+<p>The two patterns are separate decisions, and neither is for a whole system.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Level</th><th scope="col">What it is</th><th scope="col">Fits</th></tr></thead><tbody><tr><td>0 · one model</td><td>the same tables for writing and reading</td><td>most screens in most systems</td></tr><tr><td>1 · light CQRS</td><td>same database; separate query code, views or a few read tables</td><td>a few screens whose reads are heavy or oddly shaped</td></tr><tr><td>2 · full CQRS</td><td>separate read stores fed by events from an outbox</td><td>search, dashboards, very uneven read and write load</td></tr><tr class=hot><td>3 · event sourcing</td><td>the events are the write model</td><td>the core where history <i>is</i> the business: money, stock, bookings, anything audited</td></tr></tbody></table></div><aside class="mn">One or two aggregates at level 3, the rest at level 0 or 1. That is a healthy system.</aside><div class="full">
+<p>Move up a level when a specific pain appears, and only for the part that has it. Signs that level 3 fits: people ask “how did it get into this state?” every week; regulators want the history; the business already talks in events (“deposited”, “shipped”, “cancelled”). Signs that it does not: the data is mostly edited forms, such as a profile or a product description, and nobody cares what it said last Tuesday.</p>
+<h3>Tools</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Kind</th><th scope="col">Examples</th><th scope="col">Gives you</th></tr></thead><tbody><tr><td>Purpose-built event store</td><td>KurrentDB (formerly EventStoreDB), Axon Server</td><td>streams, expected-version appends, ordered subscriptions with no gaps</td></tr><tr><td>Library on a relational database</td><td>Marten (.NET on PostgreSQL), Eventuous</td><td>the table, snapshots and projections managed for you</td></tr><tr><td>Your own table</td><td>chapter 2</td><td>full control, and the gap problem from chapter 5 to solve</td></tr><tr><td>A log broker such as Kafka</td><td></td><td>a good way to <i>distribute</i> events; no per-stream expected version, so not a write model on its own</td></tr></tbody></table></div>
+</div>
+<h3>Lab</h3>
+<p>The bank adds an <b>overdraft</b>. Each account may be given a limit; withdrawals may take the balance down to minus that limit. Overdrawn accounts pay a fee of 5 on the first day of each month. Support wants a screen listing every overdrawn account.</p>
+<ol class="keep">
+  <li>Which new events do you need? Name them as business facts.</li>
+  <li>What changes in <code>decide</code>, and what in <code>evolve</code>?</li>
+  <li>The limit for acc-1 is lowered from 200 to 100 while the balance is −150. What should happen?</li>
+  <li>How is the support screen built, and may it lag?</li>
+  <li>The fee later changes from 5 to 7. What must still be true when an old stream is replayed?</li>
+</ol>
+<div class="check quiz"><h3>model answer</h3>
+<details><summary>1 · Events</summary><p><code>OverdraftLimitSet {limit}</code> and <code>OverdraftFeeCharged {amount, period}</code>. Not <code>AccountUpdated</code>. Each is a fact a bank employee would recognise.</p></details>
+<details><summary>2 · decide and evolve</summary><p><code>evolve</code> remembers the limit and subtracts fees from the balance. <code>decide</code> for a withdrawal now checks <code>amount ≤ balance + limit</code>. Old events need no change: accounts without a limit event have a limit of zero, which is the old rule.</p></details>
+<details><summary>3 · Lowering the limit</summary><p>The event is still accepted, because it is a fact that the bank lowered the limit. It does not undo past withdrawals, which were legal when made. <code>decide</code> simply refuses further withdrawals until the balance is above −100. If the bank wants to block the change instead, that is a rule in <code>decide</code> for the <code>SetOverdraftLimit</code> command.</p></details>
+<details><summary>4 · The support screen</summary><p>A new projection, <code>overdrawn_accounts</code>, fed by deposits, withdrawals and fees. It is built by replaying from position zero, so it is complete on its first day. It may lag by seconds: support staff are not harmed by a short delay, so it runs asynchronously.</p></details>
+<details><summary>5 · The fee change</summary><p>The amount is stored in each <code>OverdraftFeeCharged</code> event. Replaying a 2026 stream must still subtract 5 for the 2026 fees. If <code>evolve</code> looked the fee up in today's configuration, every historical balance would change the day the price list did.</p></details>
+</div>
+<h3>The review checklist</h3>
+<div class="checklist"><div class="cl"><h3>Streams and the store</h3><ul><li>One stream per thing that enforces its own rules</li><li>Every append carries an expected version; a conflict means decide again</li><li>The events table is insert-only, enforced by database permissions</li><li>Every event records who, when and which command</li><li>Each kind of stream has a planned end, or a snapshot plan</li></ul></div><div class="cl"><h3>Write logic</h3><ul><li>decide and evolve are plain functions with no database or clock</li><li>evolve never rejects and has no side effects</li><li>Events store what was decided, with the values used</li><li>Events are named after business facts</li></ul></div><div class="cl"><h3>Projections and reactors</h3><ul><li>Checkpoint and read model are committed together</li><li>Projections only write their own read model</li><li>Reactors move forward only and are idempotent</li><li>Each screen has a chosen behaviour for the lag</li><li>Every projection can be rebuilt beside the old one, and its rebuild time is known</li></ul></div><div class="cl"><h3>Change over time</h3><ul><li>Every event has a version number</li><li>Old shapes are upcast on read; nothing is rewritten</li><li>A changed meaning gets a new event type</li><li>Other services receive translated integration events, not the internal ones</li></ul></div><div class="cl"><h3>Correcting and erasing</h3><ul><li>Mistakes are fixed with correcting events that say why</li><li>Personal data is kept out of events, or encrypted with a per-person key</li><li>The erasure approach has been agreed with whoever is responsible for privacy</li></ul></div><div class="cl"><h3>Tests and operations</h3><ul><li>Rules are tested as given events, when command, then events</li><li>A sample of every event type and version is replayed in the build</li><li>Projection lag, version conflicts and stream length are on a dashboard</li><li>Read models are never repaired by hand</li></ul></div></div>
+
+<a class="next" href="#top"><small>the end</small>Back to the top ↑</a>
+</section>
+<p class="sources"><b>Sources.</b> Greg Young, “CQRS Documents” (2010) and <i>Versioning in an Event Sourced System</i> (2017). Martin Fowler, “Event Sourcing” (2005) and “CQRS” (2011). Jérémie Chassaing, “Functional Event Sourcing Decider” (2021), for decide and evolve. Oskar Dudycz, event-driven.io, on closing the books, projections and snapshots. Vaughn Vernon, <i>Implementing Domain-Driven Design</i> (2013), chapters on aggregates and event stores.</p>
+</div></article>
+<footer class="foot"><span>Jef’s Notes · deep dive 04 · Event Sourcing &amp; CQRS</span></footer>
+</main>
+
+<div class="dock" data-dock>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+  <div class="dock-in">
+    <a class="dock-arrow" data-prev href="#top" aria-label="Previous chapter">‹</a>
+    <button class="dock-mid" type="button" data-open aria-haspopup="dialog" aria-expanded="false">
+      <small data-count>1 / 10</small><span data-current>Recap</span><i aria-hidden="true">☰</i>
+    </button>
+    <a class="dock-arrow" data-next href="#store" aria-label="Next chapter">›</a>
+  </div>
+</div>
+<div class="sheet-back" data-close hidden></div>
+<div class="sheet" data-sheet role="dialog" aria-modal="true" aria-label="Chapters" hidden>
+  <div class="sheet-head"><b>Chapters</b><button type="button" data-close aria-label="Close">×</button></div>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Two notes in sixty seconds</span><span class="m">1 min</span></a></li><li><a href="#store" data-ch="1"><span class="n">2</span><span class="t">The event store, for real</span><span class="m">3 min</span></a></li><li><a href="#decide" data-ch="2"><span class="n">3</span><span class="t">Decide and evolve</span><span class="m">3 min</span></a></li><li><a href="#drills" data-ch="3"><span class="n">4</span><span class="t">Failure drills</span><span class="m">5 min</span></a></li><li><a href="#projections" data-ch="4"><span class="n">5</span><span class="t">Projections and the lag</span><span class="m">3 min</span></a></li><li><a href="#versioning" data-ch="5"><span class="n">6</span><span class="t">Versioning: events are forever</span><span class="m">3 min</span></a></li><li><a href="#snapshots" data-ch="6"><span class="n">7</span><span class="t">Snapshots and closing the books</span><span class="m">2 min</span></a></li><li><a href="#deleting" data-ch="7"><span class="n">8</span><span class="t">Correcting and erasing</span><span class="m">3 min</span></a></li><li><a href="#testing" data-ch="8"><span class="n">9</span><span class="t">Testing it and running it</span><span class="m">3 min</span></a></li><li><a href="#tools" data-ch="9"><span class="n">10</span><span class="t">When to use it, a lab and the checklist</span><span class="m">5 min</span></a></li></ol>
+  <div class="sheet-foot">
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+    <a href="#top" data-close>Top of page ↑</a>
+  </div>
+</div>
+</body>
+</html>
