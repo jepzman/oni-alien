@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from doodle import Doodle, esc, highlight  # noqa: E402
 import cheatsheet  # noqa: E402
+import dive  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC = ROOT / "public"
@@ -1094,6 +1095,7 @@ def render_note(j, n, back=()):
     </div>
   </div>''',
         f'  <h3>{j.get("related_h3", "Related patterns")}</h3>\n  <ul class="related">{related}</ul>',
+        deeper_link(j["key"], slug),
         h2(8, "quiz", "Self-check quiz", ""),
         f'  <div class="quiz">\n{quiz}\n  </div>',
         f'  <div class="tryit">\n    <span class="tag">try it</span>\n    <p>{n["try_it"]}</p>\n  </div>' if n.get("try_it") else "",
@@ -1291,7 +1293,7 @@ def book_items(journals, planned, series=1, book=1, casefile=False):
     return "\n".join(books)
 
 
-def render_landing(sheets=()):
+def render_landing(sheets=(), dives=()):
     series1 = [j for j in shelf() if j.get("series", 1) == 1]
     series2 = [j for j in shelf() if j.get("series", 1) == 2]
     months = []
@@ -1312,6 +1314,9 @@ def render_landing(sheets=()):
         f'  <p class="lead">A student\'s bullet journals on software design patterns, and now on the work around the code: what problem each idea solves, an everyday analogy with doodles, how it works, what it costs, how it rates, and how people get it wrong. <b>{len(shelf())} volumes, {total} notes</b> in two series so far, more on the way.</p>',
         '  <h2 id="shelf"><span class="num">✎</span>The shelf <span class="side">series 1 · design patterns</span></h2>',
         f'  <ul class="shelf">\n{book_items(series1, PLANNED)}\n  </ul>',
+        '  <h2 id="deep-dives"><span class="num">↓</span>Deep dives <span class="side">series 3 · the annotated textbook</span></h2>',
+        '  <p>A note tells you what a pattern is. A deep dive is what happens when you build and run it: the real mechanism, failure drills, testing, operations and tools, in ten short chapters with a skim mode.</p>',
+        f'  <ul class="shelf shelf-series">\n{dive_items(dives)}\n  </ul>',
         '  <h2 id="series-2"><span class="num">✎</span>Series 2 · The Practitioner\'s Notebooks <span class="side">book 1 · the solution architect</span></h2>',
         '  <p>The second series is about the work <b>around</b> the code. Book 1, <b>The Solution Architect\'s Notebook</b>, follows one company, <b>Larder</b>, a grocery delivery start-up growing from one city to six, from a vague business plan to a running architecture. Same eight sections, a template to copy in every note, and a <b>try it</b> exercise for your own project.</p>',
         '  <h3 class="shelf-book">Book 1 · The Solution Architect\'s Notebook <span>narrated by Ana</span></h3>',
@@ -1345,6 +1350,47 @@ def render_landing(sheets=()):
         '</html>',
         '',
     ])
+
+
+# ---------------------------------------------------------------- deep dives (series 3)
+# One long chaptered page per topic: content/deep-dives/<name>.py, rendered by scripts/dive.py.
+DIVES = ["saga", "reliable_messaging"]
+DEEPER = {}   # (journal key, note slug) -> (dive slug, title); filled by load_dive
+
+
+def load_dive(name):
+    spec = importlib.util.spec_from_file_location(f"dive_{name}", CONTENT / "deep-dives" / f"{name}.py")
+    mod = importlib.util.module_from_spec(spec)
+    mod.__dict__.update(dive.HELPERS)
+    spec.loader.exec_module(mod)
+    d = mod.DIVE
+    for key, slug in d.get("notes", []):
+        DEEPER[(key, slug)] = (d["slug"], d["title"])
+    return d
+
+
+def deeper_link(key, slug):
+    if (key, slug) not in DEEPER:
+        return ""
+    dslug, title = DEEPER[(key, slug)]
+    return f'  <p class="aside deeper">go deeper → <a href="../../deep-dives/{dslug}/index.html">{esc(title)}: the deep dive</a></p>'
+
+
+def dive_items(dives):
+    out = []
+    for d in dives:
+        href = f"deep-dives/{d['slug']}/index.html"
+        out.append(f'''    <li class="book book--dive">
+      <a class="book-cover" href="{href}" aria-label="Open the deep dive: {esc(d['title'])}">
+        <span class="book-band" aria-hidden="true"></span>
+        <span class="book-label"><small>deep dive {d['no']:02d}</small><b>{esc(d['title'])}</b><i>{len(d['chapters'])} chapters</i></span>
+      </a>
+      <div class="book-meta">
+        <p>{d['blurb']}</p>
+        <p class="book-actions"><a class="btn" href="{href}">Open deep dive</a><a class="btn btn--ghost" href="deep-dives/{d['slug']}/pdf/{dive.pdf_name(d)}">{DL}PDF</a></p>
+      </div>
+    </li>''')
+    return "\n".join(out)
 
 
 def load_casefile():
@@ -1554,6 +1600,7 @@ def load_content(key):
 
 def main():
     listing = []
+    dives = [load_dive(name) for name in DIVES]   # first: notes link to their deep dive
     loaded = {j["key"]: load_content(j["key"]) for j in JOURNALS}
     back = {}
     for j in JOURNALS:
@@ -1593,7 +1640,14 @@ def main():
         listing.append(dict(key=f"cheatsheets/{cs.SLUG}", title=f"{cs.TITLE} cheat sheet", all=f"cheatsheets/{cs.SLUG}/index.html",
                             pdf=f"cheatsheets/{cs.SLUG}/pdf/{cheatsheet_pdf(cs)}", notes=[]))
         print(f"[cheatsheets] wrote {cs.SLUG} ({len(cs.PAGES)} cards)")
-    (PUBLIC / "index.html").write_text(render_landing(sheets), encoding="utf-8")
+    for d in dives:
+        out = PUBLIC / "deep-dives" / d["slug"]
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "index.html").write_text(dive.render_dive(d, asset), encoding="utf-8")
+        listing.append(dict(key=f"deep-dives/{d['slug']}", title=f"{d['title']} deep dive", all=f"deep-dives/{d['slug']}/index.html",
+                            pdf=f"deep-dives/{d['slug']}/pdf/{dive.pdf_name(d)}", notes=[]))
+        print(f"[deep-dives] wrote {d['slug']} ({len(d['chapters'])} chapters)")
+    (PUBLIC / "index.html").write_text(render_landing(sheets, dives), encoding="utf-8")
     (PUBLIC / "journals.json").write_text(json.dumps(listing, indent=1), encoding="utf-8")
     # old links from before the shelf existed (everything was the distributed journal)
     old = PUBLIC / "notes"

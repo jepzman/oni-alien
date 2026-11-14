@@ -32,6 +32,9 @@ Read in this order:
 Planned: nothing left in Books 1–2 (`PLANNED_2` and `PLANNED_PRODUCT` are empty), Series 1 Vol. 7 AI App Patterns
 (`PLANNED`), Books 3–4 (Sanne: project management; Mo: client management, Korenwolf) in the future log.
 
+**Series 3 · Deep dives** started on 14 Nov 2026: Saga and Reliable Messaging are written and built (`/deep-dives/<slug>/`), on branch
+`claude/design-patterns-deep-dive-ggw0on`, not deployed. Read `docs/HANDOFF-deep-dives.md` for the plan and format.
+
 ## 2. Next steps (owner's decisions)
 
 1. **Open item:** the owner reported Grace's cover and pages looked broken right after PR #7. Locally they render
