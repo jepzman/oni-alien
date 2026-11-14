@@ -770,11 +770,11 @@ PLANNED_PRODUCT = [
 ]
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
-    ("Jan 2027", [("•", "One-page printable cheat sheet per collection")]),
+    ("Jan 2027", [("↓", "Deep dives, season 2: Replication &amp; Leader Election, Sharding &amp; Partitioning, Indexes &amp; Query Plans"), ("•", "One-page printable cheat sheet per collection")]),
     ("Feb 2027", [("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
     ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b> (Sanne, the Rotterdam launch): planning, estimation, risks and dependencies, delivery rhythms, status that tells the truth"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
-    ("Mid 2027", [("•", "A Series 2 index: every Larder note from both books in one timeline")]),
+    ("Mid 2027", [("↓", "More deep dives: Sign-in &amp; Tokens, Observability &amp; SLOs, Rendering on the Web, Multitenancy"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
     ("Someday", [("•", "Extra notes for Vols. 2, 5 and 6: Debounce &amp; Throttle, Passkeys, Signed Webhooks, Chaos Engineering, Service Catalogues"), ("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
 
@@ -1234,18 +1234,20 @@ def render_all(j):
     ])
 
 
-AUTHOR_NOTE = """  <h2 id="author"><span class="num">✎</span>A note from the author <span class="side">why I made these journals</span></h2>
+AUTHOR_NOTE = """  <h2 id="author"><span class="num">✎</span>A note from the author <span class="side">why this shelf exists</span></h2>
   <aside class="author-note" aria-labelledby="author">
     <p class="lead">Your AI agent can write a saga orchestrator in eleven seconds. It cannot tell you whether you needed one.</p>
-    <p>These notebooks are for that second part. They're for new developers learning what all the arrows mean, and for experienced ones who've been nodding along in design reviews since 2019. They're short on purpose. Read one on the train, in a tunnel with no signal, or while the progress bar says “Thinking…” for the fourth minute.</p>
-    <p>Each note gives you three things:</p>
+    <p>Everything on this shelf is for that second part.</p>
+    <p>The classic books on this subject are excellent, 600 pages long and currently holding up a monitor. I wanted the same ideas in a form people finish. So there are four shapes here, sorted by how much time you have before the next meeting.</p>
     <ul>
-      <li><b>Better questions for the code review.</b> When the agent says “Done! ✅”, you'll know to ask: <i>is this idempotent? Where's the timeout? What happens when it runs twice?</i> Ask before you tell your boss it's done. Not after.</li>
-      <li><b>Better prompts for the next ticket.</b> “Add retries” gets you a loop. “Add capped retries with jitter and an idempotency key, only on 5xx” gets you a pattern. Vocabulary is leverage.</li>
-      <li><b>A sense of the trade-offs.</b> Every pattern here has a “what we lose” column. The agent rarely volunteers that column. Somebody in the room should know it exists.</li>
+      <li><b>Ten minutes: <a href="#shelf">a pattern note</a>.</b> One problem, one silly analogy, one diagram, and the column the agent never volunteers: <i>what we lose</i>.</li>
+      <li><b>Thirty minutes: <a href="#deep-dives">a deep dive</a>.</b> The same pattern after it has met production. Failure drills, real numbers, and a checklist to take into a design review. There is a skim mode. I won't tell anyone.</li>
+      <li><b>A story: <a href="#series-2">the practitioner's notebooks</a>.</b> Ana the architect and Grace the product owner join the same grocery start-up in the same month and write down what happens. It is the non-code half of the job: decisions, trade-offs, stakeholders and saying no politely.</li>
+      <li><b>Thirty seconds: <a href="#cheatsheets">a cheat sheet</a>.</b> For the command you look up twice a week and will look up again on Thursday.</li>
     </ul>
+    <p>What you get from any of them: better questions in the code review (<i>is this idempotent? where's the timeout?</i>), better prompts for the next ticket, and a sense of what each choice costs.</p>
     <p>The honest origin story: I had usage left before my weekly limit reset, and wasting it felt worse than wasting snacks. So I asked the agent to help me write notes about what agents get wrong. It found this very relatable.</p>
-    <p class="author-sign">Read one note a day. Argue with the ratings. Doodle in the margins.<br><span>by Jefrey Romel Tagunicar</span></p>
+    <p class="author-sign">Read one a day. Argue with the ratings. Doodle in the margins.<br><span>by Jefrey Romel Tagunicar</span></p>
   </aside>"""
 
 
@@ -1293,6 +1295,41 @@ def book_items(journals, planned, series=1, book=1, casefile=False):
     return "\n".join(books)
 
 
+# Short titles for book spines on the landing page (the full title shows on the pulled-out cover).
+SPINE_TITLES = {
+    "casefile": "Meet Larder",
+    "architect-1": "Requirements", "architect-2": "Decisions", "architect-3": "Communicating",
+    "architect-4": "Integration", "architect-5": "Qualities", "architect-6": "Delivery",
+    "product-1": "Discovering", "product-2": "Deciding", "product-3": "Idea to Backlog",
+    "product-4": "Measuring", "product-5": "Stakeholders", "product-6": "Growing",
+    "Docker &amp; Kubernetes": "Docker &amp; K8s",   # cheat sheets are looked up by their full title
+}
+
+
+def spine_shelf(items_html, name, label):
+    """Books stored spine-out: one row of spines, and the chosen volume pulled out underneath.
+    items_html is what book_items()/cheatsheet_items() return; name makes the ids unique."""
+    items = re.findall(r'<li class="book (book--[\w-]+)">(.*?)\n    </li>', items_html, flags=re.S)
+    spines, panels = [], []
+    for i, (cls, inner) in enumerate(items):
+        key = cls.replace("book--", "")
+        full = re.search(r"<b>(.*?)</b>", inner).group(1)
+        title = SPINE_TITLES.get(key) or SPINE_TITLES.get(full, full)
+        vol = "file" if key == "casefile" else key.rsplit("-", 1)[1] if key.rsplit("-", 1)[-1].isdigit() else str(i + 1)
+        on = i == 0
+        spines.append(f'<button class="spine {cls}" type="button" role="tab" id="{name}-s{i}" aria-controls="{name}-p{i}" '
+                      f'aria-selected="{"true" if on else "false"}" tabindex="{0 if on else -1}">'
+                      f'<span class="spine-band" aria-hidden="true"></span><span class="spine-vol">{vol}</span>'
+                      f'<span class="spine-title">{title}</span></button>')
+        panels.append(f'    <div class="pulled book {cls}" role="tabpanel" id="{name}-p{i}" aria-labelledby="{name}-s{i}"'
+                      f'{"" if on else " hidden"}>{inner}\n    </div>')
+    return (f'  <div class="spine-shelf" data-spines>\n    <div class="spines" role="tablist" aria-label="{label}">'
+            + "".join(spines) + "</div>\n" + "\n".join(panels) + "\n  </div>")
+
+
+NUMBER_WORDS = ["none", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"]
+
+
 def render_landing(sheets=(), dives=()):
     series1 = [j for j in shelf() if j.get("series", 1) == 1]
     series2 = [j for j in shelf() if j.get("series", 1) == 2]
@@ -1301,46 +1338,47 @@ def render_landing(sheets=(), dives=()):
         lis = "".join(f'<li><span class="sig">{s}</span> {t}</li>' for s, t in items)
         months.append(f'    <div class="month"><h3>{month}</h3><ul>{lis}</ul></div>')
     total = sum(len(j["catalogue"]) for j in shelf())
+    n1 = sum(len(j["catalogue"]) for j in series1)
     return "\n".join([
-        head("Jef’s Notes", "A shelf of student bullet journals on software design patterns and the work around the code, with doodles, analogies, trade-offs and ratings.", 0, "Architects+Daughter&family=Permanent+Marker&family=IBM+Plex+Sans+Condensed:wght@700"),
+        head("Jef’s Notes", "Software design in sizes that fit a working day: ten-minute pattern notes with doodles and trade-offs, thirty-minute deep dives, two practitioner notebooks that follow one start-up, and printable cheat sheets.", 0, "Architects+Daughter&family=Permanent+Marker&family=IBM+Plex+Sans+Condensed:wght@700"),
         body_open(),
         '<a class="skip-link" href="#main">Skip to the shelf</a>',
         bar(None, 0, "shelf"),
         '<main id="main" class="desk">',
         '<article class="sheet landing">',
         '  <div class="page-meta"><span class="day">The shelf · 2026</span><span class="topic">series · <b>software design</b></span></div>',
-        '  <p class="kicker">hand-written field journals, one subject per volume</p>',
+        '  <p class="kicker">pattern notes, deep dives, two notebooks and a stack of cheat sheets</p>',
         '  <h1 class="cover-title"><span class="hl">Jef’s Notes</span></h1>',
-        f'  <p class="lead">A student\'s bullet journals on software design patterns, and now on the work around the code: what problem each idea solves, an everyday analogy with doodles, how it works, what it costs, how it rates, and how people get it wrong. <b>{len(shelf())} volumes, {total} notes</b> in two series so far, more on the way.</p>',
-        '  <h2 id="shelf"><span class="num">✎</span>The shelf <span class="side">series 1 · design patterns</span></h2>',
-        f'  <ul class="shelf">\n{book_items(series1, PLANNED)}\n  </ul>',
-        '  <h2 id="deep-dives"><span class="num">↓</span>Deep dives <span class="side">series 3 · the annotated textbook</span></h2>',
-        '  <p>A note tells you what a pattern is. A deep dive is what happens when you build and run it: the real mechanism, failure drills, testing, operations and tools, in ten short chapters with a skim mode.</p>',
-        f'  <ul class="shelf shelf-series">\n{dive_items(dives)}\n  </ul>',
-        '  <h2 id="series-2"><span class="num">✎</span>Series 2 · The Practitioner\'s Notebooks <span class="side">book 1 · the solution architect</span></h2>',
-        '  <p>The second series is about the work <b>around</b> the code. Book 1, <b>The Solution Architect\'s Notebook</b>, follows one company, <b>Larder</b>, a grocery delivery start-up growing from one city to six, from a vague business plan to a running architecture. Same eight sections, a template to copy in every note, and a <b>try it</b> exercise for your own project.</p>',
-        '  <h3 class="shelf-book">Book 1 · The Solution Architect\'s Notebook <span>narrated by Ana</span></h3>',
-        f'  <ul class="shelf shelf-series">\n{book_items([j for j in series2 if j.get("book_no", 1) == 1], PLANNED_2, series=2, book=1, casefile=True)}\n  </ul>',
-        '  <h3 class="shelf-book">Book 2 · The Product Owner\'s Notebook <span>narrated by Grace</span></h3>',
-        f'  <ul class="shelf shelf-series">\n{book_items([j for j in series2 if j.get("book_no", 1) == 2], PLANNED_PRODUCT, series=2, book=2)}\n  </ul>',
-        '  <h2 id="cheatsheets"><span class="num">⌘</span>Cheat sheets <span class="side">laminated reference cards</span></h2>',
-        '  <p>Short, dense, printable: the commands and decisions you look up twice a week, on a few A4 cards. Reads fine on a phone too.</p>',
-        f'  <ul class="shelf shelf-series">\n{cheatsheet_items(sheets)}\n  </ul>',
+        f'  <p class="lead">Software design, in sizes that fit a working day: <b>{n1} pattern notes, {len(dives)} deep dives, {total - n1} notes from two practitioners and {len(sheets)} cheat sheets</b>. More on the way.</p>',
         AUTHOR_NOTE,
+        '  <h2 id="shelf"><span class="num">✎</span>Pattern notes <span class="side">ten minutes each</span></h2>',
+        f'  <p class="hook">{len(series1)} notebooks, {n1} patterns. Each one fits in a coffee break and has a “what we lose” column, because something always is.</p>',
+        f'  <ul class="shelf">\n{book_items(series1, PLANNED)}\n  </ul>',
+        '  <h2 id="deep-dives"><span class="num">↓</span>Deep dives <span class="side">thirty minutes each</span></h2>',
+        f'  <p class="hook">The textbook chapter you were supposed to read, with someone else\'s pencil notes in the margin. {NUMBER_WORDS[len(dives)].capitalize()} so far, each one a pattern after it has met production, with a skim mode for the honest.</p>',
+        f'  <ul class="shelf shelf-series">\n{dive_items(dives)}\n  </ul>',
+        '  <h2 id="series-2"><span class="num">✎</span>The Practitioner\'s Notebooks <span class="side">a story in two voices</span></h2>',
+        '  <noscript><style>.pulled[hidden] { display: grid !important; } .spines { display: none !important; }</style></noscript>',
+        '  <p class="hook">A soap opera about a grocery start-up, told by its architect and its product owner. Nobody dies. Several roadmaps do.</p>',
+        '  <p>The work <b>around</b> the code, following one company, <b>Larder</b>, as it grows from one city to six. Every note has a template to copy and a <b>try it</b> exercise for your own project. Tap a spine to pull a volume out; start with the case file.</p>',
+        '  <h3 class="shelf-book">Book 1 · The Solution Architect\'s Notebook <span>narrated by Ana</span></h3>',
+        spine_shelf(book_items([j for j in series2 if j.get("book_no", 1) == 1], PLANNED_2, series=2, book=1, casefile=True), "ana", "Book 1 volumes"),
+        '  <h3 class="shelf-book">Book 2 · The Product Owner\'s Notebook <span>narrated by Grace</span></h3>',
+        spine_shelf(book_items([j for j in series2 if j.get("book_no", 1) == 2], PLANNED_PRODUCT, series=2, book=2), "grace", "Book 2 volumes"),
+        '  <h2 id="cheatsheets"><span class="num">⌘</span>Cheat sheets <span class="side">thirty seconds each</span></h2>',
+        '  <p class="hook">For when you know exactly what you want and have forgotten the flag.</p>',
+        '  <p>The commands and decisions you look up twice a week, on a few printable A4 cards. They read fine on a phone too.</p>',
+        spine_shelf(cheatsheet_items(sheets), "cheat", "Cheat sheets"),
         '  <h2 id="future"><span class="num">→</span>Future log <span class="side">plans, not promises</span></h2>',
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
-        '  <p class="aside">series 2 (★) has begun with the solution architect\'s notebook. Next come notebooks for product managers, project managers and anyone who manages clients. Same format: the problem, an analogy, how it works, trade-offs, pitfalls and a quiz.</p>',
+        '  <p class="aside">the architect\'s and the product owner\'s notebooks are complete, six volumes each. Next in that story (★): the project manager and the client manager. The deep dives get a second season too.</p>',
         f'  <div class="future">\n{chr(10).join(months)}\n  </div>',
-        '  <h2 id="inside"><span class="num">?</span>What\'s inside every note <span class="side">same eight sections</span></h2>',
+        '  <h2 id="inside"><span class="num">?</span>What\'s inside <span class="side">four formats, same idea</span></h2>',
         '''  <ol class="how-to">
-    <li><b>The problem</b> the pattern solves, with a doodle.</li>
-    <li><b>A real-life analogy</b> and a “translate to code” table.</li>
-    <li><b>How it works</b>: diagrams, steps, vocabulary, a code card.</li>
-    <li><b>Gains vs losses</b>, side by side.</li>
-    <li><b>Nine ratings</b> picked for each journal's subject.</li>
-    <li><b>Common pitfalls</b> and their fixes.</li>
-    <li><b>When to use it</b>, and when not to.</li>
-    <li><b>A self-check quiz.</b></li>
+    <li><b>A pattern note</b> has eight sections: the problem, a real-life analogy, how it works, gains vs losses, nine ratings, common pitfalls, when to use it, and a self-check quiz.</li>
+    <li><b>A deep dive</b> has ten chapters: a recap of the notes, the real mechanism, failure drills, the hard problem, numbers, testing, running it, tools, a lab and a review checklist. Every chapter opens with its gist.</li>
+    <li><b>A practitioner's note</b> has the same eight sections as a pattern note, set inside the Larder story, plus a template to copy and a “try it” exercise.</li>
+    <li><b>A cheat sheet</b> is a few A4 cards: a map on top, boxed panels below, and a PDF to print.</li>
   </ol>''',
         '  <p class="folio">✦</p>',
         '</article>',
@@ -1354,7 +1392,7 @@ def render_landing(sheets=(), dives=()):
 
 # ---------------------------------------------------------------- deep dives (series 3)
 # One long chaptered page per topic: content/deep-dives/<name>.py, rendered by scripts/dive.py.
-DIVES = ["saga", "reliable_messaging", "resilience_stack", "event_sourcing_cqrs"]
+DIVES = ["saga", "reliable_messaging", "resilience_stack", "event_sourcing_cqrs", "caching", "zero_downtime_change"]
 DEEPER = {}   # (journal key, note slug) -> (dive slug, title); filled by load_dive
 
 

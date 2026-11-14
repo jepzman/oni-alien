@@ -105,7 +105,7 @@ def render_body(d, home="../../index.html"):
         c["_w"] = words(c["gist"] + c["body"])
     total = sum(c["_w"] for c in chs)
     skim = sum(words(c["gist"] + c["body"], skim=True) for c in chs)
-    pills = "".join(f'<a href="#{c["id"]}" data-ch="{i}"><b>{i + 1}</b> {c["nav"]}</a>' for i, c in enumerate(chs))
+    pills = "".join(f'<a href="#{c["id"]}" data-ch="{i}"><b>{i + 1}</b> {esc(c["nav"])}</a>' for i, c in enumerate(chs))
     rows = "".join(f'<li><a href="#{c["id"]}" data-ch="{i}"><span class="n">{i + 1}</span><span class="t">{c["title"]}</span>'
                    f'<span class="m">{mins(c["_w"])} min</span></a></li>' for i, c in enumerate(chs))
     facts = "".join(f"<li><b>{k}</b> {v}</li>" for k, v in
@@ -162,7 +162,7 @@ def render_body(d, home="../../index.html"):
   <div class="dock-in">
     <a class="dock-arrow" data-prev href="#top" aria-label="Previous chapter">‹</a>
     <button class="dock-mid" type="button" data-open aria-haspopup="dialog" aria-expanded="false">
-      <small data-count>1 / {n}</small><span data-current>{chs[0]["nav"]}</span><i aria-hidden="true">☰</i>
+      <small data-count>1 / {n}</small><span data-current>{esc(chs[0]["nav"])}</span><i aria-hidden="true">☰</i>
     </button>
     <a class="dock-arrow" data-next href="#{chs[1]["id"]}" aria-label="Next chapter">›</a>
   </div>
