@@ -1295,6 +1295,38 @@ def book_items(journals, planned, series=1, book=1, casefile=False):
     return "\n".join(books)
 
 
+# Short titles for book spines on the landing page (the full title shows on the pulled-out cover).
+SPINE_TITLES = {
+    "casefile": "Meet Larder",
+    "architect-1": "Requirements", "architect-2": "Decisions", "architect-3": "Communicating",
+    "architect-4": "Integration", "architect-5": "Qualities", "architect-6": "Delivery",
+    "product-1": "Discovering", "product-2": "Deciding", "product-3": "Idea to Backlog",
+    "product-4": "Measuring", "product-5": "Stakeholders", "product-6": "Growing",
+    "Docker &amp; Kubernetes": "Docker &amp; K8s",   # cheat sheets are looked up by their full title
+}
+
+
+def spine_shelf(items_html, name, label):
+    """Books stored spine-out: one row of spines, and the chosen volume pulled out underneath.
+    items_html is what book_items()/cheatsheet_items() return; name makes the ids unique."""
+    items = re.findall(r'<li class="book (book--[\w-]+)">(.*?)\n    </li>', items_html, flags=re.S)
+    spines, panels = [], []
+    for i, (cls, inner) in enumerate(items):
+        key = cls.replace("book--", "")
+        full = re.search(r"<b>(.*?)</b>", inner).group(1)
+        title = SPINE_TITLES.get(key) or SPINE_TITLES.get(full, full)
+        vol = "file" if key == "casefile" else key.rsplit("-", 1)[1] if key.rsplit("-", 1)[-1].isdigit() else str(i + 1)
+        on = i == 0
+        spines.append(f'<button class="spine {cls}" type="button" role="tab" id="{name}-s{i}" aria-controls="{name}-p{i}" '
+                      f'aria-selected="{"true" if on else "false"}" tabindex="{0 if on else -1}">'
+                      f'<span class="spine-band" aria-hidden="true"></span><span class="spine-vol">{vol}</span>'
+                      f'<span class="spine-title">{title}</span></button>')
+        panels.append(f'    <div class="pulled book {cls}" role="tabpanel" id="{name}-p{i}" aria-labelledby="{name}-s{i}"'
+                      f'{"" if on else " hidden"}>{inner}\n    </div>')
+    return (f'  <div class="spine-shelf" data-spines>\n    <div class="spines" role="tablist" aria-label="{label}">'
+            + "".join(spines) + "</div>\n" + "\n".join(panels) + "\n  </div>")
+
+
 NUMBER_WORDS = ["none", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"]
 
 
@@ -1326,16 +1358,17 @@ def render_landing(sheets=(), dives=()):
         f'  <p class="hook">The textbook chapter you were supposed to read, with someone else\'s pencil notes in the margin. {NUMBER_WORDS[len(dives)].capitalize()} so far, each one a pattern after it has met production, with a skim mode for the honest.</p>',
         f'  <ul class="shelf shelf-series">\n{dive_items(dives)}\n  </ul>',
         '  <h2 id="series-2"><span class="num">✎</span>The Practitioner\'s Notebooks <span class="side">a story in two voices</span></h2>',
+        '  <noscript><style>.pulled[hidden] { display: grid !important; } .spines { display: none !important; }</style></noscript>',
         '  <p class="hook">A soap opera about a grocery start-up, told by its architect and its product owner. Nobody dies. Several roadmaps do.</p>',
-        '  <p>The work <b>around</b> the code, following one company, <b>Larder</b>, as it grows from one city to six. Every note has a template to copy and a <b>try it</b> exercise for your own project. Start with the case file.</p>',
+        '  <p>The work <b>around</b> the code, following one company, <b>Larder</b>, as it grows from one city to six. Every note has a template to copy and a <b>try it</b> exercise for your own project. Tap a spine to pull a volume out; start with the case file.</p>',
         '  <h3 class="shelf-book">Book 1 · The Solution Architect\'s Notebook <span>narrated by Ana</span></h3>',
-        f'  <ul class="shelf shelf-series">\n{book_items([j for j in series2 if j.get("book_no", 1) == 1], PLANNED_2, series=2, book=1, casefile=True)}\n  </ul>',
+        spine_shelf(book_items([j for j in series2 if j.get("book_no", 1) == 1], PLANNED_2, series=2, book=1, casefile=True), "ana", "Book 1 volumes"),
         '  <h3 class="shelf-book">Book 2 · The Product Owner\'s Notebook <span>narrated by Grace</span></h3>',
-        f'  <ul class="shelf shelf-series">\n{book_items([j for j in series2 if j.get("book_no", 1) == 2], PLANNED_PRODUCT, series=2, book=2)}\n  </ul>',
+        spine_shelf(book_items([j for j in series2 if j.get("book_no", 1) == 2], PLANNED_PRODUCT, series=2, book=2), "grace", "Book 2 volumes"),
         '  <h2 id="cheatsheets"><span class="num">⌘</span>Cheat sheets <span class="side">thirty seconds each</span></h2>',
         '  <p class="hook">For when you know exactly what you want and have forgotten the flag.</p>',
         '  <p>The commands and decisions you look up twice a week, on a few printable A4 cards. They read fine on a phone too.</p>',
-        f'  <ul class="shelf shelf-series">\n{cheatsheet_items(sheets)}\n  </ul>',
+        spine_shelf(cheatsheet_items(sheets), "cheat", "Cheat sheets"),
         '  <h2 id="future"><span class="num">→</span>Future log <span class="side">plans, not promises</span></h2>',
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
         '  <p class="aside">series 2 (★) has begun with the solution architect\'s notebook. Next come notebooks for product managers, project managers and anyone who manages clients. Same format: the problem, an analogy, how it works, trade-offs, pitfalls and a quiz.</p>',
