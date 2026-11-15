@@ -229,10 +229,10 @@ Benefits    500 orders a day by the end of May            owner: Joost
             a launch playbook: the next city in ≤ 8 weeks  owner: Femke
 Checked     +4 weeks · +12 weeks · at the start of Utrecht
 """),
-    tools="tools: one page and two signatures. A benefits map (in the deep dive) when there is more than one benefit.",
+    tools="tools: one page and two signatures. A benefits map (under “going deeper”) when there is more than one benefit.",
     deep_dive=dict(
         side="benefits: who owns them, and when they are checked",
-        intro="The note stops at one page. This deep dive goes one step further: how to trace each output to a benefit, why the benefit needs an owner who is not the project manager, and how to tell when a project should stop.",
+        intro="The note stops at one page. This chapter goes one step further: how to trace each output to a benefit, why the benefit needs an owner who is not the project manager, and how to tell when a project should stop.",
         parts=[
             ("Draw the benefits map", """  <p>A <b>benefits map</b> has three columns. Plan it from <b>right to left</b>: start with the benefits the business wants, ask what would have to change for them to happen (outcomes), then ask what must exist for that change (outputs). Deliver it from <b>left to right</b>.</p>
   <p>The map earns its place when you find an output with <b>no arrow</b> going right. Sanne found 22 such rows in Joost's spreadsheet, among them branded tote bags and a launch-day animation in the app. They may be nice. They are not what Rotterdam is for, so they go to the bottom.</p>

@@ -39,6 +39,9 @@ heavy dial, deep dives and the Rotterdam project file (`/rotterdam/`).
 Planned: nothing left in Books 1–2 (`PLANNED_2` and `PLANNED_PRODUCT` are empty), Book 3 vols. 3–6 (`PLANNED_PROJECT`),
 Series 1 Vol. 7 AI App Patterns (`PLANNED`), Book 4 (Mo: client management, Korenwolf) in the future log.
 
+**Series 3 · Deep dives** started on 14 Nov 2026: Season 1 is written (`/deep-dives/<slug>/`): Saga, Reliable Messaging, The Resilience Stack, Event Sourcing & CQRS
+Caching and Zero-Downtime Change, all deployed. Working branch `claude/design-patterns-deep-dive-ggw0on`. Read `docs/HANDOFF-deep-dives.md` for the plan and format.
+
 ## 2. Next steps (owner's decisions)
 
 1. **Open item:** the owner reported Grace's cover and pages looked broken right after PR #7. Locally they render

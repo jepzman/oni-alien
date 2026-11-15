@@ -122,10 +122,10 @@ SHARED MILESTONES (not movable by one workstream)
   24 Apr  go / no-go
   27 Apr  opening
 """),
-    tools="tools: the whole-project map, five questions per workstream (see the deep dive), and a milestone list.",
+    tools="tools: the whole-project map, five questions per workstream (see “going deeper” below), and a milestone list.",
     deep_dive=dict(
         side="choosing an approach, and making a hybrid hold together",
-        intro="The note says “choose per workstream”. This deep dive shows how to choose without arguing about taste, what a hybrid needs in order not to fall apart, and the four classic life cycles you will meet in other books and exam questions.",
+        intro="The note says “choose per workstream”. This chapter shows how to choose without arguing about taste, what a hybrid needs in order not to fall apart, and the four classic life cycles you will meet in other books and exam questions.",
         parts=[
             ("Five questions that choose for you", """  <p>For each workstream, answer five questions. <b>How clear is what we need?</b> <b>How expensive is a change later?</b> <b>Can it be delivered in small pieces?</b> <b>How often can the customer look and react?</b> <b>How strict are the rules and contracts?</b></p>
   <p>Answers on the left (clear, expensive, no, rarely, strict) point to <b>predictive</b>. Answers on the right point to <b>adaptive</b>. A split result is a hybrid inside the workstream: plan the fixed parts, iterate the rest.</p>""", [lc_deep1]),
@@ -285,7 +285,7 @@ Missing attention this week:  Zuid cold room has no closing (who signs it off?) 
     tools="tools: five words and a weekly look across all your projects.",
     deep_dive=dict(
         side="how the focus areas, the domains and the 40 processes fit together",
-        intro="The eighth edition arranges its forty processes in a grid: seven domains down, five focus areas across. Once you can see that grid, the guide stops being a list of forty things to memorise. This deep dive draws it, walks one real week through it, and shows why “closing” deserves more attention than it gets.",
+        intro="The eighth edition arranges its forty processes in a grid: seven domains down, five focus areas across. Once you can see that grid, the guide stops being a list of forty things to memorise. This chapter draws it, walks one real week through it, and shows why “closing” deserves more attention than it gets.",
         parts=[
             ("The grid behind the guide", """  <p>Every process in the guide answers two questions: <b>which domain</b> is it about (scope, schedule, risk…), and <b>which kind of attention</b> is it (planning it, doing it, checking it…)? So each process sits in one cell of a grid.</p>
   <p>The pattern is regular, which is what makes it learnable. Almost every domain has a process for <b>planning</b> how it will be managed and one for <b>monitoring and controlling</b> it. Some add <b>executing</b> processes (leading the team, carrying out risk responses). Only <b>Governance</b> stretches across all five columns, because starting and closing a project are governance questions.</p>
@@ -560,10 +560,10 @@ LEFT OUT, ON PURPOSE
 
 Review the fit: 20 March (what was missing? what was waste?)
 """),
-    tools="tools: the list of practices, five measures of the project (see the deep dive), and a review date.",
+    tools="tools: the list of practices, five measures of the project (see “going deeper” below), and a review date.",
     deep_dive=dict(
         side="how to tailor, step by step",
-        intro="“Use judgment” is true and not much help. This deep dive gives the judgment something to hold: the four steps of tailoring, five dials that tell you how heavy to go, the things you may not tailor away, and what a review of the fit looks like.",
+        intro="“Use judgment” is true and not much help. This chapter gives the judgment something to hold: the four steps of tailoring, five dials that tell you how heavy to go, the things you may not tailor away, and what a review of the fit looks like.",
         parts=[
             ("The four steps", """  <ol class="steps">
     <li><b>Choose the approach.</b><p>Predictive, adaptive or hybrid, per workstream (the note before last). This sets the shape of everything else.</p></li>

@@ -96,7 +96,7 @@ Signed     Joost (sponsor)     Femke (CEO)
     tools="tools: one page, the value chain and role card you already have, and ten minutes with the sponsor.",
     deep_dive=dict(
         side="what belongs in a charter, and what to do when you arrive late",
-        intro="A charter looks too simple to need a deep dive. The trouble is in three places: it gets confused with the business case and the plan, it gets written too long, and on most real projects it gets written late or not at all. This deep dive takes those in turn.",
+        intro="A charter looks too simple to need a longer chapter. The trouble is in three places: it gets confused with the business case and the plan, it gets written too long, and on most real projects it gets written late or not at all. This chapter takes those in turn.",
         parts=[
             ("Business case, charter, plan", """  <p>Three documents, three questions, three owners.</p>
   <ul>
@@ -445,7 +445,7 @@ PLAN = dict(
          ("Brass two bars early", "Pickers hired a week after stocking starts"),
          ("Rehearsal", "The side-by-side session on 20 February")],
     how_side="lay the parts side by side, fix the clashes, write one page",
-    how="""  <p>Sanne and the leads spend an hour on <b>cross-checks</b> (the deep dive lists them). Three fail. Joost moves the first picker group to <b>30 March</b>, so they train at Noord and are on site from 6 April. Handheld training gets an owner (Tomás). And the plan has no time or money set aside for its top risks: the reserve is €6k. Sanne says so in writing; it is the plan's weakest point. Then she writes <b>one page</b>: the goal, five milestones, the seven workstreams with their leads and next date, the money by workstream, the top risks, and pointers to the six parts. Joost gets it on the 20th, as promised; it goes to the steering group on the 27th.</p>""",
+    how="""  <p>Sanne and the leads spend an hour on <b>cross-checks</b> (listed under “going deeper”). Three fail. Joost moves the first picker group to <b>30 March</b>, so they train at Noord and are on site from 6 April. Handheld training gets an owner (Tomás). And the plan has no time or money set aside for its top risks: the reserve is €6k. Sanne says so in writing; it is the plan's weakest point. Then she writes <b>one page</b>: the goal, five milestones, the seven workstreams with their leads and next date, the money by workstream, the top risks, and pointers to the six parts. Joost gets it on the 20th, as promised; it goes to the steering group on the 27th.</p>""",
     how_figs=[mp_how],
     steps=[("Let each workstream plan its own work", "They have the facts."),
            ("Lay the plans side by side", "On a wall or a table."),
@@ -484,7 +484,7 @@ PARTS       scope (71 must-haves) · milestone chart · budget · people · risk
     tools="tools: a wall, the seven workstream plans, six cross-checks and one page.",
     deep_dive=dict(
         side="integration: the cross-checks that turn seven plans into one",
-        intro="“Integrate the plans” is the least concrete instruction in project management. This deep dive makes it concrete: six cross-checks you can run in an hour, what Rotterdam's three failures looked like, and how to keep the plan integrated after the first day.",
+        intro="“Integrate the plans” is the least concrete instruction in project management. This chapter makes it concrete: six cross-checks you can run in an hour, what Rotterdam's three failures looked like, and how to keep the plan integrated after the first day.",
         parts=[
             ("Six cross-checks", """  <p>Integration means asking of every pair of parts: <i>does one need something the other doesn't give?</i> Six pairs catch most problems.</p>
   <ul>

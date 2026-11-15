@@ -443,7 +443,7 @@ STATUS = dict(
          ("“Traffic ahead: new route?”", "Corrective action, or a decision for the steering group"),
          ("“Making good progress”", "A green that is really a mood")],
     how_side="position, forecast, action, ask — and colours with rules",
-    how="""  <p>For the steering group of <b>27 March</b> Sanne rebuilds the page. <b>Position</b>: a small chart of must-haves done against the plan line (49; the plan said 52), the milestones against baseline, money committed (€322k of €380k). <b>Forecast</b>: at the recent rate of four a week, 65 of 71 by go / no-go. <b>Action</b>: Ben and Eli pair on the six blocked items; nothing new enters the launch list after 3 April. <b>Ask</b>: two decisions. And each colour now follows a <b>written rule</b> (the deep dive has them). By those rules the overall status is amber. Marco reads the rules twice and says: “so next week I can check you.”</p>""",
+    how="""  <p>For the steering group of <b>27 March</b> Sanne rebuilds the page. <b>Position</b>: a small chart of must-haves done against the plan line (49; the plan said 52), the milestones against baseline, money committed (€322k of €380k). <b>Forecast</b>: at the recent rate of four a week, 65 of 71 by go / no-go. <b>Action</b>: Ben and Eli pair on the six blocked items; nothing new enters the launch list after 3 April. <b>Ask</b>: two decisions. And each colour now follows a <b>written rule</b> (under “going deeper”). By those rules the overall status is amber. Marco reads the rules twice and says: “so next week I can check you.”</p>""",
     how_figs=[sr_how],
     steps=[("Measure against the baseline", "Done, dates, money."),
            ("Show the trend", "This week against the last few."),
@@ -483,7 +483,7 @@ TURNS RED IF fewer than 55 must-haves done on 10 Apr, or G1 slips past 7 Apr
     tools="tools: the baseline, the board's weekly counts, a ruler for the trend line, and written colour rules.",
     deep_dive=dict(
         side="colour rules, forecasting, and the watermelon",
-        intro="Most status reports fail in the same three ways: the colour is an opinion, there is no forecast, and nothing happens as a result. This deep dive gives a working fix for each, using Rotterdam's real numbers, and ends with how to spot a report that is green on the outside and red inside.",
+        intro="Most status reports fail in the same three ways: the colour is an opinion, there is no forecast, and nothing happens as a result. This chapter gives a working fix for each, using Rotterdam's real numbers, and ends with how to spot a report that is green on the outside and red inside.",
         parts=[
             ("Write the colour rules down", """  <p>A colour is a summary. It is only useful if <b>two people with the same numbers would choose the same one</b>. So write the rule for each line once, agree it with the steering group, and from then on <b>derive</b> the colour.</p>
   <p>Good rules have three properties. They use <b>numbers from the baseline</b> (days, must-haves, euros). They are <b>tied to authority</b>: Rotterdam's red line for schedule is “more than three days late”, the same three days that send a decision to the sponsor. And they say what <b>amber</b> means, which is usually “off the baseline, with a recovery plan we believe”.</p>
@@ -652,7 +652,7 @@ TOLD                  store team (Joost, in writing, 1 Apr) · support (Sam) · 
     tools="tools: one log, a seven-line impact check, the thresholds from the governance page.",
     deep_dive=dict(
         side="the path of a change, the impact check, and saying no well",
-        intro="Change control has a reputation as bureaucracy, earned by processes that are slow and built to refuse. This deep dive shows the light version that works: the five steps, the seven-question impact check on a real change, the three possible answers, and what to do about changes that have already happened.",
+        intro="Change control has a reputation as bureaucracy, earned by processes that are slow and built to refuse. This chapter shows the light version that works: the five steps, the seven-question impact check on a real change, the three possible answers, and what to do about changes that have already happened.",
         parts=[
             ("Five steps, and where they usually break", """  <p>Every change goes through the same five steps. Most trouble comes from skipping the second or the fifth.</p>
   <ol class="steps">

@@ -230,3 +230,12 @@ The questions as they were asked:
   work breakdown of the 71 must-haves, estimates, the fit-out's network and critical path, the release plan), so the
   project file gains scope and schedule pages with the same numbers. Sample deep dives: work breakdown structure, critical
   path, three-point estimates. The first cheat sheets (PMBOK 8 on one page; critical path) fit here.
+
+## 12. Merge with main and deploy (2026-11-15)
+
+- Main had gained a separate format, **Deep dives** (`/deep-dives/`, ten chapters, thirty minutes each) and a landing page
+  with books stored spine-out. To avoid two things with one name, the in-note chapter of Book 3 is now called
+  **“Going deeper”** on the site (index tag “+ goes deeper”). The field is still `deep_dive` and the journal set `deep_dives`.
+- Book 3 has its own spine shelf on the landing page (`spine_shelf(..., "sanne", ...)`), with the PMBOK map as its first spine.
+- Open question for the owner: should key PMBOK items (critical path, earned value, risk) also get a full ten-chapter
+  deep dive in the Deep dives series? The in-note chapters don't replace that format.

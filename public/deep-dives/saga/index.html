@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Saga · Deep dive · Jef’s Notes</title>
+<meta name="description" content="A deep dive on the Saga pattern: the saga log and state machine, five failure drills, isolation anomalies, timeouts, orchestration vs choreography, testing, operations and tools.">
+<meta name="theme-color" content="#E4E1D9">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,700;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/dive.css?v=2b16c30ec1">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/dive.js?v=03c39c00d2" defer></script>
+</head>
+<body class="dive">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah" d="M0 0 L10 4 L0 8z"/></marker><marker id="ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah-r" d="M0 0 L10 4 L0 8z"/></marker></defs></svg>
+<a class="skip-link" href="#main">Skip to the text</a>
+<header class="site" id="top">
+  <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>deep dive 01</small></a>
+  <a class="site-link" href="../../index.html#deep-dives">Shelf</a>
+</header>
+<div class="strip" data-strip>
+  <div class="strip-in">
+    <nav aria-label="Chapters"><a href="#recap" data-ch="0"><b>1</b> Recap</a><a href="#machine" data-ch="1"><b>2</b> State machine</a><a href="#drills" data-ch="2"><b>3</b> Failure drills</a><a href="#isolation" data-ch="3"><b>4</b> Isolation</a><a href="#time" data-ch="4"><b>5</b> Time</a><a href="#styles" data-ch="5"><b>6</b> Two styles</a><a href="#testing" data-ch="6"><b>7</b> Testing</a><a href="#running" data-ch="7"><b>8</b> Running it</a><a href="#tools" data-ch="8"><b>9</b> Tools</a><a href="#lab" data-ch="9"><b>10</b> Lab</a></nav>
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+  </div>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+</div>
+
+<main id="main" class="wrap"><article class="page"><div class="col">
+<p class="eyebrow">Deep dive 01 · builds on Vol. 1, note 05</p>
+<h1><span>Saga</span></h1>
+<p class="sub">What actually happens when a multi-service transaction crashes halfway, and how to design one that survives it.</p>
+<ul class="facts"><li><b>Full read</b> about 26 min</li><li><b>Skim</b> about 12 min: yellow boxes, tables and drill rules</li><li><b>Example</b> order 42: two mugs, $49</li></ul>
+<nav class="toc" aria-label="Contents">
+  <h2 class="toc-h">In this deep dive</h2>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">The note in sixty seconds</span><span class="m">1 min</span></a></li><li><a href="#machine" data-ch="1"><span class="n">2</span><span class="t">A saga is a state machine with a diary</span><span class="m">2 min</span></a></li><li><a href="#drills" data-ch="2"><span class="n">3</span><span class="t">Failure drills</span><span class="m">4 min</span></a></li><li><a href="#isolation" data-ch="3"><span class="n">4</span><span class="t">The missing letter: no isolation</span><span class="m">2 min</span></a></li><li><a href="#time" data-ch="4"><span class="n">5</span><span class="t">Timeouts, deadlines and the stuck saga</span><span class="m">3 min</span></a></li><li><a href="#styles" data-ch="5"><span class="n">6</span><span class="t">Orchestration and choreography, side by side</span><span class="m">2 min</span></a></li><li><a href="#testing" data-ch="6"><span class="n">7</span><span class="t">Testing a saga</span><span class="m">3 min</span></a></li><li><a href="#running" data-ch="7"><span class="n">8</span><span class="t">Running it: dashboards and repair</span><span class="m">3 min</span></a></li><li><a href="#tools" data-ch="8"><span class="n">9</span><span class="t">Tools, and when to stop writing your own</span><span class="m">2 min</span></a></li><li><a href="#lab" data-ch="9"><span class="n">10</span><span class="t">Lab and review checklist</span><span class="m">3 min</span></a></li></ol>
+  <p class="toc-src">Read first: <a href="../../distributed/notes/saga.html">Saga</a><a href="../../distributed/notes/transactional-outbox.html">Transactional Outbox</a><a href="../../distributed/notes/idempotent-consumer.html">Idempotent Consumer</a></p>
+</nav>
+<section id="recap" data-title="Recap">
+<p class="ch">chapter 1 <span>· 1 min</span></p>
+<h2>The note in sixty seconds</h2>
+<div class="gist"><p><b>Gist</b> A saga replaces one big transaction with a chain of small local ones. Each step commits on its own. If a later step fails, you run compensations for the earlier ones. The note taught the shape. This deep dive is about everything that goes wrong inside that shape.</p></div>
+
+<p>Our shop sells mugs. Placing order 42 touches four services, each with its own database. The note ended with this plan:</p>
+<div class="tbl"><table><thead><tr><th scope="col">#</th><th scope="col">Step</th><th scope="col">If we must undo</th><th scope="col">Type</th></tr></thead><tbody><tr><td>1</td><td>Order: create as <code>PENDING</code></td><td>mark <code>CANCELLED</code></td><td>compensatable</td></tr><tr><td>2</td><td>Inventory: reserve 2 mugs</td><td>release the reservation</td><td>compensatable</td></tr><tr><td>3</td><td>Payment: charge $49</td><td>none: this is the pivot</td><td>pivot</td></tr><tr><td>4</td><td>Shipping: book the courier</td><td>keep retrying</td><td>retriable</td></tr><tr><td>5</td><td>Order: mark <code>APPROVED</code></td><td>keep retrying</td><td>retriable</td></tr></tbody></table></div><aside class="mn">compensatable → pivot → retriable. If you remember one thing from the note, this.</aside>
+<p class="full">That plan reads well on a whiteboard. It also hides the questions the note only touched. Where does the saga remember how far it got? What happens when a machine dies between two lines of code? What do other requests see while the saga is half done? How long may it take, how do you test it, and who fixes it at night? The chapters take them in that order.</p>
+
+
+<a class="next" href="#machine"><small>next · chapter 2</small>A saga is a state machine with a diary →</a>
+</section>
+<section id="machine" data-title="State machine">
+<p class="ch">chapter 2 <span>· 2 min</span></p>
+<h2>A saga is a state machine with a diary</h2>
+<div class="gist"><p><b>Gist</b> Stop thinking of a saga as a function that runs top to bottom. Think of it as a row in a table that moves between named states. The orchestrator can die at any moment, so it writes down what it is about to do, then does it, then writes down that it is done.</p></div>
+
+<p>The code in the note was a <code>for</code> loop over steps. A loop keeps its position in memory, and memory is gone after a crash. The real design has two parts.</p>
+<ol>
+  <li><b>States.</b> Every place the saga can rest gets a name. Order 42 is always in exactly one of them.</li>
+  <li><b>A saga log.</b> Before each command goes out, the orchestrator writes a row. When the reply comes back, it updates the row. The log lives in the orchestrator's own database.</li>
+</ol>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="State machine for the order saga. Forward path: Pending, Stock reserved, Paid, Shipping booked, Approved. A failure in Pending or Stock reserved leads to Compensating and then Cancelled. After Paid there is no path back; failures there are retried, and after too many retries the saga moves to Needs attention.">
+  <rect class="bx" x="10" y="40" width="100" height="50" rx="8"/><text class="lbl" x="60" y="71" text-anchor="middle">PENDING</text>
+  <rect class="bx" x="140" y="40" width="150" height="50" rx="8"/><text class="lbl" x="215" y="71" text-anchor="middle">STOCK_RESERVED</text>
+  <rect class="bx-y" x="320" y="40" width="80" height="50" rx="8"/><text class="lbl" x="360" y="71" text-anchor="middle">PAID</text>
+  <rect class="bx" x="430" y="40" width="160" height="50" rx="8"/><text class="lbl" x="510" y="71" text-anchor="middle">SHIPPING_BOOKED</text>
+  <rect class="bx-g" x="620" y="40" width="110" height="50" rx="8"/><text class="lbl" x="675" y="71" text-anchor="middle">APPROVED</text>
+  <path class="ln" d="M110 65 H138" marker-end="url(#a)"/><path class="ln" d="M290 65 H318" marker-end="url(#a)"/>
+  <path class="ln" d="M400 65 H428" marker-end="url(#a)"/><path class="ln" d="M590 65 H618" marker-end="url(#a)"/>
+  <text class="soft" x="360" y="26" text-anchor="middle">pivot: no way back from here</text>
+  <path class="ln-r" d="M60 90 V187 H128" marker-end="url(#ar)"/><path class="ln-r" d="M215 90 V160" marker-end="url(#ar)"/>
+  <rect class="bx-r" x="130" y="162" width="170" height="50" rx="8"/><text class="lbl" x="215" y="193" text-anchor="middle">COMPENSATING</text>
+  <path class="ln-r" d="M215 212 V246" marker-end="url(#ar)"/>
+  <rect class="bx-r" x="150" y="248" width="130" height="44" rx="8"/><text class="lbl" x="215" y="276" text-anchor="middle">CANCELLED</text>
+  <text class="soft bad" x="72" y="140">a step fails</text>
+  <path class="ln-d" d="M510 90 V160" marker-end="url(#a)"/>
+  <rect class="bx" x="420" y="162" width="180" height="50" rx="8" stroke-dasharray="6 5"/><text class="lbl" x="510" y="193" text-anchor="middle">NEEDS_ATTENTION</text>
+  <text class="soft" x="522" y="130">retries used up:</text><text class="soft" x="522" y="148">a human looks</text>
+</svg></div><figcaption>Left of the pivot, failures go down to CANCELLED. Right of the pivot, the only exits are APPROVED or a human.</figcaption></figure>
+<h3>The saga log for order 42</h3>
+<p>This is the whole memory of the saga. One row per step, written by the orchestrator.</p>
+<div class="tbl"><table><thead><tr><th scope="col">saga</th><th scope="col">step</th><th scope="col">command key</th><th scope="col">status</th><th scope="col">updated</th></tr></thead><tbody><tr><td class=mono>42</td><td>create-order</td><td class=mono>42:1</td><td>DONE</td><td class=mono>10:00:00.120</td></tr><tr><td class=mono>42</td><td>reserve-stock</td><td class=mono>42:2</td><td>DONE</td><td class=mono>10:00:00.310</td></tr><tr class=hot><td class=mono>42</td><td>charge-card</td><td class=mono>42:3</td><td>STARTED</td><td class=mono>10:00:00.315</td></tr></tbody></table></div><aside class="mn">STARTED = “I may or may not have sent this.” That honesty is what makes recovery possible.</aside>
+<p>The pink row is the interesting one. <code>STARTED</code> with no <code>DONE</code> means the orchestrator does not know whether the card was charged. It may have crashed before sending, after sending, or after the charge succeeded but before the reply arrived.</p>
+<div class="full">
+<h3>The recovery rule</h3>
+<p>When an orchestrator starts, it reads every saga that is not in a final state and applies one rule:</p>
+<p><mark>For a step that is STARTED, send the same command again with the same command key.</mark></p>
+<p>That rule only works if every service treats a repeated key as “you already asked me this, here is the answer I gave before”. So the state machine forces a requirement onto every participant: commands are idempotent, keyed by saga id plus step number. This is the Idempotent Consumer note, now mandatory.</p>
+<h3>Two writes that must not drift</h3>
+<p>Writing the log row and sending the command are two actions. If the orchestrator writes <code>STARTED</code> and crashes before sending, recovery re-sends: fine. If it sent first and wrote second, a crash in between would leave a charge that the log knows nothing about. So the order is fixed: <b>write, then send</b>. In practice the command goes into an outbox table in the same local transaction as the log row, and a relay publishes it. That is the Transactional Outbox note, also now mandatory.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>The log says step 3 is STARTED and the orchestrator has just restarted. Should it compensate steps 1 and 2?</summary><p>No. It does not know that step 3 failed. It re-sends the charge command with key 42:3 and acts on the reply.</p></details><details><summary>Why is the command key 42:3 and not a fresh random id on each attempt?</summary><p>A fresh id makes each retry look like a new request, so the customer could be charged twice. A stable key lets Payment recognise the repeat.</p></details></div>
+<a class="next" href="#drills"><small>next · chapter 3</small>Failure drills →</a>
+</section>
+<section id="drills" data-title="Failure drills">
+<p class="ch">chapter 3 <span>· 4 min</span></p>
+<h2>Failure drills</h2>
+<div class="gist"><p><b>Gist</b> Five things that will happen to your saga in production. Each drill shows the timeline, what you would see, why, and the design rule that prevents it. If you only skim, read the green rule at the bottom of each card.</p></div>
+<aside class="mn">Try to answer “what happens next?” before reading each drill. That is the exercise.</aside>
+<ul class="drill-index" aria-label="The five drills">
+  <li><a href="#drill-1">1 · crash between steps</a></li><li><a href="#drill-2">2 · timeout</a></li>
+  <li><a href="#drill-3">3 · undo arrives first</a></li><li><a href="#drill-4">4 · undo fails</a></li><li><a href="#drill-5">5 · double click</a></li>
+</ul>
+<div class="drill" id="drill-1"><header><span>Drill 1</span><h3>The orchestrator dies between two steps</h3></header><dl><dt>Timeline</dt><dd>Inventory reserves two mugs and replies OK. The orchestrator crashes before it writes <code>DONE</code> for step 2.</dd><dt class="full">What you see</dt><dd class="full">Two mugs are held. Order 42 shows PENDING. Nothing moves. Without recovery it stays that way, and the mugs are unsellable.</dd><dt>What saves you</dt><dd>On restart the log shows step 2 as STARTED. The orchestrator re-sends <code>ReserveStock</code> with key 42:2. Inventory finds the key, returns the earlier OK and reserves nothing new. The saga continues to step 3.</dd></dl><p class="rule">Rule: every step is safe to send twice, and the orchestrator resumes from its log, never from memory.</p></div><div class="drill" id="drill-2"><header><span>Drill 2</span><h3>The payment call times out</h3></header><dl><dt>Timeline</dt><dd>The orchestrator sends <code>ChargeCard $49</code>. Two seconds pass. No reply.</dd><dt>The tempting mistake</dt><dd>Treat the timeout as a failure and compensate: release the mugs, cancel the order. Then the payment provider finishes the charge it was working on. The customer has paid $49 for a cancelled order.</dd><dt class="full">Why</dt><dd class="full">A timeout carries no information about the outcome. It means “I stopped waiting”. The request may never have arrived, may be running now, or may have finished with the reply lost on the way back.</dd><dt>What saves you</dt><dd>Retry the same command with the same key until you get a definite answer: charged or declined. Only a definite “declined” starts the compensations. If you run out of patience, the saga moves to NEEDS_ATTENTION. It does not guess. Chapter 5 shows a way to get a definite answer on demand.</dd></dl><p class="rule">Rule: a timeout is a question, not an answer. Never compensate on “I don't know”, least of all at the pivot.</p></div><div class="drill" id="drill-3"><header><span>Drill 3</span><h3>The undo arrives before the thing it undoes</h3></header><dl><dt>Timeline</dt><dd><code>ReserveStock</code> is stuck in a slow queue. The saga's overall deadline passes, so the orchestrator sends <code>ReleaseStock</code>. Inventory has nothing to release and replies OK. A minute later the delayed <code>ReserveStock</code> finally arrives and reserves two mugs for an order that is already cancelled.</dd><dt class="full">What you see</dt><dd class="full">Stock that slowly leaks away. Each leaked reservation belongs to a cancelled order, so no process will ever release it. Someone notices weeks later when the warehouse count and the system disagree.</dd><dt>What saves you</dt><dd>Two behaviours in the participant. First, a compensation for a step that never ran must succeed and do nothing. Second, it must leave a tombstone: “42:2 was cancelled”. When the late command arrives, Inventory sees the tombstone and refuses it.</dd></dl><p class="rule">Rule: compensations work even when there is nothing to undo, and they block the late original.</p></div><div class="drill" id="drill-4"><header><span>Drill 4</span><h3>The compensation itself fails</h3></header><dl><dt>Timeline</dt><dd>Payment declines the card. The orchestrator sends <code>ReleaseStock</code>. Inventory is down for a deploy.</dd><dt class="full">The tempting mistake</dt><dd class="full">Catch the error, log it and mark the order CANCELLED anyway. The order looks finished, the mugs stay reserved, and nobody is told.</dd><dt>What saves you</dt><dd>A compensation is a retriable step: it has no “undo of the undo”, so it must eventually succeed. Retry with backoff for as long as it is reasonable. The saga stays in COMPENSATING, which is visible on a dashboard. After a limit it moves to NEEDS_ATTENTION with the failed step named.</dd></dl><p class="rule">Rule: compensations may be slow but they may not be optional. Design them so the only possible failures are temporary.</p></div><div class="drill" id="drill-5"><header><span>Drill 5</span><h3>The customer double-clicks “Place order”</h3></header><dl><dt>Timeline</dt><dd>Two identical requests arrive 80 ms apart. Two sagas start. Both reserve mugs, both charge $49.</dd><dt class="full">Why the earlier rules don't help</dt><dd class="full">Idempotent steps protect one saga from repeating itself. Here there are two sagas with two ids, and each is behaving correctly.</dd><dt>What saves you</dt><dd>The saga id must come from the client's intent, not from the server's clock. The checkout page generates one idempotency key when it loads. The orchestrator has a unique constraint on that key, so the second request finds saga 42 already running and returns its status.</dd></dl><p class="rule">Rule: starting a saga must be idempotent too. One customer intent, one saga id.</p></div><div class="full">
+<h3 id="participant-rules">What the five drills add up to</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Every participant must…</th><th scope="col">Because of</th></tr></thead><tbody><tr><td>recognise a repeated command key and return the first result</td><td>drills 1, 2</td></tr><tr><td>accept a compensation for a step it never saw</td><td>drill 3</td></tr><tr><td>reject a step whose compensation already ran</td><td>drill 3</td></tr><tr><td>offer compensations that only fail temporarily</td><td>drill 4</td></tr></tbody></table></div><p>This is the real cost of a saga. The orchestrator is the small part. The contract that every service has to honour is the large part, and it is the part teams skip.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Inventory receives <code>Release 42:2</code> but has no reservation for 42. What are the two things it must do?</summary><p>Reply OK without changing stock, and record that 42:2 was cancelled so a late <code>Reserve 42:2</code> is refused.</p></details><details><summary>A colleague proposes: “on timeout, compensate; if the charge turns out to have succeeded, refund it later.” What is wrong with that?</summary><p>It turns an uncertain moment into a certain bad experience: the customer is charged for a cancelled order and waits days for a refund. It also needs a process that notices the late charge, which is the same work as waiting for a definite answer.</p></details></div>
+<a class="next" href="#isolation"><small>next · chapter 4</small>The missing letter: no isolation →</a>
+</section>
+<section id="isolation" data-title="Isolation">
+<p class="ch">chapter 4 <span>· 2 min</span></p>
+<h2>The missing letter: no isolation</h2>
+<div class="gist"><p><b>Gist</b> A database transaction hides its half-finished work from everyone else. A saga cannot: each step commits and is visible at once. Other requests can read, and change, data that the saga may still undo. There are six standard countermeasures, and you choose them per step.</p></div>
+
+<p>ACID has four letters. A saga keeps atomicity in a weaker form (all steps finish, or all are compensated), keeps consistency and durability inside each service, and drops isolation completely. Three things follow.</p>
+<h3>Three anomalies, with mugs</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Anomaly</th><th scope="col">What happens in the shop</th></tr></thead><tbody><tr><td><b>Dirty read</b></td><td>Order 42 reserves the last two mugs. Order 43 sees zero stock and tells its customer “sold out”. Then 42's card is declined and the mugs come back. Order 43 lost a sale because of data that was never final.</td></tr><tr><td><b>Lost update</b></td><td>While order 42 waits for payment, the customer changes the delivery address. Step 5 then saves the order using the copy it read at step 1. The new address is gone.</td></tr><tr><td><b>Fuzzy read</b></td><td>Step 1 reads the mug price as $24.50. Marketing changes it to $27 before step 3. The order confirmation says $49 and the card is charged $54.</td></tr></tbody></table></div><aside class="mn">None of these is a bug in one service. Each service did its job. The bug is in the gaps.</aside>
+<h3>Six countermeasures</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Countermeasure</th><th scope="col">Idea</th><th scope="col">In the shop</th></tr></thead><tbody><tr><td><b>Semantic lock</b></td><td>Mark the record as mid-saga so others can react</td><td>Order is <code>PENDING</code>; address edits are refused or queued until it is final</td></tr><tr><td><b>Commutative updates</b></td><td>Design changes so their order doesn't matter</td><td>Stock moves by <code>+2</code> and <code>-2</code>, never “set stock to 8”</td></tr><tr><td><b>Pessimistic view</b></td><td>Reorder steps so risky data shows up late</td><td>Loyalty points are added after the pivot, so nobody spends points from an order that gets cancelled</td></tr><tr><td><b>Reread value</b></td><td>Check the data hasn't changed before writing</td><td>Step 5 rereads the order's version number and restarts if it moved</td></tr><tr><td><b>By value</b></td><td>Carry the facts inside the saga</td><td>The $49 total travels in the saga's context; no step looks the price up again</td></tr><tr><td><b>Version file</b></td><td>Record operations so they can be reordered</td><td>Payment logs “authorise” and “cancel” per order, so a cancel that arrives first still wins</td></tr></tbody></table></div><div class="full">
+<p>Semantic lock is the one you will use most, and it comes with a decision. When another request meets a locked record, it can <b>fail fast</b> (“this order is being processed, try again”) or <b>wait</b> until the saga ends. Failing fast is simple and pushes the retry to the caller. Waiting is friendlier and brings back a problem sagas were meant to avoid: two sagas waiting on each other's locks is a deadlock, and now you need a timeout to break it.</p>
+<p>For the dirty read on stock there is a product answer as well as a technical one. Many shops show “2 left, reserved in another basket” for a few minutes. The half-finished state becomes something the customer can see and understand. That is often cheaper than hiding it.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Which countermeasure fixes the fuzzy read on price, and why is it the cheapest?</summary><p>By value: put the price in the saga's context at step 1. No lock, no reread, no extra call. The customer pays what the confirmation page showed.</p></details><details><summary>Your refund step sets <code>balance = 120</code>. What breaks, and how do you rewrite it?</summary><p>If another saga changed the balance in between, its change is overwritten. Rewrite it as a commutative update: <code>balance = balance + 49</code>.</p></details></div>
+<a class="next" href="#time"><small>next · chapter 5</small>Timeouts, deadlines and the stuck saga →</a>
+</section>
+<section id="time" data-title="Time">
+<p class="ch">chapter 5 <span>· 3 min</span></p>
+<h2>Timeouts, deadlines and the stuck saga</h2>
+<div class="gist"><p><b>Gist</b> Every resting state gets a maximum age. Three clocks do the work: a timeout per attempt, a budget per step and a deadline for the whole saga before its pivot. Timers are stored as rows, and a sweeper job wakes the sagas that have slept too long.</p></div>
+
+<p>A saga that never fails and never finishes is the most common production problem. The cause is nearly always a state with no clock on it. Give the saga three clocks.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Clock</th><th scope="col">What it limits</th><th scope="col">Order saga</th><th scope="col">When it rings</th></tr></thead><tbody><tr><td><b>Attempt timeout</b></td><td>one call to one service</td><td>5 s for the charge, 2 s elsewhere</td><td>retry the same command, same key</td></tr><tr><td><b>Step budget</b></td><td>all attempts of one step</td><td>4 attempts, about 30 s</td><td>treat the step as failed, if the outcome is known</td></tr><tr><td><b>Saga deadline</b></td><td>the time before the pivot</td><td>5 minutes</td><td>stop going forward and compensate</td></tr></tbody></table></div><aside class="mn">Set the attempt timeout a little above the service's slow-day response time. Too short and you create your own timeouts.</aside>
+<p>After the pivot there is no deadline that cancels anything. Retriable steps get a long budget (booking a courier may retry for a day) and then the saga goes to NEEDS_ATTENTION.</p>
+<h3>Getting a definite answer from payment</h3>
+<p>Drill 2 left a gap. The saga deadline rings while the charge is still <code>STARTED</code>, and we are not allowed to guess. The usual fix is to split the payment in two, the way card payments already work.</p>
+<div class="tbl"><table><thead><tr><th scope="col">#</th><th scope="col">Step</th><th scope="col">If we must undo</th><th scope="col">Type</th></tr></thead><tbody><tr class=hot><td>3a</td><td>Payment: <b>authorise</b> $49 (hold the money, take nothing)</td><td><b>void</b> the authorisation</td><td>compensatable</td></tr><tr><td>3b</td><td>Payment: <b>capture</b> the $49</td><td>none</td><td>pivot</td></tr></tbody></table></div>
+<p><code>Void 42:3a</code> follows the rules from drill 3: it works when the authorisation exists, it works when the authorisation never arrived, and it blocks a late one. So sending it always ends in a definite state, “no money held”. The dangerous step is now compensatable, and the pivot is a capture on money that is already reserved, which rarely fails.</p>
+<div class="full">
+<h3>Timers must survive a crash too</h3>
+<p>A timer in memory dies with the process, exactly like the <code>for</code> loop in chapter 2. So a deadline is stored as data: each saga row has a <code>wake_at</code> column. A small job, the <b>sweeper</b>, runs every few seconds and picks up sagas whose time has come.</p>
+<div class="card"><div class="card-head"><span>sweeper.sql</span><span>runs every 5 s</span></div><pre><code><span class="k">SELECT</span> saga_id, state
+<span class="k">FROM</span> saga
+<span class="k">WHERE</span> state <span class="k">NOT</span> <span class="k">IN</span> (<span class="s">'APPROVED'</span>, <span class="s">'CANCELLED'</span>)
+  <span class="k">AND</span> wake_at &lt; now()
+<span class="k">ORDER</span> <span class="k">BY</span> wake_at
+<span class="k">LIMIT</span> 100
+<span class="k">FOR</span> <span class="k">UPDATE</span> <span class="k">SKIP</span> <span class="k">LOCKED</span>;   <span class="c">-- several sweepers can run side by side</span></code></pre></div>
+<p>For each row the sweeper feeds a <code>TimerFired</code> event into the state machine, the same way a reply would arrive. The machine decides what it means in that state: retry, compensate or ask for a human. The sweeper also acts as the recovery job from chapter 2, because a saga whose orchestrator crashed is simply a saga that slept past its <code>wake_at</code>.</p>
+<h3>What the customer sees meanwhile</h3>
+<p>Internal states are too many and too technical to show. Map them to three.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Customer sees</th><th scope="col">Internal states</th><th scope="col">Note</th></tr></thead><tbody><tr><td>Processing your order…</td><td>PENDING, STOCK_RESERVED, COMPENSATING</td><td>a spinner for seconds; after 10 s, “we'll email you”</td></tr><tr><td>Order confirmed</td><td>PAID and everything after it</td><td>confirm at the pivot, not at the end</td></tr><tr><td>Order cancelled, you were not charged</td><td>CANCELLED</td><td>say what happens to the money in the same sentence</td></tr></tbody></table></div><p>Confirming at the pivot is safe because every later step is retriable. A saga in NEEDS_ATTENTION after the pivot still shows “confirmed” to the customer. Support sees the flag; the customer should not have to.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>The saga deadline fires while the saga is in PAID. What should the state machine do?</summary><p>Not compensate. After the pivot a timer only means “retry the current step”, and after the step's budget, NEEDS_ATTENTION.</p></details><details><summary>Why does splitting payment into authorise and capture solve drill 2?</summary><p>Because a void is a compensation that always ends in a known state, whether or not the authorisation arrived. The saga can stop waiting without guessing.</p></details></div>
+<a class="next" href="#styles"><small>next · chapter 6</small>Orchestration and choreography, side by side →</a>
+</section>
+<section id="styles" data-title="Two styles">
+<p class="ch">chapter 6 <span>· 2 min</span></p>
+<h2>Orchestration and choreography, side by side</h2>
+<div class="gist"><p><b>Gist</b> The same saga can be run by one coordinator or by services reacting to each other's events. The drills apply to both. What changes is who is responsible for each rule: in orchestration one component, in choreography every team.</p></div>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="Two ways to run the order saga. Orchestration: an orchestrator in the middle sends commands to Order, Inventory, Payment and Shipping and gets replies. Choreography: Order publishes OrderCreated, Inventory reacts and publishes StockReserved, Payment reacts and publishes PaymentTaken, Shipping reacts and publishes CourierBooked, which Order hears.">
+  <text class="lbl" x="190" y="24" text-anchor="middle">orchestration</text>
+  <rect class="bx-y" x="130" y="100" width="120" height="50" rx="8"/><text class="lbl" x="190" y="131" text-anchor="middle">orchestrator</text>
+  <rect class="bx" x="20" y="40" width="90" height="40" rx="8"/><text x="65" y="66" text-anchor="middle">Order</text>
+  <rect class="bx" x="270" y="40" width="90" height="40" rx="8"/><text x="315" y="66" text-anchor="middle">Inventory</text>
+  <rect class="bx" x="20" y="170" width="90" height="40" rx="8"/><text x="65" y="196" text-anchor="middle">Payment</text>
+  <rect class="bx" x="270" y="170" width="90" height="40" rx="8"/><text x="315" y="196" text-anchor="middle">Shipping</text>
+  <path class="ln" d="M140 100 L104 82" marker-end="url(#a)"/><path class="ln" d="M240 100 L276 82" marker-end="url(#a)"/>
+  <path class="ln" d="M140 150 L104 168" marker-end="url(#a)"/><path class="ln" d="M240 150 L276 168" marker-end="url(#a)"/>
+  <text class="soft" x="190" y="236" text-anchor="middle">commands out, replies back;</text><text class="soft" x="190" y="256" text-anchor="middle">state lives in the middle</text>
+  <path class="ln-d" d="M390 10 V262"/>
+  <text class="lbl" x="580" y="24" text-anchor="middle">choreography</text>
+  <rect class="bx" x="420" y="60" width="90" height="40" rx="8"/><text x="465" y="86" text-anchor="middle">Order</text>
+  <rect class="bx" x="650" y="60" width="90" height="40" rx="8"/><text x="695" y="86" text-anchor="middle">Inventory</text>
+  <rect class="bx" x="650" y="160" width="90" height="40" rx="8"/><text x="695" y="186" text-anchor="middle">Payment</text>
+  <rect class="bx" x="420" y="160" width="90" height="40" rx="8"/><text x="465" y="186" text-anchor="middle">Shipping</text>
+  <path class="ln" d="M510 80 H648" marker-end="url(#a)"/><text class="soft" x="580" y="72" text-anchor="middle">OrderCreated</text>
+  <path class="ln" d="M695 100 V158" marker-end="url(#a)"/><text class="soft" x="686" y="134" text-anchor="end">StockReserved</text>
+  <path class="ln" d="M650 180 H512" marker-end="url(#a)"/><text class="soft" x="580" y="172" text-anchor="middle">PaymentTaken</text>
+  <path class="ln" d="M465 160 V102" marker-end="url(#a)"/><text class="soft" x="474" y="134">CourierBooked</text>
+  <text class="soft" x="580" y="236" text-anchor="middle">events passed along;</text><text class="soft" x="580" y="256" text-anchor="middle">state is spread over four services</text>
+</svg></div><figcaption>Same four services, same five steps. The difference is where the knowledge of the flow lives.</figcaption></figure>
+<p>The note gave a rule of thumb for choosing. Here is the detail behind it.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Question</th><th scope="col">Orchestration</th><th scope="col">Choreography</th></tr></thead><tbody><tr><td>Where is the flow written down?</td><td>one state machine</td><td>nowhere; it is the sum of who listens to what</td></tr><tr><td>Where is order 42 right now?</td><td>one row in the saga log</td><td>ask four services, or build a tracking view</td></tr><tr><td>Who owns the deadline?</td><td>the orchestrator</td><td>nobody, unless you appoint someone</td></tr><tr><td>Who starts compensation?</td><td>the orchestrator sends undo commands</td><td>each service reacts to a failure event</td></tr><tr><td>Adding a step</td><td>change the orchestrator</td><td>change who subscribes to what, in several teams</td></tr><tr><td>Coupling</td><td>orchestrator knows every service</td><td>services know each other's events</td></tr></tbody></table></div>
+<h3>The five drills, run against choreography</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Drill</th><th scope="col">What changes</th></tr></thead><tbody><tr><td>1 · crash between steps</td><td>Each service must save its change and publish its event atomically (outbox). If one forgets, the chain stops silently and no component notices, because no component expects the next event.</td></tr><tr><td>2 · timeout</td><td>Nobody is waiting for a reply, so nobody times out. A stuck saga looks like silence. In practice the Order service sets a timer on PENDING, which makes it a small orchestrator.</td></tr><tr><td>3 · undo arrives first</td><td>More likely than before. <code>PaymentDeclined</code> can reach Inventory before <code>OrderCreated</code> does, because the two events travel on different topics. The tombstone rule is unchanged.</td></tr><tr><td>4 · undo fails</td><td>The broker redelivers until the consumer succeeds. The dead-letter queue plays the part of NEEDS_ATTENTION, so someone has to watch it.</td></tr><tr><td>5 · double click</td><td>Unchanged: the first service needs the unique key.</td></tr></tbody></table></div><aside class="mn">Choreography doesn't remove the orchestrator's work. It hands a piece of it to every team.</aside><div class="full">
+<h3>Two problems only choreography has</h3>
+<p><b>Cycles.</b> Order listens to Payment's events to mark itself paid. Payment listens to Order's events to know what to charge. Each service now depends on the other's event format, and a change on either side breaks both. In orchestration the dependencies all point one way, toward the orchestrator.</p>
+<p><b>An invisible flow.</b> A new engineer cannot open one file and read what happens to an order. The remedy is discipline: every event carries the saga id, and a tracking service or a trace view rebuilds the story from the events (chapter 8).</p>
+<h3>Choosing</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Choose</th><th scope="col">When</th></tr></thead><tbody><tr><td>Choreography</td><td>two to four steps, in a line, no deadline to enforce, and the teams want to stay independent</td></tr><tr><td>Orchestration</td><td>branches, deadlines or human steps; or the business asks “where is my order?”</td></tr><tr><td>Both</td><td>events between business areas, an orchestrator inside one area. Common and sensible</td></tr></tbody></table></div>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>In a choreographed saga, which service notices that order 42 has been PENDING for an hour?</summary><p>None, unless one was given that job. Usually Order owns a timer on its PENDING state.</p></details><details><summary>Why is drill 3 more likely with choreography?</summary><p>The step and its undo are triggered by different events on different topics, so nothing guarantees their order of arrival.</p></details></div>
+<a class="next" href="#testing"><small>next · chapter 7</small>Testing a saga →</a>
+</section>
+<section id="testing" data-title="Testing">
+<p class="ch">chapter 7 <span>· 3 min</span></p>
+<h2>Testing a saga</h2>
+<div class="gist"><p><b>Gist</b> Test the state machine as a plain function with a table of cases. Then crash the orchestrator after every single log write and check that the saga still ends correctly. Then give every participant the same four contract tests.</p></div>
+
+<p>The happy path of a saga is easy to test and tells you almost nothing. The bugs live in the moments between steps. Three kinds of test reach them.</p>
+<h3>1 · The state machine as a plain function</h3>
+<p>Write the saga's logic as a function with no database and no network: given a state and an event, return the new state and the commands to send. Then test it with a table.</p>
+<div class="card"><div class="card-head"><span>order-saga.test.ts</span><span>one row per (state, event) pair</span></div><pre><code><span class="k">const</span> cases = [
+  <span class="c">// state            event               new state         commands</span>
+  [<span class="s">"STOCK_RESERVED"</span>, <span class="s">"PaymentCaptured"</span>,  <span class="s">"PAID"</span>,           [<span class="s">"BookCourier"</span>]],
+  [<span class="s">"STOCK_RESERVED"</span>, <span class="s">"PaymentDeclined"</span>,  <span class="s">"COMPENSATING"</span>,   [<span class="s">"ReleaseStock"</span>]],
+  [<span class="s">"STOCK_RESERVED"</span>, <span class="s">"TimerFired"</span>,       <span class="s">"COMPENSATING"</span>,   [<span class="s">"VoidPayment"</span>, <span class="s">"ReleaseStock"</span>]],
+  [<span class="s">"PAID"</span>,           <span class="s">"TimerFired"</span>,       <span class="s">"PAID"</span>,           [<span class="s">"BookCourier"</span>]],   <span class="c">// retry, never undo</span>
+  [<span class="s">"PAID"</span>,           <span class="s">"PaymentCaptured"</span>,  <span class="s">"PAID"</span>,           []],                <span class="c">// duplicate reply</span>
+  [<span class="s">"CANCELLED"</span>,      <span class="s">"StockReserved"</span>,    <span class="s">"CANCELLED"</span>,      [<span class="s">"ReleaseStock"</span>]],  <span class="c">// late reply</span>
+];
+
+<span class="k">for</span> (<span class="k">const</span> [state, event, next, commands] <span class="k">of</span> cases) {
+  test(<span class="s">`${state} + ${event}`</span>, () =&gt; {
+    expect(step(state, event)).toEqual({ state: next, commands });
+  });
+}</code></pre></div>
+<p>The last three rows are the valuable ones. Every state must have an answer for every event, including the ones that “cannot happen”. In production they happen.</p>
+<div class="full">
+<h3>2 · Kill the orchestrator at every write</h3>
+<p>Chapter 2 claimed that the saga survives a crash at any point. This test proves it. Run the saga against in-memory fakes of the four services. Count the writes to the saga log in a normal run, say 12. Then run the saga 12 more times, and on run <i>k</i> stop the orchestrator right after write <i>k</i>, start a fresh one, and let it finish.</p>
+<div class="card"><div class="card-head"><span>crash-recovery.test.ts</span><span>every crash point, one assertion</span></div><pre><code><span class="k">for</span> (<span class="k">let</span> k = 1; k &lt;= totalWrites; k++) {
+  test(<span class="s">`crash after log write ${k}`</span>, <span class="k">async</span> () =&gt; {
+    <span class="k">const</span> world = <span class="k">new</span> FakeWorld();                 <span class="c">// fake Order, Inventory, Payment, Shipping</span>
+    <span class="k">await</span> runUntilWrite(k, world).<span class="k">catch</span>(() =&gt; {});  <span class="c">// the orchestrator "dies" here</span>
+    <span class="k">await</span> <span class="k">new</span> Orchestrator(world).recover();        <span class="c">// a fresh process reads the log</span>
+
+    expect(world.order(42).status).toBe(<span class="s">"APPROVED"</span>);
+    expect(world.effects(<span class="s">"capture"</span>)).toBe(1);       <span class="c">// charged exactly once</span>
+    expect(world.effects(<span class="s">"reserve"</span>)).toBe(1);
+    expect(world.effects(<span class="s">"bookCourier"</span>)).toBe(1);
+  });
+}</code></pre></div>
+<p>Repeat it with a card that declines, and assert the opposite: order CANCELLED, nothing reserved, nothing captured. If a write-then-send is in the wrong order anywhere, one of these runs fails.</p>
+<h3>3 · A contract test for every participant</h3>
+<p>The four rules from chapter 3 turn directly into four tests. Each service team runs them against its own command handler.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Test</th><th scope="col">Send</th><th scope="col">Expect</th></tr></thead><tbody><tr><td>repeat</td><td><code>Reserve 42:2</code> twice</td><td>one reservation, the same reply both times</td></tr><tr><td>empty undo</td><td><code>Release 42:2</code> with no earlier reserve</td><td>OK, nothing changes</td></tr><tr><td>late original</td><td><code>Release 42:2</code>, then <code>Reserve 42:2</code></td><td>the reserve is refused</td></tr><tr><td>repeat undo</td><td><code>Release 42:2</code> twice</td><td>OK both times, stock released once</td></tr></tbody></table></div><p>These are small and dull, and they are what stands between you and drill 3 in production. Put them in a shared test kit so a new participant gets them for free.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Your crash test passes for all 12 crash points on the happy path. What have you not tested yet?</summary><p>Crashes during compensation. Run the same loop with a declining card, so the crash points fall inside COMPENSATING.</p></details><details><summary>Why does the table include <code>CANCELLED + StockReserved</code>?</summary><p>It is the orchestrator's side of drill 3: a late reply for a saga that already gave up. The machine must answer with a release, not ignore it.</p></details></div>
+<a class="next" href="#running"><small>next · chapter 8</small>Running it: dashboards and repair →</a>
+</section>
+<section id="running" data-title="Running it">
+<p class="ch">chapter 8 <span>· 3 min</span></p>
+<h2>Running it: dashboards and repair</h2>
+<div class="gist"><p><b>Gist</b> Watch three numbers: sagas in flight per state, the age of the oldest one, and how many need a human. Put the saga id on every message and log line. Repair stuck sagas through admin actions that use the normal commands, and let a nightly job check that the services agree.</p></div>
+
+<p>A saga's promise is “eventually”. Running one means being able to see how long eventually is taking, and being able to help when it stalls.</p>
+<h3>Three numbers</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Metric</th><th scope="col">Healthy</th><th scope="col">Alert when</th></tr></thead><tbody><tr><td>Sagas in flight, per state</td><td>a few, changing constantly</td><td>one state keeps growing: its next step is stuck</td></tr><tr><td>Age of the oldest unfinished saga</td><td>seconds</td><td>older than the saga deadline plus a margin: the sweeper is not doing its job</td></tr><tr><td>Sagas in NEEDS_ATTENTION</td><td>zero</td><td>above zero: each one is a customer waiting</td></tr></tbody></table></div><aside class="mn">Also worth a graph: the share of sagas that end CANCELLED. A jump means a participant is failing, not that customers changed their minds.</aside>
+<h3>One id everywhere</h3>
+<p>Every command, event, log line and trace carries the saga id. Then one search tells the story of order 42 across four services:</p>
+<div class="tbl"><table><thead><tr><th scope="col">time</th><th scope="col">service</th><th scope="col">message</th></tr></thead><tbody><tr><td class=mono>10:00:00.120</td><td>order</td><td>saga=42 order created PENDING</td></tr><tr><td class=mono>10:00:00.310</td><td>inventory</td><td>saga=42 key=42:2 reserved 2 × mug</td></tr><tr class=hot><td class=mono>10:00:05.320</td><td>orchestrator</td><td>saga=42 step=charge attempt=1 timeout</td></tr><tr><td class=mono>10:00:06.900</td><td>payment</td><td>saga=42 key=42:3 duplicate key, returning earlier result: captured</td></tr><tr><td class=mono>10:00:06.940</td><td>orchestrator</td><td>saga=42 PAID</td></tr></tbody></table></div>
+<p>That is drill 2 as it looks from the outside: a timeout, a retry with the same key, and a payment service that had already done the work.</p>
+<div class="full">
+<h3>Runbook: a saga is stuck</h3>
+<ol>
+  <li><b>Read the saga log.</b> Which step is STARTED, and since when?</li>
+  <li><b>Ask the participant.</b> Every service offers “status of command 42:3”. That endpoint is a requirement, and this is the moment you need it. Now you know more than the orchestrator does.</li>
+  <li><b>Look at the pivot.</b> Before it, the safe direction is backward: compensate. After it, the only direction is forward: fix what blocks the step and retry.</li>
+  <li><b>Use the admin actions</b>: “retry step”, “compensate now” or “mark step done, with a reason”. They go through the same state machine and the same idempotent commands as normal traffic.</li>
+  <li><b>Write down what you did</b> on the saga itself, so the next person sees it.</li>
+</ol>
+<p>What you never do is edit rows by hand in four databases. A manual fix skips the tombstones and idempotency records, and the next late message undoes it.</p>
+<h3>Reconciliation: proof that “eventually” arrived</h3>
+<p>Once a night a job compares the services with each other and reports anything that breaks these three sentences.</p>
+<ul>
+  <li>No order is CANCELLED while stock is still reserved for it.</li>
+  <li>No order is CANCELLED while money is held or captured for it.</li>
+  <li>No order is APPROVED without a captured payment and a courier booking.</li>
+</ul>
+<p>The job should find nothing. When it finds something, you have discovered a broken participant rule before the customer or the warehouse did.</p>
+<h3>Changing the saga while sagas are running</h3>
+<p>You deploy a new version with an extra step, “check fraud score”, between 2 and 3. At that moment hundreds of sagas are in STOCK_RESERVED under the old definition. Store a <b>definition version</b> on each saga row. A saga finishes under the version it started with; new sagas use the new one. Remove the old code only when the count of old-version sagas reaches zero.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>A saga is stuck in STOCK_RESERVED and Payment's status endpoint says “no such command 42:3”. Forward or backward?</summary><p>Either is safe, because the charge never arrived. Retrying is the normal choice; if you compensate, the void still has to be sent so that a late charge is blocked.</p></details><details><summary>Reconciliation finds a CANCELLED order with stock reserved. Which rule was broken, and where?</summary><p>Most likely Inventory accepted a reserve after its release (drill 3, no tombstone), or a compensation was skipped (drill 4).</p></details></div>
+<a class="next" href="#tools"><small>next · chapter 9</small>Tools, and when to stop writing your own →</a>
+</section>
+<section id="tools" data-title="Tools">
+<p class="ch">chapter 9 <span>· 2 min</span></p>
+<h2>Tools, and when to stop writing your own</h2>
+<div class="gist"><p><b>Gist</b> A workflow engine gives you the durable log, recovery, retries, timers and a dashboard. It gives you nothing for idempotent participants or isolation. Adopt one when you have many workflows or long waits; a table, an outbox and a sweeper are enough for one or two short sagas.</p></div>
+
+<p>Everything in chapters 2 and 5 is plumbing: a durable log, recovery, retries, timers. Workflow engines sell exactly that plumbing. It helps to be precise about what they cover.</p>
+<div class="tbl"><table><thead><tr><th scope="col">You need</th><th scope="col">Chapter</th><th scope="col">An engine gives you</th></tr></thead><tbody><tr><td>Durable state and crash recovery</td><td>2</td><td>yes</td></tr><tr><td>Retries with backoff, durable timers</td><td>5</td><td>yes</td></tr><tr><td>A view of every running saga</td><td>8</td><td>yes, usually a good one</td></tr><tr><td>Running compensations in order</td><td>2</td><td>yes; you still write each compensation</td></tr><tr class=hot><td>Idempotent participants, tombstones</td><td>3</td><td>no. This is in your services</td></tr><tr class=hot><td>Isolation countermeasures</td><td>4</td><td>no. This is in your data model</td></tr><tr><td>Versioning running sagas</td><td>8</td><td>partly; each engine has rules you must follow</td></tr></tbody></table></div><aside class="mn">An engine replaces the orchestrator you would have written. It does not replace the contract with the participants.</aside>
+<h3>Four families</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Family</th><th scope="col">Examples</th><th scope="col">The flow is written as</th></tr></thead><tbody><tr><td>Durable execution</td><td>Temporal, Azure Durable Functions</td><td>ordinary code that the engine can replay after a crash</td></tr><tr><td>State machine service</td><td>AWS Step Functions</td><td>a JSON definition of states and transitions</td></tr><tr><td>Process engine</td><td>Camunda</td><td>a BPMN diagram that business people can read</td></tr><tr><td>Saga support in a messaging library</td><td>MassTransit, NServiceBus, Axon</td><td>a state machine class next to your message handlers</td></tr></tbody></table></div><div class="full">
+<p>Each has a cost that is easy to miss. Durable execution replays your workflow code to rebuild its state, so that code has to be deterministic: no random numbers, clock reads or direct network calls outside the engine's own functions. A state machine service keeps logic in a definition file that needs its own tests. A process engine adds a modelling tool and people who can use it. All of them are one more system to run, upgrade and understand at 3 a.m.</p>
+<h3>Build or adopt?</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Write your own (a table, an outbox, a sweeper)</th><th scope="col">Adopt an engine</th></tr></thead><tbody><tr><td>one or two sagas</td><td>many workflows, or new ones every quarter</td></tr><tr><td>a handful of steps, minutes long</td><td>long waits: days, human approvals, reminders</td></tr><tr><td>the team already runs a database and a broker well</td><td>the team wants the dashboard and history without building them</td></tr></tbody></table></div><p>Either way, chapters 3 and 4 remain your work. Teams that adopt an engine and skip those chapters get the same incidents, with better dashboards.</p>
+</div>
+
+<a class="next" href="#lab"><small>next · chapter 10</small>Lab and review checklist →</a>
+</section>
+<section id="lab" data-title="Lab">
+<p class="ch">chapter 10 <span>· 3 min</span></p>
+<h2>Lab and review checklist</h2>
+<div class="gist"><p><b>Gist</b> Design a return-and-refund saga for order 42, then compare with the model answer. The checklist at the end is the whole deep dive as questions to ask in a design review.</p></div>
+
+<p>Order 42 was delivered. A week later the customer wants to send the mugs back and get the $49 refunded. Design the <b>return saga</b>. You have five services: Order, Shipping (books a pickup), Warehouse (a person inspects the parcel), Payment and Inventory.</p>
+<ol class="keep">
+  <li>List the steps in order. Mark each as compensatable, pivot or retriable.</li>
+  <li>Where does the refund go, and why there?</li>
+  <li>One step waits for a human. How long may it wait, and what happens then?</li>
+  <li>What stops the customer from starting two returns for the same order?</li>
+  <li>Which of the five drills would cost real money here?</li>
+</ol>
+<div class="check quiz"><h3>model answer</h3>
+<details><summary>Show the steps</summary>
+<div class="tbl"><table><thead><tr><th scope="col">#</th><th scope="col">Step</th><th scope="col">If we must undo</th><th scope="col">Type</th></tr></thead><tbody><tr><td>1</td><td>Order: create return, order becomes <code>RETURN_IN_PROGRESS</code></td><td>cancel the return, order back to <code>DELIVERED</code></td><td>compensatable</td></tr><tr><td>2</td><td>Shipping: book a pickup</td><td>cancel the pickup</td><td>compensatable</td></tr><tr><td>3</td><td>Warehouse: parcel received and accepted</td><td>none</td><td>pivot</td></tr><tr><td>4</td><td>Payment: refund $49</td><td>keep retrying</td><td>retriable</td></tr><tr><td>5</td><td>Inventory: stock <code>+2</code></td><td>keep retrying</td><td>retriable</td></tr><tr><td>6</td><td>Order: mark <code>RETURNED</code></td><td>keep retrying</td><td>retriable</td></tr></tbody></table></div></details>
+<details><summary>Why the refund comes after the pivot</summary><p>A refund is the step you cannot take back: charging the customer again needs their consent. So it goes after everything that can still fail, including the inspection. The note's rule, hard-to-undo last, decides the order.</p></details>
+<details><summary>The human step</summary><p>The saga rests in <code>AWAITING_PARCEL</code> with a <code>wake_at</code> 14 days ahead. If the parcel never arrives, the timer fires and the saga compensates: cancel the pickup, cancel the return. If the inspector rejects the parcel, that is a definite “no” and it compensates the same way. Two weeks in one state is normal for a saga, and it is the reason timers are stored as data.</p></details>
+<details><summary>Two returns for one order</summary><p>A semantic lock. Step 1 moves the order to <code>RETURN_IN_PROGRESS</code>, and a second return request for an order in that state is refused. The saga id is derived from the return request, so a double click is also covered.</p></details>
+<details><summary>The expensive drill</summary><p>Drill 2 on the refund step. A timeout followed by a retry with a new key refunds $98. The refund command must carry a stable key such as <code>return-42:4</code>, and the payment service must recognise it.</p></details>
+</div>
+<h3>The review checklist</h3>
+<p>Take this to the design review of any saga. Each line is a question from one of the chapters.</p>
+<div class="checklist"><div class="cl"><h3>Steps</h3><ul><li>Every step is typed: compensatable, pivot or retriable</li><li>The pivot is named, and nothing hard to undo comes before it</li><li>Every compensation can only fail temporarily</li></ul></div><div class="cl"><h3>State</h3><ul><li>Every resting state has a name and a maximum age</li><li>The log is written before the command is sent, through an outbox</li><li>The saga id comes from the customer's intent</li></ul></div><div class="cl"><h3>Participants</h3><ul><li>A repeated key returns the first result</li><li>An undo for an unknown step succeeds and leaves a tombstone</li><li>A step after its undo is refused</li><li>Each participant can report the status of a command key</li></ul></div><div class="cl"><h3>Isolation</h3><ul><li>Every record another request can touch mid-saga has a countermeasure</li><li>Money and stock change by amounts, not by overwriting</li><li>Values the customer saw travel inside the saga</li></ul></div><div class="cl"><h3>Time</h3><ul><li>Attempt timeout, step budget and saga deadline are set</li><li>Timers are rows, picked up by a sweeper</li><li>The customer is told at the pivot</li></ul></div><div class="cl"><h3>Tests and operations</h3><ul><li>A test crashes the orchestrator after every log write</li><li>The three numbers are on a dashboard with alerts</li><li>There is a runbook and admin actions, and nobody edits rows by hand</li><li>A nightly reconciliation checks the services against each other</li></ul></div></div>
+
+<a class="next" href="#top"><small>the end</small>Back to the top ↑</a>
+</section>
+<p class="sources"><b>Sources.</b> Garcia-Molina and Salem, “Sagas” (1987). Frank and Zahorjan, “Semantic ACID properties in multidatabases using remote procedure calls and update propagations” (1998), for the countermeasures. Chris Richardson, <i>Microservices Patterns</i>, chapter 4. Caitie McCaffrey, “Distributed Sagas: A Protocol for Coordinating Microservices” (talk). Pat Helland, “Life beyond Distributed Transactions” (2007).</p>
+</div></article>
+<footer class="foot"><span>Jef’s Notes · deep dive 01 · Saga</span></footer>
+</main>
+
+<div class="dock" data-dock>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+  <div class="dock-in">
+    <a class="dock-arrow" data-prev href="#top" aria-label="Previous chapter">‹</a>
+    <button class="dock-mid" type="button" data-open aria-haspopup="dialog" aria-expanded="false">
+      <small data-count>1 / 10</small><span data-current>Recap</span><i aria-hidden="true">☰</i>
+    </button>
+    <a class="dock-arrow" data-next href="#machine" aria-label="Next chapter">›</a>
+  </div>
+</div>
+<div class="sheet-back" data-close hidden></div>
+<div class="sheet" data-sheet role="dialog" aria-modal="true" aria-label="Chapters" hidden>
+  <div class="sheet-head"><b>Chapters</b><button type="button" data-close aria-label="Close">×</button></div>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">The note in sixty seconds</span><span class="m">1 min</span></a></li><li><a href="#machine" data-ch="1"><span class="n">2</span><span class="t">A saga is a state machine with a diary</span><span class="m">2 min</span></a></li><li><a href="#drills" data-ch="2"><span class="n">3</span><span class="t">Failure drills</span><span class="m">4 min</span></a></li><li><a href="#isolation" data-ch="3"><span class="n">4</span><span class="t">The missing letter: no isolation</span><span class="m">2 min</span></a></li><li><a href="#time" data-ch="4"><span class="n">5</span><span class="t">Timeouts, deadlines and the stuck saga</span><span class="m">3 min</span></a></li><li><a href="#styles" data-ch="5"><span class="n">6</span><span class="t">Orchestration and choreography, side by side</span><span class="m">2 min</span></a></li><li><a href="#testing" data-ch="6"><span class="n">7</span><span class="t">Testing a saga</span><span class="m">3 min</span></a></li><li><a href="#running" data-ch="7"><span class="n">8</span><span class="t">Running it: dashboards and repair</span><span class="m">3 min</span></a></li><li><a href="#tools" data-ch="8"><span class="n">9</span><span class="t">Tools, and when to stop writing your own</span><span class="m">2 min</span></a></li><li><a href="#lab" data-ch="9"><span class="n">10</span><span class="t">Lab and review checklist</span><span class="m">3 min</span></a></li></ol>
+  <div class="sheet-foot">
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+    <a href="#top" data-close>Top of page ↑</a>
+  </div>
+</div>
+</body>
+</html>
