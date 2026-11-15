@@ -205,7 +205,6 @@ replaced; Series 1 notes stay short, with the depth in the new chapter, not in t
 | 3 | The dial in Books 1–2 | Under the T-chart, on document and ceremony notes only. |
 | 4 | Seventh volumes | Both books get one, after Book 3 is complete. |
 | 5 | Design patterns | **Included** (sections 3 and 5.1). |
-
 | 6 | Vol. 7 topics for Books 1 and 2 | The lists in sections 5.3 and 5.4, as drafted. |
 | 7 | Series 1 extra notes, the open slots | Frontend: Web Workers and Offline-First Sync. Security: Rate-Limited Login. Cloud: Progressive Delivery (automated checks and rollback, building on Canary). |
 | 8 | Going deeper picks | The candidate tables in sections 3 and 4, as drafted; the fourth pick per volume is written if the note has enough for a chapter. |
