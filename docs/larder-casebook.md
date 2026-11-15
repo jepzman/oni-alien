@@ -581,3 +581,53 @@ Plan: `docs/HANDOFF-project-manager.md`. Every number below carries into later v
   decide ↔ Grace's product trio; plan it all or learn as we go ↔ Grace's now / next / later roadmap.
 - Open threads for Vol. 2 (Governance): the charter, the plan of 20 Feb, phase gates around the five milestones, the decision
   log shared with Ana (16 Mar), the scope misread corrected 9 Mar, the tailoring review of 20 Mar and the missed internet line.
+
+## Book 3, Vol. 2: Sanne's facts (February → May 2026)
+
+Vol. 2 covers the Governance domain (nine processes). Every template card is a page of **the Rotterdam project file**
+(`/rotterdam/`); the numbers below are that file's numbers.
+
+- **Charter** (19 Feb, signed by Joost and Femke): in = store fitted, stocked, staffed; city in the platform and apps; ~40
+  staff trained; launch marketing; two weeks of hypercare. Out = new app features for Rotterdam, Larder for Business, changes
+  to Amsterdam. Done when: hypercare exit, handover to the store manager, closing report accepted.
+- **Plan on a page** (20 Feb; to the steering group 27 Feb). Budget by line: fit-out **€226k** (builder €148k fixed price;
+  cold room and fridges €78k incl. the €14k door upgrade), equipment and store IT **€48k**, people **€60k**, marketing
+  **€40k**, reserve **€6k** = €380k. Cross-checks failed on: pickers starting a week after stocking (first group of 15 moved
+  to **30 March**), handhelds ordered too late (moved to 23 Feb), no reserve for the top risks (stated as the weak point).
+- **Sourcing** (24 Feb): builder fixed price €148k, handover 3 April, €1,000 off per late day (max 10), 5 % retention;
+  cold room supply-and-install (ordered 13 Feb, 8 weeks); e-bikes leased by operations; training and city set-up in-house;
+  adverts time and materials, cap €12k.
+- **Governance** (27 Feb): teams → Sanne → sponsor (the three triggers, answer in 2 working days) → steering group
+  (date, total budget, go / no-go, closing). Vetoes: Marco (spend), Lena (contracts, personal data). Steering Fridays:
+  27 Feb, 13 Mar, 27 Mar, 10 Apr, 24 Apr, 8 May, 22 May. Sunday opening: not at launch (Joost).
+- **Yara**, Rotterdam store manager, starts **2 March 2026** (reports to Joost).
+- **Gates** (criteria written 2 Mar): G1 3 Apr fit-out, G2 17 Apr stock, G3 20 Apr app, G4 24 Apr go / no-go (steering group),
+  G5 11 May hypercare exit. **G1: go with conditions**: 14 snags, 2 blocking (cold-room door seal, fire-safety sign), fixed by
+  7 April; dry goods stocked from 6 April, chilled from 8 April. G4: go with two conditions (Grace's two reds, fixed 26 Apr).
+- **Weekly rhythm** (from 5 Mar): Monday decision log with Ana, Thursday 09:30 leads, Friday status. Must-haves done (of 71):
+  26 Feb 33 · 5 Mar 34 · 12 Mar 41 · 27 Mar 49 (plan 52) · then +6, +5, +9 a week · 24 Apr 69 · 26 Apr 71.
+- **Baseline v1** (13 Mar, steering group): scope signed by Grace (6 app Musts) and Joost (65 others); €287k committed
+  (builder 148, cold room 78, earlier spend 61). The 9 March misread (“approvals at launch”) was Sanne restating a promise
+  Grace never made. **Baseline v2** on 31 Mar after C-03.
+- **Quality review** (20 Mar): the nightly script had failed silently 8–11 March (issue I-05; 212 products listed when it ran
+  again); 12 of 15 pickers had done their 20 practice orders; RTM-0's weekly order had caught 2 faults. Next review 17 Apr.
+- **Issue log** (from 20 Mar): **I-07 internet line** raised by Eli on 20 Mar, ordered 30 Mar, live 13 May; workaround a 4G
+  router with backup SIM (€600). I-09 builder late; I-14 two blocking snags; I-19 / I-20 Grace's two reds. Totals at closing:
+  23 raised, 21 closed, 2 handed over (I-21 street numbers in zone RTM-2, I-23 Saturday slots).
+- **Escalation** (23 Mar): builder forecast handover 8 April (electrical inspection re-booked). Option B chosen by Joost at
+  16:00: two weekends of work, €5k, handover held on 3 April.
+- **Status of 27 Mar**: amber; 49 of 71 done; €322k committed; forecast 65 of 71 at 4 a week. Colour rules: schedule red if
+  more than 3 days late; scope amber at 4–8 behind the plan line; finance amber when the reserve is in use.
+- **Change log**: C-01 fridges with doors +€14k (Marco, 2 Feb) · C-02 weekend work +€5k (Joost, 23 Mar) · C-03 approvals in
+  Rotterdam from launch to June (steering group, 31 Mar; same session as Ana's trade-off sliders) · C-04 4G router +€0.6k
+  (Sanne, 1 Apr) · C-05 in-store launch event, rejected (Joost) · C-06 second cold-room door, deferred to after opening.
+  Reserve: 20 → 6 → 1 → 0.4.
+- **Handover** (walk-round 12 May, signed by Yara 15 May): retention released 15 May; Sanne answers within a day until 29 May.
+- **Lessons** (18 May): 41 lines → 12 playbook changes, 9 template changes, 20 dropped. Top: store IT is an eighth workstream;
+  order long-lead items in week 1; the product owner signs the launch scope.
+- **Closing report** (22 May, steering group: closed): opened 27 April; 71 of 71; **€379.6k of €380k**; **590 orders a day in
+  week 4** (target 500 by end May: met); on time 84 % in May (target 90 % by end of summer: open, Joost); playbook v1 written.
+- Meanwhile links: gates ↔ Grace's launch checklist; baselines ↔ Grace's MoSCoW; directing the work ↔ Ana's decision log;
+  change control ↔ Ana's trade-off sliders; handover ↔ Grace's hypercare.
+- Open threads for Vol. 3 (Scope and Schedule): goes back into the same months for the 71 must-haves as a work breakdown,
+  the estimates behind the 4 February plan, the network and critical path of the fit-out, the release plan of 9 March.

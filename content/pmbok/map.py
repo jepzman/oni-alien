@@ -28,7 +28,7 @@ PRINCIPLES = [
 
 # (css key, name, the question it answers, number of processes, where in this book)
 DOMAINS = [
-    ("governance", "Governance", "Who decides, how do we start, steer, change and close?", 9, "Vol. 2"),
+    ("governance", "Governance", "Who decides, how do we start, steer, change and close?", 9, '<a href="../project-2/index.html">Vol. 2</a>'),
     ("scope", "Scope", "What will we deliver, and what not?", 6, "Vol. 3"),
     ("schedule", "Schedule", "By when?", 3, "Vol. 3"),
     ("finance", "Finance", "For how much, and is the money there when we need it?", 4, "Vol. 4"),
@@ -38,6 +38,33 @@ DOMAINS = [
 ]
 DOMAINS_NOTE = ('  <p>The domains are explained together in <a href="../project-1/notes/performance-domains.html">What Must I Keep an Eye On?</a>. '
                 'Each one then gets its own volume, where every one of its processes is covered and listed here by name.</p>')
+
+# Processes, per domain, once its volume is written: (process, focus area, in plain words, [(journal key, slug), …]).
+P2 = "project-2"
+PROCESSES = [
+    ("governance", [
+        ("Initiate Project or Phase", "initiating", "Agree that the project, or its next phase, should start: why, for what benefit, who is behind it.",
+         [(P2, "project-charter"), (P2, "governance-structure"), (P2, "phase-gates")]),
+        ("Integrate and Align Project Plans", "planning", "Make one plan in which scope, dates, money, people and risks agree with each other; approve it as the baseline.",
+         [(P2, "project-management-plan"), (P2, "baselines")]),
+        ("Plan Sourcing Strategy", "planning", "Decide what to make and what to buy, from whom, and under which kind of contract.",
+         [(P2, "sourcing-strategy")]),
+        ("Manage Project Execution", "executing", "Lead and co-ordinate the work in the plan; clear what blocks it.",
+         [(P2, "directing-the-work"), (P2, "issue-log")]),
+        ("Manage Quality Assurance", "executing", "Check that the way of working will produce good results, and improve it.",
+         [(P2, "quality-assurance")]),
+        ("Manage Project Knowledge", "executing", "Use what the organisation already knows, and capture what this project learns.",
+         [(P2, "lessons-learned")]),
+        ("Monitor and Control Project Performance", "monitoring and controlling", "Measure against the baseline, forecast the end, report honestly, and act.",
+         [(P2, "status-reports"), (P2, "escalation")]),
+        ("Assess and Implement Changes", "monitoring and controlling", "Size every requested change, have the right person decide it, and build approved changes into the plan.",
+         [(P2, "change-control")]),
+        ("Close Project or Phase", "closing", "Finish properly: results accepted and handed over, contracts and money settled, the team released.",
+         [(P2, "handover"), (P2, "closing-a-project")]),
+    ]),
+]
+PROCESSES_NOTE = ('  <p class="aside">process names as listed in public summaries of the eighth edition; check the exact wording against your '
+                  'own copy of the guide. The plain-words column is mine.</p>')
 
 FOCUS = [
     ("Initiating", "Agree that the project (or the next phase) should exist, why, and who is behind it."),

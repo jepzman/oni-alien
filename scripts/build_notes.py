@@ -812,6 +812,46 @@ JOURNALS = [
             (15, "pmo", "Who Helps the Project Managers?", "ways", "What a project management office is for, and the lightest version that still helps."),
         ],
     ),
+    dict(
+        key="project-2", vol=2, title="Starting, Steering, Closing", short="starting, steering, closing",
+        series=2, book="The Project Manager's Notebook", narrator="Sanne", brand="project manager's notebook", book_no=3,
+        title_block=True, sheet_doodles="project",
+        theme="theme-project", fonts="Patrick+Hand+SC", subject="project management",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Spring term · 2029", weekdays=(1, 3), start=date(2029, 3, 6),
+        kicker="the project manager's notebook · book 3 · vol. 2",
+        story="<b>Late February 2026.</b> Sanne has been at Larder for six weeks. Rotterdam opens on <b>27 April</b>; the team has made its own plan, there are seven workstreams, five shared milestones, a budget of €380k and a reserve of €6k. What the launch still lacks is governance: nobody has written down why it exists, who decides what, when it is allowed to move to the next step, how a change gets agreed, or what “finished” means. This volume follows the launch from its charter to its closing report on 22 May, through a scope misread, a late builder, a forgotten internet line and an opening day.",
+        lead="Volume 2 of <span class=\"hl\">The Project Manager's Notebook</span>: the <b>Governance</b> domain of the PMBOK Guide (eighth edition), all nine of its processes. {n} notes in {c} collections: starting a project properly, making one plan, running and steering the work, and closing it. Each note is one <b>question a project manager must answer</b>, and its template card is a real page of <b>the Rotterdam project file</b>, which grows through the book. Four notes go further with a <b>deep dive</b>.",
+        blurb="The Governance domain: the charter, who decides, phase gates, one plan, sourcing, baselines, running the work, honest status, change control, lessons, handover and closing.",
+        attrs=PROJECT_ATTRS, attrs_title="The nine project ratings", attrs_side="what a good project practice is judged on", ratings_h2="Project ratings",
+        first_law="Governance is a few clear answers, agreed early: why, who decides, when we move on, how we change, and when we are done.",
+        disclaimer=PMI_NOTE, pmbok=True,
+        deep_dives={"project-charter", "project-management-plan", "status-reports", "change-control"},
+        handmade=set(),
+        collections=[
+            ("starting", "Starting", "agree why, who decides, and when the next step may begin"),
+            ("plan", "One plan", "one plan everyone works from, and what was promised"),
+            ("running", "Running and steering", "do the work, see where it stands, change course on purpose"),
+            ("closing", "Closing", "finish properly: learn, hand over, close"),
+        ],
+        catalogue=[
+            (1, "project-charter", "Should This Project Exist?", "starting", "The project charter: one page that says why, what for, who is behind it and within what limits."),
+            (2, "governance-structure", "Who Decides What?", "starting", "A sponsor, a steering group and decision levels, written down before the first hard decision."),
+            (3, "phase-gates", "May We Take the Next Step?", "starting", "Phase gates and go / no-go: agreed criteria, checked at fixed points, with three possible answers."),
+            (4, "project-management-plan", "What's the Plan?", "plan", "One plan that makes scope, dates, money, people and risks agree with each other."),
+            (5, "sourcing-strategy", "Make It, Buy It, or Hire It?", "plan", "Decide what to do yourself and what to buy, and pick the contract that puts each risk in the right hands."),
+            (6, "baselines", "What Exactly Did We Promise?", "plan", "A baseline is the approved version of the plan that progress and changes are measured against."),
+            (7, "directing-the-work", "Is the Work Actually Happening?", "running", "A weekly rhythm that keeps seven workstreams moving and clears what blocks them."),
+            (8, "issue-log", "What's in the Way Right Now?", "running", "An issue is a problem that has already happened: log it, give it an owner and a date, close it."),
+            (9, "quality-assurance", "Is Our Way of Working Working?", "running", "Quality assurance checks the process; quality control checks the result. A project needs both."),
+            (10, "status-reports", "Where Are We, Really?", "running", "Measure against the baseline, forecast the end, and report a colour that follows written rules."),
+            (11, "change-control", "Can We Change That?", "running", "Every change to what was promised is written down, sized, decided by the right person and then built into the plan."),
+            (12, "escalation", "When Do I Take It Upstairs?", "running", "Escalate early, with options and a recommendation, when a decision is above your limit."),
+            (13, "lessons-learned", "What Did We Learn?", "closing", "Capture lessons while they are fresh, sort them, and put them where the next project will trip over them."),
+            (14, "handover", "Who Looks After It Now?", "closing", "Hand the result to the people who will run it, with everything they need and nothing left hanging."),
+            (15, "closing-a-project", "Are We Done?", "closing", "Close on purpose: results accepted, contracts and money settled, benefits handed to their owners, the team released."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
@@ -825,7 +865,6 @@ PLANNED_PRODUCT = [
 ]
 # Planned volumes of Series 2, book 3 (see docs/HANDOFF-project-manager.md).
 PLANNED_PROJECT = [
-    (2, "Starting, Steering, Closing", "The Governance domain: the charter, one plan, running the work, status that tells the truth, change control and closing."),
     (3, "What, and By When", "The Scope and Schedule domains: requirements, the work breakdown structure, estimates, critical path and release plans."),
     (4, "Money and People", "The Finance and Resources domains: budgets, reserves, earned value, getting and leading a team."),
     (5, "People Outside, and Surprises", "The Stakeholders and Risk domains: engagement, communication, the risk register, responses and reserves."),
@@ -1107,6 +1146,8 @@ def pmbok_tag(j, n):
     on = t.get("focus", [])
     focus = "".join(f'<li{" class=on" if f in on else ""}>{"monitoring &amp; controlling" if f == "monitoring" else f}</li>' for f in PMBOK_FOCUS)
     rows = [("covers", t["covers"])] if t.get("covers") else []
+    if t.get("processes"):
+        rows.append(("process" if len(t["processes"]) == 1 else "processes", " · ".join(t["processes"])))
     if t.get("principles"):
         rows.append(("principle", " · ".join(t["principles"])))
     if t.get("older"):
@@ -1294,7 +1335,8 @@ def render_index(j):
         f'  <p class="lead">{j["lead"].format(**counts(j))}</p>',
         story_box(j),
         ('  <p class="map-link"><a href="../pmbok/index.html"><b>The PMBOK map</b>: every principle, domain and focus area of the guide, '
-         'and the note that covers it →</a></p>') if j.get("pmbok") else "",
+         'and the note that covers it →</a><br><a href="../rotterdam/index.html"><b>The Rotterdam project file</b>: every page from '
+         'Sanne\'s binder, in order →</a></p>') if j.get("pmbok") else "",
         KEY,
         '  <h2 id="index"><span class="num">✎</span>Index <span class="side">tap a note to open it</span></h2>',
         index_list(j),
@@ -1400,7 +1442,7 @@ PMBOK_ITEM = '''    <li class="book book--pmbok">
       </a>
       <div class="book-meta">
         <p>The whole PMBOK Guide (eighth edition) on one page: six principles, seven domains, five focus areas, and the note that covers each.</p>
-        <p class="book-actions"><a class="btn" href="pmbok/index.html">Open the map</a></p>
+        <p class="book-actions"><a class="btn" href="pmbok/index.html">Open the map</a><a class="btn btn--ghost" href="rotterdam/index.html">Project file</a></p>
       </div>
     </li>'''
 
@@ -1579,6 +1621,68 @@ def load_pmbok_map():
     return mod
 
 
+def processes_block(m, link):
+    """Process tables on the PMBOK map, one per domain that has been written (PROCESSES in content/pmbok/map.py)."""
+    names = dict(PMBOK_DOMAINS)
+    out = []
+    for dom, rows in m.PROCESSES:
+        trs = "\n".join(f'      <tr><td>{name}</td><td>{fa}</td><td>{plain}</td><td>{"<br>".join(link(r) for r in refs)}</td></tr>'
+                        for name, fa, plain, refs in rows)
+        out.append(f'  <h3 class="toc-coll"><span class="dom dom-{dom}">{names[dom]}</span> <span>{len(rows)} processes</span></h3>\n'
+                   '  <div class="table-scroll"><table class="maptable">\n    <thead><tr><th scope="col">Process</th><th scope="col">Focus area</th>'
+                   '<th scope="col">In plain words</th><th scope="col">Notes</th></tr></thead>\n    <tbody>\n' + trs + '\n    </tbody>\n  </table></div>')
+    return "\n".join(out) + (f"\n{m.PROCESSES_NOTE}" if out else "")
+
+
+def render_project_file(loaded):
+    """The Rotterdam project file: every template card whose file is under rotterdam/, in book order."""
+    pages = []
+    for j in JOURNALS:
+        if not j.get("pmbok"):
+            continue
+        for num, slug, title, ckey, summary in j["catalogue"]:
+            n = loaded[j["key"]].get(slug)
+            if n and n["code"]["file"].startswith(("rotterdam/", "larder/")):
+                pages.append((j, num, slug, title, n["code"]))
+    toc = "".join(f'<li><a href="#p{i}"><span class="toc-n">{i:02d}</span><span class="toc-t">{esc(c["file"].split("/")[-1])}'
+                  f'<small>{esc(c["note"])}</small></span><span class="toc-p">vol. {j["vol"]} · {num:02d}</span></a></li>'
+                  for i, (j, num, slug, title, c) in enumerate(pages, 1))
+    cards = "\n".join(
+        f'  <h3 class="file-h" id="p{i}"><span>{i:02d}</span>{esc(c["file"].split("/")[-1])} <small>explained in '
+        f'<a href="../{j["key"]}/notes/{slug}.html">{esc(title)}</a> (vol. {j["vol"]} · {num:02d})</small></h3>\n'
+        f'  <div class="card">\n    <div class="card-head"><span>{esc(c["file"])}</span><span>{esc(c["note"])}</span></div>\n'
+        f'<pre><code>{esc(c["src"].strip(chr(10)))}</code></pre>\n  </div>'
+        for i, (j, num, slug, title, c) in enumerate(pages, 1))
+    j = dict(theme="theme-project pmbokmap projectfile", disclaimer=PMI_NOTE)
+    return "\n".join([
+        head("The Rotterdam Project File · Jef’s Notes", "Every page from Sanne's binder for the Rotterdam launch: a complete, worked set of project documents.", 1, "Patrick+Hand+SC"),
+        body_open(j),
+        '<a class="skip-link" href="#main">Skip to the project file</a>',
+        bar(None, 1),
+        '<main id="main" class="desk">',
+        '<article class="sheet">',
+        f'  {ROUGH}',
+        PROJECT_DOODLES,
+        '  <div class="page-meta"><span class="day">Rotterdam · 12 Jan → 22 May 2026</span><span class="topic">book 3 · <b>the worked example</b></span></div>',
+        '  <p class="kicker">the project manager\'s notebook · Sanne\'s binder</p>',
+        '  <h1 class="cover-title"><span class="hl">The Rotterdam Project File</span></h1>',
+        f'  <p class="lead">Every note in <b>The Project Manager\'s Notebook</b> ends its “how” section with a page from Sanne\'s binder. Here they are together, in order: <b>{len(pages)} pages</b> so far, one real project from its first week to its closing report. The numbers carry from page to page: the budget in the charter is the budget in the status report and in the closing report. Copy any page as a starting point; each links to the note that explains it.</p>',
+        '  <p class="map-link"><a href="../pmbok/index.html"><b>The PMBOK map</b>: where each of these pages sits in the guide →</a></p>',
+        '  <h2 id="index"><span class="num">✎</span>Contents <span class="side">tap a page to jump to it</span></h2>',
+        f'  <ol class="toc">{toc}</ol>',
+        '  <h2 id="pages"><span class="num">§</span>The pages <span class="side">in the order Sanne wrote them</span></h2>',
+        cards,
+        '  <p class="aside">this file grows with the book: each new volume adds its pages.</p>',
+        '  <p class="folio">✦</p>',
+        '</article>',
+        foot(j),
+        '</main>',
+        '</body>',
+        '</html>',
+        '',
+    ])
+
+
 def render_pmbok_map(loaded):
     """The PMBOK map: the whole guide on one page, each item linked to the note that covers it."""
     m = load_pmbok_map()
@@ -1639,6 +1743,7 @@ def render_pmbok_map(loaded):
         '<th scope="col">Processes</th><th scope="col">In this book</th></tr></thead>\n    <tbody>\n' + domains +
         f'\n      <tr class="total"><td></td><td>all seven</td><td class="n">{total}</td><td></td></tr>\n    </tbody>\n  </table></div>',
         m.DOMAINS_NOTE,
+        processes_block(m, link),
         '  <h2 id="focus"><span class="num">4</span>Five focus areas <span class="side">what kind of attention the work needs now</span></h2>',
         f'  <ol class="maplist maplist--focus">\n{focus}\n  </ol>',
         '  <h2 id="foundations"><span class="num">5</span>The ground under it <span class="side">ideas the guide builds on</span></h2>',
@@ -1821,6 +1926,8 @@ def main():
     (PUBLIC / "larder" / "index.html").write_text(render_casefile(), encoding="utf-8")
     (PUBLIC / "pmbok").mkdir(exist_ok=True)
     (PUBLIC / "pmbok" / "index.html").write_text(render_pmbok_map(loaded), encoding="utf-8")
+    (PUBLIC / "rotterdam").mkdir(exist_ok=True)
+    (PUBLIC / "rotterdam" / "index.html").write_text(render_project_file(loaded), encoding="utf-8")
     sheets = [load_cheatsheet(name) for name in CHEATSHEETS]
     for cs in sheets:
         out = PUBLIC / "cheatsheets" / cs.SLUG

@@ -29,9 +29,10 @@ Live site: https://jepzman.github.io/oni-alien/
 | 2 · 4 | Measuring & Learning (`/product-4/`) | 15 | product ratings |
 | 2 · 5 | Stakeholders & Influence (`/product-5/`) | 15 | product ratings |
 | 2 · 6 | Growing the Product (`/product-6/`) | 15 | product ratings |
+| 3 · 2 | Starting, Steering, Closing (`/project-2/`) | 15 | project ratings |
 | 3 · 1 | The Lay of the Land (`/project-1/`) | 15 | project ratings (value focus, predictability, risk reduction, transparency, stakeholder confidence, team ownership, adaptability, quality built in, low overhead) |
 
-Book 3 is *The Project Manager's Notebook* (Sanne, binder skin `theme-project`): the whole **PMBOK Guide, eighth edition** in plain words. Each note is a question a project manager must answer, with a PMBOK tag under the title (domain, focus areas, what it covers, what older editions called it), a **light / standard / heavy** dial in place of gains vs losses, and, on key notes, a **deep dive**. The **PMBOK map** (`/pmbok/`, data in `content/pmbok/map.py`) shows the whole guide on one page and links each part to its note. Plan and decisions: `docs/HANDOFF-project-manager.md`. These are independent study notes, not affiliated with PMI.
+Book 3 is *The Project Manager's Notebook* (Sanne, binder skin `theme-project`): the whole **PMBOK Guide, eighth edition** in plain words. Each note is a question a project manager must answer, with a PMBOK tag under the title (domain, focus areas, what it covers, what older editions called it), a **light / standard / heavy** dial in place of gains vs losses, and, on key notes, a **deep dive**. The **PMBOK map** (`/pmbok/`, data in `content/pmbok/map.py`) shows the whole guide on one page and links each part to its note. **The Rotterdam project file** (`/rotterdam/`) collects every template card of the book in order: one worked set of project documents. Plan and decisions: `docs/HANDOFF-project-manager.md`. These are independent study notes, not affiliated with PMI.
 
 The landing page (`/`) shows two shelves (Series 1: design patterns; Series 2: practitioner's notebooks, with `series=2` in `JOURNALS`), planned volumes (`PLANNED`, `PLANNED_2`) and a “future log” of upcoming work.
 

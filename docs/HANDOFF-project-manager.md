@@ -1,6 +1,6 @@
 # Handoff: The Project Manager's Notebook (Series 2, Book 3)
 
-Status as of 2026-11-14: **Vol. 1 written (15 notes, 4 deep dives), not yet deployed. Vols. 2–6 planned.** Decisions in section 9;
+Status as of 2026-11-15: **Vols. 1 and 2 written (15 notes and 4 deep dives each), not yet deployed. Vols. 3–6 planned.** Decisions in section 9;
 what was built in section 10.
 
 Story facts: `docs/larder-casebook.md` (source of truth) and the public case file `/larder/`.
@@ -202,3 +202,31 @@ The questions as they were asked:
   marked as an illustration. Check both against the guide before deploying, or soon after.
 - Next: Vol. 2, Starting, Steering, Closing (Governance, 9 processes). Start the **project file** page there (charter first)
   and the first cheat sheet (PMBOK 8 on one page). Open story threads are listed at the end of the casebook section.
+
+## 11. Vol. 2 notes on the build (2026-11-15)
+
+- `project-2` journal, “Starting, Steering, Closing”: the **Governance** domain, all nine processes. Content in
+  `content/project-2/01_starting_plan.py` (6 notes), `02_running.py` (6), `03_closing.py` (3). Story: 19 February → 22 May 2026,
+  the Rotterdam launch from charter to closing report. Facts: casebook, “Book 3, Vol. 2”.
+- Process → notes (also on the map): Initiate Project or Phase → charter, who decides, gates · Integrate and Align Project
+  Plans → the plan, baselines · Plan Sourcing Strategy → sourcing · Manage Project Execution → directing the work, issue log ·
+  Manage Quality Assurance → quality review · Manage Project Knowledge → lessons · Monitor and Control Project Performance →
+  status, escalation · Assess and Implement Changes → change control · Close Project or Phase → gates, handover, closing.
+- **Deep dives** (4): charter (business case vs charter vs plan; the retro-charter) · the plan (six cross-checks) · status
+  (colour rules, a forecast sum, monitoring vs controlling, the watermelon) · change control (five steps, the seven-question
+  impact check, approve / reject / defer).
+- **The Rotterdam project file** (`/rotterdam/`, `render_project_file()`): every template card whose `file` starts with
+  `rotterdam/` or `larder/`, from all `pmbok` journals, in book order (28 pages now). No extra field is needed: name a card's
+  file `rotterdam/NN-name.md` and it appears. Linked from the journal index, the map and the shelf.
+- **PMBOK map**: `PROCESSES` in `content/pmbok/map.py` now lists Governance's nine processes with focus area, plain words and
+  notes. A caption says the names come from public summaries and should be checked against the guide. The PMBOK tag on a
+  note shows a `processes` row (note field `pmbok["processes"]`).
+- Sanne's mistakes, as planned: the 9 March misread (baselines), ten days of an unowned issue (issue log), status colours
+  with no rules (status). The missed internet line ties to Ana's Vol. 2 fact (ordered 30 March).
+- Money was made consistent across both volumes: cold room and fridges are €78k including the €14k door upgrade.
+- Verified as Vol. 1: figures on contact sheets, 375 px, light and dark, every listed page exists.
+- **Still not verified against the guide:** the nine Governance process names and their focus areas.
+- Next: Vol. 3, What, and By When (Scope 6, Schedule 3). It returns to January–April 2026 for the worked examples (the
+  work breakdown of the 71 must-haves, estimates, the fit-out's network and critical path, the release plan), so the
+  project file gains scope and schedule pages with the same numbers. Sample deep dives: work breakdown structure, critical
+  path, three-point estimates. The first cheat sheets (PMBOK 8 on one page; critical path) fit here.
