@@ -141,6 +141,18 @@ class Doodle:
                 self.shapes.append(f'<path class="d d-red" d="M{x + 6} {ry + row / 2:g} h{w - 12}"/>')
         return self
 
+    def row(self, items, x=14, y=30, h=84, gap=14, w=None, size=17, subsize=13, arrows=False):
+        """A row of equal boxes across the drawing. items: (label, sub, fill). With arrows=True (use gap ≥ 34) an arrow
+        joins each box to the next."""
+        n = len(items)
+        w = w or (self.w - 2 * x - gap * (n - 1)) / n
+        for i, (label, sub, fill) in enumerate(items):
+            bx = x + i * (w + gap)
+            self.box(round(bx), y, round(w), h, label, fill, sub=sub, size=size, subsize=subsize)
+            if arrows and i:
+                self.arrow(round(bx - gap + 4), y + h // 2, round(bx - 4), y + h // 2)
+        return self
+
     def html(self):
         shapes = "".join(self.shapes)
         texts = "".join(self.texts)

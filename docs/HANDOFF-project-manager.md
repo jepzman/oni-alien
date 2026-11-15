@@ -1,6 +1,7 @@
 # Handoff: The Project Manager's Notebook (Series 2, Book 3)
 
-Status as of 2026-11-14: **Proposal. Nothing built. Owner decisions needed in section 9.**
+Status as of 2026-11-14: **Vol. 1 written (15 notes, 4 deep dives), not yet deployed. Vols. 2–6 planned.** Decisions in section 9;
+what was built in section 10.
 
 Story facts: `docs/larder-casebook.md` (source of truth) and the public case file `/larder/`.
 Earlier plans, for comparison: `docs/HANDOFF-solution-architect.md`, `docs/HANDOFF-product-owner.md`.
@@ -19,6 +20,10 @@ Grace's asks *“should we, and for whom?”*, Sanne's asks ***“by when, for h
 | A note is | one technique | **one question a project manager must answer**, which covers 1–3 PMBOK processes and their main tools |
 | The reader checks progress on | the volume index | a **PMBOK map** page: every item of the guide → the note that covers it |
 | Example data | new numbers per note | **one project file that grows**: the same Rotterdam numbers run from charter to closing report |
+
+**Deep dives** (owner's addition, 2026-11-14): key items get a chapter-like deep dive inside their note, after
+“How it solves it”: an intro and three or four numbered parts with their own figures. The note stays short for a first
+read; the deep dive is for when you need more (worked examples, how to choose, what goes wrong). Three to five per volume.
 
 Kept from Books 1–2: the eight-section note, the Larder scene, the analogy with doodles, the template card,
 “try it”, the quiz, the “meanwhile” boxes, the case file timeline, nine ratings, one PDF per volume.
@@ -87,8 +92,8 @@ Same data shape as Books 1–2, with these options:
 | 7 Pitfalls | list | same, with Sanne's own mistake where there is one |
 | 8 When to use, quiz | recall questions | **situational** questions |
 
-New note fields: `pmbok=dict(domain=, focus=, processes=[…], principles=[…], older="…")`, `dial`, `file_page`.
-New generated pages: the **PMBOK map** (`/project/map/`) and the **project file** (`/project/file/`).
+New note fields: `pmbok=dict(covers=, domains=[…], focus=[…], principles=[…], older="…")`, `dial`, `deep_dive`
+(and `file_page` from Vol. 2). New generated pages: the **PMBOK map** (`/pmbok/`) and, from Vol. 2, the **project file**.
 
 **Ratings: `PROJECT_ATTRS`** (proposal):
 
@@ -150,7 +155,13 @@ Formula-heavy and map-like content suits the laminated cards better than a note:
 6. [ ] Cheat sheets alongside the volume they belong to.
 7. [ ] Verify as before (contact sheets, 375 px, light / dark, PDFs), PR, deploy when asked.
 
-## 9. Decisions needed (owner)
+## 9. Decisions (owner, 2026-11-14: “do your recommendation”, plus deep dives)
+
+All eight recommendations below are accepted: eighth edition, volumes by domain, practitioner's notebook with situational
+quizzes, the light / standard / heavy dial, the binder skin, the nine ratings, six volumes. The owner added **deep-dive
+chapters for key items** (section 1). Critical Path stays the recommended sample for the formula-heavy style; it is in Vol. 3.
+
+The questions as they were asked:
 
 1. **Edition:** eighth as the spine, with “in older editions” tags (recommended), or seventh / sixth?
 2. **Volume order:** by domain (recommended, section 5), or by life cycle (initiating → closing)?
@@ -162,3 +173,32 @@ Formula-heavy and map-like content suits the laminated cards better than a note:
 7. **Sample note:** Critical Path (recommended: it has a doodle, a sum and a template, so it tests every new element),
    or The Project Charter?
 8. **Size:** six volumes of 13–15 notes (about 85), or fewer, larger notes?
+
+## 10. Vol. 1 notes on the build (2026-11-14)
+
+- `project-1` journal, “The Lay of the Land”; content in `content/project-1/01_what.py` (4 notes), `02_principles.py` (6),
+  `03_ways.py` (5). Story: 12 January → 25 February 2026. Facts: casebook, “Book 3, Vol. 1”.
+- The plan's list changed a little: **What Must I Keep an Eye On?** (the seven domains) was added; the value delivery system
+  and the PMO kept; “What a Project Manager Does” became **What Is My Job Here?**. Titles are the questions; the official
+  term is the kicker and the `covers` line of the PMBOK tag.
+- **Deep dives** (4): What Is It All For? (benefits map, benefit owners, when to stop) · Plan It All, or Learn As We Go?
+  (five questions, what holds a hybrid together, the four life cycles) · What Do I Do When? (the domain × focus-area grid)
+  · How Much Process Do We Need? (four steps, five dials, what can't be tailored away, reviewing the fit).
+  Mark a note in the journal's `deep_dives` set so the index and the map show the “+ deep dive” tag.
+- Generator (`scripts/build_notes.py`): `PROJECT_ATTRS`, `PMBOK_DOMAINS`, `PMBOK_FOCUS`, `PMI_NOTE`; `pmbok_tag()`,
+  `dial_block()`, `deep_dive_block()`, `render_pmbok_map()`; journal fields `pmbok=True`, `deep_dives`, `first_law`,
+  `disclaimer`; `PLANNED_PROJECT`; `PROJECT_DOODLES`. `Doodle.row()` (a row of equal boxes, optional arrows) in `doodle.py`.
+- **PMBOK map**: `content/pmbok/map.py` → `/pmbok/`. It lists principles, domains (with process **counts** only), focus areas,
+  foundations, every note by volume, and an edition crosswalk. **Process names are not printed yet**: add each domain's
+  names when its volume is written and they have been checked against the guide.
+- Skin `.theme-project` (the binder): slate desk, ring holes, a margin line, block-capital titles (Patrick Hand SC), divider-tab
+  section numbers, bulldog-clip figures, `--dom-*` colours for the seven domain tabs. Cover: navy with an amber band.
+- Meanwhile links: focus on value ↔ Grace's strategy on a page; build quality in ↔ Ana's walking skeleton; let the team
+  decide ↔ Grace's product trio; life cycles ↔ Grace's now / next / later.
+- Case file: Book 3 card links to vol. 1; 15 timeline entries (tag `"3"`, red ✎). Landing: a Book 3 shelf row with the map.
+- Verified: all 54 figures on contact sheets, 375 px on every new page, light and dark. PDFs are built by the workflow.
+- **Not verified:** wording against the eighth edition itself. The six principle names, the domain names and the process
+  counts (9 / 6 / 3 / 4 / 7 / 5 / 6) come from PMI's public pages and study guides. The focus-area grid in the deep dive is
+  marked as an illustration. Check both against the guide before deploying, or soon after.
+- Next: Vol. 2, Starting, Steering, Closing (Governance, 9 processes). Start the **project file** page there (charter first)
+  and the first cheat sheet (PMBOK 8 on one page). Open story threads are listed at the end of the casebook section.

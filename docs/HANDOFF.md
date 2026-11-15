@@ -29,8 +29,14 @@ Read in this order:
 | Series 2 · Book 2 (Grace) | `product-5` | Stakeholders & Influence | 15 (Oct 2026 → Mar 2027) |
 | Series 2 · Book 2 (Grace) | `product-6` | Growing the Product | 15 (Apr → Dec 2027) |
 
-Planned: nothing left in Books 1–2 (`PLANNED_2` and `PLANNED_PRODUCT` are empty), Series 1 Vol. 7 AI App Patterns
-(`PLANNED`), Books 3–4 (Sanne: project management; Mo: client management, Korenwolf) in the future log.
+| Series 2 · Book 3 (Sanne) | `project-1` | The Lay of the Land (PMBOK foundations) | 15, 4 with deep dives (Jan → Feb 2026) |
+
+Book 3, *The Project Manager's Notebook*, covers the whole PMBOK Guide (eighth edition): plan, decisions and build notes in
+`docs/HANDOFF-project-manager.md`. It adds the PMBOK map page (`/pmbok/`), a PMBOK tag on each note, the light / standard /
+heavy dial and deep dives.
+
+Planned: nothing left in Books 1–2 (`PLANNED_2` and `PLANNED_PRODUCT` are empty), Book 3 vols. 2–6 (`PLANNED_PROJECT`),
+Series 1 Vol. 7 AI App Patterns (`PLANNED`), Book 4 (Mo: client management, Korenwolf) in the future log.
 
 ## 2. Next steps (owner's decisions)
 
@@ -38,8 +44,8 @@ Planned: nothing left in Books 1–2 (`PLANNED_2` and `PLANNED_PRODUCT` are empt
    fine; the likely cause was a stale cached `bujo.css`, fixed in PR #8 (content-hash `?v=` on assets). **Ask the owner
    to confirm** it now looks right; if not, ask for a screenshot (the sandbox can't open github.io).
 2. **Books 1 and 2 are complete** (PR #16 deployed both Vol. 6s).
-3. Next, if the owner wants more: Book 3 (Sanne, project management) or Book 4 (Mo, client management), both in the
-   future log; they should reuse the casebook, the case file timeline and the meanwhile links.
+3. **Book 3 has started**: Vol. 1 is written and waits for the owner's review and a deploy. Next is Vol. 2 (Governance);
+   see `docs/HANDOFF-project-manager.md` section 10. Book 4 (Mo, client management) is in the future log; they should reuse the casebook, the case file timeline and the meanwhile links.
    New journal keys get their shelf cover automatically (CSS matches `book--architect-*` / `book--product-*`).
 4. For each new volume: add every note to the case file `TIMELINE` (`content/larder/casefile.py`, tag `"1"` or `"2"`),
    add `meanwhile` links where the two books share a scene, record new facts in the casebook, update the future log.

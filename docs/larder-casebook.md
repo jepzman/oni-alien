@@ -534,3 +534,50 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
 - **Handover** of Ordering to the reliability team: game days 14 and 21 Sep; pager 1 Oct; first incident 9 Oct, 18 min.
 - **Architects**: Cho (payments + data) and Dee (mobile + customer apps) grown from May; Cho led ADR 0029 alone in Sep;
   guild every other Thursday; architecture path on the career ladder from Oct.
+
+## Book 3, Vol. 1: Sanne's facts (January → February 2026)
+
+Book 3 follows the PMBOK Guide, eighth edition (6 principles, 7 performance domains, 5 focus areas, 40 processes).
+Plan: `docs/HANDOFF-project-manager.md`. Every number below carries into later volumes (the project file grows).
+
+- **Sanne** joins Monday **12 January 2026** as delivery manager. Her last job: fitting out warehouses (all predictive).
+  Larder's first project manager. Opening is **15 weeks** away (27 April).
+- **Desk sort** (14 Jan): 11 requests → 4 projects (Rotterdam launch, Zuid cold-room replacement, new helpdesk tool for Sam,
+  summer courier hiring drive), 3 products (approvals, customer app, picker app), 4 operations.
+- **Joost's spreadsheet** “Rotterdam v7”: 140 rows, 31 without an owner.
+- **Value chain** (16 Jan, signed by Joost and Femke): outputs = store open and stocked, city set up in the platform,
+  ~40 pickers and couriers trained. Benefits: **500 orders a day by the end of May** (owner Joost), **90 % express on time
+  by the end of the summer** (Joost), **a launch playbook: next city in ≤ 8 weeks** (Femke). Checked at +4 weeks, +12 weeks
+  and the start of Utrecht.
+- **Role card** (19 Jan): **Joost is the sponsor**; steering group Femke, Marco, Priya, Joost, fortnightly. Three triggers go to
+  Joost: date at risk by more than 3 days, a change over €5,000, a change to what customers get at launch.
+- **Environment scan** (21 Jan): cold room and fridges take 8 weeks from order; food-safety registration needed before the
+  first delivery (Tomás with Lena); the lease allows no deliveries before 07:30.
+- **Whole-launch map** (23 Jan): seven workstreams: store fit-out (Joost), people (Joost), stock and suppliers (Tomás),
+  platform set-up (Eli, Ana), apps (Ben, Dee), payments and legal (Cho, Lena), launch marketing (Priya). Orphans found:
+  food-safety registration, charging for 40 e-bikes. Opening hours stay 08:00–22:00 at launch (Tomás proposed 07:00–23:00).
+  The map had **no line for store IT and internet** (see Ana's Vol. 2: the line was ordered 30 March, too late).
+- **Value test** (26 Jan): 71 must-have rows, 47 that help, 22 parked (tote bags, an app animation). Progress is counted as
+  must-haves done / 71 (24 on 26 Jan).
+- **Quality built in** (28 Jan): nightly script for prices, VAT and zones (Eli); label scanned at the shelf; 20 practice orders
+  per new picker at Noord; a weekly end-to-end order through RTM-0; a rehearsal week before go / no-go.
+- **First status report** (30 Jan, 12½ weeks to go): **amber**. Commitments: fridge order by 13 Feb (placed 13 Feb), a first
+  plan by 20 Feb. **Budget €380k** (fit-out and equipment €260k, hiring and training €60k, launch marketing €40k,
+  reserve €20k), confirmed by Marco.
+- **Long view** (2 Feb): fridges with doors, +€14k, ≈ €6k a year less electricity → **reserve €20k → €6k**; first deliveries
+  07:30; unsold food to a Rotterdam food bank daily from week 1.
+- **Planning session** (4 Feb, Ben, Dee, Eli, Tomás, Joost's operations lead): Sanne's own 96-task plan thrown away; the team
+  plans and estimates its own work; three decision levels (team, Sanne, sponsor).
+- **Approach** (9 Feb): fit-out, people, stock, payments and legal predictive; platform, apps and marketing adaptive (two-week
+  sprints). **Shared milestones: fit-out complete 3 Apr, stock on shelves 17 Apr, app ready 20 Apr, go / no-go 24 Apr,
+  opening 27 Apr.**
+- **Seven tabs** (13 Feb, 10 weeks to go): €61k of €380k spent or committed; amber on scope (→ the MoSCoW session of 3 March),
+  stakeholders (neighbours, landlord) and risk (top three: cold-room delivery, hiring on time, StockPilot's rate limit).
+- **Tailoring** (18 Feb): one-page charter and plan, top-15 risk list, one-page status on Fridays, one meeting (Thursdays
+  09:30, 30 min); no communications plan, procurement plan or earned value. Review of the fit: 20 March.
+- **Launch desk** (25 Feb): a supportive PMO of two hours a week (templates, lessons page, launch playbook, a quarterly sheet of
+  all projects for Femke); agreed until Utrecht.
+- Meanwhile links: focus on value ↔ Grace's strategy on a page; build quality in ↔ Ana's walking skeleton; let the team
+  decide ↔ Grace's product trio; plan it all or learn as we go ↔ Grace's now / next / later roadmap.
+- Open threads for Vol. 2 (Governance): the charter, the plan of 20 Feb, phase gates around the five milestones, the decision
+  log shared with Ana (16 Mar), the scope misread corrected 9 Mar, the tailoring review of 20 Mar and the missed internet line.
