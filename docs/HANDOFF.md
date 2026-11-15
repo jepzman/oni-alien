@@ -1,7 +1,8 @@
 # Handoff: Jef's Notes (start here)
 
-Status as of **2026-11-13**. Books 1 and 2 are complete (six volumes each). Both Vol. 6s are deployed together
-(PR #16). Working branch: `claude/design-patterns-notebook-site-6p22em`.
+Status as of **2026-11-15**. Books 1 and 2 are complete (six volumes each). **Book 3, *The Project Manager's Notebook*
+(Sanne, the PMBOK Guide), has vols. 1 and 2 written and deployed** (PR #24, deploy run succeeded 15 Nov 01:58 UTC);
+vols. 3–6 are planned. `main` is the deployed branch; work on a branch and open a PR to `main`.
 
 Read in this order:
 1. This file: state, next steps, how to build/verify/deploy, gotchas.
@@ -9,6 +10,7 @@ Read in this order:
 3. The plan for the book you're writing:
    - Book 1 (Ana, architect): `docs/HANDOFF-solution-architect.md`
    - Book 2 (Grace, product owner): `docs/HANDOFF-product-owner.md`
+   - **Book 3 (Sanne, project manager): `docs/HANDOFF-project-manager.md`** ← the book in progress; start at its section 13
 
 ## 1. What's on the shelf
 
@@ -48,10 +50,11 @@ Caching and Zero-Downtime Change, all deployed. Working branch `claude/design-pa
    fine; the likely cause was a stale cached `bujo.css`, fixed in PR #8 (content-hash `?v=` on assets). **Ask the owner
    to confirm** it now looks right; if not, ask for a screenshot (the sandbox can't open github.io).
 2. **Books 1 and 2 are complete** (PR #16 deployed both Vol. 6s).
-3. **Book 3 has started**: Vols. 1 and 2 are written and wait for the owner's review and a deploy. Next is Vol. 3 (Scope and
-   Schedule); see `docs/HANDOFF-project-manager.md` section 11. Book 4 (Mo, client management) is in the future log; they should reuse the casebook, the case file timeline and the meanwhile links.
+3. **Book 3 is in progress**: Vols. 1 and 2 are live. **Next is Vol. 3, “What, and By When” (Scope and Schedule)**; the
+   step-by-step start is in `docs/HANDOFF-project-manager.md` section 13. Three questions are waiting for the owner there
+   (section 13.1): check PMBOK names against the guide, full ten-chapter deep dives for key items, and a look at the live pages. Book 4 (Mo, client management) is in the future log; they should reuse the casebook, the case file timeline and the meanwhile links.
    New journal keys get their shelf cover automatically (CSS matches `book--architect-*` / `book--product-*`).
-4. For each new volume: add every note to the case file `TIMELINE` (`content/larder/casefile.py`, tag `"1"` or `"2"`),
+4. For each new volume: add every note to the case file `TIMELINE` (`content/larder/casefile.py`, tag `"1"`, `"2"` or `"3"`),
    add `meanwhile` links where the two books share a scene, record new facts in the casebook, update the future log.
 5. Deploy only when the owner asks (see §4).
 
@@ -94,6 +97,18 @@ Caching and Zero-Downtime Change, all deployed. Working branch `claude/design-pa
 - The story's dates and numbers must match the casebook exactly (e.g. 6.2 % baseline, 23,000 perfect orders/week,
   Rotterdam opens 27 Apr 2026, ADR 0002 on 8 Dec 2025).
 
+### Added on 2026-11-15 (Book 3)
+
+- A local preview for checks: `cd public && python3 -m http.server 8765` (run it in the background; it stops after a while).
+  Playwright is pre-installed: `require('playwright')`, `chromium.launch()` with no options.
+- Shell commands that combine a heredoc with file moves can be refused by the sandbox's removal check. Write scripts with
+  the file tool and run them; don't delete scratch folders.
+- Before deploying, **fetch and merge `main`**: other sessions merge to it too. The generated `public/` files conflict by
+  the hundred; resolve the source conflict (`scripts/build_notes.py`), rebuild, `git add -A`.
+- A deploy run now takes about 15 minutes (PDFs for every note). The run does not appear in the Actions list for the
+  first seconds after a merge.
+- Doodle text: use `Doodle.row()` for rows of boxes; with 5 boxes keep labels under 12 characters, with 4 under 15.
+
 ## 6. Recent PRs
 
 | PR | What |
@@ -110,3 +125,5 @@ Caching and Zero-Downtime Change, all deployed. Working branch `claude/design-pa
 | #14 | Book 1 Vol. 4 (Ana, ADRs 0018–0024) + Book 2 Vol. 4 (Grace): 30 notes, timeline, casebook |
 | #15 | Book 1 Vol. 5 (Ana, ADRs 0025–0026) + Book 2 Vol. 5 (Grace): 30 notes, timeline, casebook |
 | #16 | Book 1 Vol. 6 (Ana, ADRs 0027–0029) + Book 2 Vol. 6 (Grace): 30 notes; both books complete |
+| #17–#23 | Cheat sheets, the Deep dives series (six ten-chapter pages), landing page with spine shelves (other sessions) |
+| #24 | Book 3 Vols. 1–2 (Sanne): 30 notes, PMBOK map, Rotterdam project file, binder skin, Book 3 spine shelf |
