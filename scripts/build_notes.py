@@ -106,6 +106,23 @@ PRODUCT_ATTRS = [
     ("Flow", "small steps to customers?", "Value reaches customers in small, frequent steps."),
     ("Low overhead", "light to run?", "Time and ceremony it takes. High = light."),
 ]
+PROJECT_ATTRS = [
+    ("Value focus", "serves the outcome?", "Keeps the project aimed at the benefit, not at the paperwork."),
+    ("Predictability", "dates and costs hold?", "Forecasts get closer to what really happens."),
+    ("Risk reduction", "fewer surprises?", "Trouble is found while it is still cheap."),
+    ("Transparency", "true status visible?", "Anyone can see where the project really is."),
+    ("Stakeholder confidence", "they trust the plan?", "Sponsors and partners believe the updates."),
+    ("Team ownership", "team decides and commits?", "The people doing the work own the plan."),
+    ("Adaptability", "easy to change course?", "Change is absorbed without chaos."),
+    ("Quality built in", "right first time?", "Problems are prevented, not inspected out at the end."),
+    ("Low overhead", "light to run?", "Time and ceremony it takes. High = light."),
+]
+# PMBOK Guide, Eighth Edition: the seven performance domains (binder tabs) and the five focus areas.
+PMBOK_DOMAINS = [("governance", "Governance"), ("scope", "Scope"), ("schedule", "Schedule"), ("finance", "Finance"),
+                 ("stakeholders", "Stakeholders"), ("resources", "Resources"), ("risk", "Risk")]
+PMBOK_FOCUS = ["initiating", "planning", "executing", "monitoring", "closing"]
+PMI_NOTE = ("Independent study notes, written in my own words. Not affiliated with or endorsed by the Project Management "
+            "Institute. PMBOK is a registered mark of the Project Management Institute, Inc.")
 CLOUD_ATTRS = [
     ("Simplicity", "easy to run &amp; explain?", "Few moving parts; the on-call person can understand it at 3 a.m."),
     ("Delivery speed", "fast from commit to prod?", "Short lead time and frequent, small releases."),
@@ -757,6 +774,85 @@ JOURNALS = [
             (15, "handing-over", "Handing Over a Product Area", "growing", "Pass on the why, the people and the open bets, then step back on purpose."),
         ],
     ),
+    dict(
+        key="project-1", vol=1, title="The Lay of the Land", short="the lay of the land",
+        series=2, book="The Project Manager's Notebook", narrator="Sanne", brand="project manager's notebook", book_no=3,
+        title_block=True, sheet_doodles="project",
+        theme="theme-project", fonts="Patrick+Hand+SC", subject="project management",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Winter term · 2029", weekdays=(1, 3), start=date(2029, 1, 9),
+        kicker="the project manager's notebook · book 3 · vol. 1",
+        story="<b>January 2026.</b> Larder has promised its investors six cities by the end of 2027. The second city, Rotterdam, must open on <b>27 April 2026</b>: the store lease is signed. Ana is three months into the architecture and Grace into the product. There is a date, a building and a lot of goodwill, but no plan and nobody whose job is the launch. Sanne joins on 12 January as delivery manager. This volume follows her first seven weeks: working out what kind of thing she has been handed, what good project management rests on, and how much process Rotterdam needs.",
+        lead="Volume 1 of <span class=\"hl\">The Project Manager's Notebook</span>, a plain-words walk through the whole <b>PMBOK Guide</b> (eighth edition). {n} notes in {c} collections: what a project is, the six principles, and the ways of working. Each note is one <b>question a project manager must answer</b>; the official PMBOK term is on the tag under the title. Every note follows <b>Sanne</b> at <b>Larder</b>, in the same months as Ana's and Grace's notebooks. Key notes go further with a <b>going deeper</b> chapter, and every note ends with a <b>try it</b> for your own project.",
+        blurb="What a project is, the six principles, life cycles, focus areas, the seven domains and tailoring: the ground the rest of the PMBOK Guide stands on.",
+        attrs=PROJECT_ATTRS, attrs_title="The nine project ratings", attrs_side="what a good project practice is judged on", ratings_h2="Project ratings",
+        first_law="A project is finished when the benefit shows up, not when the plan is ticked off. Use as much process as the risk needs, and no more.",
+        disclaimer=PMI_NOTE, pmbok=True,
+        deep_dives={"value-delivery-system", "life-cycles", "focus-areas", "tailoring"},
+        handmade=set(),
+        collections=[
+            ("what", "What a project is", "know what you have been handed before you plan it"),
+            ("principles", "The six principles", "what good project management rests on, whatever the method"),
+            ("ways", "Ways of working", "how the work is shaped, watched and sized"),
+        ],
+        catalogue=[
+            (1, "project-product-operations", "Is This a Project?", "what", "Tell a project from a product and from operations, so each gets the right kind of management."),
+            (2, "value-delivery-system", "What Is It All For?", "what", "Follow the chain from strategy to portfolio, programme, project and operations, and from output to benefit."),
+            (3, "project-manager-role", "What Is My Job Here?", "what", "What a project manager does, what the sponsor does, and where the role ends."),
+            (4, "project-environment", "What Was Here Before Me?", "what", "Read the surroundings a project lands in: rules, habits, people and what already exists."),
+            (5, "holistic-view", "See the Whole", "principles", "Treat the project as one connected system, so a fix in one place doesn't break another."),
+            (6, "focus-on-value", "Focus on Value", "principles", "Steer by the benefit the project exists for, not by the list of tasks."),
+            (7, "embed-quality", "Build Quality In", "principles", "Put quality into how the work is done, instead of inspecting for it at the end."),
+            (8, "accountable-leader", "Own the Outcome", "principles", "Lead by taking responsibility for the result, the truth of the status and the people."),
+            (9, "sustainability", "Think Past the Finish", "principles", "Weigh the long-term effect on people, planet and money in every project decision."),
+            (10, "empowered-culture", "Let the Team Decide", "principles", "Give the people doing the work the room, the facts and the trust to decide."),
+            (11, "life-cycles", "Plan It All, or Learn As We Go?", "ways", "Choose a predictive, adaptive or hybrid approach for each part of the work."),
+            (12, "focus-areas", "What Do I Do When?", "ways", "Initiating, planning, executing, monitoring and controlling, closing: five kinds of attention, not five phases."),
+            (13, "performance-domains", "What Must I Keep an Eye On?", "ways", "The seven performance domains: seven things a project manager watches all the way through."),
+            (14, "tailoring", "How Much Process Do We Need?", "ways", "Fit the approach, the documents and the meetings to this project, on purpose."),
+            (15, "pmo", "Who Helps the Project Managers?", "ways", "What a project management office is for, and the lightest version that still helps."),
+        ],
+    ),
+    dict(
+        key="project-2", vol=2, title="Starting, Steering, Closing", short="starting, steering, closing",
+        series=2, book="The Project Manager's Notebook", narrator="Sanne", brand="project manager's notebook", book_no=3,
+        title_block=True, sheet_doodles="project",
+        theme="theme-project", fonts="Patrick+Hand+SC", subject="project management",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Spring term · 2029", weekdays=(1, 3), start=date(2029, 3, 6),
+        kicker="the project manager's notebook · book 3 · vol. 2",
+        story="<b>Late February 2026.</b> Sanne has been at Larder for six weeks. Rotterdam opens on <b>27 April</b>; the team has made its own plan, there are seven workstreams, five shared milestones, a budget of €380k and a reserve of €6k. What the launch still lacks is governance: nobody has written down why it exists, who decides what, when it is allowed to move to the next step, how a change gets agreed, or what “finished” means. This volume follows the launch from its charter to its closing report on 22 May, through a scope misread, a late builder, a forgotten internet line and an opening day.",
+        lead="Volume 2 of <span class=\"hl\">The Project Manager's Notebook</span>: the <b>Governance</b> domain of the PMBOK Guide (eighth edition), all nine of its processes. {n} notes in {c} collections: starting a project properly, making one plan, running and steering the work, and closing it. Each note is one <b>question a project manager must answer</b>, and its template card is a real page of <b>the Rotterdam project file</b>, which grows through the book. Four notes go further with a <b>going deeper</b> chapter.",
+        blurb="The Governance domain: the charter, who decides, phase gates, one plan, sourcing, baselines, running the work, honest status, change control, lessons, handover and closing.",
+        attrs=PROJECT_ATTRS, attrs_title="The nine project ratings", attrs_side="what a good project practice is judged on", ratings_h2="Project ratings",
+        first_law="Governance is a few clear answers, agreed early: why, who decides, when we move on, how we change, and when we are done.",
+        disclaimer=PMI_NOTE, pmbok=True,
+        deep_dives={"project-charter", "project-management-plan", "status-reports", "change-control"},
+        handmade=set(),
+        collections=[
+            ("starting", "Starting", "agree why, who decides, and when the next step may begin"),
+            ("plan", "One plan", "one plan everyone works from, and what was promised"),
+            ("running", "Running and steering", "do the work, see where it stands, change course on purpose"),
+            ("closing", "Closing", "finish properly: learn, hand over, close"),
+        ],
+        catalogue=[
+            (1, "project-charter", "Should This Project Exist?", "starting", "The project charter: one page that says why, what for, who is behind it and within what limits."),
+            (2, "governance-structure", "Who Decides What?", "starting", "A sponsor, a steering group and decision levels, written down before the first hard decision."),
+            (3, "phase-gates", "May We Take the Next Step?", "starting", "Phase gates and go / no-go: agreed criteria, checked at fixed points, with three possible answers."),
+            (4, "project-management-plan", "What's the Plan?", "plan", "One plan that makes scope, dates, money, people and risks agree with each other."),
+            (5, "sourcing-strategy", "Make It, Buy It, or Hire It?", "plan", "Decide what to do yourself and what to buy, and pick the contract that puts each risk in the right hands."),
+            (6, "baselines", "What Exactly Did We Promise?", "plan", "A baseline is the approved version of the plan that progress and changes are measured against."),
+            (7, "directing-the-work", "Is the Work Actually Happening?", "running", "A weekly rhythm that keeps seven workstreams moving and clears what blocks them."),
+            (8, "issue-log", "What's in the Way Right Now?", "running", "An issue is a problem that has already happened: log it, give it an owner and a date, close it."),
+            (9, "quality-assurance", "Is Our Way of Working Working?", "running", "Quality assurance checks the process; quality control checks the result. A project needs both."),
+            (10, "status-reports", "Where Are We, Really?", "running", "Measure against the baseline, forecast the end, and report a colour that follows written rules."),
+            (11, "change-control", "Can We Change That?", "running", "Every change to what was promised is written down, sized, decided by the right person and then built into the plan."),
+            (12, "escalation", "When Do I Take It Upstairs?", "running", "Escalate early, with options and a recommendation, when a decision is above your limit."),
+            (13, "lessons-learned", "What Did We Learn?", "closing", "Capture lessons while they are fresh, sort them, and put them where the next project will trip over them."),
+            (14, "handover", "Who Looks After It Now?", "closing", "Hand the result to the people who will run it, with everything they need and nothing left hanging."),
+            (15, "closing-a-project", "Are We Done?", "closing", "Close on purpose: results accepted, contracts and money settled, benefits handed to their owners, the team released."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
@@ -768,11 +864,18 @@ PLANNED_2 = [
 ]
 PLANNED_PRODUCT = [
 ]
+# Planned volumes of Series 2, book 3 (see docs/HANDOFF-project-manager.md).
+PLANNED_PROJECT = [
+    (3, "What, and By When", "The Scope and Schedule domains: requirements, the work breakdown structure, estimates, critical path and release plans."),
+    (4, "Money and People", "The Finance and Resources domains: budgets, reserves, earned value, getting and leading a team."),
+    (5, "People Outside, and Surprises", "The Stakeholders and Risk domains: engagement, communication, the risk register, responses and reserves."),
+    (6, "Making It Yours", "Tailoring a whole project, a launch playbook, programmes, AI in project work, benefits and growing as a project manager."),
+]
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
     ("Jan 2027", [("↓", "Deep dives, season 2: Replication &amp; Leader Election, Sharding &amp; Partitioning, Indexes &amp; Query Plans"), ("•", "One-page printable cheat sheet per collection")]),
     ("Feb 2027", [("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
-    ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b> (Sanne, the Rotterdam launch): planning, estimation, risks and dependencies, delivery rhythms, status that tells the truth"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
+    ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b>, vols. 3–6 (Sanne): the rest of the PMBOK Guide, one domain at a time, with a project file that grows"), ("•", "Cheat sheets: PMBOK 8 on one page, earned value, critical path"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
     ("Mid 2027", [("↓", "More deep dives: Sign-in &amp; Tokens, Observability &amp; SLOs, Rendering on the Web, Multitenancy"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
     ("Someday", [("•", "Extra notes for Vols. 2, 5 and 6: Debounce &amp; Throttle, Passkeys, Signed Webhooks, Chaos Engineering, Service Catalogues"), ("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
@@ -853,7 +956,24 @@ PRODUCT_DOODLES = (
     '<rect class="d d-thin f-blue" x="160" y="38" width="30" height="24"/><circle class="d f-red" cx="120" cy="10" r="6"/></g></svg>'
     '</div>'
 )
-DESK_DOODLES = {True: SHEET_DOODLES, "architect": SHEET_DOODLES, "product": PRODUCT_DOODLES}
+# Desk doodles around a project manager's sheet: a wall calendar, a binder clip, and a small Gantt chart.
+PROJECT_DOODLES = (
+    '<div class="sheet-doodles" aria-hidden="true">'
+    '<svg class="sd sd-coffee" viewBox="0 0 120 120"><g class="rough">'
+    '<rect class="d d-thin f-paper" x="14" y="22" width="92" height="84" rx="3"/><path class="d d-thin f-red" d="M14 25 a3 3 0 0 1 3 -3 h86 a3 3 0 0 1 3 3 v19 h-92 z"/>'
+    '<path class="d d-thin" d="M34 14 v16 M86 14 v16"/><path class="d d-thin d-soft" d="M14 64 h92 M14 84 h92 M45 44 v62 M76 44 v62"/>'
+    '<circle class="d d-red" cx="60" cy="74" r="9" fill="none"/></g></svg>'
+    '<svg class="sd sd-compass" viewBox="0 0 70 110"><g class="rough">'
+    '<path class="d f-ink" d="M12 40 h46 v52 h-46 z"/><path class="d" d="M22 40 q-6 -30 13 -32 q19 2 13 32" fill="none"/>'
+    '<path class="d d-thin" d="M20 92 q-4 10 15 12 q19 -2 15 -12" fill="none"/></g></svg>'
+    '<svg class="sd sd-pencil" viewBox="0 0 240 80"><g class="rough">'
+    '<rect class="d d-thin f-paper" x="10" y="6" width="220" height="68" rx="3"/>'
+    '<path class="d d-thin d-soft" d="M66 6 v68 M107 6 v68 M148 6 v68 M189 6 v68"/>'
+    '<rect class="d d-thin f-blue" x="22" y="16" width="70" height="10"/><rect class="d d-thin f-y" x="66" y="32" width="84" height="10"/>'
+    '<rect class="d d-thin f-green" x="120" y="48" width="74" height="10"/><path class="d f-red" d="M206 54 l8 8 l-8 8 l-8 -8 z"/></g></svg>'
+    '</div>'
+)
+DESK_DOODLES = {True: SHEET_DOODLES, "architect": SHEET_DOODLES, "product": PRODUCT_DOODLES, "project": PROJECT_DOODLES}
 KEY = '''  <aside class="key" aria-label="Key to the signifiers on this page">
     <h3>Key</h3>
     <ul>
@@ -869,9 +989,10 @@ KEY = '''  <aside class="key" aria-label="Key to the signifiers on this page">
 
 
 def foot(j=None):
-    what = (f"{j['book']} · vol. {j['vol']}" if j and j.get("book") else
-            f"Vol. {j['vol']} · a student's bullet journal on {j['short']}") if j else "a shelf of student bullet journals on software design"
-    return f'<footer class="foot"><span>Jef’s Notes · {what}</span><span>by {AUTHOR}</span></footer>'
+    what = (f"{j['book']} · vol. {j['vol']}" if j.get("book") else
+            f"Vol. {j['vol']} · a student's bullet journal on {j['short']}") if j and "vol" in j else "a shelf of student bullet journals on software design"
+    note = f'\n<p class="foot-note">{j["disclaimer"]}</p>' if j and j.get("disclaimer") else ""
+    return f'<footer class="foot"><span>Jef’s Notes · {what}</span><span>by {AUTHOR}</span></footer>{note}'
 
 
 def asset(name):
@@ -1014,6 +1135,50 @@ def journal(key):
     return next(x for x in JOURNALS if x["key"] == key)
 
 
+def pmbok_tag(j, n):
+    """The PMBOK tag under a project note's title: domain tab(s), the five focus areas (the ones this note touches
+    filled in), the processes and principles it covers, and what older editions called it (note field `pmbok`)."""
+    t = n.get("pmbok")
+    if not t:
+        return ""
+    names = dict(PMBOK_DOMAINS)
+    doms = "".join(f'<span class="dom dom-{d}">{names.get(d, d.title())}</span>' for d in t.get("domains", []))
+    doms = doms or '<span class="dom dom-foundations">Foundations</span>'
+    on = t.get("focus", [])
+    focus = "".join(f'<li{" class=on" if f in on else ""}>{"monitoring &amp; controlling" if f == "monitoring" else f}</li>' for f in PMBOK_FOCUS)
+    rows = [("covers", t["covers"])] if t.get("covers") else []
+    if t.get("processes"):
+        rows.append(("process" if len(t["processes"]) == 1 else "processes", " · ".join(t["processes"])))
+    if t.get("principles"):
+        rows.append(("principle", " · ".join(t["principles"])))
+    if t.get("older"):
+        rows.append(("in older editions", t["older"]))
+    dl = "".join(f"<div><dt>{k}</dt><dd>{v}</dd></div>" for k, v in rows)
+    return (f'  <aside class="pmbok" aria-label="Where this note sits in the PMBOK Guide">\n'
+            f'    <p class="pmbok-top"><a class="pmbok-ed" href="../../pmbok/index.html">PMBOK 8 map</a>{doms}</p>\n'
+            f'    <ol class="focus" aria-label="Focus areas this note touches">{focus}</ol>\n'
+            f'    <dl>{dl}</dl>\n  </aside>')
+
+
+def dial_block(n):
+    """Light / standard / heavy: how much of this practice a small, a typical and a heavy project needs."""
+    cols = "".join(f'    <div class="dial-{k}"><h3>{name}</h3><p class="dial-when">{when}</p>{li(items)}</div>\n'
+                   for k, (name, when, items) in zip(("light", "standard", "heavy"), n["dial"]))
+    return f'  <div class="dial">\n{cols}  </div>'
+
+
+def deep_dive_block(n):
+    """A deep dive: a longer chapter inside a key note. `deep_dive=dict(side=, intro=, parts=[(heading, html, [figs])])`."""
+    d = n.get("deep_dive")
+    if not d:
+        return ""
+    parts = "\n".join(f'  <h3 class="deep-h"><span>{i}</span>{t}</h3>\n{body}\n' + "\n".join(f.html() for f in figs)
+                      for i, (t, body, figs) in enumerate(d["parts"], 1))
+    return (f'  <section class="deep" id="deep" aria-label="Going deeper">\n'
+            f'  <h2><span class="num">＋</span>Going deeper <span class="side">{d.get("side", "for when you need more than the note")}</span></h2>\n'
+            f'  <p class="deep-intro">{d["intro"]}</p>\n{parts}\n  </section>')
+
+
 def render_note(j, n, back=()):
     num, slug, title, ckey, summary = entry(j, n["slug"])
     cname = coll(j, ckey)[1]
@@ -1042,6 +1207,7 @@ def render_note(j, n, back=()):
         f'  <h1><span class="hl">{esc(title)}</span></h1>',
         f'  <div class="tldr">\n    <span class="tag">TL;DR</span>\n    <p>{n["tldr"]}</p>\n  </div>',
         f'  <ul class="chips" aria-label="At a glance">{chips}</ul>',
+        pmbok_tag(j, n),
         KEY,
         h2(1, "problem", j.get("problem_h2", "The problem"), n.get("problem_side", "why do we even need this?")),
         n["problem"], figs("problem_figs"), n.get("problem_after", ""), meanwhile_box(j, n, back),
@@ -1067,8 +1233,9 @@ def render_note(j, n, back=()):
 <pre><code>{esc(code["src"].strip(chr(10))) if code.get("plain") else highlight(code["src"].strip(chr(10)))}</code></pre>
   </div>''',
         f'  <p class="aside">{n["tools"]}</p>' if n.get("tools") else "",
-        h2(4, "tradeoffs", "Gains vs losses", "nothing is free"),
-        f'''  <div class="tchart">
+        deep_dive_block(n),
+        h2(4, "tradeoffs", "Light, standard, heavy", "how much of this do you need?") if n.get("dial") else h2(4, "tradeoffs", "Gains vs losses", "nothing is free"),
+        dial_block(n) if n.get("dial") else f'''  <div class="tchart">
     <div class="gain">
       <h3>What we gain</h3>
       {li(n["gains"])}
@@ -1128,7 +1295,8 @@ def index_list(j, anchors=False):
             if ckey != key:
                 continue
             href = f"#{slug}" if anchors else f"notes/{slug}.html"
-            items.append(f'<li><a href="{href}"><span class="toc-n">{num:02d}</span><span class="toc-t">{esc(title)}'
+            deep = ' <em class="deep-tag">+ goes deeper</em>' if slug in j.get("deep_dives", ()) else ""
+            items.append(f'<li><a href="{href}"><span class="toc-n">{num:02d}</span><span class="toc-t">{esc(title)}{deep}'
                          f'<small>{esc(summary)}</small></span><span class="toc-p">p. {num:02d}</span></a></li>')
         out.append(f'  <h3 class="toc-coll">{name} <span>{esc(blurb)}</span></h3>\n  <ol class="toc">{"".join(items)}</ol>')
     return "\n".join(out)
@@ -1156,7 +1324,7 @@ def counts(j):
 
 
 def render_index(j):
-    return "\n".join([
+    return "\n".join(x for x in [
         head(f"{j['title']} · Jef’s Notes", j["blurb"], 1, j.get("fonts")),
         body_open(j),
         '<a class="skip-link" href="#main">Skip to the index</a>',
@@ -1168,6 +1336,9 @@ def render_index(j):
         f'  <h1 class="cover-title"><span class="hl">{esc(j["title"])}</span></h1>',
         f'  <p class="lead">{j["lead"].format(**counts(j))}</p>',
         story_box(j),
+        ('  <p class="map-link"><a href="../pmbok/index.html"><b>The PMBOK map</b>: every principle, domain and focus area of the guide, '
+         'and the note that covers it →</a><br><a href="../rotterdam/index.html"><b>The Rotterdam project file</b>: every page from '
+         'Sanne\'s binder, in order →</a></p>') if j.get("pmbok") else "",
         KEY,
         '  <h2 id="index"><span class="num">✎</span>Index <span class="side">tap a note to open it</span></h2>',
         index_list(j),
@@ -1175,8 +1346,8 @@ def render_index(j):
         f'''  <ol class="how-to">
     <li><b>{j.get("problem_h2", "The problem")}</b>: {"a scene from the case study where it goes wrong" if j.get("book") else "what breaks without the pattern"}, with a doodle.</li>
     <li><b>Real-life analogy</b>: an everyday version, plus a “{j.get("map_caption", "translate to code").lower()}” table.</li>
-    <li><b>How it solves it</b>: diagrams, steps, vocabulary and a {"template" if j.get("book") else "code"} card.</li>
-    <li><b>Gains vs losses</b>: the trade-off spread.</li>
+    <li><b>How it solves it</b>: diagrams, steps, vocabulary and a {"template" if j.get("book") else "code"} card{". Key notes add a <b>going deeper</b> chapter here" if j.get("deep_dives") else ""}.</li>
+    <li>{"<b>Light, standard, heavy</b>: how much of it a small, a typical and a heavy project needs." if j.get("pmbok") else "<b>Gains vs losses</b>: the trade-off spread."}</li>
     <li><b>Ratings</b>: nine qualities, before → after.</li>
     <li><b>Common pitfalls</b>: each with its fix.</li>
     <li><b>When to use it</b>: and when to skip it.</li>
@@ -1187,8 +1358,8 @@ def render_index(j):
         attrs_block(j),
         '''  <div class="remember">
     <span class="tag">first law</span>
-    <p>Everything in architecture is a trade-off. If you think you've found one that isn't, you haven't found the cost yet.</p>
-  </div>''',
+    <p>FIRSTLAW</p>
+  </div>'''.replace("FIRSTLAW", j.get("first_law", "Everything in architecture is a trade-off. If you think you've found one that isn't, you haven't found the cost yet.")),
         f'''  <div class="export no-print">
     <a class="btn" href="all.html?print">{DL}Export the whole journal as PDF</a>
     {"" if j.get("draft") else f'<a class="btn btn--ghost" href="pdf/{journal_pdf(j)}">Download ready-made PDF</a>'}
@@ -1201,7 +1372,7 @@ def render_index(j):
         '</body>',
         '</html>',
         '',
-    ])
+    ] if x is not None)
 
 
 def render_all(j):
@@ -1268,6 +1439,18 @@ CASEFILE_ITEM = '''    <li class="book book--casefile">
     </li>'''
 
 
+PMBOK_ITEM = '''    <li class="book book--pmbok">
+      <a class="book-cover" href="pmbok/index.html" aria-label="Open the PMBOK map">
+        <span class="book-band" aria-hidden="true"></span>
+        <span class="book-label"><small>book 3 · find your way</small><b>The PMBOK Map</b><i>the guide on one page</i></span>
+      </a>
+      <div class="book-meta">
+        <p>The whole PMBOK Guide (eighth edition) on one page: six principles, seven domains, five focus areas, and the note that covers each.</p>
+        <p class="book-actions"><a class="btn" href="pmbok/index.html">Open the map</a><a class="btn btn--ghost" href="rotterdam/index.html">Project file</a></p>
+      </div>
+    </li>'''
+
+
 def book_items(journals, planned, series=1, book=1, casefile=False):
     books = [CASEFILE_ITEM] if casefile else []
     for j in journals:
@@ -1302,6 +1485,8 @@ SPINE_TITLES = {
     "architect-4": "Integration", "architect-5": "Qualities", "architect-6": "Delivery",
     "product-1": "Discovering", "product-2": "Deciding", "product-3": "Idea to Backlog",
     "product-4": "Measuring", "product-5": "Stakeholders", "product-6": "Growing",
+    "pmbok": "PMBOK Map", "project-1": "Lay of the Land", "project-2": "Start, Steer, Close",
+    "People Outside, and Surprises": "People &amp; Surprises",
     "Docker &amp; Kubernetes": "Docker &amp; K8s",   # cheat sheets are looked up by their full title
 }
 
@@ -1315,7 +1500,9 @@ def spine_shelf(items_html, name, label):
         key = cls.replace("book--", "")
         full = re.search(r"<b>(.*?)</b>", inner).group(1)
         title = SPINE_TITLES.get(key) or SPINE_TITLES.get(full, full)
-        vol = "file" if key == "casefile" else key.rsplit("-", 1)[1] if key.rsplit("-", 1)[-1].isdigit() else str(i + 1)
+        vol = "file" if key == "casefile" else "map" if key == "pmbok" else key.rsplit("-", 1)[1] if key.rsplit("-", 1)[-1].isdigit() else str(i + 1)
+        planned_vol = re.search(r"vol\. (\d+)", inner) if key == "planned" else None
+        vol = planned_vol.group(1) if planned_vol else vol
         on = i == 0
         spines.append(f'<button class="spine {cls}" type="button" role="tab" id="{name}-s{i}" aria-controls="{name}-p{i}" '
                       f'aria-selected="{"true" if on else "false"}" tabindex="{0 if on else -1}">'
@@ -1349,7 +1536,7 @@ def render_landing(sheets=(), dives=()):
         '  <div class="page-meta"><span class="day">The shelf · 2026</span><span class="topic">series · <b>software design</b></span></div>',
         '  <p class="kicker">pattern notes, deep dives, two notebooks and a stack of cheat sheets</p>',
         '  <h1 class="cover-title"><span class="hl">Jef’s Notes</span></h1>',
-        f'  <p class="lead">Software design, in sizes that fit a working day: <b>{n1} pattern notes, {len(dives)} deep dives, {total - n1} notes from two practitioners and {len(sheets)} cheat sheets</b>. More on the way.</p>',
+        f'  <p class="lead">Software design, in sizes that fit a working day: <b>{n1} pattern notes, {len(dives)} deep dives, {total - n1} notes from three practitioners and {len(sheets)} cheat sheets</b>. More on the way.</p>',
         AUTHOR_NOTE,
         '  <h2 id="shelf"><span class="num">✎</span>Pattern notes <span class="side">ten minutes each</span></h2>',
         f'  <p class="hook">{len(series1)} notebooks, {n1} patterns. Each one fits in a coffee break and has a “what we lose” column, because something always is.</p>',
@@ -1357,21 +1544,23 @@ def render_landing(sheets=(), dives=()):
         '  <h2 id="deep-dives"><span class="num">↓</span>Deep dives <span class="side">thirty minutes each</span></h2>',
         f'  <p class="hook">The textbook chapter you were supposed to read, with someone else\'s pencil notes in the margin. {NUMBER_WORDS[len(dives)].capitalize()} so far, each one a pattern after it has met production, with a skim mode for the honest.</p>',
         f'  <ul class="shelf shelf-series">\n{dive_items(dives)}\n  </ul>',
-        '  <h2 id="series-2"><span class="num">✎</span>The Practitioner\'s Notebooks <span class="side">a story in two voices</span></h2>',
+        '  <h2 id="series-2"><span class="num">✎</span>The Practitioner\'s Notebooks <span class="side">a story in three voices</span></h2>',
         '  <noscript><style>.pulled[hidden] { display: grid !important; } .spines { display: none !important; }</style></noscript>',
-        '  <p class="hook">A soap opera about a grocery start-up, told by its architect and its product owner. Nobody dies. Several roadmaps do.</p>',
+        '  <p class="hook">A soap opera about a grocery start-up, told by its architect, its product owner and its project manager. Nobody dies. Several roadmaps do.</p>',
         '  <p>The work <b>around</b> the code, following one company, <b>Larder</b>, as it grows from one city to six. Every note has a template to copy and a <b>try it</b> exercise for your own project. Tap a spine to pull a volume out; start with the case file.</p>',
         '  <h3 class="shelf-book">Book 1 · The Solution Architect\'s Notebook <span>narrated by Ana</span></h3>',
         spine_shelf(book_items([j for j in series2 if j.get("book_no", 1) == 1], PLANNED_2, series=2, book=1, casefile=True), "ana", "Book 1 volumes"),
         '  <h3 class="shelf-book">Book 2 · The Product Owner\'s Notebook <span>narrated by Grace</span></h3>',
         spine_shelf(book_items([j for j in series2 if j.get("book_no", 1) == 2], PLANNED_PRODUCT, series=2, book=2), "grace", "Book 2 volumes"),
+        '  <h3 class="shelf-book">Book 3 · The Project Manager\'s Notebook <span>narrated by Sanne · the PMBOK Guide in plain words</span></h3>',
+        spine_shelf(PMBOK_ITEM + "\n" + book_items([j for j in series2 if j.get("book_no", 1) == 3], PLANNED_PROJECT, series=2, book=3), "sanne", "Book 3 volumes"),
         '  <h2 id="cheatsheets"><span class="num">⌘</span>Cheat sheets <span class="side">thirty seconds each</span></h2>',
         '  <p class="hook">For when you know exactly what you want and have forgotten the flag.</p>',
         '  <p>The commands and decisions you look up twice a week, on a few printable A4 cards. They read fine on a phone too.</p>',
         spine_shelf(cheatsheet_items(sheets), "cheat", "Cheat sheets"),
         '  <h2 id="future"><span class="num">→</span>Future log <span class="side">plans, not promises</span></h2>',
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
-        '  <p class="aside">the architect\'s and the product owner\'s notebooks are complete, six volumes each. Next in that story (★): the project manager and the client manager. The deep dives get a second season too.</p>',
+        '  <p class="aside">the architect\'s and the product owner\'s notebooks are complete, six volumes each, and the project manager\'s has begun (★): the whole PMBOK Guide, one domain per volume. After that: the client manager. The deep dives get a second season too.</p>',
         f'  <div class="future">\n{chr(10).join(months)}\n  </div>',
         '  <h2 id="inside"><span class="num">?</span>What\'s inside <span class="side">four formats, same idea</span></h2>',
         '''  <ol class="how-to">
@@ -1498,12 +1687,166 @@ def render_casefile():
         c.two_books.html(),
         f'  <ul class="bookcards">\n{books}\n  </ul>',
         '  <h2 id="timeline"><span class="num">7</span>The story timeline <span class="side">every note, pinned to its date</span></h2>',
-        '  <p>Read one book from start to end, or follow the story in date order across books. <span class="sig-inline">★</span> story events · <span class="sig-inline">✎</span> Ana’s notebook · <span class="sig-inline sig-2">✎</span> Grace’s notebook.</p>',
+        '  <p>Read one book from start to end, or follow the story in date order across books. <span class="sig-inline">★</span> story events · <span class="sig-inline">✎</span> Ana’s notebook · <span class="sig-inline sig-2">✎</span> Grace’s notebook · <span class="sig-inline sig-3">✎</span> Sanne’s notebook.</p>',
         f'  <div class="future timeline">\n{chr(10).join(months)}\n  </div>',
         '  <p class="aside">the facts on this page are the source of truth for every note. If a note and this page disagree, this page wins (and the note gets fixed).</p>',
         '  <p class="folio">✦</p>',
         '</article>',
         foot(),
+        '</main>',
+        '</body>',
+        '</html>',
+        '',
+    ])
+
+
+def load_pmbok_map():
+    f = CONTENT / "pmbok" / "map.py"
+    spec = importlib.util.spec_from_file_location("pmbok_map", f)
+    mod = importlib.util.module_from_spec(spec)
+    mod.__dict__["Doodle"] = Doodle
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def processes_block(m, link):
+    """Process tables on the PMBOK map, one per domain that has been written (PROCESSES in content/pmbok/map.py)."""
+    names = dict(PMBOK_DOMAINS)
+    out = []
+    for dom, rows in m.PROCESSES:
+        trs = "\n".join(f'      <tr><td>{name}</td><td>{fa}</td><td>{plain}</td><td>{"<br>".join(link(r) for r in refs)}</td></tr>'
+                        for name, fa, plain, refs in rows)
+        out.append(f'  <h3 class="toc-coll"><span class="dom dom-{dom}">{names[dom]}</span> <span>{len(rows)} processes</span></h3>\n'
+                   '  <div class="table-scroll"><table class="maptable">\n    <thead><tr><th scope="col">Process</th><th scope="col">Focus area</th>'
+                   '<th scope="col">In plain words</th><th scope="col">Notes</th></tr></thead>\n    <tbody>\n' + trs + '\n    </tbody>\n  </table></div>')
+    return "\n".join(out) + (f"\n{m.PROCESSES_NOTE}" if out else "")
+
+
+def render_project_file(loaded):
+    """The Rotterdam project file: every template card whose file is under rotterdam/, in book order."""
+    pages = []
+    for j in JOURNALS:
+        if not j.get("pmbok"):
+            continue
+        for num, slug, title, ckey, summary in j["catalogue"]:
+            n = loaded[j["key"]].get(slug)
+            if n and n["code"]["file"].startswith(("rotterdam/", "larder/")):
+                pages.append((j, num, slug, title, n["code"]))
+    toc = "".join(f'<li><a href="#p{i}"><span class="toc-n">{i:02d}</span><span class="toc-t">{esc(c["file"].split("/")[-1])}'
+                  f'<small>{esc(c["note"])}</small></span><span class="toc-p">vol. {j["vol"]} · {num:02d}</span></a></li>'
+                  for i, (j, num, slug, title, c) in enumerate(pages, 1))
+    cards = "\n".join(
+        f'  <h3 class="file-h" id="p{i}"><span>{i:02d}</span>{esc(c["file"].split("/")[-1])} <small>explained in '
+        f'<a href="../{j["key"]}/notes/{slug}.html">{esc(title)}</a> (vol. {j["vol"]} · {num:02d})</small></h3>\n'
+        f'  <div class="card">\n    <div class="card-head"><span>{esc(c["file"])}</span><span>{esc(c["note"])}</span></div>\n'
+        f'<pre><code>{esc(c["src"].strip(chr(10)))}</code></pre>\n  </div>'
+        for i, (j, num, slug, title, c) in enumerate(pages, 1))
+    j = dict(theme="theme-project pmbokmap projectfile", disclaimer=PMI_NOTE)
+    return "\n".join([
+        head("The Rotterdam Project File · Jef’s Notes", "Every page from Sanne's binder for the Rotterdam launch: a complete, worked set of project documents.", 1, "Patrick+Hand+SC"),
+        body_open(j),
+        '<a class="skip-link" href="#main">Skip to the project file</a>',
+        bar(None, 1),
+        '<main id="main" class="desk">',
+        '<article class="sheet">',
+        f'  {ROUGH}',
+        PROJECT_DOODLES,
+        '  <div class="page-meta"><span class="day">Rotterdam · 12 Jan → 22 May 2026</span><span class="topic">book 3 · <b>the worked example</b></span></div>',
+        '  <p class="kicker">the project manager\'s notebook · Sanne\'s binder</p>',
+        '  <h1 class="cover-title"><span class="hl">The Rotterdam Project File</span></h1>',
+        f'  <p class="lead">Every note in <b>The Project Manager\'s Notebook</b> ends its “how” section with a page from Sanne\'s binder. Here they are together, in order: <b>{len(pages)} pages</b> so far, one real project from its first week to its closing report. The numbers carry from page to page: the budget in the charter is the budget in the status report and in the closing report. Copy any page as a starting point; each links to the note that explains it.</p>',
+        '  <p class="map-link"><a href="../pmbok/index.html"><b>The PMBOK map</b>: where each of these pages sits in the guide →</a></p>',
+        '  <h2 id="index"><span class="num">✎</span>Contents <span class="side">tap a page to jump to it</span></h2>',
+        f'  <ol class="toc">{toc}</ol>',
+        '  <h2 id="pages"><span class="num">§</span>The pages <span class="side">in the order Sanne wrote them</span></h2>',
+        cards,
+        '  <p class="aside">this file grows with the book: each new volume adds its pages.</p>',
+        '  <p class="folio">✦</p>',
+        '</article>',
+        foot(j),
+        '</main>',
+        '</body>',
+        '</html>',
+        '',
+    ])
+
+
+def render_pmbok_map(loaded):
+    """The PMBOK map: the whole guide on one page, each item linked to the note that covers it."""
+    m = load_pmbok_map()
+    books = [j for j in JOURNALS if j.get("pmbok")]
+
+    def link(ref):
+        if not ref:
+            return '<span class="todo">to come</span>'
+        key, slug = ref
+        o = journal(key)
+        num, _, title, *_ = entry(o, slug)
+        return f'<a href="../{key}/notes/{slug}.html">{esc(title)}</a> <small>vol. {o["vol"]} · {num:02d}</small>'
+
+    principles = "\n".join(f'    <li><h3>{name}</h3><p>{plain}</p><p class="where">{link(ref)}</p></li>' for name, plain, ref in m.PRINCIPLES)
+    focus = "\n".join(f'    <li><h3>{name}</h3><p>{plain}</p></li>' for name, plain in m.FOCUS)
+    domains = "\n".join(
+        f'      <tr><td><span class="dom dom-{k}">{name}</span></td><td>{q}</td><td class="n">{n}</td><td>{vol}</td></tr>'
+        for k, name, q, n, vol in m.DOMAINS)
+    total = sum(d[3] for d in m.DOMAINS)
+    foundations = "\n".join(f'    <li><b>{what}</b>: {link(ref)}</li>' for what, ref in m.FOUNDATIONS)
+    cross = "\n".join(f'      <tr><td>{a}</td><td>{b}</td><td>{c}</td><td>{d}</td></tr>' for a, b, c, d in m.CROSSWALK)
+    vols = []
+    for j in books:
+        rows = []
+        for num, slug, title, ckey, summary in j["catalogue"]:
+            t = loaded[j["key"]].get(slug, {}).get("pmbok", {})
+            names = dict(PMBOK_DOMAINS)
+            doms = "".join(f'<span class="dom dom-{d}">{names[d]}</span>' for d in t.get("domains", [])) or '<span class="dom dom-foundations">Foundations</span>'
+            deep = ' <em class="deep-tag">+ goes deeper</em>' if slug in j.get("deep_dives", ()) else ""
+            rows.append(f'      <tr><td class="n">{num:02d}</td><td><a href="../{j["key"]}/notes/{slug}.html">{esc(title)}</a>{deep}</td>'
+                        f'<td>{t.get("covers", "")}</td><td>{doms}</td></tr>')
+        vols.append(f'  <h3 class="toc-coll">Vol. {j["vol"]} · {esc(j["title"])} <span>{len(j["catalogue"])} notes</span></h3>\n'
+                    f'  <div class="table-scroll"><table class="maptable">\n    <thead><tr><th scope="col">#</th><th scope="col">The question</th>'
+                    f'<th scope="col">What it covers in the guide</th><th scope="col">Domain</th></tr></thead>\n    <tbody>\n'
+                    + "\n".join(rows) + '\n    </tbody>\n  </table></div>')
+    planned = "".join(f"<li><b>Vol. {v} · {t}.</b> {b}</li>" for v, t, b in PLANNED_PROJECT)
+    j = dict(theme="theme-project pmbokmap", disclaimer=PMI_NOTE)
+    return "\n".join([
+        head("The PMBOK Map · Jef’s Notes", "The PMBOK Guide, eighth edition, on one page: principles, domains, focus areas, and the note that covers each.", 1, "Patrick+Hand+SC"),
+        body_open(j),
+        '<a class="skip-link" href="#main">Skip to the map</a>',
+        bar(None, 1),
+        '<main id="main" class="desk">',
+        '<article class="sheet">',
+        f'  {ROUGH}',
+        PROJECT_DOODLES,
+        '  <div class="page-meta"><span class="day">PMBOK Guide · 8th edition</span><span class="topic">book 3 · <b>find your way</b></span></div>',
+        '  <p class="kicker">the project manager\'s notebook · the guide on one page</p>',
+        '  <h1 class="cover-title"><span class="hl">The PMBOK Map</span></h1>',
+        f'  <p class="lead">{m.LEAD}</p>',
+        '  <h2 id="shape"><span class="num">1</span>The shape of the guide <span class="side">6 · 7 · 5 · 40</span></h2>',
+        m.shape.html(),
+        m.SHAPE,
+        '  <h2 id="principles"><span class="num">2</span>Six principles <span class="side">what good project management rests on</span></h2>',
+        f'  <ol class="maplist">\n{principles}\n  </ol>',
+        '  <h2 id="domains"><span class="num">3</span>Seven performance domains <span class="side">what you watch, all the way through</span></h2>',
+        '  <div class="table-scroll"><table class="maptable">\n    <thead><tr><th scope="col">Domain</th><th scope="col">The question it answers</th>'
+        '<th scope="col">Processes</th><th scope="col">In this book</th></tr></thead>\n    <tbody>\n' + domains +
+        f'\n      <tr class="total"><td></td><td>all seven</td><td class="n">{total}</td><td></td></tr>\n    </tbody>\n  </table></div>',
+        m.DOMAINS_NOTE,
+        processes_block(m, link),
+        '  <h2 id="focus"><span class="num">4</span>Five focus areas <span class="side">what kind of attention the work needs now</span></h2>',
+        f'  <ol class="maplist maplist--focus">\n{focus}\n  </ol>',
+        '  <h2 id="foundations"><span class="num">5</span>The ground under it <span class="side">ideas the guide builds on</span></h2>',
+        f'  <ul class="drivers">\n{foundations}\n  </ul>',
+        '  <h2 id="notes"><span class="num">6</span>Every note, by volume <span class="side">the question, and what it covers</span></h2>',
+        "\n".join(vols),
+        f'  <p>Still to come:</p>\n  <ul class="drivers">{planned}</ul>',
+        '  <h2 id="editions"><span class="num">7</span>If you learned an older edition <span class="side">6th → 7th → 8th</span></h2>',
+        m.EDITIONS,
+        '  <div class="table-scroll"><table class="maptable">\n    <thead><tr><th scope="col"></th><th scope="col">6th (2017)</th><th scope="col">7th (2021)</th>'
+        '<th scope="col">8th (2025)</th></tr></thead>\n    <tbody>\n' + cross + '\n    </tbody>\n  </table></div>',
+        '  <p class="aside">this map grows with the book: each new volume fills in its domains.</p>',
+        '  <p class="folio">✦</p>',
+        '</article>',
+        foot(j),
         '</main>',
         '</body>',
         '</html>',
@@ -1670,6 +2013,10 @@ def main():
                                         pdf=f"{key}/pdf/{pdf_name(c[0], c[1])}") for c in ready]))
     (PUBLIC / "larder").mkdir(exist_ok=True)
     (PUBLIC / "larder" / "index.html").write_text(render_casefile(), encoding="utf-8")
+    (PUBLIC / "pmbok").mkdir(exist_ok=True)
+    (PUBLIC / "pmbok" / "index.html").write_text(render_pmbok_map(loaded), encoding="utf-8")
+    (PUBLIC / "rotterdam").mkdir(exist_ok=True)
+    (PUBLIC / "rotterdam" / "index.html").write_text(render_project_file(loaded), encoding="utf-8")
     sheets = [load_cheatsheet(name) for name in CHEATSHEETS]
     for cs in sheets:
         out = PUBLIC / "cheatsheets" / cs.SLUG
