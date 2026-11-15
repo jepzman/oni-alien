@@ -1,6 +1,7 @@
 # Handoff: The Project Manager's Notebook (Series 2, Book 3)
 
-Status as of 2026-11-15: **Vols. 1 and 2 written (15 notes and 4 deep dives each), not yet deployed. Vols. 3–6 planned.** Decisions in section 9;
+Status as of 2026-11-15: **Vols. 1 and 2 are written and deployed (PR #24; 15 notes each, 4 “going deeper” chapters each).
+Vols. 3–6 are planned. To continue, read section 13 first.** Decisions in section 9;
 what was built in section 10.
 
 Story facts: `docs/larder-casebook.md` (source of truth) and the public case file `/larder/`.
@@ -239,3 +240,69 @@ The questions as they were asked:
 - Book 3 has its own spine shelf on the landing page (`spine_shelf(..., "sanne", ...)`), with the PMBOK map as its first spine.
 - Open question for the owner: should key PMBOK items (critical path, earned value, risk) also get a full ten-chapter
   deep dive in the Deep dives series? The in-note chapters don't replace that format.
+
+## 13. Start here: state and next steps (2026-11-15)
+
+### 13.1 Waiting for the owner
+
+1. **PMBOK names.** Nothing was checked against the eighth edition itself. To check: the six principle names
+   (`content/pmbok/map.py`, `PRINCIPLES`), the seven domain names and process counts 9 / 6 / 3 / 4 / 7 / 5 / 6 (`DOMAINS`),
+   the nine Governance process names and their focus areas (`PROCESSES`), and the grid in the “What Do I Do When?” chapter
+   (marked as an illustration). Fix the data file and the notes' `pmbok` tags, rebuild, redeploy.
+2. **Full deep dives?** The owner asked for “deep-dive-like chapters for key items”. What exists is the lighter in-note
+   “Going deeper” chapter. Asked on 15 Nov whether key PMBOK items (critical path, earned value, risk) should also get a
+   ten-chapter page in the Deep dives series (`content/deep-dives/`, `scripts/dive.py`). No answer yet. Don't build one unasked.
+3. **A look at the live pages**: `/project-1/`, `/project-2/`, `/pmbok/`, `/rotterdam/` and the Book 3 spine shelf on the
+   landing page. The sandbox can't open github.io; only the workflow result was confirmed.
+
+### 13.2 What exists (all on `main`)
+
+| Thing | Where |
+| --- | --- |
+| Vol. 1, The Lay of the Land (15) | `content/project-1/` → `/project-1/` |
+| Vol. 2, Starting, Steering, Closing (15) | `content/project-2/` → `/project-2/` |
+| PMBOK map | `content/pmbok/map.py` → `/pmbok/` (`render_pmbok_map`) |
+| Rotterdam project file (28 pages) | generated from template cards → `/rotterdam/` (`render_project_file`) |
+| Journals, ratings, planned volumes | `scripts/build_notes.py`: `JOURNALS` (`project-1`, `project-2`), `PROJECT_ATTRS`, `PLANNED_PROJECT`, `SPINE_TITLES` |
+| Skin and components | `public/assets/bujo.css`: `.theme-project`, `.pmbok`, `.dial`, `.deep`, `.dom-*`, `.pmbokmap`, `.projectfile` |
+| Story facts | `docs/larder-casebook.md`: “Book 3, Vol. 1” and “Book 3, Vol. 2” |
+
+### 13.3 How to write Vol. 3 (What, and By When: Scope 6 processes, Schedule 3)
+
+1. Branch from `main`. Read the two casebook sections for Book 3 and section 5 of this file (the volume table).
+2. Add the `project-3` journal to `JOURNALS` (copy `project-2`; next term: `"Summer term · 2029"`, a start date in May 2029),
+   remove vol. 3 from `PLANNED_PROJECT`, add `"project-3"` to `SPINE_TITLES`, set `deep_dives`.
+3. Write `content/project-3/*.py`. Copy a note from `content/project-2/02_running.py` for the shape. Every note needs
+   `pmbok=dict(covers=, domains=[…], processes=[…], principles=[…], focus=[…], older=)`, a `dial` (three tuples) and a
+   template card named `rotterdam/NN-name.md` (continue the numbering from 16) so it joins the project file.
+4. Story: it goes **back into January–April 2026**, the same launch, for the scope and schedule work behind what Vol. 2
+   showed. Facts already fixed that Vol. 3 must use: 71 must-haves (6 app Musts from 3 March); milestones 3, 17, 20, 24,
+   27 April; the 4 February planning session; fit-out by a builder (fixed price, handover 3 April, electrical inspection);
+   cold room ordered 13 February with 8 weeks' lead time; first 15 pickers start 30 March; stocking 6–17 April; Grace's
+   release plan of 9 March (R1 30 Mar, R2 13 Apr, R3 Rotterdam → June); must-haves done per week (casebook).
+   New facts to invent and record: the work breakdown of the 71 must-haves by workstream, the estimates behind them, the
+   fit-out's task network with durations (it must give a critical path that ends on 3 April and shows why 5 days of delay
+   mattered on 23 March), float on the non-critical tasks.
+5. Suggested notes (15): Scope: Plan for Scope · Requirements · The Scope Statement · Work Breakdown Structure ★ ·
+   Acceptance and Sign-off (Validate Scope) · Scope Creep (Monitor and Control Scope). Estimating: Analogous, Parametric,
+   Bottom-up · Three-Point Estimates ★ · Estimating with the Team. Schedule: Dependencies and the Network Diagram ·
+   Critical Path ★ · Float and Buffers · Gantt Charts and Milestones · Crashing and Fast-Tracking · Release and Iteration
+   Plans with Burn Charts. ★ = “going deeper”. Link, don't repeat: Grace's story mapping, thin slices, MoSCoW, roadmap vs
+   release plan; Ana's last responsible moment.
+6. Add the Scope and Schedule processes to `PROCESSES` in `content/pmbok/map.py` and link the Vol. column in `DOMAINS`.
+   Names from public summaries: Scope: Plan Scope Management, Elicit and Analyze Requirements, Define Scope, Develop Scope
+   Structure, Monitor and Control Scope, Validate Scope. Schedule: Plan Schedule Management, Develop Schedule, Monitor and
+   Control Schedule. (Unverified, like Governance.)
+7. Case file `TIMELINE` entries (tag `"3"`), a casebook section “Book 3, Vol. 3”, meanwhile links, README and both handoffs.
+8. Cheat sheets that fit this volume (`content/cheatsheets/`, add to `CHEATSHEETS`): PMBOK 8 on one page; critical path.
+9. Verify (section 4 of `docs/HANDOFF.md`): every figure on contact sheets, 375 px, light and dark, listed pages exist.
+   Then merge `main`, PR, and deploy only when the owner asks.
+
+### 13.4 Conventions that held for both volumes
+
+- Title = the question; kicker = the official term. Third person, present tense, dates and numbers in every scene.
+- One mistake of Sanne's per collection, told plainly.
+- Quiz: three recall questions, two situational ones (“what does Sanne do?”).
+- Numbers carry: budget €380k (fit-out €226k, equipment €48k, people €60k, marketing €40k, reserve €20k → €0.4k),
+  final cost €379.6k. Check any new sum against the casebook before writing it into a card.
+- Own words only; no PMI text, tables or figures. The PMI disclaimer is in the footer of every Book 3 page.
