@@ -311,6 +311,9 @@ JOURNALS = [
             (13, "audit-logging", "Audit Logging", "operations", "Record who did what, when and from where, in a log attackers can't quietly edit."),
             (14, "supply-chain", "Supply-Chain Hygiene", "operations", "Pin, scan and verify the packages and images you depend on."),
             (15, "defense-in-depth", "Defence in Depth", "operations", "Stack independent layers so one failure doesn't mean a breach."),
+            (16, "passkeys", "Passkeys", "identity", "Sign in with a key pair kept on the user's device, so there is no password to steal or phish."),
+            (17, "signed-webhooks", "Signed Webhooks", "input", "Check a signature and timestamp on every incoming webhook before trusting it."),
+            (18, "login-throttling", "Rate-Limited Login", "identity", "Slow down and block password guessing per account, per IP and overall."),
         ],
     ),
     dict(
