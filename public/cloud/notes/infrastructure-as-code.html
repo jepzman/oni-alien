@@ -31,7 +31,7 @@
 <article class="sheet" id="infrastructure-as-code">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Tue · 17.11.26</span><span class="topic">collection · <b>infrastructure as code</b></span></div>
-  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question and a try it</p>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “the blueprint”</p>
   <h1><span class="hl">Infrastructure as Code</span></h1>
   <div class="tldr">
@@ -124,6 +124,38 @@ module <span class="s">"web"</span> {
 <span class="c"># merge: terraform apply → from CI with a short-lived role</span></code></pre>
   </div>
   <p class="aside">tools: Terraform / OpenTofu, Pulumi, AWS CloudFormation and CDK, Azure Bicep, Crossplane, Atlantis or Spacelift for PR plans, Checkov/tfsec/Trivy for policy checks, driftctl-style drift detection.</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">splitting state, reading plans, refactoring safely</span></h2>
+  <p class="deep-intro">The note covers plans, remote state and applying from CI. As the code grows, three questions decide whether it stays safe: how much infrastructure one apply can touch, how to read a plan so the dangerous lines stand out, and how to restructure the code without the tool deciding to rebuild your database.</p>
+  <h3 class="deep-h"><span>1</span>How much can one apply touch?</h3>
+  <p>With one big state file, every change is planned against everything: a typo in an alarm can show up next to a change to the network, and one bad apply can damage both. Split the state so a change can only reach what it should.</p>
+  <ul>
+    <li><b>By layer</b>, ordered by how often things change: a foundation layer (network, DNS, base permissions), a data layer (databases, buckets), and an apps layer (services, queues, alarms).</li>
+    <li><b>By environment:</b> separate state for staging and production, ideally in separate accounts.</li>
+    <li><b>Lower layers publish outputs</b> (subnet ids, database endpoints) that upper layers read. Never the other way round.</li>
+  </ul>
+  <p>Smaller states also plan faster and lock less: two teams can apply their own app layers at the same time. Don't split so far that one change needs five applies in the right order; layers that always change together belong together.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 310" role="img" aria-label="Infrastructure split into layers with separate state files. The foundation layer holds the network and DNS and changes a few times a year. The data layer holds databases and buckets and changes monthly. The apps layer holds services and queues and changes daily. Each layer reads the outputs of the layer below it. A mistake in an app change can only touch the apps layer."><g class="rough"><rect class="d f-green" x="140" y="20" width="380" height="62" rx="10"/><path class="d" d="M330 110 L330 86"/><path class="d" d="M335.2 96.8 L330 86 L324.8 96.8"/><rect class="d f-y" x="140" y="112" width="380" height="62" rx="10"/><path class="d" d="M330 202 L330 178"/><path class="d" d="M335.2 188.8 L330 178 L324.8 188.8"/><rect class="d f-blue" x="140" y="204" width="380" height="62" rx="10"/></g><text class="t-head" x="330" y="47" text-anchor="middle" font-size="18">apps</text><text class="t" x="330" y="71" text-anchor="middle" font-size="14">services · queues · alarms</text><text class="t-s" x="580" y="58" text-anchor="start" font-size="16">changes daily</text><text class="t-s" x="100" y="58" text-anchor="end" font-size="15">state</text><text class="t-s" x="342" y="104" text-anchor="start" font-size="14">outputs</text><text class="t-head" x="330" y="139" text-anchor="middle" font-size="18">data</text><text class="t" x="330" y="163" text-anchor="middle" font-size="14">databases · buckets · backups</text><text class="t-s" x="580" y="150" text-anchor="start" font-size="16">changes monthly</text><text class="t-s" x="100" y="150" text-anchor="end" font-size="15">state</text><text class="t-s" x="342" y="196" text-anchor="start" font-size="14">outputs</text><text class="t-head" x="330" y="231" text-anchor="middle" font-size="18">foundation</text><text class="t" x="330" y="255" text-anchor="middle" font-size="14">network · DNS · IAM baseline</text><text class="t-s" x="580" y="242" text-anchor="start" font-size="16">changes yearly</text><text class="t-s" x="100" y="242" text-anchor="end" font-size="15">state</text><text class="t-s t-pen" x="380" y="300" text-anchor="middle" font-size="17">one state file per layer and per environment</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Separate state per layer: a daily change can't delete a yearly one.</figcaption></figure>
+  <h3 class="deep-h"><span>2</span>Reading a plan for the dangerous lines</h3>
+  <p>Most plans are routine. The skill is spotting the few lines that aren't:</p>
+  <ul>
+    <li><b>Replacements</b> (<code>-/+</code>, “must be replaced”): some attribute changes can't be made in place, so the tool destroys and recreates. Harmless for a stateless instance; a disaster for a database or a bucket.</li>
+    <li><b>Deletes</b> you didn't expect, often from a renamed resource or a changed <code>count</code>.</li>
+    <li><b>Permission changes:</b> new IAM policies, wider security groups, public access settings.</li>
+    <li><b>The size of the plan:</b> a one-line code change that plans 40 changes needs explaining.</li>
+  </ul>
+  <p>Don't rely on reviewers alone. Set <code>prevent_destroy</code> on stateful resources, and run <b>policy checks</b> on the plan in CI (Conftest/OPA, Sentinel, Checkov): “no deletes of databases”, “no public buckets”, “every resource is tagged”. A failing policy stops the apply before a person has to notice.</p>
+
+  <h3 class="deep-h"><span>3</span>Refactoring without rebuilding</h3>
+  <p>The tool tracks each resource by its <b>address</b> in the code. Rename a resource, move it into a module, or change a <code>count</code> to a <code>for_each</code>, and the address changes. To the tool that looks like one resource removed and another added: destroy and create.</p>
+  <ul>
+    <li><b>moved blocks</b> (Terraform 1.1+, OpenTofu) record that an address changed. The plan then shows a move, not a rebuild, and the block documents the refactor in code review.</li>
+    <li><b>import blocks</b> bring resources created by hand under management without touching them. Write the code, plan until it shows no changes, then apply the import.</li>
+    <li><b>removed blocks</b> (or <code>state rm</code>) stop managing a resource without destroying it, for handing it to another state.</li>
+  </ul>
+  <p>Always refactor in a change of its own, with no other edits, so the plan should show moves and nothing else. If it shows a destroy, stop.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 230" role="img" aria-label="Renaming a resource safely. Moving a database resource into a module changes its address from aws_db_instance.main to module.db.aws_db_instance.this. Without a moved block, the plan says destroy the old database and create a new, empty one. With a moved block from the old address to the new one, the plan says the resource moved and nothing is destroyed."><g class="rough"><rect class="d f-pink d-red" x="20" y="30" width="330" height="70" rx="10"/><rect class="d f-green" x="410" y="30" width="330" height="70" rx="10"/></g><text class="t-head t-red" x="185" y="61" text-anchor="middle" font-size="17">without “moved”</text><text class="t" x="185" y="85" text-anchor="middle" font-size="14">- destroy main · + create this (empty!)</text><text class="t-head" x="575" y="61" text-anchor="middle" font-size="17">with “moved”</text><text class="t" x="575" y="85" text-anchor="middle" font-size="14">~ main has moved to module.db…this</text><text class="t-s t-pen" x="380" y="150" text-anchor="middle" font-size="17">moved { from = aws_db_instance.main</text><text class="t-s t-pen" x="380" y="176" text-anchor="middle" font-size="17">to = module.db.aws_db_instance.this }</text><text class="t-s" x="380" y="214" text-anchor="middle" font-size="16">and set prevent_destroy on anything stateful</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Same database, new address: tell the tool it moved, or it will rebuild it empty.</figcaption></figure>
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">
