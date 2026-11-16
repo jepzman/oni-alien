@@ -1,8 +1,9 @@
 # Handoff: The Darkside of the Corporation (Series 4)
 
-Status as of 2026-11-16: **planning only. Nothing is built.** This file is the plan: concept, voice, format,
-skin, the eight books ("Acts") with a first draft of every entry, and one fully written sample entry to set the tone.
-Open decisions are in section 10.
+Status as of 2026-11-16: **Act II (The Bestiary) is written and built: 12 entries.** Owner's decisions (16 Nov):
+the company is **MetroVolt Electric Corporation** (a modern city power utility) instead of the gothic placeholder;
+start with Act II; 12 entries per Act; both looks, **candlelight** (default) and **parchment**, with a switch on
+every page. Built pages: section 12. Remaining open decisions: section 10.
 
 ## 1. What the series is
 
@@ -50,18 +51,18 @@ How it differs from the other shelves:
 
 ## 3. The world (recurring cast)
 
-The dungeon: **Grimhollow Global Solutions Ltd**, "a family" (says the poster) of 4,000 souls across nine floors and
+The dungeon: **MetroVolt Electric Corporation**, a city power utility ("Powering Tomorrow, Today™"): 6,200 souls in **The Grid**, a 31-storey glass tower downtown, keeping the lights on for 2.3 million homes. Plus
 a basement nobody goes to. Recurring characters (pronouns stated, keep them consistent):
 
 | Character | Role | Notes |
 | --- | --- | --- |
-| **The Chronicler** (narrator, they/them) | 19 years at Grimhollow, survived 7 reorgs, 4 CEOs and 1 "transformation journey" | writes the entries in the grand voice |
-| **The Annotator** (she/her) | ex-Grimhollow, now freelance, writes the margin notes | the deadpan voice of reason |
+| **The Chronicler** (narrator, they/them) | 19 years at MetroVolt, survived 7 reorgs, 4 CEOs and 1 "transformation journey" | writes the entries in the grand voice |
+| **The Annotator** (she/her) | ex-MetroVolt, now freelance, writes the margin notes | the deadpan voice of reason |
 | **Pip** (he/him) | the apprentice: a junior analyst, level 3, full of hope | the reader stand-in; makes the mistakes |
 | **Lord Varnish** (he/him) | the VP of Synergy | speaks only in frameworks; appears in every Act as a recurring boss |
 | **The Council of the Third Floor** | the leadership team | decisions emerge from it like smoke |
 | **Vexmoor Consulting** | the rival vendor guild | always cheaper on slide 4, never on invoice 9 |
-| **Hargreave Foods** | the difficult client | 11 stakeholders, 0 decision makers |
+| **Hargreave Foods** | the difficult client (a big industrial power customer) | 11 stakeholders, 0 decision makers |
 
 ## 4. Entry format (the grimoire page)
 
@@ -70,7 +71,7 @@ Every entry has the same ten parts, so the series reads like a bestiary and can 
 | # | Section | What it holds |
 | --- | --- | --- |
 | 1 | **Name, sigil and threat level** | creature or curse name, a doodled sigil, 1–5 skulls, habitat ("open-plan, Q4") |
-| 2 | **A sighting** | a short Grimhollow scene: Pip meets the thing, with a date and a number |
+| 2 | **A sighting** | a short MetroVolt scene: Pip meets the thing, with a date and a number |
 | 3 | **Know thy enemy** | why this happens, the real mechanism (incentives, fear, structure), in plain words |
 | 4 | **Signs and omens** | 4–6 early warning signs, as a checklist |
 | 5 | **Counter-spells** | 3–5 moves that work, each with a short **incantation**: the exact words to say or send |
@@ -264,7 +265,7 @@ Eight Acts, 12 entries each, about 96 entries. Your topics are marked ✦; the r
 
 > **The Credit Vampire** · ☠☠☠☠ · *Habitat: steering committees, all-hands slides, any email with "great work team"*
 
-**A sighting.** On the 3rd of March, Pip spent eleven nights building the forecast model that saved the Hargreave
+**A sighting.** On the 3rd of March, Pip spent eleven nights building the forecast model that saved the heatwave
 account. On the 4th, at the all-hands, Dorian from Strategy presented it. Slide 7 said *"Dorian's model."* Pip's
 name appeared nowhere, not even in the font.
 
@@ -292,7 +293,7 @@ asked me to stop saying this.*
 
 **Forbidden spells.**
 - *The Public Staking*: calling them a thief at the all-hands. **Soul cost:** high. You look bitter; they look calm.
-- *The Poisoned File*: sabotaging the next model you hand over. **Soul cost:** total. Hargreave loses money, and so
+- *The Poisoned File*: sabotaging the next model you hand over. **Soul cost:** total. the city browns out, and so
   do you.
 - *The Whisper Campaign*: complaining to everyone at the coffee machine. **Soul cost:** medium. The coffee machine
   reports to Lord Varnish.
@@ -318,11 +319,11 @@ in writing."*
 ## 10. Open decisions
 
 1. **Name:** *The Darkside of the Corporation* as the series title, with *A Survival Grimoire* as subtitle? Or
-   *The Grimoire of Grimhollow*?
+   *The MetroVolt Grimoire*?
 2. **Volume order:** start with **Act II (The Bestiary)**. It's the most fun, every entry stands alone, and it
    sets the voice for the rest. Proposed order: II → I → III → V → IV → VI → VII → VIII.
 3. **Size:** 12 entries per Act (96 total), or 8 per Act for a faster first season (64)?
-4. **Separate world or Larder crossover?** Proposal: separate (Grimhollow), so it can be darker and sillier
+4. **Separate world or Larder crossover?** Proposal: separate (MetroVolt), so it can be darker and sillier
    without spoiling the Larder story; a single "Meanwhile at Larder" easter egg per Act at most.
 5. **Narrator:** one Chronicler plus the Annotator (proposed), or a different narrator per Act?
 6. **Skin default:** dark ("by candlelight") or parchment light?
@@ -337,3 +338,19 @@ in writing."*
 - New pages: `/darkside/` (series index with the eight Acts), `/darkside/bestiary/`, `/darkside/loot/`,
   `/darkside/class/`.
 - Landing page: a `series=4` shelf, `PLANNED_DARKSIDE` list, future-log entry.
+
+## 12. What was built (Act II, 16 Nov 2026)
+
+- Renderer `scripts/grimoire.py` (called from `build_notes.py` main; `grimoire.build(asset)`), content
+  `content/darkside/act-2.py` (an `ACT` dict; `note()` = the Annotator's margin note, injected by the loader).
+- Pages: `/darkside/` (the eight Acts; unwritten ones show as sealed), `/darkside/act-2/` (contents + cast),
+  `/darkside/act-2/<slug>.html` (12 entries). A shelf section on the landing page (`#darkside`, `.book--darkside` in
+  `bujo.css`). Not in `journals.json`, so there are no PDFs yet.
+- Skin: `public/assets/grimoire.css` (`html[data-look="candle"|"parch"]`) and `grimoire.js` (look switch saved in
+  localStorage, difficulty tabs with a no-JS fallback that shows all three).
+- Act II entries: Credit Vampire ★, Meeting Lich, Gaslight Wraith, Bulldozer Ogre, Passive-Aggressive Poltergeist,
+  Coasting Zombie, Doppelgänger, Martyr Banshee, Know-It-All Basilisk, Doom Prophet, Toxic Positivity Siren,
+  Boundary Goblin. Cast with pronouns is in the `cast` list of the content file; keep it consistent in later Acts.
+- Checked: both looks at desktop, 375 px phone width (no horizontal scroll) on the series, Act and entry pages and the landing page.
+- Next: Act I (The Court of Whispers), same format. Extras from section 8 (bestiary index across Acts, class quiz,
+  loot chest) once two Acts exist.

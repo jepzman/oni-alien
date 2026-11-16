@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from doodle import ICONS, Doodle, esc, highlight  # noqa: E402
 import cheatsheet  # noqa: E402
 import dive  # noqa: E402
+import grimoire  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC = ROOT / "public"
@@ -1814,7 +1815,25 @@ def spine_shelf(items_html, name, label):
 NUMBER_WORDS = ["none", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"]
 
 
-def render_landing(sheets=(), dives=()):
+def darkside_items(acts):
+    """Series 4 on the landing page: one cover per live Act of The Darkside of the Corporation."""
+    out = []
+    for no, act in sorted(acts.items()):
+        href = f"darkside/act-{no}/index.html"
+        out.append(f'''    <li class="book book--darkside">
+      <a class="book-cover" href="{href}" aria-label="Open Act {grimoire.ROMAN[no]}: {esc(act['title'])}">
+        <span class="book-band" aria-hidden="true"></span>
+        <span class="book-label"><small>act {grimoire.ROMAN[no]}</small><b>{esc(act['title'])}</b><i>{len(act['entries'])} creatures</i></span>
+      </a>
+      <div class="book-meta">
+        <p>{esc(act['sub'])}. {len(act['entries'])} difficult-colleague creatures, the counter-spells that work and the forbidden spells that backfire.</p>
+        <p class="book-actions"><a class="btn" href="{href}">Open the Act</a><a class="btn btn--ghost" href="darkside/index.html">All eight Acts</a></p>
+      </div>
+    </li>''')
+    return "\n".join(out)
+
+
+def render_landing(sheets=(), dives=(), darkside=None):
     series1 = [j for j in shelf() if j.get("series", 1) == 1]
     series2 = [j for j in shelf() if j.get("series", 1) == 2]
     months = []
@@ -1824,7 +1843,7 @@ def render_landing(sheets=(), dives=()):
     total = sum(len(j["catalogue"]) for j in shelf())
     n1 = sum(len(j["catalogue"]) for j in series1)
     return "\n".join([
-        head("Jef’s Notes", "Software design in sizes that fit a working day: ten-minute pattern notes with doodles and trade-offs, thirty-minute deep dives, two practitioner notebooks that follow one start-up, and printable cheat sheets.", 0, "Architects+Daughter&family=Permanent+Marker&family=IBM+Plex+Sans+Condensed:wght@700"),
+        head("Jef’s Notes", "Software design in sizes that fit a working day: ten-minute pattern notes with doodles and trade-offs, thirty-minute deep dives, two practitioner notebooks that follow one start-up, and printable cheat sheets.", 0, "Architects+Daughter&family=Permanent+Marker&family=IBM+Plex+Sans+Condensed:wght@700&family=Pirata+One&family=IM+Fell+English+SC"),
         body_open(),
         '<a class="skip-link" href="#main">Skip to the shelf</a>',
         bar(None, 0, "shelf"),
@@ -1855,6 +1874,11 @@ def render_landing(sheets=(), dives=()):
         '  <p class="hook">For when you know exactly what you want and have forgotten the flag.</p>',
         '  <p>The commands and decisions you look up twice a week, on a few printable A4 cards. They read fine on a phone too.</p>',
         spine_shelf(cheatsheet_items(sheets), "cheat", "Cheat sheets"),
+        *([
+            '  <h2 id="darkside"><span class="num">☾</span>The Darkside of the Corporation <span class="side">a survival grimoire</span></h2>',
+            '  <p class="hook">Office politics, difficult people, bad managers and layoffs, written up as a bestiary. Funny on the outside, real advice on the inside.</p>',
+            f'  <ul class="shelf shelf-series">\n{darkside_items(darkside)}\n  </ul>',
+        ] if darkside else []),
         '  <h2 id="future"><span class="num">→</span>Future log <span class="side">plans, not promises</span></h2>',
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
         '  <p class="aside">the architect\'s and the product owner\'s notebooks are complete, six volumes each, and the project manager\'s has begun (★): the whole PMBOK Guide, one domain per volume. After that: the client manager. The deep dives get a second season too.</p>',
@@ -2365,7 +2389,8 @@ def main():
         listing.append(dict(key=f"deep-dives/{d['slug']}", title=f"{d['title']} deep dive", all=f"deep-dives/{d['slug']}/index.html",
                             pdf=f"deep-dives/{d['slug']}/pdf/{dive.pdf_name(d)}", notes=[]))
         print(f"[deep-dives] wrote {d['slug']} ({len(d['chapters'])} chapters)")
-    (PUBLIC / "index.html").write_text(render_landing(sheets, dives), encoding="utf-8")
+    darkside = grimoire.build(asset)
+    (PUBLIC / "index.html").write_text(render_landing(sheets, dives, darkside), encoding="utf-8")
     (PUBLIC / "journals.json").write_text(json.dumps(listing, indent=1), encoding="utf-8")
     # old links from before the shelf existed (everything was the distributed journal)
     old = PUBLIC / "notes"
