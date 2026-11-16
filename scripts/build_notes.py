@@ -2204,6 +2204,9 @@ def load_content(key):
     for slug, rev in REVISIONS.get(key, {}).items():
         if slug in notes:
             apply_revision(notes[slug], rev)
+            r = notes[slug].get("revised")
+            if rev.get("deep_dive") and r and "going-deeper" not in r[1]:
+                notes[slug]["revised"] = (r[0], r[1].replace(" and a try it", ", a try it") + " and a going-deeper chapter")
     return notes
 
 
