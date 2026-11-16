@@ -871,6 +871,46 @@ JOURNALS = [
             (15, "closing-a-project", "Are We Done?", "closing", "Close on purpose: results accepted, contracts and money settled, benefits handed to their owners, the team released."),
         ],
     ),
+    dict(
+        key="project-3", vol=3, title="What, and By When", short="what, and by when",
+        series=2, book="The Project Manager's Notebook", narrator="Sanne", brand="project manager's notebook", book_no=3,
+        title_block=True, sheet_doodles="project",
+        theme="theme-project", fonts="Patrick+Hand+SC", subject="project management",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Summer term · 2029", weekdays=(1, 3), start=date(2029, 5, 8),
+        kicker="the project manager's notebook · book 3 · vol. 3",
+        story="<b>February → April 2026, again.</b> Vol. 2 followed the Rotterdam launch from its charter to its closing report: who decided, how it was steered, how it ended. This volume goes back over the same weeks for the two questions every plan rests on: <b>what exactly</b> will be delivered, and <b>by when</b>. Here are the 71 must-haves broken down, the estimates behind the plan of 20 February, the builder's network of twelve activities and the one path through it that set the handover date, and what happened to that path when an electrical inspector re-booked on 23 March.",
+        lead="Volume 3 of <span class=\"hl\">The Project Manager's Notebook</span>: the <b>Scope</b> and <b>Schedule</b> domains of the PMBOK Guide (eighth edition), all nine of their processes. {n} notes in {c} collections: pinning down what will be delivered, estimating how big it is, turning work into dates, and holding scope and dates where they were promised. Every number comes from one worked example, the Rotterdam launch, and its template card is a page of <b>the Rotterdam project file</b>. Four notes go further with a <b>going deeper</b> chapter: the work breakdown structure, three-point estimates, the critical path and schedule tracking.",
+        blurb="The Scope and Schedule domains: requirements, the scope statement, the work breakdown structure, estimates as ranges, the network, critical path, float, Gantt charts, crashing and fast-tracking, tracking dates, acceptance and scope creep.",
+        attrs=PROJECT_ATTRS, attrs_title="The nine project ratings", attrs_side="what a good project practice is judged on", ratings_h2="Project ratings",
+        first_law="A date is only as good as the list of work under it and the longest chain through that work. Find both before you promise.",
+        disclaimer=PMI_NOTE, pmbok=True,
+        deep_dives={"work-breakdown-structure", "three-point-estimates", "critical-path", "schedule-tracking"},
+        handmade=set(),
+        collections=[
+            ("scope", "What, exactly?", "pin down what will be delivered, and what won't"),
+            ("estimating", "How big is it?", "estimate honestly, as a range, with the people who do the work"),
+            ("schedule", "By when?", "turn work and estimates into dates you can defend"),
+            ("control", "Holding the line", "keep dates and scope where they were promised, or move them on purpose"),
+        ],
+        catalogue=[
+            (1, "scope-schedule-approach", "How Will We Pin It Down?", "scope", "Decide, before you start, how scope and dates will be defined, detailed, measured and changed."),
+            (2, "requirements", "What Do They Actually Need?", "scope", "Draw needs out of the people who will live with the result, and trace each one to something you'll deliver and check."),
+            (3, "scope-statement", "What's In, and What's Out?", "scope", "One page that names the deliverables, how each will be accepted, and what is deliberately left out."),
+            (4, "work-breakdown-structure", "How Do We Break It Down?", "scope", "Break the whole result into smaller deliverables until each piece can be owned, estimated and checked."),
+            (5, "estimating-methods", "How Long, Roughly?", "estimating", "Three ways to estimate: from a similar past job, from a rate, or by adding up the parts."),
+            (6, "three-point-estimates", "How Sure Are We?", "estimating", "Ask for the best case, the likely case and the worst case, and turn them into a range with odds."),
+            (7, "estimating-with-the-team", "Who Should Guess?", "estimating", "Let the people who do the work estimate, independently first, so nobody's number anchors the rest."),
+            (8, "network-diagram", "What Waits for What?", "schedule", "Draw which activities wait for which, including waits on things outside the project."),
+            (9, "critical-path", "What Decides the Finish Date?", "schedule", "The longest chain of dependent activities sets the end date. Find it, and watch it."),
+            (10, "float-and-buffers", "How Much Can This Slip?", "schedule", "Float is how late an activity can be without moving the end; a buffer is slack you put in on purpose."),
+            (11, "gantt-and-milestones", "How Do We Show the Dates?", "schedule", "A milestone chart for the people who decide, a Gantt chart for the people who do the work."),
+            (12, "crashing-and-fast-tracking", "Can We Go Faster?", "schedule", "Two ways to shorten a schedule: pay to speed up critical work, or overlap work that was meant to follow."),
+            (13, "schedule-tracking", "Are We Still on Time?", "control", "Track predictive work by its milestones and float, adaptive work by a burn-up, and forecast both every week."),
+            (14, "validate-scope", "Is This What We Asked For?", "control", "The people who asked for each deliverable formally accept it against criteria agreed in advance."),
+            (15, "scope-creep", "Where Did That Come From?", "control", "Small, unapproved additions eat the schedule quietly. Make every addition a decision."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
@@ -884,7 +924,6 @@ PLANNED_PRODUCT = [
 ]
 # Planned volumes of Series 2, book 3 (see docs/HANDOFF-project-manager.md).
 PLANNED_PROJECT = [
-    (3, "What, and By When", "The Scope and Schedule domains: requirements, the work breakdown structure, estimates, critical path and release plans."),
     (4, "Money and People", "The Finance and Resources domains: budgets, reserves, earned value, getting and leading a team."),
     (5, "People Outside, and Surprises", "The Stakeholders and Risk domains: engagement, communication, the risk register, responses and reserves."),
     (6, "Making It Yours", "Tailoring a whole project, a launch playbook, programmes, AI in project work, benefits and growing as a project manager."),
@@ -892,7 +931,7 @@ PLANNED_PROJECT = [
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
     ("Jan 2027", [("↓", "Deep dives, season 2: Replication &amp; Leader Election, Sharding &amp; Partitioning, Indexes &amp; Query Plans"), ("•", "One-page printable cheat sheet per collection")]),
-    ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b>, vols. 3–6 (Sanne): the rest of the PMBOK Guide, one domain at a time, with a project file that grows"), ("•", "Cheat sheets: PMBOK 8 on one page, earned value, critical path")]),
+    ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b>, vols. 4–6 (Sanne): the rest of the PMBOK Guide, one domain at a time, with a project file that grows"), ("•", "Cheat sheets: PMBOK 8 on one page, earned value, critical path")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations")]),
     ("Mid 2027", [("↓", "More deep dives: Sign-in &amp; Tokens, Observability &amp; SLOs, Rendering on the Web, Multitenancy"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
     ("Someday", [("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
@@ -1704,7 +1743,7 @@ SPINE_TITLES = {
     "architect-4": "Integration", "architect-5": "Qualities", "architect-6": "Delivery",
     "product-1": "Discovering", "product-2": "Deciding", "product-3": "Idea to Backlog",
     "product-4": "Measuring", "product-5": "Stakeholders", "product-6": "Growing",
-    "pmbok": "PMBOK Map", "project-1": "Lay of the Land", "project-2": "Start, Steer, Close",
+    "pmbok": "PMBOK Map", "project-1": "Lay of the Land", "project-2": "Start, Steer, Close", "project-3": "What, By When",
     "People Outside, and Surprises": "People &amp; Surprises",
     "Docker &amp; Kubernetes": "Docker &amp; K8s",   # cheat sheets are looked up by their full title
 }

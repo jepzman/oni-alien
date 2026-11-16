@@ -12,8 +12,10 @@ def esc(s):
 class Doodle:
     """Tiny helper for hand-drawn SVG: shapes go in a wobbly group, text stays crisp."""
 
-    def __init__(self, w, h, label, caption="", small=False):
-        self.w, self.h, self.label, self.caption, self.small = w, h, label, caption, small
+    def __init__(self, w, h, label, caption="", small=False, exact=False):
+        """exact=True: font sizes passed to box(), text(), note() etc. are applied as inline styles, so they win over
+        the stylesheet's fixed sizes (.t 19px, .t-head 21px). Off by default, so existing figures render unchanged."""
+        self.w, self.h, self.label, self.caption, self.small, self.exact = w, h, label, caption, small, exact
         self.shapes, self.texts, self.defs = [], [], []
 
     # shapes ------------------------------------------------------
@@ -156,6 +158,8 @@ class Doodle:
     def html(self):
         shapes = "".join(self.shapes)
         texts = "".join(self.texts)
+        if self.exact:
+            texts = re.sub(r' font-size="([\d.]+)"', r' style="font-size:\1px"', texts)
         swipe = "" if self.small else '<p class="swipe">← swipe to see the whole drawing →</p>'
         cap = f"<figcaption>{self.caption}</figcaption>" if self.caption else ""
         cls = "fig fig--small" if self.small else "fig"

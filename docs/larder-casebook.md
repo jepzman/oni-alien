@@ -615,7 +615,7 @@ Vol. 2 covers the Governance domain (nine processes). Every template card is a p
   router with backup SIM (€600). I-09 builder late; I-14 two blocking snags; I-19 / I-20 Grace's two reds. Totals at closing:
   23 raised, 21 closed, 2 handed over (I-21 street numbers in zone RTM-2, I-23 Saturday slots).
 - **Escalation** (23 Mar): builder forecast handover 8 April (electrical inspection re-booked). Option B chosen by Joost at
-  16:00: two weekends of work, €5k, handover held on 3 April.
+  16:00: work on the weekend of 28–29 March, €5k, handover held on 3 April.
 - **Status of 27 Mar**: amber; 49 of 71 done; €322k committed; forecast 65 of 71 at 4 a week. Colour rules: schedule red if
   more than 3 days late; scope amber at 4–8 behind the plan line; finance amber when the reserve is in use.
 - **Change log**: C-01 fridges with doors +€14k (Marco, 2 Feb) · C-02 weekend work +€5k (Joost, 23 Mar) · C-03 approvals in
@@ -631,3 +631,69 @@ Vol. 2 covers the Governance domain (nine processes). Every template card is a p
   change control ↔ Ana's trade-off sliders; handover ↔ Grace's hypercare.
 - Open threads for Vol. 3 (Scope and Schedule): goes back into the same months for the 71 must-haves as a work breakdown,
   the estimates behind the 4 February plan, the network and critical path of the fit-out, the release plan of 9 March.
+
+## Book 3, Vol. 3: Sanne's facts (February → April 2026, Scope and Schedule)
+
+Vol. 3 goes back over the same weeks as Vol. 2 for the scope and schedule work behind the plan. Template cards are
+project-file pages 16–30. Two Vol. 2 slips were corrected on the way: the builder's extra work was **one weekend
+(28–29 March)**, not two; and on 10 April the last three weeks had finished **4, 6 and 5** (not 6, 5 and 9).
+
+- **Estimating session** (4 Feb): Sanne anchored the platform estimate (“Zuid took about two weeks?”) → all said 10.
+  Redone as wideband Delphi: 8, 10, 12, 24 (Eli: deposits need their own VAT rate; zone edges cut through streets) →
+  round 2: 10, 12, 12, 14. **Apps: 14 Musts = 61 story points; capacity for Rotterdam 8–10 points a sprint** (approvals
+  runs alongside) ≈ 7 sprints, 5 available → to Grace → her MoSCoW of 3 Mar: 6 Musts = **26 points ≈ 3 sprints**.
+- **First estimates** (5 Feb, answer to Femke: “it fits, with no spare week; the fit-out is the long pole”):
+  fit-out analogous from **Zuid (6 weeks, 520 m², incl. 1 week floor re-work)** → Rotterdam **600 m²**: 5–7 weeks;
+  stocking parametric **2,500 products × 2½ min ≈ 104 h** (15 person-days) but deliveries over 10 working days;
+  training ≈ 50 person-days; platform set-up bottom-up, 9 pieces, 12 days.
+- **Cold room**: the supplier quoted “up to 8 weeks”; on ordering (13 Feb) it **confirmed delivery for Fri 27 March**
+  (panels leave the factory on the 26th; an earlier date was refused).
+- **Three-point** (6 Feb): **Kees**, the builder's site manager: fit-out **22 / 25 / 34** working days (worst: inspection
+  re-booked, materials late, slow curing) → PERT **26 ± 2**; P(25) ≈ 31 %, expected Tue 7 Apr, 84 % by Thu 9 Apr.
+  Eli: platform **8 / 12 / 24** → 13⅓ ± 2⅔. Weekend work priced on **12 Feb: one weekend ≈ €5,000**.
+- **Rules for scope and schedule** (10 Feb): unit = a must-have with owner and “done means”; predictive work in working
+  days (Mon–Fri), adaptive in two-week sprints; rolling wave (detail 4 weeks ahead); calendar: **builder off on Easter
+  Monday 6 Apr**; **27 April, opening day, is King's Day** (store and couriers work; offices and builders don't).
+- **Requirements** (Noord's Friday peak walked; workshop 12 Feb with Tomás, Joost's ops lead, Sam, Lena; Grace's
+  prototype findings; Zuid's opening): **96 requirements → 71 must-haves (each traced), 18 “helps”, 7 rejected**.
+  Examples: R-08 ≤ 2 pickers waiting at the cold room at peak (→ wider door + layout; second door deferred, C-06);
+  R-12 cold room 2–4 °C, alarm > 5 °C for 15 min; R-23 100 % prices + VAT before stocking; R-31 40 e-bikes charged by 07:30
+  (three-phase supply, must-have F-09); R-44 buttons ≥ 12 mm; R-57 food-safety registration.
+- **Scope statement** (16 Feb): result = a dark store serving zones **RTM-1 to RTM-3**; 8 deliverable groups; hypercare IN;
+  a separate Rotterdam landing page OUT (the waitlist page gets a city field; the promo code came back as extra E1).
+- **WBS** (17 Feb; app branch cut 6 Mar; baselined 13 Mar): 1.0 project management (no must-haves, ≈ 6 % of effort);
+  fit-out 16 · people 9 · stock 10 · platform 12 · apps 6 · payments + legal 9 · marketing 5 · opening + hypercare 4 = 71.
+  Fit-out level 3: building works, cold room + fridges, shelving, e-bike charging, **1.1.5 store systems online** (Eli).
+  The builder's quote said **“data cabling to the comms cabinet; connectivity by client”**: the internet line was a
+  missing work package in 1.1.5 (Sanne's mistake: she skipped the “small print” check). Added 23 Mar; count stays 71.
+- **Fit-out network** (with Kees, 19 Feb; working days, day 1 = Mon 2 Mar): A strip-out 3 · B first fix 4 (A) ·
+  C plumbing 3 (A) · D screed + curing 7 (C) · E walls, ceiling 5 (B) · F second fix 4 (E) · G inspection 1 (F; booked
+  **Tue 24 Mar**) · H paint 3 (G, D) · I cold-room build 3 (D; delivery 27 Mar) · J energise + 48 h test 2 (I, G) ·
+  K shelving, fridges, chargers 3 (H) · L snags 2 (K) · handover after J, L. Sanne's first chart (12 Feb) had bars and no
+  links (her mistake in the schedule collection).
+- **Critical path** (20 Feb): **A-B-E-F-G-H-K-L = 25 days → Fri 3 Apr**. C and D: 4 days' total float (C has no free
+  float). I-J: zero float, held by the delivery date. **23 Mar**: inspection re-booked to **Thu 26 Mar** (+2 working
+  days) → handover **Wed 8 Apr** (Easter Monday off) = 5 calendar days → escalated → crash: builder works **Sat 28 and
+  Sun 29 Mar** on paint (C-02, €5,000 = €2,500 a day) → back to 3 Apr. Afterwards both chains end on day 25.
+- **Float** (24 Feb): the plumber asked to start a week late; allowed **two days (starts Mon 9 Mar, done Wed 11 Mar)**,
+  leaving two for the screed. No project buffer; feeding buffer for the cold room refused → confirmation call 20 Mar.
+- **Three views** (from 20 Feb / 13 Mar): milestone chart for the steering group (6 milestones incl. G5), summary for the
+  leads, detailed Gantt for the builder; sprint boards and the burn-up for adaptive teams.
+- **Schedule tracking**: must-haves done 26 Feb 33 · 5 Mar 34 · 12 Mar 41 · **19 Mar 45** · 27 Mar 49 (plan 52) · 3 Apr 55 ·
+  10 Apr 60 · 17 Apr 69 · 24 Apr 69 · 26 Apr 71; plan line 33 → 71 (26 Feb → 24 Apr). Forecast on 27 Mar: weeks of 7, 4, 4
+  → 17 Apr to 3 May. Milestone forecasts: G1 3 Apr except 8 Apr on 23 Mar; G3 app ready off the chart (“mid-May”) on
+  20 and 27 Feb, 20 Apr from 6 Mar, 22 Apr on 20–27 Mar, 20 Apr from 3 Apr.
+- **Acceptance**: G2 (17 Apr) the scan check was 100 %, but **aisles 14 and 15 carried Noord's aisle codes**; Tomás
+  rejected them; relabelled 18–19 Apr; accepted **20 Apr**. Lena accepted payments + legal 13 Apr; Grace the app 20 Apr
+  (real orders in RTM-1, -2, -3); Priya marketing 24 Apr.
+- **Scope creep** (27 Mar, Sanne's mistake in the control collection): nine unlogged extras since the baseline, ≈ 7
+  team-days (5 from Ben, Dee, Eli): E1 promo code (kept) · E2 Friday 21:00–22:00 slot (after opening) · E3 neighbourhood
+  names (after) · E4 English shelf labels (kept) · E5 tour video (kept) · E6 store dashboard for Yara (after) · E7 Rotterdam
+  test data (kept) · E8 courier route cards (kept) · E9 waitlist email variants (after). Rule: every addition on the extras
+  list, decided Thursdays.
+- Meanwhile links: requirements ↔ Grace's prototype testing; WBS ↔ Grace's story mapping; critical path ↔ Ana's last
+  responsible moment; Gantt and milestones ↔ Grace's roadmap vs release plan; acceptance ↔ Grace's definition of done;
+  scope creep ↔ Grace's request triage.
+- Open threads for Vol. 4 (Finance and Resources): the €380k budget built bottom-up from the WBS, the reserve (20 → 0.4),
+  cash flow of the builder's payments and retention, earned value on the fit-out, hiring 40 people under a cap of four
+  new office hires, training at Noord, the electrician crew shared by B and F, the e-bike lease.

@@ -1,7 +1,7 @@
 # Handoff: The Project Manager's Notebook (Series 2, Book 3)
 
-Status as of 2026-11-15: **Vols. 1 and 2 are written and deployed (PR #24; 15 notes each, 4 “going deeper” chapters each).
-Vols. 3–6 are planned. To continue, read section 13 first.** Decisions in section 9;
+Status as of 2026-11-16: **Vols. 1 and 2 are deployed (PR #24). Vol. 3 is written, not yet deployed (section 14).
+Vols. 4–6 are planned. To continue, read sections 13 and 14 first.** Decisions in section 9;
 what was built in section 10.
 
 Story facts: `docs/larder-casebook.md` (source of truth) and the public case file `/larder/`.
@@ -267,7 +267,7 @@ The questions as they were asked:
 | Skin and components | `public/assets/bujo.css`: `.theme-project`, `.pmbok`, `.dial`, `.deep`, `.dom-*`, `.pmbokmap`, `.projectfile` |
 | Story facts | `docs/larder-casebook.md`: “Book 3, Vol. 1” and “Book 3, Vol. 2” |
 
-### 13.3 How to write Vol. 3 (What, and By When: Scope 6 processes, Schedule 3)
+### 13.3 How to write the next volume (written for Vol. 3; the same steps held for it, so reuse them for Vol. 4)
 
 1. Branch from `main`. Read the two casebook sections for Book 3 and section 5 of this file (the volume table).
 2. Add the `project-3` journal to `JOURNALS` (copy `project-2`; next term: `"Summer term · 2029"`, a start date in May 2029),
@@ -306,3 +306,31 @@ The questions as they were asked:
 - Numbers carry: budget €380k (fit-out €226k, equipment €48k, people €60k, marketing €40k, reserve €20k → €0.4k),
   final cost €379.6k. Check any new sum against the casebook before writing it into a card.
 - Own words only; no PMI text, tables or figures. The PMI disclaimer is in the footer of every Book 3 page.
+
+## 14. Vol. 3 notes on the build (2026-11-16)
+
+- `project-3` journal, “What, and By When”: the **Scope** (6) and **Schedule** (3) domains. Content in
+  `content/project-3/01_scope.py` (4 notes), `02_estimating.py` (3), `03_schedule.py` (5), `04_control.py` (3).
+  The story goes back over **February → April 2026**: the work behind Vol. 2's plan. Facts: casebook, “Book 3, Vol. 3”.
+- Process → notes (also on the map): Plan Scope Management + Plan Schedule Management → “How Will We Pin It Down?” ·
+  Elicit and Analyze Requirements → requirements · Define Scope → scope statement · Develop Scope Structure → WBS ·
+  Develop Schedule → the three estimating notes and five schedule notes · Monitor and Control Schedule → tracking ·
+  Validate Scope → acceptance · Monitor and Control Scope → scope creep.
+- **Going deeper** (4): WBS (nouns not verbs, the 100 % rule and three checks, the dictionary, WBS vs story map) ·
+  three-point estimates (formulas, odds, adding estimates, limits) · critical path (both passes by hand, calendars,
+  paths that change) · schedule tracking (milestone trend chart, burn-up, range forecast, float).
+- **One worked example** runs through notes 08–12: the builder's 12-activity network (in the casebook). Its numbers were
+  checked by a script: critical path 25 working days; C/D 4 days' float; the 23 March slip (+2 working days on G) gives
+  8 April only because the builder doesn't work on Easter Monday. Keep that calendar fact if you touch the network.
+- Sanne's mistakes: skipping the supplier small-print check (WBS: the internet line), anchoring the estimate (4 Feb),
+  a bar chart with no links (12 Feb), no owner for the yes on extras (scope creep).
+- **Vol. 2 corrected** while writing: one weekend of builder's work (28–29 March), not two; the 10 April quiz counts
+  (4, 6, 5); the 27 March deep-dive counts (7, 4, 4). Casebook updated to match.
+- New helper: `Doodle(..., exact=True)` (see `docs/HANDOFF.md` §5). Used on five dense Vol. 3 figures only.
+- Project file: 43 pages (vols. 1–3). Map: Scope and Schedule rows filled, Vol. 3 linked.
+- Verified: 53 figures on contact sheets, every new page at 375 px, light and dark, page-level views. PDFs left to the
+  workflow. **Not verified against the guide**: the nine Scope and Schedule process names (from public summaries).
+- **Next: Vol. 4, “Money and People”** (Finance 4 processes, Resources 5). Open threads are at the end of the casebook's
+  “Book 3, Vol. 3”. Suggested “going deeper”: the budget and its reserves, earned value, resource levelling. Earned value
+  can use the fit-out network and the €148k fixed price, so the numbers stay one example. Cheat sheets that fit: earned
+  value; critical path (from this volume).
