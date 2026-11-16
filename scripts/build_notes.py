@@ -1002,11 +1002,36 @@ def asset(name):
     return f"assets/{name}?v={digest}"
 
 
-def stamp_handmade(path):
-    """Hand-made notes link the assets directly; give them the same version tags."""
+def stamp_handmade(path, j=None):
+    """Hand-made notes link the assets directly; give them the same version tags. With the journal, also bring
+    them up to date like the generated notes: linked related notes, seen-at-Larder and cheat-sheet asides, and
+    the additions from content/<key>/revisions.py (extra quiz questions, try it, revised stamp). Every injected
+    block sits between <!-- gen:NAME --> markers, so a rebuild replaces it instead of adding it twice."""
     html = path.read_text(encoding="utf-8")
     new = re.sub(r'(href|src)="((?:\.\./)*)assets/(notebook\.css|bujo\.css|notebook\.js)(?:\?v=[0-9a-f]+)?"',
                  lambda m: f'{m.group(1)}="{m.group(2)}{asset(m.group(3))}"', html)
+    if j is not None:
+        slug = path.stem
+        rev = REVISIONS.get(j["key"], {}).get(slug, {})
+        new = re.sub(r"\n?<!-- gen:(\w+) -->.*?<!-- /gen:\1 -->", "", new, flags=re.S)
+
+        def block(name, text):
+            return f"\n<!-- gen:{name} -->{text}<!-- /gen:{name} -->" if text else ""
+        new = re.sub(r'(<ul class="related">)(.*?)(</ul>)', lambda m: m.group(1) + related_items(
+            j, slug, [re.sub(r"^\s*<li>|</li>\s*$", "", x) for x in re.findall(r"<li>.*?</li>", m.group(2), re.S)]) + m.group(3),
+            new, count=1, flags=re.S)
+        new = re.sub(r'(<p class="aside deeper">.*?</p>|</ul>(?=\s*<h2 id="quiz"))',
+                     lambda m: m.group(1) + block("links", extra_links(j, slug)), new, count=1, flags=re.S)
+        if rev.get("quiz_add"):
+            qs = "".join(f"\n    <details><summary>{sit_q(q)}</summary><p>{a}</p></details>" for q, a in rev["quiz_add"])
+            new = re.sub(r'(<div class="quiz">.*?)(\n  </div>)', lambda m: m.group(1) + block("quiz", qs) + m.group(2),
+                         new, count=1, flags=re.S)
+        if rev.get("try_it"):
+            t = f'\n  <div class="tryit">\n    <span class="tag">try it</span>\n    <p>{rev["try_it"]}</p>\n  </div>'
+            new = new.replace('\n  <div class="remember">', block("tryit", t) + '\n  <div class="remember">', 1)
+        if rev.get("revised"):
+            new = re.sub(r'(<div class="page-meta">.*?</div>)', lambda m: m.group(1) + block("revised", "\n" + revised_stamp(rev)),
+                         new, count=1, flags=re.S)
     if new != html:
         path.write_text(new, encoding="utf-8")
 
@@ -1179,6 +1204,146 @@ def deep_dive_block(n):
             f'  <p class="deep-intro">{d["intro"]}</p>\n{parts}\n  </section>')
 
 
+# ------------------------------------------------------------ cross-links between notes
+# “Related notes” are written as text (“<b>Load profiles</b> (this volume)”); the build turns each one it can
+# match to a note into a link. Series 2 notes that name a pattern also show up on that pattern's note as
+# “seen at Larder”. Notes listed in CARD_LINKS point at the cheat sheet that covers them.
+TITLES = {}          # normalised title -> [(journal, slug)]
+SEEN_AT_LARDER = {}  # (series-1 key, slug) -> [(journal, slug, title)]
+UNRESOLVED = []      # (journal key, slug, text): related entries with no matching note (printed by the build)
+CHEAT_TITLES = {}    # cheat sheet slug -> title
+CARD_LINKS = {
+    ("data", "indexing"): ["sql"], ("data", "keyset-pagination"): ["sql"], ("data", "n-plus-one"): ["sql"],
+    ("data", "optimistic-locking"): ["sql"], ("data", "materialized-views"): ["sql"],
+    ("cloud", "health-checks"): ["docker-kubernetes"], ("cloud", "autoscaling"): ["docker-kubernetes"],
+    ("cloud", "build-once"): ["docker-kubernetes", "git-flow"], ("cloud", "preview-environments"): ["git-flow"],
+    ("testing", "testcontainers"): ["docker-kubernetes"],
+    ("distributed", "service-discovery"): ["shell-network", "docker-kubernetes"],
+    ("architect-1", "nfr-checklist"): ["nfr-checklists"], ("architect-1", "quality-attribute-scenarios"): ["nfr-checklists"],
+    ("architect-5", "availability-maths"): ["nfr-checklists"], ("architect-5", "performance-budgets"): ["nfr-checklists"],
+}
+
+
+# Related entries that name a note by another name (normalised with norm_title on load).
+RELATED_ALIASES = {
+    "consumer-driven contracts": ("testing", "contract-testing"), "idempotency keys": ("distributed", "idempotent-consumer"),
+    "oauth 2.0 & openid connect": ("security", "oauth-pkce"), "retries with backoff": ("distributed", "retry-backoff"),
+    "api gateway / bff": ("distributed", "api-gateway"), "tech-debt talks": ("product-3", "tech-debt-talks"),
+    "user stories that aren't tasks": ("product-3", "user-stories"), "strategy on a page": ("product-2", "strategy-on-a-page"),
+    "quality assurance vs control": ("project-2", "quality-assurance"), "status reports that tell the truth": ("project-2", "status-reports"),
+    "phase gates and go / no-go": ("project-2", "phase-gates"), "lessons learned that get used": ("project-2", "lessons-learned"),
+}
+
+
+def norm_title(t):
+    t = re.sub(r"<[^>]+>", "", t).replace("&amp;", "&").lower()
+    t = re.sub(r"\(.*?\)", "", t).replace("&", " and ")
+    t = re.sub(r"[^a-z0-9+]+", " ", t).strip()
+    t = re.sub(r"^(the|a|an) ", "", t).replace(" vs ", " and ")
+    t = re.sub(r"is(e|ed|ing)\b", r"iz\1", t)                      # British and American spellings
+    return " ".join(w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w for w in t.split())
+
+
+def index_titles(loaded):
+    """Every note under its title, its title without the bracket, and the term in its “a.k.a.” kicker."""
+    for o in JOURNALS:
+        for num, slug, title, *_ in o["catalogue"]:
+            names = {norm_title(title), norm_title(title.split(" (")[0])}
+            n = loaded.get(o["key"], {}).get(slug)
+            aka = re.match(r"a\.k\.a\. “([^”]+)”", n.get("kicker", "")) if n else None
+            if aka:
+                names.add(norm_title(aka.group(1)))
+            for name in names:
+                if (o, slug) not in TITLES.setdefault(name, []):
+                    TITLES[name].append((o, slug))
+    for name, (key, slug) in RELATED_ALIASES.items():
+        TITLES.setdefault(norm_title(name), []).insert(0, (journal(key), slug))
+
+
+def resolve_related(j, item):
+    """(journal, slug) of the note a related entry names, or None. The text after the title narrows it down:
+    “(this volume)”, “(Vol. 3)”, “(patterns, Vol. 6)”, “(Grace, vol. 4)”."""
+    m = re.search(r"<b>(.*?)</b>", item)
+    if not m:
+        return None
+    name = norm_title(m.group(1))
+    cands = TITLES.get(name, []) or [c for t, cs in TITLES.items() if t.startswith(name + " ") for c in cs]
+    cands = list(dict.fromkeys((o["key"], s) for o, s in cands))
+    cands = [(journal(k), s) for k, s in cands]
+    ctx = re.sub(r"<[^>]+>", "", item[m.end():]).lower()
+    vol = re.search(r"vol\.?\s*(\d+)", ctx)
+    filters = []
+    who = [w for w in ("ana", "grace", "sanne", "mo") if re.search(rf"\b{w}\b", ctx)]
+    if who:
+        filters.append(lambda o: (o.get("narrator") or "").lower() in who)
+    if "patterns" in ctx or (j.get("series", 1) == 1 and not who):
+        filters.append(lambda o: o.get("series", 1) == 1)
+    elif j.get("series") == 2 and not who:
+        filters.append(lambda o: o.get("series") == 2 and o.get("book_no", 1) == j.get("book_no", 1))
+    if vol:
+        filters.append(lambda o: o["vol"] == int(vol.group(1)))
+    if not vol and not who and "patterns" not in ctx:
+        filters.append(lambda o: o["key"] == j["key"])
+    for f in filters:
+        narrowed = [c for c in cands if f(c[0])]
+        if narrowed:
+            cands = narrowed
+    return cands[0] if len(cands) == 1 else None
+
+
+def note_href(j, o, slug):
+    """A link from a note page to another note. Always starts with ../ so the whole-journal page can rewrite it."""
+    return f"../notes/{slug}.html" if o["key"] == j["key"] else f"../../{o['key']}/notes/{slug}.html"
+
+
+def related_items(j, slug, items):
+    out = []
+    for r in items:
+        r = re.sub(r"</?a\b[^>]*>", "", r)
+        hit = resolve_related(j, r)
+        if hit and hit[1] != slug:
+            href = note_href(j, *hit)
+            r = re.sub(r"<b>(.*?)</b>", lambda m: f'<a href="{href}"><b>{m.group(1)}</b></a>', r, count=1)
+        elif not hit:
+            UNRESOLVED.append((j["key"], slug, re.sub(r"<[^>]+>", "", r)))
+        out.append(f"<li>{r}</li>")
+    return "".join(out)
+
+
+def find_seen_at_larder(loaded):
+    for j in JOURNALS:
+        if j.get("series") != 2:
+            continue
+        for slug, n in loaded[j["key"]].items():
+            for r in n.get("related", []):
+                hit = resolve_related(j, r)
+                if hit and hit[0].get("series", 1) == 1:
+                    title = entry(j, slug)[2]
+                    SEEN_AT_LARDER.setdefault((hit[0]["key"], hit[1]), []).append((j, slug, title))
+
+
+def extra_links(j, slug):
+    """Asides under the related notes: seen at Larder, and the cheat sheet that covers this note."""
+    out = []
+    seen = SEEN_AT_LARDER.get((j["key"], slug), [])
+    if seen:
+        links = " · ".join(f'<a href="{note_href(j, o, s)}">{esc(t)}</a> <small>({o["narrator"]}, vol. {o["vol"]})</small>'
+                           for o, s, t in seen)
+        out.append(f'  <p class="aside seen">seen at Larder → {links}</p>')
+    for cs in CARD_LINKS.get((j["key"], slug), []):
+        if cs in CHEAT_TITLES:
+            out.append(f'  <p class="aside deeper">on a card → <a href="../../cheatsheets/{cs}/index.html">{esc(CHEAT_TITLES[cs])}: the cheat sheet</a></p>')
+    return "\n".join(out)
+
+
+def revised_stamp(n):
+    """`revised=("Nov 2026", "what changed")`: a small stamp under the date of a note that was updated."""
+    r = n.get("revised")
+    if not r:
+        return ""
+    return f'  <p class="revised"><span class="tag">revised</span> {r[0]} · {r[1]}</p>'
+
+
 def render_note(j, n, back=()):
     num, slug, title, ckey, summary = entry(j, n["slug"])
     cname = coll(j, ckey)[1]
@@ -1187,7 +1352,7 @@ def render_note(j, n, back=()):
     steps = "\n".join(f"    <li><b>{t}</b><p>{d}</p></li>" for t, d in n["steps"])
     pits = "\n".join(f'    <li><h3>{t}</h3><p>{d} <span class="fix">Fix →</span> {f}</p></li>' for t, d, f in n["pitfalls"])
     quiz = "\n".join(f"    <details><summary>{q}</summary><p>{a}</p></details>" for q, a in n["quiz"])
-    related = "".join(f"<li>{r}</li>" for r in n["related"])
+    related = related_items(j, n["slug"], n["related"])
     chips = "".join(f"<li><b>{k}:</b> {v}</li>" for k, v in n["chips"])
     sources = "".join(f"<li>{s}</li>" for s in n["sources"])
     code = n["code"]
@@ -1203,6 +1368,7 @@ def render_note(j, n, back=()):
         f'  {ROUGH}',
         DESK_DOODLES.get(j.get("sheet_doodles"), "") if j.get("sheet_doodles") else "",
         f'  <div class="page-meta"><span class="day">{day_label(j, num)}</span><span class="topic">collection · <b>{cname.lower()}</b></span></div>',
+        revised_stamp(n),
         f'  <p class="kicker">{n["kicker"]}</p>',
         f'  <h1><span class="hl">{esc(title)}</span></h1>',
         f'  <div class="tldr">\n    <span class="tag">TL;DR</span>\n    <p>{n["tldr"]}</p>\n  </div>',
@@ -1263,6 +1429,7 @@ def render_note(j, n, back=()):
   </div>''',
         f'  <h3>{j.get("related_h3", "Related patterns")}</h3>\n  <ul class="related">{related}</ul>',
         deeper_link(j["key"], slug),
+        extra_links(j, slug),
         h2(8, "quiz", "Self-check quiz", ""),
         f'  <div class="quiz">\n{quiz}\n  </div>',
         f'  <div class="tryit">\n    <span class="tag">try it</span>\n    <p>{n["try_it"]}</p>\n  </div>' if n.get("try_it") else "",
@@ -1335,6 +1502,8 @@ def render_index(j):
         f'  <p class="kicker">{j["kicker"]}</p>',
         f'  <h1 class="cover-title"><span class="hl">{esc(j["title"])}</span></h1>',
         f'  <p class="lead">{j["lead"].format(**counts(j))}</p>',
+        (f'  <p class="revised"><span class="tag">revised</span> {REVISION_NOTE[j["key"]][0]} · {REVISION_NOTE[j["key"]][1]}</p>'
+         if j["key"] in REVISION_NOTE else ""),
         story_box(j),
         ('  <p class="map-link"><a href="../pmbok/index.html"><b>The PMBOK map</b>: every principle, domain and focus area of the guide, '
          'and the note that covers it →</a><br><a href="../rotterdam/index.html"><b>The Rotterdam project file</b>: every page from '
@@ -1967,6 +2136,24 @@ def redirect(to):
             f'<body><p>This page moved to <a href="{to}">{to}</a>.</p></body></html>\n')
 
 
+REVISIONS = {}       # journal key -> {slug: changes} from content/<key>/revisions.py (also used for hand-made notes)
+REVISION_NOTE = {}   # journal key -> (month, what changed in this volume), shown on the index
+
+
+def sit_q(q):
+    """A situational question: tagged “what would you do?” above the question text."""
+    return f'<span class="q-body"><span class="q-sit">what would you do?</span>{q}</span>'
+
+
+def apply_revision(n, rev):
+    """Merge a note's later additions into it: `quiz_add` appends questions, every other field replaces."""
+    for k, v in rev.items():
+        if k == "quiz_add":
+            n["quiz"] = list(n["quiz"]) + [(sit_q(q), a) for q, a in v]
+        else:
+            n[k] = v
+
+
 def load_content(key):
     notes = {}
     for f in sorted((CONTENT / key).glob("*.py")):
@@ -1976,13 +2163,24 @@ def load_content(key):
         spec.loader.exec_module(mod)
         for n in getattr(mod, "NOTES", []):
             notes[n["slug"]] = n
+        if hasattr(mod, "REVISIONS"):
+            REVISIONS[key] = mod.REVISIONS
+            if hasattr(mod, "REVISION_NOTE"):
+                REVISION_NOTE[key] = mod.REVISION_NOTE
+    for slug, rev in REVISIONS.get(key, {}).items():
+        if slug in notes:
+            apply_revision(notes[slug], rev)
     return notes
 
 
 def main():
     listing = []
     dives = [load_dive(name) for name in DIVES]   # first: notes link to their deep dive
+    sheets = [load_cheatsheet(name) for name in CHEATSHEETS]
+    CHEAT_TITLES.update((cs.SLUG, cs.TITLE) for cs in sheets)
     loaded = {j["key"]: load_content(j["key"]) for j in JOURNALS}
+    index_titles(loaded)
+    find_seen_at_larder(loaded)
     back = {}
     for j in JOURNALS:
         for slug, n in loaded[j["key"]].items():
@@ -2000,7 +2198,7 @@ def main():
         for slug, n in notes.items():
             (out / "notes" / f"{slug}.html").write_text(render_note(j, n, back.get((key, slug), [])), encoding="utf-8")
         for slug in j["handmade"]:
-            stamp_handmade(out / "notes" / f"{slug}.html")
+            stamp_handmade(out / "notes" / f"{slug}.html", j)
         print(f"[{key}] wrote {len(notes)} notes")
         (out / "index.html").write_text(render_index(j), encoding="utf-8")
         (out / "all.html").write_text(render_all(j), encoding="utf-8")
@@ -2017,7 +2215,6 @@ def main():
     (PUBLIC / "pmbok" / "index.html").write_text(render_pmbok_map(loaded), encoding="utf-8")
     (PUBLIC / "rotterdam").mkdir(exist_ok=True)
     (PUBLIC / "rotterdam" / "index.html").write_text(render_project_file(loaded), encoding="utf-8")
-    sheets = [load_cheatsheet(name) for name in CHEATSHEETS]
     for cs in sheets:
         out = PUBLIC / "cheatsheets" / cs.SLUG
         out.mkdir(parents=True, exist_ok=True)
@@ -2041,6 +2238,10 @@ def main():
         (old / f"{c[1]}.html").write_text(redirect(f"../distributed/notes/{c[1]}.html"), encoding="utf-8")
     (PUBLIC / "all.html").write_text(redirect("distributed/all.html"), encoding="utf-8")
     print("wrote landing page, journals.json and redirects")
+    if UNRESOLVED:
+        print(f"[links] {len(UNRESOLVED)} related entries name no note (left as text); first ten:")
+        for key, slug, text in UNRESOLVED[:10]:
+            print(f"    {key}/{slug}: {text}")
 
 
 if __name__ == "__main__":
