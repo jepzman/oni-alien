@@ -171,6 +171,9 @@ JOURNALS = [
             (16, "replication", "Leader–Follower Replication", "data", "Copy data to followers for reads and failover; one leader takes the writes."),
             (17, "cache-aside", "Cache-Aside", "data", "Check a fast cache first; on a miss, load from the database and keep a copy."),
             (18, "leader-election", "Leader Election", "coordination", "Pick exactly one node to do a job, and safely pick a new one when it dies."),
+            (19, "strangler-fig", "Strangler Fig", "communication", "Put a routing layer in front of the old system and move one route at a time to the new one."),
+            (20, "backpressure", "Backpressure", "resilience", "When work arrives faster than you can finish it, push back instead of queueing without limit."),
+            (21, "consistent-hashing", "Consistent Hashing", "data", "Spread keys across nodes so adding or removing a node moves only a small share of them."),
         ],
     ),
     dict(
