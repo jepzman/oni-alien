@@ -346,6 +346,9 @@ JOURNALS = [
             (13, "disaster-recovery", "Backups & Disaster Recovery", "resilience", "Keep tested backups and a rehearsed plan to restore service elsewhere."),
             (14, "postmortems", "Incident Response & Postmortems", "resilience", "Handle incidents with clear roles, then learn from them without blame."),
             (15, "finops", "Cost Visibility (FinOps)", "resilience", "Tag, measure and own cloud spend, so cost is a design input, not a surprise."),
+            (16, "progressive-delivery", "Progressive Delivery", "shipping", "Roll a change out ring by ring, with automatic checks deciding each next step."),
+            (17, "service-catalogue", "Service Catalogue", "running", "One place that says what each service is, who owns it, and how to run it."),
+            (18, "chaos-engineering", "Chaos Engineering", "resilience", "Run planned experiments that break things on purpose, to learn before an incident does."),
         ],
     ),
     # ---- Series 2 · The Solution Architect's Notebook ----
