@@ -892,11 +892,10 @@ PLANNED_PROJECT = [
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
     ("Jan 2027", [("↓", "Deep dives, season 2: Replication &amp; Leader Election, Sharding &amp; Partitioning, Indexes &amp; Query Plans"), ("•", "One-page printable cheat sheet per collection")]),
-    ("Feb 2027", [("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
-    ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b>, vols. 3–6 (Sanne): the rest of the PMBOK Guide, one domain at a time, with a project file that grows"), ("•", "Cheat sheets: PMBOK 8 on one page, earned value, critical path"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
-    ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
+    ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b>, vols. 3–6 (Sanne): the rest of the PMBOK Guide, one domain at a time, with a project file that grows"), ("•", "Cheat sheets: PMBOK 8 on one page, earned value, critical path")]),
+    ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations")]),
     ("Mid 2027", [("↓", "More deep dives: Sign-in &amp; Tokens, Observability &amp; SLOs, Rendering on the Web, Multitenancy"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
-    ("Someday", [("•", "Extra notes for Vols. 2, 5 and 6: Debounce &amp; Throttle, Passkeys, Signed Webhooks, Chaos Engineering, Service Catalogues"), ("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
+    ("Someday", [("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
 
 

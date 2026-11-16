@@ -226,7 +226,8 @@ The owner approved the plan on 2026-11-15 (“do your recommendation”). The wo
 | S2 try it | **done**, 93 of 93 |
 | S3 going deeper | **done, 24 chapters (4 per volume), 40 figures** (owner, 16 Nov: “continue going deeper for other volumes”). Data: Indexing, Optimistic Locking, Change Data Capture, Multitenancy. Distributed: API Gateway, Service Discovery, Sharding. Frontend: State Machines, SSR & Hydration, Micro-Frontends. Testing: Test Doubles, Contract Testing, Flaky Test Quarantine. Security: OAuth 2.0 with PKCE, Threat Modelling, Supply-Chain Hygiene. Cloud: Infrastructure as Code, SLOs & Error Budgets, Incident Response & Postmortems. Fourth chapters (16 Nov): Sidecar & Service Mesh, Optimistic UI, Property-Based Testing, Envelope Encryption, Autoscaling |
 | S4 depth pass, S5 freshness pass | not started |
-| 5.1 extra notes, Vol. 7 | not started |
+| 5.1 extra notes | **done, 18 notes, 54 figures** (16 Nov), numbered after the existing notes so URLs and PDF names stay the same: Data 16–18 (Upserts, Bitemporal Data, Vector Indexes), Distributed 19–21 (Strangler Fig, Backpressure, Consistent Hashing), Frontend 16–18 (Debounce &amp; Throttle, Web Workers, Offline-First Sync), Testing 16–18 (Fuzzing, Visual Regression Tests, Fault Injection Tests: replaces “Chaos Experiments”, which would have repeated Vol. 6), Security 16–18 (Passkeys, Signed Webhooks, Rate-Limited Login), Cloud 16–18 (Progressive Delivery, Service Catalogue, Chaos Engineering). New notes carry their situational question in a `quiz_sit` field |
+| Vol. 7 | not started |
 
 How it is built: additions live in `content/<key>/revisions.py` (quiz_add, try_it, revised) and `content/<key>/deeper.py`
 (deep_dive), merged into the notes by `load_content`; the original note files are unchanged. Several files may add to one note.
@@ -237,4 +238,4 @@ on the live site; deep-dive covers restyled as a printed textbook; long words in
 Cover artwork: the owner chose option C (16 Nov): a paper sticker with one emblem and the volume's paper pressed into the
 cloth, on the six pattern covers (`COVER_ART` in `build_notes.py`).
 
-Next for Series 1: the extra notes (5.1), the freshness pass (S5), the depth pass (S4), then Vol. 7.
+Next for Series 1: the freshness pass (S5), the depth pass (S4), then Vol. 7.
