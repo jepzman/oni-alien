@@ -31,7 +31,7 @@
 <article class="sheet" id="oauth-pkce">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Mon · 09.11.26</span><span class="topic">collection · <b>identity &amp; access</b></span></div>
-  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question and a try it</p>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “the valet key”</p>
   <h1><span class="hl">OAuth 2.0 with PKCE</span></h1>
   <div class="tldr">
@@ -120,6 +120,39 @@ redirect(<span class="s">`${issuer}/authorize?`</span> + <span class="k">new</sp
 <span class="k">const</span> { id_token, access_token } = <span class="k">await</span> processAuthorizationCodeOpenIDResponse(as, client, res);</code></pre>
   </div>
   <p class="aside">tools: identity providers (Auth0, Okta, Entra ID, Keycloak, Cognito, Google), libraries like oauth4webapi, openid-client, Auth.js, Spring Security, AppAuth for mobile.</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">where tokens live, checking them, signing out</span></h2>
+  <p class="deep-intro">The note covers the flow: code, verifier, exchange. After the exchange you hold tokens, and most real problems are about what happens to them next: where they are stored, how an API checks them, and what “sign out” actually ends. This chapter covers the three.</p>
+  <h3 class="deep-h"><span>1</span>Where the tokens live</h3>
+  <p>For a server-rendered app the answer is simple: tokens stay on the server, and the browser gets a session cookie. For a single-page app there are three options, from safest to riskiest:</p>
+  <ul>
+    <li><b>A backend for frontend (token handler).</b> A small server next to the app runs the OAuth flow, keeps the tokens, and gives the browser an <code>HttpOnly; Secure; SameSite</code> session cookie. The app calls its own backend, which adds the access token. JavaScript never sees a token. This is what current guidance recommends for browser apps.</li>
+    <li><b>Tokens in memory only,</b> with short-lived access tokens and refresh-token rotation. Better than storage, but any script running in the page can still use them.</li>
+    <li><b>Tokens in localStorage.</b> Avoid: every script on the page, including a compromised third-party one, can read them and send them elsewhere.</li>
+  </ul>
+  <p>Native mobile apps use the system browser for sign-in (not an embedded web view), PKCE, and the platform's secure storage (Keychain, Keystore) for the refresh token.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="A backend for frontend keeps tokens out of the browser. The single-page app talks only to its own backend, with an HttpOnly, Secure, SameSite session cookie. The backend runs the authorization code flow with PKCE, stores the access and refresh tokens server side, and adds the access token when it calls the APIs. JavaScript in the page never sees a token, so a cross-site scripting bug can&#x27;t steal one."><g class="rough"><rect class="d f-y" x="20" y="90" width="160" height="90" rx="10"/><path class="d" d="M184 135 L316 135"/><path class="d" d="M305.2 140.2 L316 135 L305.2 129.8"/><path class="d" d="M194.8 129.8 L184 135 L194.8 140.2"/><rect class="d f-green" x="320" y="80" width="160" height="110" rx="10"/><path class="d" d="M484 110 L576 60"/><path class="d" d="M569.0 69.7 L576 60 L564.0 60.6"/><path class="d" d="M484 160 L576 210"/><path class="d" d="M564.0 209.4 L576 210 L569.0 200.3"/><rect class="d f-paper" x="580" y="20" width="160" height="70" rx="10"/><rect class="d f-blue" x="580" y="180" width="160" height="70" rx="10"/></g><text class="t-head" x="100" y="131" text-anchor="middle" font-size="18">browser app</text><text class="t" x="100" y="155" text-anchor="middle" font-size="14">no tokens in JS</text><text class="t-s" x="250" y="124" text-anchor="middle">session cookie</text><text class="t-s" x="250" y="166" text-anchor="middle" font-size="14">HttpOnly · Secure</text><text class="t-s" x="250" y="186" text-anchor="middle" font-size="14">SameSite</text><text class="t-head" x="400" y="131" text-anchor="middle" font-size="20">BFF</text><text class="t" x="400" y="155" text-anchor="middle" font-size="14">holds the tokens</text><text class="t-s" x="566" y="40" text-anchor="end" font-size="15">code + PKCE</text><text class="t-s" x="566" y="244" text-anchor="end" font-size="15">Bearer token</text><text class="t-head" x="660" y="62" text-anchor="middle" font-size="15">identity provider</text><text class="t-head" x="660" y="222" text-anchor="middle" font-size="18">APIs</text><text class="t-s t-pen" x="380" y="270" text-anchor="middle" font-size="16">an XSS bug can act in the page, but can&#x27;t take a token home</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The browser holds a cookie; the tokens stay on the server.</figcaption></figure>
+  <h3 class="deep-h"><span>2</span>Checking an access token at the API</h3>
+  <p>When an API receives a JWT access token, it must check all of these, every time. Use a maintained library and configure it; don't parse tokens by hand.</p>
+  <div class="table-scroll"><table class="map"><thead><tr><th scope="col">Check</th><th scope="col">Why</th></tr></thead><tbody>
+    <tr><td><b>Signature</b>, with the provider's published keys (JWKS), choosing the key by <code>kid</code></td><td>Anyone can write a JWT; only the provider can sign one. Cache the keys and refresh them when an unknown <code>kid</code> appears, so key rotation works.</td></tr>
+    <tr><td><b>Algorithm</b> from a fixed allow-list (for example RS256 or ES256)</td><td>Never trust the token's own <code>alg</code> header; never accept <code>none</code>.</td></tr>
+    <tr><td><b>Issuer</b> (<code>iss</code>) and <b>audience</b> (<code>aud</code>)</td><td>A valid token for another API, or from another tenant's issuer, must not work here.</td></tr>
+    <tr><td><b>Expiry</b> (<code>exp</code>, <code>nbf</code>) with a small clock allowance (a minute)</td><td>Short lifetimes are only a defence if they're checked.</td></tr>
+    <tr><td><b>Scopes or roles</b> for this endpoint</td><td>Authentication says who; scopes say what this token may do.</td></tr>
+  </tbody></table></div>
+  <p>Opaque (non-JWT) tokens are checked by asking the provider (token introspection), which also tells you if the token was revoked.</p>
+
+  <h3 class="deep-h"><span>3</span>What signing out really ends</h3>
+  <p>“Sign out” can mean three different things, and users expect all of them:</p>
+  <ul>
+    <li><b>The app's session:</b> delete the session server side and clear the cookie.</li>
+    <li><b>The tokens:</b> revoke the refresh token at the provider (the revocation endpoint), so it can't mint new access tokens.</li>
+    <li><b>The provider's session:</b> redirect to the provider's logout endpoint, or the next “sign in” succeeds silently without a password.</li>
+  </ul>
+  <p>One thing you can't end early is a self-contained JWT access token that has already been issued: APIs accept it until it expires. That's the main reason access tokens should live <b>minutes, not hours</b>. For “sign out everywhere” after a stolen laptop, revoke all refresh tokens for the user and, for sensitive APIs, check a short revocation list or use introspection.</p>
+
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">
