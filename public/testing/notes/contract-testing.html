@@ -31,7 +31,7 @@
 <article class="sheet" id="contract-testing">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Fri · 27.11.26</span><span class="topic">collection · <b>doubles &amp; boundaries</b></span></div>
-  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question and a try it</p>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “plug and socket”</p>
   <h1><span class="hl">Contract Testing</span></h1>
   <div class="tldr">
@@ -121,6 +121,34 @@ it(<span class="s">"shows an order's price"</span>, <span class="k">async</span>
 <span class="c">// provider CI:  pact verify --provider orders-api   →  fails if "price" disappears</span></code></pre>
   </div>
   <p class="aside">tools: Pact and PactFlow (many languages), Spring Cloud Contract, Specmatic, OpenAPI diff tools (oasdiff) for breaking-change checks, GraphQL schema checks (Apollo GraphOS, graphql-inspector).</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">writing good contracts, the release flow, events and schemas</span></h2>
+  <p class="deep-intro">The note explains the loop: consumers record what they need, providers replay it, a gate stops incompatible deploys. This chapter covers how to write contracts that don't break for no reason, how the broker flow works with branches and environments, and when a schema-based approach is the better choice.</p>
+  <h3 class="deep-h"><span>1</span>Writing contracts that last</h3>
+  <p>A contract should hold <b>only what the consumer uses</b>, matched <b>by shape, not by value</b>. If the web app shows an order's total and status, its contract says: a response with <code>total</code> (a number) and <code>status</code> (one of placed, paid, shipped). It does not list the twelve other fields, and it doesn't require the total to be exactly 49.95.</p>
+  <ul>
+    <li><b>Use type matchers</b> (<code>like(49.95)</code>, <code>eachLike(...)</code>, a regex for ids). Exact values make the provider's test data a contract too.</li>
+    <li><b>Leave business rules out.</b> “A cancelled order returns 409” is a contract; “the discount is 10% over €50” is the provider's own unit test.</li>
+    <li><b>Name provider states in plain words</b> (“order 42 exists and is paid”), so the provider team can set them up without reading consumer code.</li>
+  </ul>
+  <p>Over-specified contracts are the main reason teams give up on contract testing: every harmless provider change fails a build. Minimal contracts fail only when a consumer would really break.</p>
+
+  <h3 class="deep-h"><span>2</span>The release flow</h3>
+  <p>The broker connects two pipelines that never call each other. The consumer's CI publishes its contract, tagged with its version and branch. The provider's CI verifies <b>every contract that matters</b>: the consumers' main branches and the versions now deployed in each environment. Results go back to the broker.</p>
+  <p>Before any deploy, either side asks <code>can-i-deploy</code>: “has my version been verified against the versions currently in production?” If yes, deploy, then <code>record-deployment</code> so the broker knows what is live. If no, the answer names the pair that isn't verified.</p>
+  <p>Two settings keep it workable. <b>Pending contracts</b>: a new consumer expectation doesn't fail the provider's main build until the provider has passed it once, so consumers can't block providers by publishing. <b>Work-in-progress contracts</b>: the provider also verifies consumers' feature branches, so a consumer learns early whether its new need is already met.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="The release flow with a contract broker. The web app&#x27;s CI runs its consumer tests and publishes the contract to the broker. The Orders service&#x27;s CI fetches every consumer&#x27;s contracts and verifies them against the real service, publishing the results. Before either side deploys to production, it asks the broker can-i-deploy: have the versions now in production been verified against mine? If yes, deploy and record the deployment."><g class="rough"><rect class="d f-y" x="20" y="30" width="200" height="80" rx="10"/><rect class="d f-blue" x="20" y="170" width="200" height="80" rx="10"/><rect class="d f-green" x="290" y="100" width="180" height="80" rx="10"/><path class="d" d="M224 70 L286 120"/><path class="d" d="M274.3 117.3 L286 120 L280.9 109.2"/><path class="d" d="M286 160 L224 200"/><path class="d" d="M230.3 189.8 L224 200 L235.9 198.5"/><path class="d" d="M279.7 170.2 L286 160 L274.1 161.5"/><rect class="d f-paper" x="540" y="100" width="200" height="80" rx="10"/><path class="d" d="M474 140 L536 140"/><path class="d" d="M525.2 145.2 L536 140 L525.2 134.8"/><path class="d" d="M484.8 134.8 L474 140 L484.8 145.2"/></g><text class="t-head" x="120" y="66" text-anchor="middle" font-size="17">web app CI</text><text class="t" x="120" y="90" text-anchor="middle" font-size="13">consumer tests → contract</text><text class="t-head" x="120" y="206" text-anchor="middle" font-size="17">Orders CI</text><text class="t" x="120" y="230" text-anchor="middle" font-size="13">verify all contracts</text><text class="t-head" x="380" y="136" text-anchor="middle" font-size="19">broker</text><text class="t" x="380" y="160" text-anchor="middle" font-size="14">contracts + results</text><text class="t-s" x="262" y="82" text-anchor="middle">publish</text><text class="t-s" x="258" y="196" text-anchor="start">fetch · report</text><text class="t-head" x="640" y="136" text-anchor="middle" font-size="18">can-i-deploy?</text><text class="t" x="640" y="160" text-anchor="middle" font-size="14">before prod</text><text class="t-s t-green" x="640" y="214" text-anchor="middle" font-size="16">yes → deploy, record it</text><text class="t-s t-red" x="640" y="238" text-anchor="middle" font-size="16">no → which pair is unverified</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Both pipelines meet at the broker. can-i-deploy is the gate before production.</figcaption></figure>
+  <h3 class="deep-h"><span>3</span>Events, and when schemas are enough</h3>
+  <p>Contracts work for messages too. A consumer of <code>OrderPlaced</code> records the message shape it needs; the provider's test calls the code that builds the message and checks it against every consumer's contract. No broker connection or running queue is needed.</p>
+  <p>Consumer-driven contracts aren't always the right tool:</p>
+  <div class="table-scroll"><table class="map"><thead><tr><th scope="col">Situation</th><th scope="col">Better fit</th></tr></thead><tbody>
+    <tr><td>A few internal consumers you can talk to</td><td>Consumer-driven contracts (Pact).</td></tr>
+    <tr><td>A public API with unknown consumers</td><td>A published OpenAPI or AsyncAPI schema, and a breaking-change check in CI (oasdiff, a schema registry's compatibility rules).</td></tr>
+    <tr><td>Events with many subscribers</td><td>A schema registry with backward compatibility enforced, plus contracts for the few critical consumers.</td></tr>
+    <tr><td>A provider team that already keeps a precise OpenAPI file</td><td>Bi-directional contracts: compare consumer contracts with the provider's schema, no provider replay.</td></tr>
+  </tbody></table></div>
+
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">

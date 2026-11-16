@@ -31,7 +31,7 @@
 <article class="sheet" id="flaky-tests">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Fri · 18.12.26</span><span class="topic">collection · <b>reliability &amp; speed</b></span></div>
-  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question and a try it</p>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “the alarm that beeps at random”</p>
   <h1><span class="hl">Flaky Test Quarantine</span></h1>
   <div class="tldr">
@@ -120,6 +120,41 @@ expect(<span class="k">await</span> page.locator(<span class="s">".total"</span>
 test(<span class="s">"applies coupon @quarantine  JIRA-482 owner:ana due:2026-11-30"</span>, <span class="k">async</span> () =&gt; { /* … */ });</code></pre>
   </div>
   <p class="aside">tools: Playwright retries + flaky reporting, Jest/Vitest <code>--retry</code>, BuildPulse, Trunk Flaky Tests, Datadog Test Visibility, Gradle Develocity flaky detection, <code>--sequence.shuffle</code> to expose order dependence.</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">the maths of distrust, finding causes, fixing async waits</span></h2>
+  <p class="deep-intro">The note sets up detection and quarantine. This chapter explains why a few flaky tests do so much damage, how to find the cause of a specific flake quickly, and how to fix the most common kind, the test that waits by the clock instead of by what it needs to see.</p>
+  <h3 class="deep-h"><span>1</span>Why a little flakiness ruins a suite</h3>
+  <p>Flakiness multiplies. If each test fails by chance one time in 200 (0.5%), a single test looks fine. But a run of 200 such tests passes only when all 200 pass: 0.995<sup>200</sup> ≈ <b>37%</b>. Two runs in three are red for no reason, and people learn to press re-run.</p>
+  <p>That gives a useful target. To keep a 2,000-test suite green 95% of the time, the average flake rate per test must be below about 1 in 40,000. You can't reach that by fixing tests one at a time after complaints; you need the numbers:</p>
+  <ul>
+    <li>Record every test result with the commit, and mark a test <b>flaky</b> when it failed and passed on the same commit.</li>
+    <li>Track <b>flake rate per test</b> (flaky runs ÷ runs) and the suite's <b>green-on-first-try rate</b> each week.</li>
+    <li>Work from the top of the list: a handful of tests usually cause most re-runs.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="Why a little flakiness ruins a suite. If each of 200 tests fails by chance one time in 200, a whole run passes only about 37 percent of the time. With 20 tests at that rate it passes about 90 percent of the time. With 200 tests at one in 2,000 it passes about 90 percent of the time. Teams stop trusting red long before any single test looks bad."><g class="rough"><rect class="d f-green" x="250" y="36" width="315" height="40" rx="10"/><rect class="d f-pink d-red" x="250" y="106" width="130" height="40" rx="10"/><rect class="d f-green" x="250" y="176" width="315" height="40" rx="10"/></g><text class="t-head" x="20" y="60" text-anchor="start" font-size="16">20 tests · 0.5% each</text><text class="t" x="577" y="62" text-anchor="start" font-size="15">90% of runs green</text><text class="t-head" x="20" y="130" text-anchor="start" font-size="16">200 tests · 0.5% each</text><text class="t" x="392" y="132" text-anchor="start" font-size="15">37% of runs green</text><text class="t-head" x="20" y="200" text-anchor="start" font-size="16">200 tests · 0.05% each</text><text class="t" x="577" y="202" text-anchor="start" font-size="15">90% of runs green</text><text class="t-s t-pen" x="380" y="256" text-anchor="middle" font-size="17">suite pass rate = (1 − flake rate) ^ number of tests</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Small per-test flake rates multiply into a suite nobody trusts.</figcaption></figure>
+  <h3 class="deep-h"><span>2</span>Finding the cause</h3>
+  <p>Most flakes fall into a few families. Each has a tell-tale sign and a way to reproduce it on purpose.</p>
+  <div class="table-scroll"><table class="map"><thead><tr><th scope="col">Cause</th><th scope="col">Sign · how to reproduce</th></tr></thead><tbody>
+    <tr><td><b>Timing</b> (async UI, background jobs)</td><td>Fails more on slow CI machines. Slow the CPU or network; run with a fixed sleep removed.</td></tr>
+    <tr><td><b>Shared state, test order</b></td><td>Fails only with other tests. Run in random order with a fixed seed; run the test alone and with its neighbour.</td></tr>
+    <tr><td><b>Parallel runs</b> (shared rows, ports, files)</td><td>Fails with more workers. Run with 1 worker, then 8.</td></tr>
+    <tr><td><b>Clock and environment</b></td><td>Fails at certain times or on some machines. Set TZ, locale and the date to edge values.</td></tr>
+    <tr><td><b>Real external services</b></td><td>Fails when the network or a sandbox is slow. Replace with a double or a container.</td></tr>
+    <tr><td><b>Randomness</b></td><td>Fails for some generated data. Log the seed and replay it.</td></tr>
+  </tbody></table></div>
+  <p>Start by running the test 100 times in a loop locally (Playwright's <code>--repeat-each</code>, a shell loop elsewhere). If it never fails alone, the cause is in its neighbours or the environment, not in the test itself.</p>
+
+  <h3 class="deep-h"><span>3</span>Fixing async waits</h3>
+  <p>The most common flaky test waits by the clock: click, sleep two seconds, check. It fails when the server takes 2.3 seconds and wastes time when it takes 0.4. The fix is always the same: <b>wait for the state you need</b>, with a deadline.</p>
+  <ul>
+    <li><b>In UI tests</b>, use assertions that retry until they pass or time out: <code>await expect(page.getByText("Total €49.95")).toBeVisible()</code>. Wait for something the user would see, not for “network idle”, which modern pages rarely reach.</li>
+    <li><b>Control the network</b> where the test isn't about it: serve fixed responses with route mocking so timing doesn't vary.</li>
+    <li><b>Turn off animations</b> and transitions in test runs, so clicks don't land on moving elements.</li>
+    <li><b>In back-end tests</b> for queues and background jobs, poll for the result (the row exists, the message was published) with a short interval and a deadline, instead of sleeping.</li>
+  </ul>
+  <p>A retry hides the symptom; a wait on the right condition removes the cause.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Waiting by time versus waiting by state. With a fixed sleep of two seconds, the test fails when the server takes 2.3 seconds and wastes time when it takes 0.4 seconds. Waiting for the result to appear, with a ten second limit, passes in both cases and continues as soon as the result is there."><g class="rough"><rect class="d f-pink" x="200" y="14" width="200" height="34" rx="10"/><rect class="d f-green" x="340" y="108" width="70" height="34" rx="10"/></g><text class="t-head t-red" x="20" y="34" text-anchor="start" font-size="17">sleep(2000)</text><text class="t-head" x="300" y="38" text-anchor="middle" font-size="15">waits 2.0 s</text><text class="t-s t-red" x="200" y="74" text-anchor="start" font-size="16">server took 2.3 s → fails · took 0.4 s → 1.6 s wasted</text><text class="t-head t-green" x="20" y="130" text-anchor="start" font-size="17">expect(total).toHaveText(…)</text><text class="t-head" x="375" y="132" text-anchor="middle" font-size="15">0.4 s</text><text class="t-s t-green" x="340" y="168" text-anchor="start" font-size="16">continues the moment it appears · gives up at 10 s</text><text class="t-s t-pen" x="380" y="226" text-anchor="middle" font-size="17">same idea in back-end tests: poll for the state, with a deadline</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Wait for what you need to see, not for a number of seconds.</figcaption></figure>
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">
