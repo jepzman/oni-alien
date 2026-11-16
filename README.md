@@ -82,7 +82,7 @@ Start with `docs/HANDOFF.md`: current state, next steps, how to build, verify an
 - `content/<journal>/*.py`: note content as data, including the doodles
 - `scripts/build_notes.py`: journal configs (`JOURNALS`, `PLANNED`, `FUTURE_LOG`) and the page templates
 - `scripts/doodle.py`: the hand-drawn SVG helpers (including `table()` for database tables), icon library and code highlighter (JS/TS, Python and SQL keywords)
-- `scripts/build-pdf.mjs`: builds `public/<journal>/pdf/` (one PDF per note + the whole journal) with Playwright
+- `scripts/build-pdf.mjs`: builds `public/<journal>/pdf/` (one PDF per note + the whole journal) with Playwright. Only PDFs whose page changed are rendered; the rest come from `.pdf-cache/` (`npm run pdf -- --all` renders everything)
 
 ## Editing
 
@@ -98,4 +98,4 @@ npm run serve                       # preview on http://localhost:8080
 
 ## Publishing (GitHub Pages)
 
-`.github/workflows/pages.yml` runs on every push to `main`: it installs Chromium, builds the PDFs for every journal, checks every page and PDF exists, and deploys `public/` to GitHub Pages and to the Cloudflare Worker mirror (https://oni-alien.jepzman.workers.dev/, via `wrangler.jsonc`; needs the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets, and is skipped without them). PDFs are not committed. You can also run it from the Actions tab (“Run workflow”).
+`.github/workflows/pages.yml` runs on every push to `main`: it restores the PDF cache, renders only the PDFs whose page (or the stylesheets, or the PDF script) changed, saves the cache, checks every page and PDF exists, and deploys `public/` to GitHub Pages and to the Cloudflare Worker mirror (https://oni-alien.jepzman.workers.dev/, via `wrangler.jsonc`; needs the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets, and is skipped without them). PDFs are not committed. You can also run it from the Actions tab (“Run workflow”); tick “Render every PDF again” to ignore the cache.
