@@ -19,7 +19,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from doodle import Doodle, esc, highlight  # noqa: E402
+from doodle import ICONS, Doodle, esc, highlight  # noqa: E402
 import cheatsheet  # noqa: E402
 import dive  # noqa: E402
 
@@ -1620,6 +1620,39 @@ PMBOK_ITEM = '''    <li class="book book--pmbok">
     </li>'''
 
 
+# Cover artwork for the pattern volumes (owner's choice, Nov 2026: “option C”): a round paper sticker with one
+# hand-drawn emblem, and the volume's own paper pattern pressed into the cloth in the band colour.
+COVER_ART = {
+    "distributed": ("server", "nodes"), "frontend": ("window", "grid"), "data": ("ledger", "rules"),
+    "testing": ("flask", "cross"), "security": ("lock", "hatch"), "cloud": ("cloud", "iso"),
+}
+COVER_PATTERNS = {
+    "grid": '<pattern id="{id}" width="14" height="14" patternUnits="userSpaceOnUse"><path d="M14 0H0V14" fill="none" stroke-width="1"/></pattern>',
+    "rules": '<pattern id="{id}" width="20" height="12" patternUnits="userSpaceOnUse"><path d="M0 11.5H20" stroke-width="1"/></pattern>',
+    "cross": '<pattern id="{id}" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M9 5V13M5 9H13" stroke-width="1.4"/></pattern>',
+    "hatch": '<pattern id="{id}" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M0 10L10 0M-2 2L2 -2M8 12L12 8" stroke-width="1.2"/></pattern>',
+    "iso": '<pattern id="{id}" width="24" height="14" patternUnits="userSpaceOnUse"><path d="M0 7L12 0L24 7L12 14Z" fill="none" stroke-width="1"/></pattern>',
+}
+
+
+def cover_art(key):
+    if key not in COVER_ART:
+        return ""
+    icon, motif = COVER_ART[key]
+    if motif == "nodes":
+        cloth = ('<svg class="cover-cloth" viewBox="0 0 120 160" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'
+                 '<path class="cloth-line" d="M14 26 L62 52 L108 22 M62 52 L40 112 L98 128 M62 52 L98 128 M14 26 L40 112 M40 112 L20 150"/>'
+                 '<g class="cloth-dot"><circle cx="14" cy="26" r="4"/><circle cx="62" cy="52" r="5"/><circle cx="108" cy="22" r="4"/>'
+                 '<circle cx="40" cy="112" r="4"/><circle cx="98" cy="128" r="5"/><circle cx="20" cy="150" r="3"/></g></svg>')
+    else:
+        pid = f"cloth-{key}"
+        cloth = (f'<svg class="cover-cloth" aria-hidden="true"><defs>{COVER_PATTERNS[motif].format(id=pid)}</defs>'
+                 f'<rect width="100%" height="100%" fill="url(#{pid})"/></svg>')
+    body = ICONS[icon].replace('class="F"', 'class="f-paper"')
+    sticker = f'<span class="sticker" aria-hidden="true"><svg viewBox="-6 -6 72 72"><g class="d">{body}</g></svg></span>'
+    return cloth + sticker
+
+
 def book_items(journals, planned, series=1, book=1, casefile=False):
     books = [CASEFILE_ITEM] if casefile else []
     for j in journals:
@@ -1630,7 +1663,7 @@ def book_items(journals, planned, series=1, book=1, casefile=False):
                  else f"{n} notes · {len(j['collections'])} collections")
         books.append(f'''    <li class="book book--{k}">
       <a class="book-cover" href="{k}/index.html" aria-label="Open {vol}: {esc(j['title'])}">
-        <span class="book-band" aria-hidden="true"></span>
+        {cover_art(k)}<span class="book-band" aria-hidden="true"></span>
         <span class="book-label"><small>{vol}</small><b>{esc(j['title'])}</b><i>{count}</i></span>
       </a>
       <div class="book-meta">
