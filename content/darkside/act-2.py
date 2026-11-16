@@ -37,7 +37,7 @@ happens to his hope. Learn from it.</p>""",
     entries=[
         # ------------------------------------------------------------------ 1
         dict(
-            slug="credit-vampire", flagship=True,
+            slug="credit-vampire", plate_caption="The all-hands, 4 March, 10:02. The model took Pip eleven evenings. The slide took Dorian four seconds.", ring="PER MY LAST EMAIL ✠ GREAT WORK TEAM ✠ I'LL TAKE IT FROM HERE ✠", scrawl="don't send him the file", flagship=True,
             name="The Credit Vampire", sigil="☾",
             epithet="Feeds on your work by night. Presents it by day.",
             threat=4, habitat="steering committees, all-hands slides, any email that starts “great work team”",
@@ -104,7 +104,7 @@ NEED HELP   Access to the 2025 smart-meter data (waiting on IT, ticket #4471).""
         ),
         # ------------------------------------------------------------------ 2
         dict(
-            slug="meeting-lich",
+            slug="meeting-lich", ring="LET'S TAKE IT OFFLINE ✠ QUICK SYNC ✠ SAME TIME NEXT WEEK ✠", scrawl="it has met 112 times",
             name="The Meeting Lich", sigil="⌛",
             epithet="Undead. Recurring. Spawns more of itself.",
             threat=3, habitat="the 27th floor meeting rooms, every Tuesday at 10:00, forever",
@@ -173,7 +173,7 @@ reply the same day."""),
         ),
         # ------------------------------------------------------------------ 3
         dict(
-            slug="gaslight-wraith",
+            slug="gaslight-wraith", ring="I NEVER SAID THAT ✠ THAT'S NOT WHAT I MEANT ✠ YOU MISREMEMBER ✠", scrawl="write it down. WRITE IT DOWN",
             name="The Gaslight Wraith", sigil="☁",
             epithet="“I never said that.” (It did. You were there.)",
             threat=5, habitat="verbal agreements, hallway chats, calls with no notes",
@@ -240,7 +240,7 @@ Pip"""),
         ),
         # ------------------------------------------------------------------ 4
         dict(
-            slug="bulldozer-ogre",
+            slug="bulldozer-ogre", ring="JUST TO JUMP IN ✠ WHAT I'M HEARING IS ✠ LET ME STOP YOU THERE ✠", scrawl="let me finish",
             name="The Bulldozer Ogre", sigil="⚒",
             epithet="Speaks first, loudest and longest. Hears no one.",
             threat=3, habitat="brainstorms, workshops, any meeting with a whiteboard",
@@ -302,7 +302,7 @@ ground: written input first, rounds, timers, a facilitator. Ogres don't do well 
         ),
         # ------------------------------------------------------------------ 5
         dict(
-            slug="passive-aggressive-poltergeist",
+            slug="passive-aggressive-poltergeist", ring="PER MY LAST EMAIL ✠ GENTLE REMINDER ✠ THANKS IN ADVANCE ✠", scrawl="kind regards (20% kind)",
             name="The Passive-Aggressive Poltergeist", sigil="✉",
             epithet="Rattles the inbox. Never appears in person.",
             threat=2, habitat="email, the kitchen noticeboard, shared calendars",
@@ -367,7 +367,7 @@ Pip"""),
         ),
         # ------------------------------------------------------------------ 6
         dict(
-            slug="coasting-zombie",
+            slug="coasting-zombie", ring="IN PROGRESS ✠ IN PROGRESS ✠ IN PROGRESS ✠ IN PROGRESS ✠", scrawl="still in progress",
             name="The Coasting Zombie", sigil="☕",
             epithet="Does nothing. Survives everything.",
             threat=2, habitat="shared projects, group tasks, any work with more than one owner",
@@ -430,7 +430,7 @@ Sign-off                  Rhona     20 May   –        –"""),
         ),
         # ------------------------------------------------------------------ 7
         dict(
-            slug="doppelganger",
+            slug="doppelganger", ring="LOVE THAT IDEA ✠ SOME PEOPLE FEEL ✠ JUST BETWEEN US ✠", scrawl="who brought the buns?",
             name="The Doppelgänger", sigil="⚭",
             epithet="Lovely to your face. A different creature in rooms you're not in.",
             threat=5, habitat="1:1s with your manager, calibration meetings, the pub after work",
@@ -494,7 +494,7 @@ A peer outside  honest outside view      12 Sep            lunch"""),
         ),
         # ------------------------------------------------------------------ 8
         dict(
-            slug="martyr-banshee",
+            slug="martyr-banshee", ring="NOBODY ELSE CAN ✠ HAVEN'T HAD LUNCH ✠ IT'S QUICKER IF I DO IT ✠", scrawl="go home",
             name="The Martyr Banshee", sigil="♫",
             epithet="Wails of overwork. Refuses all help.",
             threat=2, habitat="Network Operations, Slack status “drowning 🫠”, the late-night email",
@@ -560,7 +560,7 @@ If not this week, no worries, the offer stands."""),
         ),
         # ------------------------------------------------------------------ 9
         dict(
-            slug="know-it-all-basilisk",
+            slug="know-it-all-basilisk", ring="THAT WON'T SCALE ✠ WE TRIED THAT ✠ ACTUALLY ✠ NEXT ✠", scrawl="don't look it in the eye",
             name="The Know-It-All Basilisk", sigil="◉",
             epithet="One glance at your idea and it turns to stone.",
             threat=3, habitat="architecture reviews, technical forums, the comments on your doc",
@@ -626,7 +626,7 @@ the 14th. Before I do, I'd really value your eyes on it:
         ),
         # ------------------------------------------------------------------ 10
         dict(
-            slug="doom-prophet",
+            slug="doom-prophet", ring="IT FAILED IN 2014 ✠ GIVE IT SIX MONTHS ✠ MARK MY WORDS ✠", scrawl="2014 was a long time ago",
             name="The Doom Prophet", sigil="☄",
             epithet="“We tried that in 2014. It failed.”",
             threat=2, habitat="the Control Room, kick-offs, the back row of every town hall",
@@ -687,7 +687,7 @@ and the Prophet becomes useful.</p>
         ),
         # ------------------------------------------------------------------ 11
         dict(
-            slug="toxic-positivity-siren",
+            slug="toxic-positivity-siren", ring="NO PROBLEMS ✠ ONLY OPPORTUNITIES ✠ GOOD VIBES ONLY ✠", scrawl="the gong cannot hurt you",
             name="The Toxic Positivity Siren", sigil="✺",
             epithet="Sings of opportunity as the ship goes down.",
             threat=3, habitat="town halls, wellbeing weeks, announcements with too many emojis",
@@ -747,7 +747,7 @@ ASK       Can you confirm by Friday which one you'd rather keep?"""),
         ),
         # ------------------------------------------------------------------ 12
         dict(
-            slug="boundary-goblin",
+            slug="boundary-goblin", ring="QUICK Q ✠ NO RUSH ✠ ? ✠ ANY UPDATE ✠ JUST CHECKING ✠", scrawl="do not feed after midnight",
             name="The Boundary Goblin", sigil="☏",
             epithet="“Quick question, no rush 🙂” (23:47, there is rush)",
             threat=3, habitat="Slack, WhatsApp, your phone at dinner, your holiday",

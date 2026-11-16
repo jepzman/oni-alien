@@ -354,3 +354,18 @@ in writing."*
 - Checked: both looks at desktop, 375 px phone width (no horizontal scroll) on the series, Act and entry pages and the landing page.
 - Next: Act I (The Court of Whispers), same format. Extras from section 8 (bestiary index across Acts, class quiz,
   loot chest) once two Acts exist.
+
+## 13. The eerie pass and painted plates (16 Nov 2026)
+
+- Owner approved the eerie design (preview first), then asked for **more realistic illustrations, serious and humorous at once**.
+- Skin now has: a turning **sigil** per entry (the creature's catchphrases on the ring, `ring=` field; an eye that blinks),
+  skulls with glowing sockets, blood-drop soul costs, blinking omen eyes, thorned dividers that drip, thorned corners,
+  a torn page edge, tally marks and a margin scrawl (`scrawl=` field), fog, a vignette, a flickering title and, by
+  candlelight, eyes that blink in the side margins. All motion stops under `prefers-reduced-motion`.
+- **Plates:** `content/darkside/art/<slug>.svg` is inlined into the entry (with `plate_caption=`) when it exists.
+  Style: a painted night scene with dramatic light (warm projector light against cool window light), a straight-faced
+  pose, film grain and a vignette, with the jokes in the props (badge “AFTER DARK ONLY”, the bat pocket square, the
+  USB stick tagged PIP_Q3_FORECAST_v4, the “World's best team player” mug). Prefix every id in an art file
+  (e.g. `cv-`) so plates never clash. Done: Credit Vampire. To do: the other 11, after the owner signs off the style.
+- Limit: hand-drawn SVG, not photo-realistic. If photo-realism is wanted, the owner could generate images
+  elsewhere from prompts we write and drop them in as `<slug>.webp`.
