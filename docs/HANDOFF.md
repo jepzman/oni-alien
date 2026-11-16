@@ -85,9 +85,8 @@ cloth, `COVER_ART`). Not deployed yet: merging the branch to `main` is the deplo
      Budget box widths with that; split long labels into label + `sub`.
 2. Phone check at 375 px on every new page: nothing wider than the viewport.
 3. Light and dark mode on the index, one note and the landing shelf.
-4. PDFs: the pinned Playwright 1.48 can't find its browser in the cloud sandbox. Run a copy of
-   `scripts/build-pdf.mjs` with `chromium.launch({ executablePath: '/opt/pw-browsers/chromium' })` and `root` pointed
-   at `public/` (and `NODE_PATH=$(npm root -g)`). PDFs are not committed.
+4. PDFs: in the cloud sandbox run `CHROMIUM_PATH=/opt/pw-browsers/chromium npm run pdf` (the pinned Playwright can't
+   find its own browser there). `PDF_JOURNALS=testing,data` limits a local run. PDFs are not committed.
 5. The workflow's check: every page and PDF in `public/journals.json` exists.
 6. Commit on the working branch, push, open a PR to `main`, merge when the owner asks: the merge **is** the deploy
    (`.github/workflows/pages.yml` → GitHub Pages + the Cloudflare Worker mirror). Watch the run with the GitHub
@@ -121,7 +120,7 @@ cloth, `COVER_ART`). Not deployed yet: merging the branch to `main` is the deplo
   the file tool and run them; don't delete scratch folders.
 - Before deploying, **fetch and merge `main`**: other sessions merge to it too. The generated `public/` files conflict by
   the hundred; resolve the source conflict (`scripts/build_notes.py`), rebuild, `git add -A`.
-- A deploy run now takes about 15 minutes (PDFs for every note). The run does not appear in the Actions list for the
+- A deploy renders only the PDFs that changed (fingerprints in `.pdf-cache/manifest.json`, kept in the Actions cache), so most deploys take a few minutes. A stylesheet change, a change to `scripts/build-pdf.mjs`, a Playwright upgrade or an evicted cache means a full rebuild (about 15 minutes). Force one with “Run workflow” → “Render every PDF again”. The run does not appear in the Actions list for the
   first seconds after a merge.
 - Doodle text: use `Doodle.row()` for rows of boxes; with 5 boxes keep labels under 12 characters, with 4 under 15.
 
