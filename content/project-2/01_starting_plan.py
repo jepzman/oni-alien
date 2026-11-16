@@ -679,7 +679,7 @@ bl_analogy.box(430, 60, 300, 100, "the mark, with a date", "y", sub="moved only 
 
 bl_how = Doodle(760, 400, "Rotterdam's baseline, approved by the steering group on 13 March 2026, version 1. Scope baseline: 71 must-haves, with six app must-haves agreed on 3 March; substitution approvals in Rotterdam is a should, not promised for launch. Schedule baseline: the five milestones, 3, 17, 20, 24 and 27 April. Cost baseline: 380 thousand euros, of which 273 thousand committed. Each signed by its owner: Grace and Joost for scope, the leads for the schedule, Marco for cost. Below: after 13 March the baseline changes only through change control.",
                 "Three baselines, each signed by the person who owns that promise, approved together on 13 March.")
-bl_how.row([("scope", "71 must-haves · 6 in the app", "blue"), ("schedule", "3 · 17 · 20 · 24 · 27 April", "y"), ("cost", "€380k · €287k committed", "green")], y=14, h=100, size=22, subsize=14)
+bl_how.row([("scope", "71 must-haves · 6 in the app", "blue"), ("schedule", "3 · 17 · 20 · 24 · 27 April", "y"), ("cost", "€380k · €335k committed", "green")], y=14, h=100, size=22, subsize=14)
 bl_how.note(132, 142, "signed: Grace, Joost", "pen", size=16)
 bl_how.note(380, 142, "signed: the leads", "pen", size=16)
 bl_how.note(628, 142, "signed: Marco", "pen", size=16)
@@ -714,7 +714,7 @@ BASELINES = dict(
          ("A new mark, on purpose", "Baseline v2, after an approved change"),
          ("Quietly moving the mark", "Editing the plan and calling it on track")],
     how_side="each owner signs their part; the steering group approves the whole",
-    how="""  <p>Sanne corrects the misread the same day, in person, to Joost and the store team, and says it was hers. Then she fixes the cause. Each part of the plan goes to <b>the person who owns that promise</b>. <b>Scope</b>: Grace signs the six app Musts from her session on 3 March (approvals in Rotterdam is a Should, not promised); Joost signs the store and staffing must-haves. <b>Schedule</b>: each lead confirms their milestone. <b>Cost</b>: Marco confirms €380k, of which €287k is already committed. On <b>13 March</b> the steering group approves the three together as <b>baseline v1</b>. From now on the plan can still change, but the baseline moves only through change control.</p>""",
+    how="""  <p>Sanne corrects the misread the same day, in person, to Joost and the store team, and says it was hers. Then she fixes the cause. Each part of the plan goes to <b>the person who owns that promise</b>. <b>Scope</b>: Grace signs the six app Musts from her session on 3 March (approvals in Rotterdam is a Should, not promised); Joost signs the store and staffing must-haves. <b>Schedule</b>: each lead confirms their milestone. <b>Cost</b>: Marco confirms €380k, of which €335k is already committed. On <b>13 March</b> the steering group approves the three together as <b>baseline v1</b>. From now on the plan can still change, but the baseline moves only through change control.</p>""",
     how_figs=[bl_how],
     steps=[("Finish integrating the plan", "A baseline of a clashing plan is worthless."),
            ("Have each owner sign their part", "Scope, schedule, cost."),
@@ -741,8 +741,9 @@ SCOPE      71 must-haves (list: scope)                                   signed
 SCHEDULE   3 Apr fit-out done · 17 Apr stock in · 20 Apr app ready ·     the leads
            24 Apr go / no-go · 27 Apr opening · 11 May hypercare exit
 
-COST       €380k total · committed to date €287k                         Marco
-           (builder €148k · cold room €78k · earlier spend €61k)
+COST       €380k total · committed to date €335k                         Marco
+           (builder €148k · cold room €78k · equipment €48k · recruiting and
+           marketing contracts €61k)
            reserve €6k
 
 RULE       measured against v1 from today. v1 changes only by an approved change

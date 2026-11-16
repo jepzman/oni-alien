@@ -381,7 +381,7 @@ sr_analogy.icon("map", 40, 60, 1.6)
 sr_analogy.row([("where we are", "against the route", "blue"), ("what's left", "distance", "y"), ("arrival time", "updated as we drive", "green")], x=180, y=60, h=84, w=178, gap=10, size=16, subsize=13)
 sr_analogy.note(460, 196, "position · remaining · forecast", "pen", size=20)
 
-sr_how = Doodle(760, 400, "Rotterdam's status of 27 March 2026, one month before opening. A chart of must-haves done against the plan line: 49 done, the plan said 52. Milestones: fit-out forecast 8 April against a baseline of 3 April, escalated on the 23rd and recovered. Money: 322 thousand euros committed of 380. Overall amber, by the written rules. A forecast: 71 must-haves by 24 April if the rate of four a week rises to six. And two decisions asked of the steering group.",
+sr_how = Doodle(760, 400, "Rotterdam's status of 27 March 2026, one month before opening. A chart of must-haves done against the plan line: 49 done, the plan said 52. Milestones: fit-out forecast 8 April against a baseline of 3 April, escalated on the 23rd and recovered. Money: 355.5 thousand euros committed of 380. Overall amber, by the written rules. A forecast: 71 must-haves by 24 April if the rate of four a week rises to six. And two decisions asked of the steering group.",
                 "Position against the baseline, a forecast, a colour that follows rules, and what is needed from the reader.")
 sr_how.box(14, 14, 420, 230, None, "paper")
 sr_how.line("M50 220 h360 M50 220 v-190", thin=True)
@@ -393,7 +393,7 @@ sr_how.note(330, 82, "plan: 52", size=14)
 sr_how.note(230, 240, "must-haves done, by week (of 71)", size=14)
 sr_how.box(452, 14, 294, 68, "AMBER", "y", sub="by the rules", size=24, subsize=14)
 sr_how.box(452, 94, 294, 68, "forecast", "blue", sub="71 by 24 Apr needs 6 a week", size=18, subsize=13)
-sr_how.box(452, 174, 294, 70, "money", "green", sub="€322k of €380k committed", size=18, subsize=13)
+sr_how.box(452, 174, 294, 70, "money", "green", sub="€355.5k of €380k committed", size=18, subsize=13)
 sr_how.box(14, 264, 732, 100, None, "pink")
 sr_how.head(380, 292, "needed from the steering group", size=18)
 sr_how.text(380, 322, "1 confirm approvals move to June (31 Mar session)  ·  2 nothing new for launch after 3 April", size=14)
@@ -438,12 +438,12 @@ STATUS = dict(
     analogy="""  <p>A <b>sat-nav</b> shows three things: <b>where you are</b> on the planned route, <b>how far is left</b>, and <b>when you'll arrive</b>, recalculated as you drive. When traffic builds it tells you at once and offers another route. It never says “making good progress”, and it never waits until you've missed the ferry to mention the jam.</p>""",
     analogy_figs=[sr_analogy],
     map=[("The planned route", "Baseline v1"),
-         ("The dot on the map", "49 must-haves done; fit-out forecast; €322k committed"),
+         ("The dot on the map", "49 must-haves done; fit-out forecast; €355.5k committed"),
          ("Arrival time", "The forecast: 65 of 71 by go / no-go at the current rate"),
          ("“Traffic ahead: new route?”", "Corrective action, or a decision for the steering group"),
          ("“Making good progress”", "A green that is really a mood")],
     how_side="position, forecast, action, ask — and colours with rules",
-    how="""  <p>For the steering group of <b>27 March</b> Sanne rebuilds the page. <b>Position</b>: a small chart of must-haves done against the plan line (49; the plan said 52), the milestones against baseline, money committed (€322k of €380k). <b>Forecast</b>: at the recent rate of four a week, 65 of 71 by go / no-go. <b>Action</b>: Ben and Eli pair on the six blocked items; nothing new enters the launch list after 3 April. <b>Ask</b>: two decisions. And each colour now follows a <b>written rule</b> (under “going deeper”). By those rules the overall status is amber. Marco reads the rules twice and says: “so next week I can check you.”</p>""",
+    how="""  <p>For the steering group of <b>27 March</b> Sanne rebuilds the page. <b>Position</b>: a small chart of must-haves done against the plan line (49; the plan said 52), the milestones against baseline, money committed (€355.5k of €380k). <b>Forecast</b>: at the recent rate of four a week, 65 of 71 by go / no-go. <b>Action</b>: Ben and Eli pair on the six blocked items; nothing new enters the launch list after 3 April. <b>Ask</b>: two decisions. And each colour now follows a <b>written rule</b> (under “going deeper”). By those rules the overall status is amber. Marco reads the rules twice and says: “so next week I can check you.”</p>""",
     how_figs=[sr_how],
     steps=[("Measure against the baseline", "Done, dates, money."),
            ("Show the trend", "This week against the last few."),
@@ -468,7 +468,7 @@ SCOPE        52 of 71 by now  49 done · 6 blocked  65 by 24 Apr at     AMBER (3
                                                    4 a week            → amber at 4+)
 SCHEDULE     G1 3 Apr         builder said 8 Apr   3 Apr (weekend      GREEN (on baseline
                               on 23 Mar            work, C-02)         after C-02)
-FINANCE      €380k            €322k committed      €379k               AMBER (reserve in
+FINANCE      €380k            €355.5k committed    €379k               AMBER (reserve in
                               reserve €1k                              use)
 GOVERNANCE   ok · STAKEHOLDERS ok (neighbours told 2 Mar) · RESOURCES ok (15 pickers
 start Mon) · RISK amber (I-07 internet line: workaround agreed)
@@ -489,7 +489,7 @@ TURNS RED IF fewer than 55 must-haves done on 10 Apr, or G1 slips past 7 Apr
   <p>Good rules have three properties. They use <b>numbers from the baseline</b> (days, must-haves, euros). They are <b>tied to authority</b>: Rotterdam's red line for schedule is “more than three days late”, the same three days that send a decision to the sponsor. And they say what <b>amber</b> means, which is usually “off the baseline, with a recovery plan we believe”.</p>
   <p>The overall colour is the <b>worst line</b>, not an average. One red domain can sink a project that is green in the other six.</p>""", [sr_deep1]),
             ("Forecast: where will we land?", """  <p>Position tells you about the past. The steering group cares about the end. The simplest honest forecast needs two numbers: <b>how much is left</b> and <b>how fast you are really going</b>.</p>
-  <p>On 27 March: 71 − 49 = <b>22 left</b>. The last three weeks finished 4, 5 and 3: about <b>4 a week</b>. 22 ÷ 4 = <b>5½ weeks</b>. There are 4 before go / no-go. So at this rate Rotterdam reaches <b>65 of 71</b>, six short.</p>
+  <p>On 27 March: 71 − 49 = <b>22 left</b>. The last three weeks finished 7, 4 and 4, and the pace has settled at about <b>4 a week</b>. 22 ÷ 4 = <b>5½ weeks</b>. There are 4 before go / no-go. So at this rate Rotterdam reaches <b>65 of 71</b>, six short.</p>
   <p>That sum does three useful things. It turns “a bit behind” into a number. It shows the size of the fix: the rate must reach 5½ a week, or six must-haves must leave the list. And it can be <b>checked next week</b>: did the rate rise? (It did: moving approvals to June freed Ben's team, and the next three weeks finished 6, 5 and 9.)</p>
   <p>Always state the assumption (“at the average of the last three weeks”). Vol. 4 does the same sum for money, where it is called earned value.</p>""", [sr_deep2]),
             ("Monitoring without controlling", """  <p>A report that measures and then stops is only half the process. For every line that is off the baseline, one of four things must be written:</p>
@@ -534,7 +534,7 @@ TURNS RED IF fewer than 55 must-haves done on 10 Apr, or G1 slips past 7 Apr
           ("Monitoring or controlling: deciding to pair Ben and Eli?", "Controlling."),
           ("22 must-haves left, 4 finished a week. How long?", "5½ weeks."),
           ("Six lines are green and one is red. What is the overall colour?", "Red: the worst line."),
-          ("On 10 April, 60 must-haves are done and 11 remain, with two weeks to go / no-go. The last three weeks finished 6, 5 and 9. What does Sanne report?", "A rate of about 6½ a week: 11 need under two weeks. Forecast: 71 by 24 April, just. Green or amber by the scope rule, with the assumption stated.")],
+          ("On 10 April, 60 must-haves are done and 11 remain, with two weeks to go / no-go. The last three weeks finished 4, 6 and 5. What does Sanne report?", "A rate of about 5 a week: 11 need just over two weeks, and there are two. Forecast: 69 or 70 by 24 April. Amber by the scope rule, with the two at-risk must-haves named and the assumption stated. (On 24 April it was 69.)")],
     try_it="Take your last status report. For each colour, write the rule that would make someone else choose the same colour from the same numbers. Then add one sum: what's left ÷ your real rate. Does the answer fit in the time you have?",
     remember="Where we are, where we'll <span class=\"hl\">land</span>, what we're doing, what we <span class=\"hl\">need</span>.",
     sources=["Project Management Institute, <i>PMBOK Guide</i>, Eighth Edition (2025): Governance domain, monitoring and controlling performance.",
@@ -632,7 +632,7 @@ CHANGE = dict(
 
 ID    DATE    CHANGE                         IMPACT                  DECIDED BY   RESULT
 C-01   2 Feb  fridges with doors             +€14k; reserve 20 → 6   Marco        approved
-C-02  23 Mar  builder works two weekends     +€5k; reserve 6 → 1     Joost        approved
+C-02  23 Mar  builder works 28–29 March     +€5k; reserve 6 → 1     Joost        approved
               to hold G1 on 3 Apr            G1 back on 3 Apr
 C-03  31 Mar  substitution approvals in      scope: one Should out   steering     approved
               Rotterdam: launch → June       frees ~1 week (Ben)     group        → baseline v2
@@ -720,11 +720,11 @@ es_analogy = Doodle(760, 240, "Doodle of a nurse on a night ward. A patient's te
 es_analogy.row([("situation", "what has changed", "paper"), ("impact", "what it means", "y"), ("options", "two or three", "blue"), ("recommendation", "what I'd do", "green")], y=50, h=90, size=16, subsize=13)
 es_analogy.note(380, 200, "now, not at the morning round", "pen", size=20)
 
-es_how = Doodle(760, 400, "Sanne's escalation to Joost on 23 March 2026, on one screen, sent within two hours of the builder's call. Situation: handover forecast 8 April, five days late, because the electrical inspection was re-booked. Impact: stocking shrinks from ten working days to seven; Gate 2 at risk. Three options. A: accept, squeeze stocking, no cost, high risk. B: weekend work for two weekends, five thousand euros, handover back on 3 April. C: partial handover, cold room first, no cost, medium risk. Recommendation: B. Decision needed by Tuesday noon. Joost decides B at four o'clock the same day.",
+es_how = Doodle(760, 400, "Sanne's escalation to Joost on 23 March 2026, on one screen, sent within two hours of the builder's call. Situation: handover forecast 8 April, five days late, because the electrical inspection was re-booked. Impact: stocking shrinks from ten working days to seven; Gate 2 at risk. Three options. A: accept, squeeze stocking, no cost, high risk. B: weekend work on the weekend of 28–29 March, five thousand euros, handover back on 3 April. C: partial handover, cold room first, no cost, medium risk. Recommendation: B. Decision needed by Tuesday noon. Joost decides B at four o'clock the same day.",
                 "Situation, impact, options, recommendation, deadline. On one screen, the same day.")
 es_how.box(14, 14, 360, 96, "situation", "paper", sub="handover 8 Apr, not 3 Apr (5 days)", size=18, subsize=14)
 es_how.box(386, 14, 360, 96, "impact", "y", sub="stocking: 10 days → 7 · Gate 2 at risk", size=18, subsize=14)
-opts = [("A accept", "squeeze stocking · €0", "high risk", "paper"), ("B weekend work", "2 weekends · €5k", "back on 3 Apr", "green"), ("C partial handover", "cold room first · €0", "medium risk", "paper")]
+opts = [("A accept", "squeeze stocking · €0", "high risk", "paper"), ("B weekend work", "28–29 Mar · €5k", "back on 3 Apr", "green"), ("C partial handover", "cold room first · €0", "medium risk", "paper")]
 for i, (t, s, r, f) in enumerate(opts):
     es_how.box(14 + i * 248, 130, 236, 100, t, f, sub=s, size=17, subsize=13)
     es_how.note(132 + i * 248, 252, r, "pen", size=15)
@@ -757,7 +757,7 @@ ESCALATION = dict(
          ("“What I'd recommend”", "Option B: weekend work, €5k"),
          ("The doctor decides in a minute", "Joost decides at 16:00")],
     how_side="early, on one screen: situation, impact, options, recommendation, deadline",
-    how="""  <p>Sanne takes ninety minutes to do three things: confirm the builder's date in writing, ask Tomás what seven stocking days would mean, and get a price for weekend work. Then one message to Joost: <b>situation</b> (8 April, five days late, the cause), <b>impact</b> (stocking shrinks from ten working days to seven; Gate 2 at risk), <b>three options</b> with cost and risk, her <b>recommendation</b> (B: two weekends of work, €5k, handover back on 3 April; the reserve covers it and falls to €1k) and a <b>deadline</b> (Tuesday noon, to book the crews). Joost phones Marco and decides B at 16:00. It goes in the issue log as I-09 and the change log as C-02. The fit-out is handed over on 3 April.</p>""",
+    how="""  <p>Sanne takes ninety minutes to do three things: confirm the builder's date in writing, ask Tomás what seven stocking days would mean, and get a price for weekend work. Then one message to Joost: <b>situation</b> (8 April, five days late, the cause), <b>impact</b> (stocking shrinks from ten working days to seven; Gate 2 at risk), <b>three options</b> with cost and risk, her <b>recommendation</b> (B: work on the weekend of 28–29 March, €5k, handover back on 3 April; the reserve covers it and falls to €1k) and a <b>deadline</b> (Tuesday noon, to book the crews). Joost phones Marco and decides B at 16:00. It goes in the issue log as I-09 and the change log as C-02. The fit-out is handed over on 3 April.</p>""",
     how_figs=[es_how],
     steps=[("Know your thresholds before you need them", "Days, money, scope."),
            ("When one is crossed, escalate the same day", "Not after you've tried to fix it."),
@@ -782,7 +782,7 @@ IMPACT     Stocking shrinks from 10 working days to 7. Tomás: possible only wit
 
 OPTIONS                              COST    HANDOVER   RISK
 A  accept; squeeze stocking          €0      8 Apr      high: no slack before G2
-B  builder works two weekends        €5,000  3 Apr      low: crews available if booked
+B  builder works 28–29 March        €5,000  3 Apr      low: crews available if booked
                                                         by Tuesday
 C  partial handover: cold room and   €0      3 / 8 Apr  medium: pickers and builders
    dry area first                                       share the store for 3 days
