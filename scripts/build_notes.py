@@ -206,6 +206,9 @@ JOURNALS = [
             (13, "micro-frontends", "Micro-Frontends", "architecture", "Split a big frontend into apps owned and deployed by separate teams."),
             (14, "design-tokens", "Design Tokens", "architecture", "Name every colour, size and font once, and use those names everywhere."),
             (15, "error-boundaries", "Error Boundaries", "architecture", "Catch a crashing part of the UI and show a fallback, instead of a blank page."),
+            (16, "debounce-throttle", "Debounce & Throttle", "rendering", "Run a handler once after the user pauses, or at most every so often, instead of on every event."),
+            (17, "web-workers", "Web Workers", "rendering", "Move heavy work off the main thread so the page keeps responding to taps."),
+            (18, "offline-first", "Offline-First Sync", "state", "Write to a local store first and sync with the server when the connection allows."),
         ],
     ),
     dict(
