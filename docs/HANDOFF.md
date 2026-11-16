@@ -47,9 +47,9 @@ Caching and Zero-Downtime Change, all deployed. Working branch `claude/design-pa
 ## 1b. In progress: improving the earlier books (2026-11-16)
 
 Plan: `docs/PLAN-improve-earlier-books.md` (approved 15 Nov; progress in its section 8). Branch `ccr-5ac82ff1-8gn15m`.
-Series 1 has a first pass: linked related notes, seen-at-Larder and cheat-sheet asides, a situational question and a try it on
-all 93 notes, and four going-deeper chapters on Vol. 3 as a sample. Waiting for the owner: review the sample, and pick a
-cover artwork option (sticker, printed cloth or both).
+Series 1 is revised: linked related notes, seen-at-Larder and cheat-sheet asides, a situational question and a try it on
+all 93 notes, 19 going-deeper chapters (3–4 per volume, in `content/<key>/deeper.py`), and new covers (sticker + printed
+cloth, `COVER_ART`). Not deployed yet: merging the branch to `main` is the deploy. Next: the extra notes (plan 5.1).
 
 ## 2. Next steps (owner's decisions)
 

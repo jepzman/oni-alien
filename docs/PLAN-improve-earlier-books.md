@@ -224,7 +224,7 @@ The owner approved the plan on 2026-11-15 (“do your recommendation”). The wo
 | A6 meanwhile links (Books 1–2) | not started |
 | S1 situational question | **done**, 93 of 93 (tagged “what would you do?”) |
 | S2 try it | **done**, 93 of 93 |
-| S3 going deeper | **sample done on `data`**: Indexing, Optimistic Locking, Change Data Capture, Multitenancy (4 chapters, 9 figures). Owner reviews before the other five volumes |
+| S3 going deeper | **done, 19 chapters, 35 figures** (owner, 16 Nov: “continue going deeper for other volumes”). Data: Indexing, Optimistic Locking, Change Data Capture, Multitenancy. Distributed: API Gateway, Service Discovery, Sharding. Frontend: State Machines, SSR & Hydration, Micro-Frontends. Testing: Test Doubles, Contract Testing, Flaky Test Quarantine. Security: OAuth 2.0 with PKCE, Threat Modelling, Supply-Chain Hygiene. Cloud: Infrastructure as Code, SLOs & Error Budgets, Incident Response & Postmortems. Not written (still candidates): Sidecar & Service Mesh, Optimistic UI, Property-Based Testing, Envelope Encryption, Autoscaling |
 | S4 depth pass, S5 freshness pass | not started |
 | 5.1 extra notes, Vol. 7 | not started |
 
@@ -234,5 +234,7 @@ How it is built: additions live in `content/<key>/revisions.py` (quiz_add, try_i
 Also fixed on the way: leftover merge markers in `bujo.css` that hid the deep-dive cover colours and Book 3's binder colours
 on the live site; deep-dive covers restyled as a printed textbook; long words in quiz answers no longer widen phone pages.
 
-Next for Series 1: owner reviews the `data` sample, then going deeper for the other five volumes (candidates in section 3),
-then the extra notes (5.1). Cover artwork: three options mocked up (sticker, printed cloth, both); waiting for the owner.
+Cover artwork: the owner chose option C (16 Nov): a paper sticker with one emblem and the volume's paper pressed into the
+cloth, on the six pattern covers (`COVER_ART` in `build_notes.py`).
+
+Next for Series 1: the extra notes (5.1), the freshness pass (S5), the depth pass (S4), then Vol. 7.
