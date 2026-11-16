@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
 <link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
-<link rel="stylesheet" href="../../assets/bujo.css?v=9d78ec9815">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5122ca78ff">
 <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
 <script src="../../assets/notebook.js?v=520827edac" defer></script>
 </head>
@@ -31,6 +31,7 @@
 <article class="sheet" id="autoscaling">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Fri · 04.12.26</span><span class="topic">collection · <b>running &amp; observing</b></span></div>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “open more checkout lanes”</p>
   <h1><span class="hl">Autoscaling</span></h1>
   <div class="tldr">
@@ -126,6 +127,37 @@ spec:
   triggers: [{ <span class="k">type</span>: aws-sqs-queue, metadata: { queueURL: <span class="s">"…"</span>, queueLength: <span class="s">"20"</span> } }]</code></pre>
   </div>
   <p class="aside">tools: Kubernetes HPA / VPA, KEDA, Karpenter and Cluster Autoscaler (nodes), AWS Auto Scaling groups and ECS service autoscaling, GCP managed instance groups, Cloud Run / Lambda (automatic, scale to zero).</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">headroom and lag, two layers of scaling, protecting what's behind you</span></h2>
+  <p class="deep-intro">The note covers signals, limits and “up fast, down slow”. This chapter is about the numbers behind those settings: how much spare capacity you need given how slowly new capacity arrives, why scaling pods also means scaling machines, and how to stop a scale-up from overwhelming the database behind it.</p>
+  <h3 class="deep-h"><span>1</span>Headroom: carrying the gap</h3>
+  <p>New capacity always arrives late. The autoscaler needs a minute or so of data to notice a rise, a new machine may take two minutes, and a new pod another minute to become ready. For three to four minutes, the instances you already have must carry the extra load.</p>
+  <p>That sets the <b>target utilisation</b>. If traffic can grow 30% in four minutes at the start of a sale, instances must be able to absorb 30% more than they carry now: a target around 70% CPU, not 90%. Add the loss of one zone: with three zones, the remaining two must carry everything until replacements arrive. Work it out from your own numbers:</p>
+  <ul>
+    <li><b>Lag:</b> time from load rising to a new instance serving. Measure it in a load test, don't guess.</li>
+    <li><b>Ramp:</b> how fast load grows on a bad day (from your metrics, launch days included).</li>
+    <li><b>Headroom</b> = ramp × lag, as a fraction of current capacity. Target utilisation = 100% minus that, minus a margin.</li>
+  </ul>
+  <p>Cutting lag is often cheaper than buying headroom: smaller images, faster start-up, and capacity scheduled ahead of known peaks.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Load rising faster than capacity can follow. Traffic climbs steadily from 9:00. The autoscaler notices after a minute, asks for more pods, which need new machines first; machines take two minutes and pods one more. During those three to four minutes, the existing instances must carry the extra load, which is what headroom is for."><g class="rough"><path class="d d-thin" d="M60 30 V240 H740"/><path class="d d-red" d="M60 220 L740 50"/><path class="d d-green" d="M60 190 H250 V150 H430 V110 H610 V70 H740"/><path class="d d-red f-pink" d="M180 190 L250 172.5 L250 190 Z"/><path class="d d-red f-pink" d="M340 150 L430 127.5 L430 150 Z"/><path class="d d-red f-pink" d="M500 110 L610 82.5 L610 110 Z"/><path class="d d-red f-pink" d="M660 70 L740 50 L740 70 Z"/></g><text class="t-s" x="740" y="266" text-anchor="end" font-size="15">time →</text><text class="t-s" x="50" y="40" text-anchor="end" font-size="14">load</text><text class="t-s t-red" x="700" y="46" text-anchor="end" font-size="15">demand</text><text class="t-s t-green" x="740" y="92" text-anchor="end" font-size="15">capacity</text><text class="t-s t-red" x="190" y="214" text-anchor="start" font-size="15">the gaps: headroom must carry these</text><text class="t-s t-pen" x="400" y="284" text-anchor="middle" font-size="16">notice ~1 min · new machine ~2 min · pod ready ~1 min</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Capacity arrives in steps, minutes after demand. Headroom carries the gap.</figcaption></figure>
+  <h3 class="deep-h"><span>2</span>Two layers: pods and machines</h3>
+  <p>In Kubernetes, the pod autoscaler (HPA, or KEDA for queues) only asks for more pods. If the cluster has no room, the new pods wait as <i>Pending</i> until the cluster autoscaler (or Karpenter) adds machines. Two autoscalers, two delays, and the second is usually the slower.</p>
+  <ul>
+    <li><b>Keep a little spare room</b> in the cluster: a few low-priority placeholder pods that reserve space and are evicted the moment real pods need it. Real pods start in seconds; the placeholders wait for the new machine instead.</li>
+    <li><b>Make requests honest.</b> The cluster autoscaler sizes machines from pod <i>requests</i>, not actual use. Requests set too low pack too many pods onto a machine; too high waste money and slow scaling.</li>
+    <li><b>Watch scale-down.</b> Removing a machine evicts its pods. Set pod disruption budgets so a scale-down never takes out too many copies of one service at once.</li>
+  </ul>
+
+  <h3 class="deep-h"><span>3</span>Protecting what's behind you</h3>
+  <p>Autoscaling the web tier moves the bottleneck to whatever it calls. Twenty pods with a database pool of 20 connections each need 400 connections; scale to 60 pods and you need 1,200, far beyond what the database can take (see Connection Pooling, Vol. 3). The scale-up that was supposed to help takes the database down.</p>
+  <ul>
+    <li><b>Set the maximum from the dependency,</b> not just the budget: max pods × pool size must stay below the database's limit, or put a pooler in between.</li>
+    <li><b>Scale workers on the queue, within the downstream limit.</b> More workers than the payment provider's rate limit allows only produce 429s.</li>
+    <li><b>Shed load before the limit.</b> When the maximum is reached, reject excess requests quickly with 429 or 503 rather than queueing them until everything times out.</li>
+    <li><b>Scale to zero only where cold starts are acceptable:</b> background jobs and internal tools, not checkout. Keep a minimum of two or three for anything users wait on.</li>
+  </ul>
+
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">
@@ -175,13 +207,20 @@ spec:
     </div>
   </div>
   <h3>Related patterns</h3>
-  <ul class="related"><li><b>Health checks &amp; probes</b></li><li><b>Immutable infrastructure</b></li><li><b>Cost visibility (FinOps)</b></li><li><b>Connection pooling</b> (Vol. 3)</li></ul>
+  <ul class="related"><li><a href="../notes/health-checks.html"><b>Health checks &amp; probes</b></a></li><li><a href="../notes/immutable-infrastructure.html"><b>Immutable infrastructure</b></a></li><li><a href="../notes/finops.html"><b>Cost visibility (FinOps)</b></a></li><li><a href="../../data/notes/connection-pooling.html"><b>Connection pooling</b></a> (Vol. 3)</li></ul>
+  <p class="aside seen">seen at Larder → <a href="../../architect-5/notes/capacity-planning.html">Capacity Planning</a> <small>(Ana, vol. 5)</small></p>
+  <p class="aside deeper">on a card → <a href="../../cheatsheets/docker-kubernetes/index.html">Docker &amp; Kubernetes: the cheat sheet</a></p>
   <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
   <div class="quiz">
     <details><summary>Why scale up fast and down slowly?</summary><p>To catch spikes quickly while avoiding flapping when load dips briefly.</p></details>
     <details><summary>What makes a good scaling metric?</summary><p>One that tracks demand early, like requests per instance or queue depth.</p></details>
     <details><summary>Why set a maximum?</summary><p>To cap cost and protect downstream systems from too many instances.</p></details>
     <details><summary>What must be true of instances?</summary><p>They must be stateless and start quickly.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A queue worker scales on CPU, which stays at 20% while the queue grows to 2 hours of work, because the workers wait on an external API. What signal do you scale on, and what limit do you set?</span></summary><p>Queue length or age (with KEDA, for example), so instances follow the work waiting. Set a maximum that the external API can handle, or more workers will only hit its rate limit.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Deploy a service with a Horizontal Pod Autoscaler in a local cluster and send load with hey or k6. Watch replicas go up and down, then change the scale-down stabilisation window and compare how often it flaps.</p>
   </div>
   <div class="remember">
     <span class="tag">remember!!</span>

@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
 <link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
-<link rel="stylesheet" href="../../assets/bujo.css?v=9d78ec9815">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5122ca78ff">
 <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
 <script src="../../assets/notebook.js?v=520827edac" defer></script>
 </head>
@@ -31,6 +31,7 @@
 <article class="sheet" id="supply-chain">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Thu · 17.12.26</span><span class="topic">collection · <b>building &amp; running</b></span></div>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “check the deliveries”</p>
   <h1><span class="hl">Supply-Chain Hygiene</span></h1>
   <div class="tldr">
@@ -114,6 +115,41 @@
 <span class="c"># cluster admission policy: only images signed by this repo's workflow may run</span></code></pre>
   </div>
   <p class="aside">tools: Dependabot, Renovate, npm/pnpm lockfiles, OSV-Scanner, Snyk, Socket (malicious package detection), Syft/Trivy/Grype, CycloneDX, Sigstore cosign, SLSA GitHub generator, OpenSSF Scorecard, Kyverno / Sigstore policy-controller.</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">choosing packages, handling advisories, build to cluster</span></h2>
+  <p class="deep-intro">The note lists the controls: lockfiles, updates, scanning, SBOMs, signing. This chapter is about the decisions in between: whether to add a dependency in the first place, what to do in the first hour after a vulnerability advisory, and how the build evidence is checked all the way to the cluster.</p>
+  <h3 class="deep-h"><span>1</span>Before you add a dependency</h3>
+  <p>Every package you add brings its own dependencies and its maintainers' habits. Two minutes of checking before <code>npm install</code> is cheaper than removing it later.</p>
+  <div class="table-scroll"><table class="map"><thead><tr><th scope="col">Look at</th><th scope="col">Warning sign</th></tr></thead><tbody>
+    <tr><td>What it pulls in (<code>npm ls</code>, the lockfile diff)</td><td>A small helper that brings 80 transitive packages.</td></tr>
+    <tr><td>Maintainers and activity</td><td>One maintainer, no release in two years, issues unanswered.</td></tr>
+    <tr><td>Install scripts (<code>preinstall</code>, <code>postinstall</code>)</td><td>Scripts that download or run code at install time.</td></tr>
+    <tr><td>The name</td><td>One letter off a popular package (typosquatting), or very new with few users.</td></tr>
+    <tr><td>Security practice (OpenSSF Scorecard)</td><td>No branch protection, no signed releases, no security policy.</td></tr>
+    <tr><td>Licence</td><td>A licence your company can't ship.</td></tr>
+  </tbody></table></div>
+  <p>And ask the plain question: is ten lines of our own code better than this package? For small utilities, often yes.</p>
+
+  <h3 class="deep-h"><span>2</span>The first hour after an advisory</h3>
+  <p>A critical advisory lands for a library you have heard of. Panic-upgrading everything is risky; ignoring it is worse. Work through four questions:</p>
+  <ol>
+    <li><b>Do we have it?</b> Search the SBOMs of every deployed service, not just the main repository. This is what SBOMs are for: the answer takes minutes, not days.</li>
+    <li><b>Can it be reached?</b> Is the vulnerable function used, and is that service exposed to the input the attack needs? Reachability tools help; a quick code search often does too.</li>
+    <li><b>Is there a fix?</b> Upgrade through the normal pipeline, with tests, within the deadline your policy sets for that severity (for example 2 days for critical and internet-facing, 30 days for medium).</li>
+    <li><b>If not, mitigate:</b> turn off the feature, add a WAF rule, change the config the advisory names, and track the real fix.</li>
+  </ol>
+  <p>Write down “not affected, because …” decisions with a date to check again: reachability changes when code changes.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Triage of a new vulnerability advisory. First: is the package in our software bill of materials? If not, nothing to do. If it is: is the vulnerable code reachable from our use, and is the service exposed? If yes and a fixed version exists, upgrade within the deadline for that severity. If no fix exists, add a mitigation such as a WAF rule or a config change. If not reachable, record the decision with a re-check date."><g class="rough"><rect class="d f-y" x="20" y="20" width="160" height="64" rx="10"/><path class="d" d="M100 88 L100 126"/><path class="d" d="M94.8 115.2 L100 126 L105.2 115.2"/><rect class="d f-green" x="20" y="130" width="160" height="50" rx="10"/><path class="d" d="M184 52 L226 52"/><path class="d" d="M215.2 57.2 L226 52 L215.2 46.8"/><rect class="d f-y" x="230" y="20" width="230" height="64" rx="10"/><path class="d" d="M345 88 L345 196"/><path class="d" d="M339.8 185.2 L345 196 L350.2 185.2"/><rect class="d f-paper" x="250" y="200" width="190" height="70" rx="10"/><path class="d" d="M464 52 L496 52"/><path class="d" d="M485.2 57.2 L496 52 L485.2 46.8"/><rect class="d f-y" x="500" y="20" width="240" height="64" rx="10"/><path class="d" d="M580 88 L580 120"/><path class="d" d="M574.8 109.2 L580 120 L585.2 109.2"/><rect class="d f-green" x="480" y="124" width="210" height="56" rx="10"/><path class="d d-red" d="M718 88 L718 206"/><path class="d d-red" d="M712.8 195.2 L718 206 L723.2 195.2"/><rect class="d f-pink d-red" x="480" y="210" width="260" height="60" rx="10"/></g><text class="t-head" x="100" y="59" text-anchor="middle" font-size="17">in our SBOM?</text><text class="t-s" x="108" y="112" text-anchor="start">no</text><text class="t-head" x="100" y="162" text-anchor="middle" font-size="15">nothing to do</text><text class="t-s" x="205" y="42" text-anchor="middle">yes</text><text class="t-head" x="345" y="59" text-anchor="middle" font-size="17">reachable + exposed?</text><text class="t-s" x="353" y="146" text-anchor="start">no</text><text class="t-head" x="345" y="231" text-anchor="middle" font-size="16">record it</text><text class="t" x="345" y="255" text-anchor="middle" font-size="13">re-check date</text><text class="t-s" x="480" y="42" text-anchor="middle">yes</text><text class="t-head" x="620" y="59" text-anchor="middle" font-size="17">fixed version?</text><text class="t-s" x="588" y="108" text-anchor="start">yes</text><text class="t-head" x="585" y="159" text-anchor="middle" font-size="15">upgrade by deadline</text><text class="t-s t-red" x="712" y="150" text-anchor="end">no</text><text class="t-head t-red" x="610" y="236" text-anchor="middle" font-size="15">mitigate meanwhile</text><text class="t" x="610" y="260" text-anchor="middle" font-size="13">config, WAF rule, disable</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Four questions turn a scary advisory into one of four actions.</figcaption></figure>
+  <h3 class="deep-h"><span>3</span>From build to cluster</h3>
+  <p>Signing is only useful if something checks the signature. The chain looks like this:</p>
+  <ul>
+    <li><b>The build</b> runs in CI on a fresh, isolated runner, from a reviewed commit on a protected branch, with pinned tools and actions. No one builds release images on a laptop.</li>
+    <li><b>CI produces evidence</b>: the image, an SBOM, and a <b>provenance</b> statement (which repository, which commit, which workflow built it), and signs them with a short-lived identity (Sigstore keyless signing), so there is no long-lived signing key to steal.</li>
+    <li><b>The cluster checks it.</b> An admission policy (Kyverno, Gatekeeper or the platform's own) refuses images that aren't signed by your CI identity or whose provenance names another repository.</li>
+  </ul>
+  <p>SLSA describes these steps as levels. You don't need the top level on day one; a protected branch, a CI-only build, signed images and an admission check already stop the most common attacks: a stolen registry password and a tampered build machine.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 220" role="img" aria-label="The chain from source to cluster. A commit is built by CI in an isolated runner with pinned tools. CI produces the image, an SBOM and a provenance statement, signs them, and pushes them to the registry. At deploy, the cluster&#x27;s admission policy checks the signature and the provenance and refuses anything that wasn&#x27;t built by the expected pipeline from the expected repository."><g class="rough"><rect class="d f-paper" x="10" y="40" width="121" height="84" rx="10"/><rect class="d f-y" x="165" y="40" width="121" height="84" rx="10"/><path class="d" d="M135 82 L161 82"/><path class="d" d="M150.2 87.2 L161 82 L150.2 76.8"/><rect class="d f-blue" x="320" y="40" width="121" height="84" rx="10"/><path class="d" d="M290 82 L316 82"/><path class="d" d="M305.2 87.2 L316 82 L305.2 76.8"/><rect class="d f-paper" x="474" y="40" width="121" height="84" rx="10"/><path class="d" d="M444 82 L470 82"/><path class="d" d="M459.2 87.2 L470 82 L459.2 76.8"/><rect class="d f-green" x="629" y="40" width="121" height="84" rx="10"/><path class="d" d="M599 82 L625 82"/><path class="d" d="M614.2 87.2 L625 82 L614.2 76.8"/></g><text class="t-head" x="70.5" y="78" text-anchor="middle" font-size="16">commit</text><text class="t" x="70.5" y="102" text-anchor="middle" font-size="11">reviewed, main</text><text class="t-head" x="225.5" y="78" text-anchor="middle" font-size="16">CI build</text><text class="t" x="225.5" y="102" text-anchor="middle" font-size="11">isolated, pinned</text><text class="t-head" x="380.5" y="78" text-anchor="middle" font-size="16">signed</text><text class="t" x="380.5" y="102" text-anchor="middle" font-size="11">SBOM + provenance</text><text class="t-head" x="534.5" y="78" text-anchor="middle" font-size="16">registry</text><text class="t" x="534.5" y="102" text-anchor="middle" font-size="11">image + proofs</text><text class="t-head" x="689.5" y="78" text-anchor="middle" font-size="16">admission</text><text class="t" x="689.5" y="102" text-anchor="middle" font-size="11">verify or refuse</text><text class="t-s t-pen" x="380" y="178" text-anchor="middle" font-size="16">a stolen registry password can push an image, but not a valid signature from your CI</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Each step leaves evidence the next one checks.</figcaption></figure>
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">
@@ -163,13 +199,18 @@
     </div>
   </div>
   <h3>Related patterns</h3>
-  <ul class="related"><li><b>Defence in depth</b></li><li><b>Least privilege</b></li><li><b>Short-lived tokens</b></li><li><b>Parallel &amp; selective runs</b> (Vol. 4)</li></ul>
+  <ul class="related"><li><a href="../notes/defense-in-depth.html"><b>Defence in depth</b></a></li><li><a href="../notes/least-privilege.html"><b>Least privilege</b></a></li><li><a href="../notes/short-lived-tokens.html"><b>Short-lived tokens</b></a></li><li><a href="../../testing/notes/parallel-selective.html"><b>Parallel &amp; selective runs</b></a> (Vol. 4)</li></ul>
   <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
   <div class="quiz">
     <details><summary>Why are transitive dependencies a risk?</summary><p>They make up most of your code, and you didn't choose or review them directly.</p></details>
     <details><summary>What is an SBOM for?</summary><p>Knowing exactly which components and versions are in a build, so you can answer “are we affected?” quickly.</p></details>
     <details><summary>Why pin CI actions by commit SHA?</summary><p>Tags can be moved to point at different code; a SHA can't change.</p></details>
     <details><summary>What does signing images with provenance give you?</summary><p>Proof that an image was built by your trusted pipeline, which deploys can verify.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A popular package you use transitively publishes a malicious version, and your Docker builds run npm install without a lockfile. How many of your services are affected, and what would have limited it?</span></summary><p>Every service built since the release could have pulled it, and you can't easily tell which. A committed lockfile with integrity hashes and npm ci, updates through reviewed automated pull requests, and an SBOM per image would have limited and shown the impact.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Generate an SBOM for one of your images or projects with Syft and scan it with Grype or osv-scanner. Pin your CI actions by commit SHA, turn on Dependabot or Renovate, and check that builds use the lockfile only.</p>
   </div>
   <div class="remember">
     <span class="tag">remember!!</span>

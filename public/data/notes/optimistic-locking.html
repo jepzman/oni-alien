@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
 <link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
-<link rel="stylesheet" href="../../assets/bujo.css?v=9d78ec9815">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5122ca78ff">
 <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
 <script src="../../assets/notebook.js?v=520827edac" defer></script>
 </head>
@@ -31,6 +31,7 @@
 <article class="sheet" id="optimistic-locking">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Mon · 05.10.26</span><span class="topic">collection · <b>changing safely</b></span></div>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “check the version stamp”</p>
   <h1><span class="hl">Optimistic Locking</span></h1>
   <div class="tldr">
@@ -118,6 +119,42 @@
 <span class="c">// UPDATE stock SET qty = qty - 1 WHERE sku = $1 AND qty &gt; 0</span></code></pre>
   </div>
   <p class="aside">tools: JPA/Hibernate <code>@Version</code>, Rails <code>lock_version</code>, Entity Framework <code>[ConcurrencyCheck]</code> / rowversion, Django <code>django-concurrency</code>, HTTP ETag + If-Match, DynamoDB condition expressions.</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">HTTP versions, merging, contention, bigger objects</span></h2>
+  <p class="deep-intro">The note shows the version check in one UPDATE. In a real application the version has to travel to the browser and back, someone has to decide what a conflict looks like on screen, and there are workloads where optimistic locking is the wrong tool. This chapter covers all three, and what to version when the thing you edit is more than one row.</p>
+  <h3 class="deep-h"><span>1</span>Carrying the version over HTTP</h3>
+  <p>HTTP already has the parts. When the API returns a resource, it sends its version in an <b>ETag</b> header (<code>ETag: "v7"</code>). When the client saves, it sends the version it started from in <b>If-Match</b>. The server turns that into the conditional UPDATE from the note. If no row matched, it answers <b>412 Precondition Failed</b> and includes the current version, so the client can show what changed.</p>
+  <p>Some APIs put the version in the body instead and answer <b>409 Conflict</b>. Either works; pick one and use it everywhere. Two rules matter more:</p>
+  <ul>
+    <li><b>Require the version on writes.</b> A PUT without If-Match should be rejected (428 Precondition Required), or the check is optional and someone will skip it.</li>
+    <li><b>Don't trust a client-made version.</b> The version comes from the server; the client only returns it.</li>
+  </ul>
+  <p>In an HTML form, the version is a hidden field. In a single-page app, keep it with the data in the cache, and update it from every successful save.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 340" role="img" aria-label="Two support agents load customer 7 at version 7. Ben saves first with If-Match version 7; the server updates the row to version 8 and returns 200. Ana saves next with If-Match version 7; the conditional update matches no row, so the server returns 412 Precondition Failed with the current version 8, and Ana&#x27;s screen shows what changed."><g class="rough"><rect class="d f-blue" x="65" y="14" width="90" height="40" rx="10"/><path class="d d-dash d-thin" d="M110 58 V326"/><rect class="d f-y" x="300" y="14" width="160" height="40" rx="10"/><path class="d d-dash d-thin" d="M380 58 V326"/><rect class="d f-blue" x="605" y="14" width="90" height="40" rx="10"/><path class="d d-dash d-thin" d="M650 58 V326"/><path class="d" d="M380 86 L116 86"/><path class="d" d="M126.8 80.8 L116 86 L126.8 91.2"/><path class="d" d="M380 120 L644 120"/><path class="d" d="M633.2 125.2 L644 120 L633.2 114.8"/><path class="d" d="M650 170 L386 170"/><path class="d" d="M396.8 164.8 L386 170 L396.8 175.2"/><path class="d d-green" d="M380 206 L644 206"/><path class="d d-green" d="M633.2 211.2 L644 206 L633.2 200.8"/><path class="d" d="M110 250 L374 250"/><path class="d" d="M363.2 255.2 L374 250 L363.2 244.8"/><path class="d d-red" d="M380 290 L116 290"/><path class="d d-red" d="M126.8 284.8 L116 290 L126.8 295.2"/></g><text class="t-head" x="110" y="41" text-anchor="middle" font-size="17">Ana</text><text class="t-head" x="380" y="41" text-anchor="middle" font-size="17">API + database</text><text class="t-head" x="650" y="41" text-anchor="middle" font-size="17">Ben</text><text class="t-s" x="248" y="78" text-anchor="middle">GET · ETag: v7</text><text class="t-s" x="512" y="112" text-anchor="middle">GET · ETag: v7</text><text class="t-s" x="518" y="162" text-anchor="middle">PUT · If-Match: v7</text><text class="t-s t-green" x="512" y="198" text-anchor="middle">200 · now v8</text><text class="t-s" x="242" y="242" text-anchor="middle">PUT · If-Match: v7</text><text class="t-s t-red" x="248" y="282" text-anchor="middle">412 · current is v8</text><text class="t-s t-red" x="126" y="320" text-anchor="start" font-size="16">Ana sees what Ben changed</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The version travels with the data: out in the ETag, back in If-Match.</figcaption></figure>
+  <h3 class="deep-h"><span>2</span>What to do with a conflict</h3>
+  <p>“Reload and try again” is the simplest policy, and it is fine when edits are small. When a person has spent ten minutes on a form, throwing their work away is not fine. There are three better options, from simple to clever:</p>
+  <ul>
+    <li><b>Show both.</b> Keep the person's input on screen, show the current values next to it, and let them choose per field.</li>
+    <li><b>Merge different fields automatically.</b> Compare both edits with the version they started from (a three-way merge). If they changed different fields, keep both changes and save. Only the same field changed to different values needs a person.</li>
+    <li><b>Last writer wins, on purpose.</b> For fields where the newest value is simply right (a “last seen” time, a status set by a device), skip the check for that field.</li>
+  </ul>
+  <p>To merge, the client needs the base version's values, not just its number. Keep them with the form when it loads.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 256" role="img" aria-label="A three-way merge. The base version, Ana&#x27;s version and Ben&#x27;s version of a customer are compared field by field. Ben changed the phone number and Ana changed the address, so both changes are kept automatically. If both had changed the same field to different values, that one field would be a real conflict for a person to decide."><g class="rough"><rect class="d d-thin f-paper" x="20" y="30" width="160" height="110" rx="4"/><path class="d d-thin f-paper" d="M20 34 a4 4 0 0 1 4 -4 h152 a4 4 0 0 1 4 4 v28 h-160 z"/><path class="d d-thin d-soft" d="M26 88 h148"/><path class="d d-thin d-soft" d="M26 114 h148"/><rect class="d d-thin f-paper" x="210" y="30" width="170" height="110" rx="4"/><path class="d d-thin f-blue" d="M210 34 a4 4 0 0 1 4 -4 h162 a4 4 0 0 1 4 4 v28 h-170 z"/><path class="d d-thin d-soft" d="M216 88 h158"/><rect class="f-hl" x="213" y="90" width="164" height="22" rx="2" style="stroke:none"/><path class="d d-thin d-soft" d="M216 114 h158"/><rect class="d d-thin f-paper" x="410" y="30" width="170" height="110" rx="4"/><path class="d d-thin f-y" d="M410 34 a4 4 0 0 1 4 -4 h162 a4 4 0 0 1 4 4 v28 h-170 z"/><path class="d d-thin d-soft" d="M416 88 h158"/><path class="d d-thin d-soft" d="M416 114 h158"/><rect class="f-hl" x="413" y="116" width="164" height="22" rx="2" style="stroke:none"/><path class="d" d="M590 90 L618 90"/><path class="d" d="M607.2 95.2 L618 90 L607.2 84.8"/><rect class="d d-thin f-paper" x="620" y="30" width="130" height="110" rx="4"/><path class="d d-thin f-green" d="M620 34 a4 4 0 0 1 4 -4 h122 a4 4 0 0 1 4 4 v28 h-130 z"/><path class="d d-thin d-soft" d="M626 88 h118"/><rect class="f-hl" x="623" y="90" width="124" height="22" rx="2" style="stroke:none"/><path class="d d-thin d-soft" d="M626 114 h118"/><rect class="f-hl" x="623" y="116" width="124" height="22" rx="2" style="stroke:none"/></g><text class="t-head" x="100" y="53" text-anchor="middle" font-size="16">base (v7)</text><text class="t" x="30" y="81" font-size="15">name: Joost</text><text class="t" x="30" y="107" font-size="15">phone: 0612…</text><text class="t" x="30" y="133" font-size="15">address: Kade 4</text><text class="t-head" x="295" y="53" text-anchor="middle" font-size="16">Ben (saved v8)</text><text class="t" x="220" y="81" font-size="15">name: Joost</text><text class="t" x="220" y="107" font-size="15">phone: 0687…</text><text class="t" x="220" y="133" font-size="15">address: Kade 4</text><text class="t-head" x="495" y="53" text-anchor="middle" font-size="16">Ana (from v7)</text><text class="t" x="420" y="81" font-size="15">name: Joost</text><text class="t" x="420" y="107" font-size="15">phone: 0612…</text><text class="t" x="420" y="133" font-size="15">address: Dam 1</text><text class="t-head" x="685" y="53" text-anchor="middle" font-size="15">merged (v9)</text><text class="t" x="630" y="81" font-size="14">name: Joost</text><text class="t" x="630" y="107" font-size="14">phone: 0687…</text><text class="t" x="630" y="133" font-size="14">address: Dam 1</text><text class="t-s t-green" x="380" y="178" text-anchor="middle">different fields → keep both, no question asked</text><text class="t-s t-red" x="380" y="210" text-anchor="middle">same field, different values → ask the person</text><text class="t-s" x="380" y="240" text-anchor="middle" font-size="16">(they&#x27;re the only real conflict)</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Compare both edits with the version they started from: only the same field changed twice is a real conflict.</figcaption></figure>
+  <h3 class="deep-h"><span>3</span>When contention is high</h3>
+  <p>Optimistic locking bets that conflicts are rare. When many writers hit the same row (a stock counter during a sale, a shared budget, a seat map), the bet fails: most updates miss, retry, and miss again, and the database does the work several times.</p>
+  <div class="table-scroll"><table class="map"><thead><tr><th scope="col">Situation</th><th scope="col">Better tool</th></tr></thead><tbody>
+    <tr><td>A counter goes up or down</td><td>An atomic update: <code>SET qty = qty - 1 WHERE sku = $1 AND qty &gt; 0</code>. No version needed.</td></tr>
+    <tr><td>A short read-decide-write on a hot row</td><td>A pessimistic lock: <code>SELECT … FOR UPDATE</code> inside a short transaction.</td></tr>
+    <tr><td>Many writers to one thing, order matters</td><td>Put the changes on a queue and let one worker apply them.</td></tr>
+    <tr><td>Rare conflicts, people editing</td><td>Optimistic locking, as in the note.</td></tr>
+  </tbody></table></div>
+  <p>If you do retry automatically, retry a few times with a short random wait, and only for changes a program made. Never silently re-apply a person's edit on top of data they haven't seen.</p>
+
+  <h3 class="deep-h"><span>4</span>Versioning something bigger than a row</h3>
+  <p>An order with lines, a document with sections: the thing the user edits is several rows. Give the <b>whole object one version</b>, on its top row (the aggregate root), and increase it whenever anything inside changes, in the same transaction. Two people editing different lines of the same order then conflict, which is usually right: the order total depends on all of them.</p>
+  <p>The same idea appears outside SQL. Event stores append with an <b>expected version</b> (see Event Sourcing in Vol. 1). DynamoDB has <b>conditional writes</b>, and object stores such as S3 accept <b>If-Match</b> on uploads. Each one is the same compare-and-set: “write this only if it is still the version I read.”</p>
+
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">
@@ -167,13 +204,19 @@
     </div>
   </div>
   <h3>Related patterns</h3>
-  <ul class="related"><li><b>History tables</b></li><li><b>Expand &amp; contract</b></li><li><b>Idempotent consumer</b> (Vol. 1)</li><li><b>Optimistic UI</b> (Vol. 2)</li></ul>
+  <ul class="related"><li><a href="../notes/history-tables.html"><b>History tables</b></a></li><li><a href="../notes/expand-contract.html"><b>Expand &amp; contract</b></a></li><li><a href="../../distributed/notes/idempotent-consumer.html"><b>Idempotent consumer</b></a> (Vol. 1)</li><li><a href="../../frontend/notes/optimistic-ui.html"><b>Optimistic UI</b></a> (Vol. 2)</li></ul>
+  <p class="aside deeper">on a card → <a href="../../cheatsheets/sql/index.html">SQL: the cheat sheet</a></p>
   <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
   <div class="quiz">
     <details><summary>What is a lost update?</summary><p>Two read-modify-write cycles overlap and the second save overwrites the first without any error.</p></details>
     <details><summary>Why put the version check in the WHERE clause?</summary><p>Check and write happen atomically; there's no gap where another writer can change the row.</p></details>
     <details><summary>What should the API return on a conflict?</summary><p>An error like HTTP 409 or 412 with the latest data so the client can merge or retry.</p></details>
     <details><summary>When is pessimistic locking better?</summary><p>When contention is high and retries would waste lots of work, for short transactions.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Two support agents edit the same customer at the same time. The second save silently removes the phone number the first one added. What do you add, and what does the second agent see?</span></summary><p>A version column checked in the UPDATE's WHERE clause. The second save matches 0 rows, so the API returns 409 Conflict, and the agent sees “this customer changed since you opened it” with the new values to merge.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Open the same row in two terminals, update it from both with a plain UPDATE, and see the lost update. Add a version column and WHERE version = :v, repeat, and handle the 0-rows case with a clear error.</p>
   </div>
   <div class="remember">
     <span class="tag">remember!!</span>

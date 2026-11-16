@@ -44,6 +44,13 @@ Series 1 Vol. 7 AI App Patterns (`PLANNED`), Book 4 (Mo: client management, Kore
 **Series 3 · Deep dives** started on 14 Nov 2026: Season 1 is written (`/deep-dives/<slug>/`): Saga, Reliable Messaging, The Resilience Stack, Event Sourcing & CQRS
 Caching and Zero-Downtime Change, all deployed. Working branch `claude/design-patterns-deep-dive-ggw0on`. Read `docs/HANDOFF-deep-dives.md` for the plan and format.
 
+## 1b. In progress: improving the earlier books (2026-11-16)
+
+Plan: `docs/PLAN-improve-earlier-books.md` (approved 15 Nov; progress in its section 8). Branch `ccr-5ac82ff1-8gn15m`.
+Series 1 is revised: linked related notes, seen-at-Larder and cheat-sheet asides, a situational question and a try it on
+all 93 notes, 24 going-deeper chapters (4 per volume, in `content/<key>/deeper.py`), and new covers (sticker + printed
+cloth, `COVER_ART`). Not deployed yet: merging the branch to `main` is the deploy. Next: the extra notes (plan 5.1).
+
 ## 2. Next steps (owner's decisions)
 
 1. **Open item:** the owner reported Grace's cover and pages looked broken right after PR #7. Locally they render
@@ -96,6 +103,15 @@ Caching and Zero-Downtime Change, all deployed. Working branch `claude/design-pa
 - Keep Series 1 pages unchanged unless fixing a shared bug (the gains/losses divider fix touched all journals, on purpose).
 - The story's dates and numbers must match the casebook exactly (e.g. 6.2 % baseline, 23,000 perfect orders/week,
   Rotterdam opens 27 Apr 2026, ADR 0002 on 8 Dec 2025).
+
+### Added on 2026-11-16 (Series 1 revisions)
+
+- Add to a finished note through `content/<key>/revisions.py` or `deeper.py` (`REVISIONS = {slug: {...}}`), not by editing
+  the note: `quiz_add` appends (tagged “what would you do?”), any other field replaces. Hand-made notes get the same blocks
+  injected by `stamp_handmade`.
+- Text in content is raw HTML: escape example markup (`&lt;img …&gt;`). A raw `<img onerror=…>` in a try it ran on the page.
+- A build prints related entries that match no note (`[links]`); add a `RELATED_ALIASES` entry when a note exists under another name.
+- After resolving a merge, grep `public/assets/*.css` for `<<<<<<<` / `=======`: a stray marker silently drops the next rule.
 
 ### Added on 2026-11-15 (Book 3)
 
