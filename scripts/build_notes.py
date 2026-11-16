@@ -235,6 +235,9 @@ JOURNALS = [
             (13, "multitenancy", "Multitenancy", "growing", "Serve many customers from one database while keeping each one's data apart."),
             (14, "connection-pooling", "Connection Pooling", "growing", "Reuse a small set of open connections instead of opening one per request."),
             (15, "star-schema", "Star Schema", "growing", "Shape analytics data as facts surrounded by dimensions, for fast reports."),
+            (16, "upserts", "Upserts", "changing", "Insert a row or update the one that's already there, in one atomic statement."),
+            (17, "bitemporal-data", "Bitemporal Data", "modelling", "Record both when a fact was true and when you knew it, so corrections never erase history."),
+            (18, "vector-indexes", "Vector Indexes", "reading", "Find the nearest items by meaning, not by exact value, without comparing against every row."),
         ],
     ),
     dict(
@@ -2195,6 +2198,8 @@ def load_content(key):
         mod.__dict__["Doodle"] = Doodle
         spec.loader.exec_module(mod)
         for n in getattr(mod, "NOTES", []):
+            if n.get("quiz_sit"):   # situational questions, tagged “what would you do?” (notes written after Nov 2026)
+                n["quiz"] = list(n["quiz"]) + [(sit_q(q), a) for q, a in n["quiz_sit"]]
             notes[n["slug"]] = n
         if hasattr(mod, "REVISIONS"):   # several files may add to the same note (revisions.py, deeper.py)
             for slug, rev in mod.REVISIONS.items():

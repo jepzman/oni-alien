@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Upserts · Jef’s Notes</title>
+<meta name="description" content="Insert a row or update the one that&#x27;s already there, in one atomic statement.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5122ca78ff">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-data">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 3 · data &amp; database patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="upserts">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 29.10.26</span><span class="topic">collection · <b>changing safely</b></span></div>
+  <p class="kicker">a.k.a. “insert, or update if it's already there”</p>
+  <h1><span class="hl">Upserts</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>When you don't know whether a row exists yet (imports, syncs, counters, “save settings”), don't check first and then write: two writers will both see “not there”. Put a <b>unique constraint</b> on the natural key and use one atomic statement: <b><code>INSERT … ON CONFLICT … DO UPDATE</code></b> (PostgreSQL, SQLite), <b><code>MERGE</code></b> (SQL standard) or <b><code>ON DUPLICATE KEY UPDATE</code></b> (MySQL). Add a condition so old data never overwrites newer data.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> writing safely</li><li><b>Needs:</b> a unique constraint on the key</li><li><b>Also called:</b> merge, insert-or-update</li><li><b>Pairs with:</b> idempotent consumer, change data capture</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">A nightly job imports 10,000 prices. For each one it asks “does this SKU exist?”, then inserts or updates. With two workers, both ask about SKU 812 at the same moment, both hear “no”, both insert, and one crashes with a <span class="hl-pink">duplicate-key error halfway through</span>.</p>
+  <ul>
+    <li><b>Check-then-write races</b>: the gap between the SELECT and the INSERT is where the second writer gets in.</li>
+    <li>Without a unique constraint, the race doesn't crash: it silently creates <b>two rows for one SKU</b>.</li>
+    <li>Retried messages and re-run imports must not create duplicates or fail on rows they already wrote.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="Doodle of a nightly price import done as check-then-write. Two import workers both look for SKU 812, both find nothing, and both try to insert it. One succeeds; the other fails with a duplicate-key error at row 4,120 of 10,000, and the job stops halfway with half the prices updated."><g class="rough"><rect class="d f-blue" x="20" y="30" width="150" height="54" rx="10"/><rect class="d f-green" x="20" y="170" width="150" height="54" rx="10"/><path class="d" d="M174 50 L300 90"/><path class="d" d="M288.1 91.7 L300 90 L291.3 81.8"/><path class="d" d="M174 194 L300 140"/><path class="d" d="M292.1 149.1 L300 140 L288.0 139.5"/><rect class="d d-thin f-paper" x="310" y="80" width="170" height="84" rx="4"/><path class="d d-thin f-y" d="M310 84 a4 4 0 0 1 4 -4 h162 a4 4 0 0 1 4 4 v28 h-170 z"/><path class="d d-thin d-soft" d="M316 138 h158"/><rect class="d f-green" x="540" y="40" width="200" height="60" rx="10"/><rect class="d f-pink d-red" x="540" y="150" width="200" height="70" rx="10"/></g><text class="t-head" x="95" y="64" text-anchor="middle" font-size="17">worker A</text><text class="t-head" x="95" y="204" text-anchor="middle" font-size="17">worker B</text><text class="t-s" x="200" y="40" text-anchor="start">SKU 812? none</text><text class="t-s" x="200" y="226" text-anchor="start">SKU 812? none</text><text class="t-head" x="395" y="103" text-anchor="middle" font-size="17">products</text><text class="t" x="320" y="131" font-size="16">… 811</text><text class="t t-soft" x="320" y="157" font-size="16">(812 missing)</text><text class="t-head" x="640" y="77" text-anchor="middle" font-size="16">INSERT 812 ✓</text><text class="t-head t-red" x="640" y="181" text-anchor="middle" font-size="16">INSERT 812 ✗</text><text class="t" x="640" y="205" text-anchor="middle" font-size="13">duplicate key · job stops</text><text class="t-s t-red" x="380" y="258" text-anchor="middle" font-size="16">row 4,120 of 10,000: half the prices updated, half not</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Check, then insert: two workers see “not there” at the same moment.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the hotel front desk</span></h2>
+  <p>At a hotel desk you give your <b>booking reference</b>. If there's a booking, the clerk changes the dates; if not, the clerk makes one. Both happen <b>at the desk, in one step</b>, and the reference is unique, so two clerks can't create two bookings for it.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a hotel front desk. A guest gives a booking reference. If a booking exists, the clerk updates it with the new dates; if not, the clerk creates one. It happens in one step at the desk, so two clerks can never create two bookings for the same reference."><g class="rough"><g transform="translate(40 70) scale(1.6)"><g class="d"><path class="f-y" d="M6 0 h48 v62 l-8 -6 l-8 6 l-8 -6 l-8 6 l-8 -6 l-8 6 z"/><path d="M14 12 h32 M14 22 h24 M14 32 h32 M14 42 h18"/></g></g><path class="d" d="M170 120 L290 120"/><path class="d" d="M279.2 125.2 L290 120 L279.2 114.8"/><rect class="d f-blue" x="300" y="70" width="200" height="100" rx="10"/><path class="d" d="M504 100 L576 60"/><path class="d" d="M569.1 69.8 L576 60 L564.0 60.7"/><path class="d" d="M504 140 L576 190"/><path class="d" d="M564.1 188.1 L576 190 L570.1 179.5"/><rect class="d f-green" x="580" y="30" width="160" height="56" rx="10"/><rect class="d f-y" x="580" y="160" width="160" height="56" rx="10"/></g><text class="t-s" x="90" y="200" text-anchor="middle">ref BK-812</text><text class="t-head" x="400" y="116" text-anchor="middle" font-size="19">front desk</text><text class="t" x="400" y="140" text-anchor="middle" font-size="15">one step</text><text class="t-s" x="540" y="60" text-anchor="middle">exists</text><text class="t-s" x="540" y="192" text-anchor="middle">new</text><text class="t-head" x="660" y="65" text-anchor="middle" font-size="16">update dates</text><text class="t-head" x="660" y="195" text-anchor="middle" font-size="16">create booking</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One desk, one reference: update the booking if it exists, create it if it doesn't.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The booking reference</td><td>The unique key (SKU, email, external id)</td></tr>
+      <tr><td>The desk deciding in one step</td><td>One atomic statement: insert or update</td></tr>
+      <tr><td>Change the dates</td><td><code>DO UPDATE SET …</code></td></tr>
+      <tr><td>Make a new booking</td><td>The insert half</td></tr>
+      <tr><td>“Your old request? We already have newer dates”</td><td><code>WHERE excluded.updated_at &gt; products.updated_at</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">one statement, decided by the unique key</span></h2>
+  <p>The database tries the insert. If it would break the unique constraint, it updates the existing row instead. Both halves happen under the same row lock, so there's no gap for another writer. The rows that were proposed are available as <code>EXCLUDED</code> (PostgreSQL) or <code>source</code> (MERGE).</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="How an upsert works. Each incoming row is inserted. If the unique key, here the SKU, already exists, the database updates that row instead, in the same atomic statement. A WHERE clause skips the update when nothing changed or when the incoming data is older than the stored row."><g class="rough"><rect class="d f-y" x="20" y="90" width="150" height="70" rx="10"/><path class="d" d="M174 125 L246 125"/><path class="d" d="M235.2 130.2 L246 125 L235.2 119.8"/><rect class="d f-blue" x="250" y="70" width="200" height="110" rx="10"/><path class="d" d="M454 100 L546 50"/><path class="d" d="M539.0 59.7 L546 50 L534.0 50.6"/><path class="d" d="M454 150 L546 200"/><path class="d" d="M534.0 199.4 L546 200 L539.0 190.3"/><rect class="d f-green" x="550" y="20" width="190" height="60" rx="10"/><rect class="d f-green" x="550" y="170" width="190" height="70" rx="10"/></g><text class="t-head" x="95" y="121" text-anchor="middle" font-size="16">incoming row</text><text class="t" x="95" y="145" text-anchor="middle" font-size="14">sku 812 · €4.10</text><text class="t-head" x="350" y="121" text-anchor="middle" font-size="19">unique key</text><text class="t" x="350" y="145" text-anchor="middle" font-size="14">sku already there?</text><text class="t-s" x="496" y="60" text-anchor="middle">no</text><text class="t-s" x="496" y="196" text-anchor="middle">yes</text><text class="t-head" x="645" y="57" text-anchor="middle" font-size="17">insert it</text><text class="t-head" x="645" y="201" text-anchor="middle" font-size="17">update it</text><text class="t" x="645" y="225" text-anchor="middle" font-size="13">only if newer or different</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>INSERT … ON CONFLICT (sku) DO UPDATE: the unique key decides, the database does both halves.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Pick the natural key</b><p>What makes a row “the same row”: the SKU, the email, the partner's id, (user_id, setting).</p></li>
+    <li><b>Make it unique</b><p>A UNIQUE constraint or index on exactly those columns. Without it, there is nothing to conflict on.</p></li>
+    <li><b>Write one statement</b><p><code>INSERT … ON CONFLICT (sku) DO UPDATE SET …</code>, or <code>MERGE</code>, or MySQL's <code>ON DUPLICATE KEY UPDATE</code>.</p></li>
+    <li><b>Guard the update</b><p>Skip it when nothing changed (<code>IS DISTINCT FROM</code>) or when the incoming row is older.</p></li>
+    <li><b>Batch it</b><p>Upsert hundreds of rows per statement with a multi-row VALUES list or <code>UNNEST</code>; it's far faster than one round trip per row.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Upsert</dt><dd>Insert a row, or update it if its key already exists.</dd></div>
+    <div><dt>Natural key</dt><dd>The real-world value that identifies a row (SKU, email).</dd></div>
+    <div><dt>ON CONFLICT</dt><dd>PostgreSQL and SQLite's upsert clause.</dd></div>
+    <div><dt>MERGE</dt><dd>The SQL standard statement for insert / update / delete by match.</dd></div>
+    <div><dt>EXCLUDED</dt><dd>The row you tried to insert, inside DO UPDATE.</dd></div>
+    <div><dt>Race condition</dt><dd>A bug that depends on two operations interleaving.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>import_prices.sql</span><span>PostgreSQL 15+</span></div>
+<pre><code><span class="c">-- the natural key must be unique, or there is nothing to conflict on</span>
+<span class="k">ALTER</span> <span class="k">TABLE</span> products <span class="k">ADD</span> CONSTRAINT products_sku_key <span class="k">UNIQUE</span> (sku);
+
+<span class="c">-- one statement for a whole batch: insert new SKUs, update known ones</span>
+<span class="k">INSERT</span> <span class="k">INTO</span> products (sku, price_cents, updated_at)
+<span class="k">SELECT</span> * <span class="k">FROM</span> unnest($1::text[], $2::int[], $3::timestamptz[])
+<span class="k">ON</span> <span class="k">CONFLICT</span> (sku) <span class="k">DO</span> <span class="k">UPDATE</span>
+   <span class="k">SET</span> price_cents = EXCLUDED.price_cents,
+       updated_at  = EXCLUDED.updated_at
+ <span class="k">WHERE</span> products.updated_at &lt; EXCLUDED.updated_at          <span class="c">-- never let old data win</span>
+   <span class="k">AND</span> products.price_cents <span class="k">IS</span> DISTINCT <span class="k">FROM</span> EXCLUDED.price_cents;
+
+<span class="c">-- the standard spelling (PostgreSQL 15+, SQL Server, Oracle)</span>
+MERGE <span class="k">INTO</span> products p
+<span class="k">USING</span> staging_prices s <span class="k">ON</span> p.sku = s.sku
+<span class="k">WHEN</span> MATCHED <span class="k">AND</span> s.updated_at &gt; p.updated_at <span class="k">THEN</span>
+  <span class="k">UPDATE</span> <span class="k">SET</span> price_cents = s.price_cents, updated_at = s.updated_at
+<span class="k">WHEN</span> <span class="k">NOT</span> MATCHED <span class="k">THEN</span>
+  <span class="k">INSERT</span> (sku, price_cents, updated_at) <span class="k">VALUES</span> (s.sku, s.price_cents, s.updated_at);</code></pre>
+  </div>
+  <p class="aside">tools: PostgreSQL <code>ON CONFLICT</code> and <code>MERGE</code>, SQLite <code>ON CONFLICT</code>, MySQL <code>ON DUPLICATE KEY UPDATE</code>, SQL Server / Oracle <code>MERGE</code>, ORMs: Prisma <code>upsert</code>, Django <code>update_or_create</code> and <code>bulk_create(update_conflicts=True)</code>, Rails <code>upsert_all</code>.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>No races</b>: the check and the write are one atomic step.</li><li><b>Safe to re-run</b>: imports and retried messages don't duplicate rows.</li><li><b>Fast in batches</b>: one statement for hundreds of rows.</li><li><b>Simpler code</b>: no “does it exist?” branch.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Needs a unique key</b>, which some legacy tables don't have.</li><li><b>Dialects differ</b>: ON CONFLICT, MERGE and MySQL's syntax aren't interchangeable.</li><li><b>Easy to overwrite newer data</b> without a guard.</li><li><b>Hidden work</b>: triggers, sequences and row locks still fire on the conflict path.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Database ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>SELECT, then INSERT or UPDATE in code</b> to <b>one upsert statement on a unique key</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="4"><td>Simplicity<small>easy to reason about?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One statement instead of a branch.</td></tr>
+      <tr data-before="3" data-after="3"><td>Read speed<small>fast queries?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Write speed<small>cheap inserts &amp; updates?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One round trip, batchable.</td></tr>
+      <tr data-before="2" data-after="5"><td>Integrity<small>data stays correct?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No duplicates, no lost race.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>10× more rows?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No locking dance between workers.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low storage cost<small>cheap to keep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral (the unique index costs a little).</td></tr>
+      <tr data-before="3" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Operability<small>calm to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Re-runnable imports, fewer 3 a.m. failures.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change shape?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>No unique constraint</h3><p>ON CONFLICT has nothing to conflict on, so every run inserts new rows. <span class="fix">Fix →</span> add the UNIQUE constraint first, and clean up existing duplicates.</p></li>
+    <li><h3>Old data wins</h3><p>A delayed retry with yesterday's price overwrites today's. <span class="fix">Fix →</span> guard the update with a version or timestamp comparison.</p></li>
+    <li><h3>DO NOTHING hides problems</h3><p>Conflicting rows are skipped silently, including ones that should have updated. <span class="fix">Fix →</span> use DO NOTHING only when the existing row is always right; count what was skipped.</p></li>
+    <li><h3>MERGE assumed to be race-free</h3><p>On some databases (SQL Server) MERGE can still race without a lock hint. <span class="fix">Fix →</span> read your database's notes; add HOLDLOCK / SERIALIZABLE where advised, or use ON CONFLICT.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Imports and syncs from another system.</li><li>Consumers that may receive the same message twice.</li><li>Settings and preferences: one row per user and key.</li><li>Counters and aggregates keyed by day or by item.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>The key isn't really unique in your domain (two people can share an email).</li><li>Creating and updating need different rules or permissions; keep them separate.</li><li>You need to know which happened and act differently; use RETURNING (xmax) or two explicit paths.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../../distributed/notes/idempotent-consumer.html"><b>Idempotent consumer</b></a> (Vol. 1)</li><li><a href="../notes/optimistic-locking.html"><b>Optimistic locking</b></a></li><li><a href="../notes/change-data-capture.html"><b>Change data capture</b></a></li><li><a href="../notes/surrogate-keys.html"><b>Surrogate keys</b></a></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why does “SELECT, then INSERT” fail under concurrency?</summary><p>Two writers can both run the SELECT before either inserts; both see “not there” and both try to insert.</p></details>
+    <details><summary>What does ON CONFLICT need in order to work?</summary><p>A unique constraint or unique index on the columns you name; that's what defines a conflict.</p></details>
+    <details><summary>What is EXCLUDED?</summary><p>The row you tried to insert, available inside DO UPDATE so you can copy its values.</p></details>
+    <details><summary>How do you stop a late, older message from overwriting newer data?</summary><p>Add a WHERE to the update that compares a version or timestamp: update only if the incoming row is newer.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A partner sends product updates as webhooks, sometimes twice and sometimes out of order. Your handler does SELECT, then INSERT or UPDATE, and you see duplicate products and prices going backwards. What do you change?</span></summary><p>Add a unique constraint on the partner's product id, replace the handler's branch with one upsert, and guard the update with the partner's updated_at (or a version), so duplicates collapse and older messages can't overwrite newer ones.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Write an import that does SELECT then INSERT, and run two copies at once against the same 1,000 rows. Count the duplicate-key errors (or the duplicate rows, if there's no unique constraint). Replace it with <code>INSERT … ON CONFLICT DO UPDATE</code> on a unique key, run both copies again, and then re-run the whole import to check it changes nothing.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>One <span class="hl">unique key</span>, one <span class="hl">statement</span>. And never let old data win.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/16-upserts.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>PostgreSQL documentation, “INSERT … ON CONFLICT” and “MERGE”.</li><li>MySQL documentation, “INSERT … ON DUPLICATE KEY UPDATE”.</li><li>Michael J. Swart, “Mythbusting: Concurrent Update/Insert Solutions” (2011), on MERGE races in SQL Server.</li><li>SQLite documentation, “UPSERT”.</li></ul>
+  </div>
+  <p class="folio">16</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="star-schema.html"><small>← previous note</small>15 · Star Schema</a>
+  <a href="bitemporal-data.html"><small>Next note →</small>17 · Bitemporal Data</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 3 · a student's bullet journal on data &amp; database patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>
