@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
 <link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
-<link rel="stylesheet" href="../../assets/bujo.css?v=41570b4686">
+<link rel="stylesheet" href="../../assets/bujo.css?v=2d8e9b72e4">
 <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
 <script src="../../assets/notebook.js?v=520827edac" defer></script>
 </head>
@@ -31,7 +31,7 @@
 <article class="sheet" id="change-data-capture">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Mon · 12.10.26</span><span class="topic">collection · <b>changing safely</b></span></div>
-  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question and a try it</p>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “the court stenographer”</p>
   <h1><span class="hl">Change Data Capture</span></h1>
   <div class="tldr">
@@ -118,6 +118,41 @@
 <span class="k">FROM</span> pg_replication_slots;</code></pre>
   </div>
   <p class="aside">tools: Debezium (PostgreSQL, MySQL, SQL Server, MongoDB, Oracle), Kafka Connect, AWS DMS, Google Datastream, Fivetran, Airbyte, Estuary, PostgreSQL logical replication, MongoDB change streams, DynamoDB Streams.</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">snapshots, ordering, the slot, contracts</span></h2>
+  <p class="deep-intro">The note sets up CDC in six steps. This chapter covers what happens in production: how the connector gets the rows that existed before it started, what order events really arrive in, how a stopped consumer can fill the database's disk, and how to stop other teams from depending on your table layout.</p>
+  <h3 class="deep-h"><span>1</span>The first run: snapshot, then stream</h3>
+  <p>A new connector has a problem: the log only holds recent changes, but the search index needs every product, including the ones created years ago. So it starts in two phases. It opens a <b>consistent snapshot</b> of the tables at one log position and emits every existing row as a read event (<code>op: "r"</code>). Then it starts reading the log <b>from exactly that position</b>. Changes made during the snapshot arrive afterwards as normal events, so nothing is lost and nothing is applied twice.</p>
+  <p>On a large table the snapshot can take hours and adds read load. Run it at a quiet time, or use an incremental snapshot (Debezium can snapshot in chunks while streaming). Consumers must handle a row arriving as a snapshot read and then as an update: one more reason they must be idempotent.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="How a CDC connector starts. First it opens a consistent snapshot of the tables at log position 1000 and emits every existing row as a read event. Then it streams changes from the log starting exactly at position 1000, so no change is missed or doubled between the two phases."><g class="rough"><path class="d" d="M30 160 L740 160"/><path class="d" d="M729.2 165.2 L740 160 L729.2 154.8"/><rect class="d f-y" x="30" y="50" width="300" height="80" rx="10"/><rect class="d f-green" x="400" y="50" width="340" height="80" rx="10"/><path class="d d-pen d-dash" d="M360 30 V200"/></g><text class="t-s" x="740" y="186" text-anchor="end" font-size="16">log position →</text><text class="t-head" x="180" y="86" text-anchor="middle" font-size="19">1 · snapshot</text><text class="t" x="180" y="110" text-anchor="middle" font-size="17">every existing row · op = r</text><text class="t-head" x="570" y="86" text-anchor="middle" font-size="19">2 · stream the log</text><text class="t" x="570" y="110" text-anchor="middle" font-size="17">op = c / u / d, in commit order</text><text class="t-s t-pen" x="360" y="226" text-anchor="middle" font-size="17">LSN 1000: snapshot taken here, stream starts here</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Snapshot first, then the log from the same position: nothing falls through the gap.</figcaption></figure>
+  <h3 class="deep-h"><span>2</span>What order events arrive in</h3>
+  <p>The log is in commit order, but the topic it lands in usually isn't one line. Kafka splits a topic into partitions and only keeps order <b>inside a partition</b>. Connectors use the row's primary key as the message key, so <b>all changes to one row stay in order</b>. Changes to different rows, and to different tables, can be read in any order by a consumer.</p>
+  <p>Design consumers for that:</p>
+  <ul>
+    <li><b>Never assume a parent arrives before its child.</b> An order line may arrive before its order. Store it and link it later, or look the parent up.</li>
+    <li><b>Use the log position to ignore old news.</b> Each event carries its position (<code>lsn</code>). If you already applied a later position for that row, skip the event.</li>
+    <li><b>Transactions are split up.</b> One transaction that touched three tables becomes three events. If a consumer needs “all of it or none”, use the outbox pattern and publish one event per business change.</li>
+  </ul>
+
+  <h3 class="deep-h"><span>3</span>The slot that fills the disk</h3>
+  <p>PostgreSQL keeps write-ahead log segments until every <b>replication slot</b> has confirmed it has read them. That is what makes CDC reliable after a restart. It is also how CDC takes production down: if the connector stops for a weekend, the database keeps every segment written since, and the disk fills.</p>
+  <p>Three defences:</p>
+  <ul>
+    <li><b>Alert on slot lag</b> in bytes (the query is on the note's card), long before the disk is at risk: for example at 5 GB and 20 GB.</li>
+    <li><b>Cap it.</b> <code>max_slot_wal_keep_size</code> lets the database drop log a slot hasn't read. The slot then breaks and the connector needs a new snapshot, which is better than a full disk.</li>
+    <li><b>Remove unused slots.</b> A slot for a connector that no longer exists keeps the log for nobody. Check <code>pg_replication_slots</code> after every decommission.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="A replication slot with a stopped consumer. The database keeps every write-ahead log segment after the consumer&#x27;s last confirmed position. The consumer stopped on Friday; by Monday 60 gigabytes of log are kept and the disk is almost full."><g class="rough"><rect class="d f-paper" x="20" y="60" width="70" height="60" rx="10"/><rect class="d f-paper" x="100" y="60" width="70" height="60" rx="10"/><rect class="d f-pink d-red" x="180" y="60" width="70" height="60" rx="10"/><rect class="d f-pink d-red" x="260" y="60" width="70" height="60" rx="10"/><rect class="d f-pink d-red" x="340" y="60" width="70" height="60" rx="10"/><rect class="d f-pink d-red" x="420" y="60" width="70" height="60" rx="10"/><rect class="d f-pink d-red" x="500" y="60" width="70" height="60" rx="10"/><rect class="d f-pink d-red" x="580" y="60" width="70" height="60" rx="10"/><rect class="d f-pink d-red" x="660" y="60" width="70" height="60" rx="10"/><path class="d d-red" d="M195 160 L195 126"/><path class="d d-red" d="M200.2 136.8 L195 126 L189.8 136.8"/><path class="d" d="M720 30 L720 56"/><path class="d" d="M714.8 45.2 L720 56 L725.2 45.2"/></g><text class="t-head" x="55" y="97" text-anchor="middle" font-size="15">seg 1</text><text class="t-head" x="135" y="97" text-anchor="middle" font-size="15">seg 2</text><text class="t-head t-red" x="215" y="97" text-anchor="middle" font-size="15">seg 3</text><text class="t-head t-red" x="295" y="97" text-anchor="middle" font-size="15">seg 4</text><text class="t-head t-red" x="375" y="97" text-anchor="middle" font-size="15">seg 5</text><text class="t-head t-red" x="455" y="97" text-anchor="middle" font-size="15">seg 6</text><text class="t-head t-red" x="535" y="97" text-anchor="middle" font-size="15">seg 7</text><text class="t-head t-red" x="615" y="97" text-anchor="middle" font-size="15">seg 8</text><text class="t-head t-red" x="695" y="97" text-anchor="middle" font-size="15">seg 9</text><text class="t-s t-red" x="200" y="180" text-anchor="start">consumer stopped here (Fri)</text><text class="t-s" x="716" y="24" text-anchor="end">now (Mon)</text><text class="t-s t-red" x="470" y="214" text-anchor="middle">kept: ~20 GB a day × 3 days = 60 GB</text><text class="t-s t-pen" x="470" y="248" text-anchor="middle" font-size="17">alert on slot lag · cap it with max_slot_wal_keep_size</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A slot keeps the log until its consumer confirms it. A stopped consumer keeps it forever.</figcaption></figure>
+  <h3 class="deep-h"><span>4</span>Tables are not a contract</h3>
+  <p>Raw CDC events mirror your table layout. If other teams consume them, every column rename becomes their incident, and you can no longer change your own schema freely. Treat it like any other API:</p>
+  <ul>
+    <li><b>Inside your team</b> (cache, search index, your own read models), raw table events are fine; you change both sides together.</li>
+    <li><b>For other teams</b>, publish business events through an outbox table and let CDC carry those (Debezium's outbox router does this). The event shape is designed and versioned, and your tables stay private.</li>
+    <li><b>Register the schemas</b> (Avro, Protobuf or JSON Schema in a registry) and check compatibility in CI: adding an optional field is fine, renaming or removing one is a breaking change.</li>
+  </ul>
+  <p>And remember deletes: a delete event, and the empty “tombstone” that follows it in Kafka, must be handled by every consumer, or deleted products live on in the search index.</p>
+
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">

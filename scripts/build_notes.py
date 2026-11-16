@@ -2163,8 +2163,9 @@ def load_content(key):
         spec.loader.exec_module(mod)
         for n in getattr(mod, "NOTES", []):
             notes[n["slug"]] = n
-        if hasattr(mod, "REVISIONS"):
-            REVISIONS[key] = mod.REVISIONS
+        if hasattr(mod, "REVISIONS"):   # several files may add to the same note (revisions.py, deeper.py)
+            for slug, rev in mod.REVISIONS.items():
+                REVISIONS.setdefault(key, {}).setdefault(slug, {}).update(rev)
             if hasattr(mod, "REVISION_NOTE"):
                 REVISION_NOTE[key] = mod.REVISION_NOTE
     for slug, rev in REVISIONS.get(key, {}).items():
@@ -2180,6 +2181,8 @@ def main():
     CHEAT_TITLES.update((cs.SLUG, cs.TITLE) for cs in sheets)
     loaded = {j["key"]: load_content(j["key"]) for j in JOURNALS}
     index_titles(loaded)
+    for j in JOURNALS:   # a note with a going-deeper chapter is tagged on the index
+        j["deep_dives"] = set(j.get("deep_dives", ())) | {s for s, n in loaded[j["key"]].items() if n.get("deep_dive")}
     find_seen_at_larder(loaded)
     back = {}
     for j in JOURNALS:

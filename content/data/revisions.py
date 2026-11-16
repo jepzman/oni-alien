@@ -81,5 +81,6 @@ REVISIONS = {
     ),
 }
 
-for _rev in REVISIONS.values():
-    _rev.setdefault("revised", ("Nov 2026", "a “what would you do?” question and a try it"))
+for _slug, _rev in REVISIONS.items():
+    _deeper = _slug in ("indexing", "optimistic-locking", "change-data-capture", "multitenancy")
+    _rev.setdefault("revised", ("Nov 2026", "a “what would you do?” question, a try it" + (" and a going-deeper chapter" if _deeper else "")))

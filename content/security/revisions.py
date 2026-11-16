@@ -52,7 +52,7 @@ REVISIONS = {
     "output-encoding": dict(
         quiz_add=[("Product wants users to write comments with bold, links and lists. A developer plans to render them with dangerouslySetInnerHTML. What do you do instead?",
                    "Accept Markdown (or a small set of tags), convert it to HTML on the server and sanitise it with an allow-list (DOMPurify or similar), strip javascript: links, and keep a strict nonce-based CSP as the second layer.")],
-        try_it="In a local copy of your app, put <img src=x onerror=alert(1)> into every text field and see which pages show an alert. Fix any you find by removing raw HTML rendering, then add a Content-Security-Policy header in report-only mode and read the reports.",
+        try_it="In a local copy of your app, put <code>&lt;img src=x onerror=alert(1)&gt;</code> into every text field and see which pages show an alert. Fix any you find by removing raw HTML rendering, then add a Content-Security-Policy header in report-only mode and read the reports.",
     ),
     "csrf-protection": dict(
         quiz_add=[("Your app moved from a cookie session to bearer tokens in localStorage for the API, but the admin panel still uses a session cookie and has a POST /users/:id/delete form. Which part needs CSRF protection?",

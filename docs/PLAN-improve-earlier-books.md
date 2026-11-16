@@ -1,7 +1,6 @@
 # Plan: improve the earlier books
 
-Plan of 2026-11-15, **approved by the owner** (decisions in section 7). **Nothing here is built yet**: the work
-starts later, at step 1 of section 6.
+Plan of 2026-11-15, **approved by the owner** (decisions in section 7). Progress is in section 8.
 
 It covers everything that is finished: Series 1, the six design-pattern volumes (93 notes), and the two practitioner
 books, Book 1 (Ana, 90 notes) and Book 2 (Grace, 90 notes).
@@ -210,3 +209,30 @@ replaced; Series 1 notes stay short, with the depth in the new chapter, not in t
 | 8 | Going deeper picks | The candidate tables in sections 3 and 4, as drafted; the fourth pick per volume is written if the note has enough for a chapter. |
 
 The owner approved the plan on 2026-11-15 (“do your recommendation”). The work starts later, at step 1 of section 6.
+
+## 8. Progress
+
+### 2026-11-16: Series 1 (design patterns), first pass
+
+| Item | State |
+| --- | --- |
+| A1 related notes are links | **done** for all 303 notes (about 1,200 of 1,219 entries; 19 name topics with no note yet and stay text; the build prints them) |
+| A2 hand-made notes | **done differently**: Circuit Breaker and Saga stay hand-made; the build injects the new blocks between `<!-- gen:… -->` markers (idempotent) |
+| A3 deep-dive and cheat-sheet links | **done**: `CARD_LINKS` in `build_notes.py` (“on a card →”) |
+| A4 seen at Larder | **done**, automatic: every Series 2 related entry that names a pattern shows on that pattern (38 links on 26 notes) |
+| A5 revised mark | **done**: `revised=(month, what)` on a note, `REVISION_NOTE` on the volume index |
+| A6 meanwhile links (Books 1–2) | not started |
+| S1 situational question | **done**, 93 of 93 (tagged “what would you do?”) |
+| S2 try it | **done**, 93 of 93 |
+| S3 going deeper | **sample done on `data`**: Indexing, Optimistic Locking, Change Data Capture, Multitenancy (4 chapters, 9 figures). Owner reviews before the other five volumes |
+| S4 depth pass, S5 freshness pass | not started |
+| 5.1 extra notes, Vol. 7 | not started |
+
+How it is built: additions live in `content/<key>/revisions.py` (quiz_add, try_it, revised) and `content/<key>/deeper.py`
+(deep_dive), merged into the notes by `load_content`; the original note files are unchanged. Several files may add to one note.
+
+Also fixed on the way: leftover merge markers in `bujo.css` that hid the deep-dive cover colours and Book 3's binder colours
+on the live site; deep-dive covers restyled as a printed textbook; long words in quiz answers no longer widen phone pages.
+
+Next for Series 1: owner reviews the `data` sample, then going deeper for the other five volumes (candidates in section 3),
+then the extra notes (5.1). Cover artwork: three options mocked up (sticker, printed cloth, both); waiting for the owner.

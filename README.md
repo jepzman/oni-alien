@@ -43,6 +43,13 @@ testing, operations and tools, in the “annotated textbook” skin with a skim 
 Written so far: **Saga**, **Reliable Messaging**, **The Resilience Stack**, **Event Sourcing & CQRS**, **Caching** and **Zero-Downtime Change** (10 chapters each, about a 30-minute read). Content `content/deep-dives/<slug>.py`, renderer `scripts/dive.py`, styles and
 script `public/assets/dive.css` / `dive.js`. Plan and format: `docs/HANDOFF-deep-dives.md`.
 
+## Revisions to finished notes
+
+Later additions to a finished volume live beside its notes: `content/<key>/revisions.py` (extra “what would you do?”
+questions, try it, a revised stamp) and `content/<key>/deeper.py` (a going-deeper chapter). The build merges them into the
+notes. Related notes are written as text and become links when they name a note; pattern notes also list the Series 2
+notes that use them (“seen at Larder”). Plan: `docs/PLAN-improve-earlier-books.md`.
+
 ## Cheat sheets
 
 Laminated reference cards (`/cheatsheets/<slug>/`), listed on the landing page under **Cheat sheets**. Each is a few A4 pages:
