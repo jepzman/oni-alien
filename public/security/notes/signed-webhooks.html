@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Signed Webhooks · Jef’s Notes</title>
+<meta name="description" content="Check a signature and timestamp on every incoming webhook before trusting it.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=6e8d3c64da">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-security">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 5 · security patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="signed-webhooks">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 28.12.26</span><span class="topic">collection · <b>untrusted input</b></span></div>
+  <p class="kicker">a.k.a. “prove it came from them, and that it's new”</p>
+  <h1><span class="hl">Signed Webhooks</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>A webhook endpoint is a public URL that changes things (“order paid”, “subscription cancelled”). Anyone who finds it can call it. <b>Verify every request</b>: the sender signs the <b>exact raw body plus a timestamp</b> with a shared secret (HMAC), you recompute and compare in <b>constant time</b>, reject <b>old timestamps</b> to stop replays, and ignore <b>event ids you've already handled</b>. Then answer quickly and process in the background.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> untrusted input</li><li><b>Mechanism:</b> HMAC-SHA256 over timestamp + raw body</li><li><b>Standard:</b> Standard Webhooks spec; Stripe, GitHub, Slack all sign</li><li><b>Pairs with:</b> idempotent consumer, validate at the boundary, secrets management</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">A shop's <code>/webhooks/payment</code> endpoint ships an order whenever it receives a JSON body saying “paid”. Someone who finds the URL (in a log, a browser extension, a guess) <span class="hl-pink">sends their own “order 812 paid”</span>, and the order ships without payment.</p>
+  <ul>
+    <li>Webhook URLs are <b>public</b> by nature; obscurity is not protection.</li>
+    <li>A captured real notice can be <b>sent again</b> later (replay).</li>
+    <li>Providers retry deliveries, so the same event can legitimately arrive <b>twice</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of an unauthenticated webhook. The shop&#x27;s endpoint accepts any POST that looks like a payment provider notice saying an order was paid. Someone who finds the URL sends their own payment succeeded message for order 812, and the order is shipped without any payment."><g class="rough"><rect class="d f-blue" x="20" y="30" width="190" height="70" rx="10"/><rect class="d f-pink d-red" x="20" y="150" width="190" height="70" rx="10"/><path class="d" d="M214 65 L366 110"/><path class="d" d="M354.2 111.9 L366 110 L357.1 101.9"/><path class="d d-red" d="M214 185 L366 140"/><path class="d d-red" d="M357.1 148.1 L366 140 L354.2 138.1"/><rect class="d f-y" x="370" y="90" width="170" height="70" rx="10"/><path class="d d-red" d="M544 125 L596 125"/><path class="d d-red" d="M585.2 130.2 L596 125 L585.2 119.8"/><rect class="d f-pink d-red" x="600" y="90" width="140" height="70" rx="10"/></g><text class="t-head" x="115" y="61" text-anchor="middle" font-size="16">payment provider</text><text class="t" x="115" y="85" text-anchor="middle" font-size="13">real notices</text><text class="t-head t-red" x="115" y="181" text-anchor="middle" font-size="16">anyone</text><text class="t" x="115" y="205" text-anchor="middle" font-size="13">found the URL</text><text class="t-s t-red" x="300" y="196" text-anchor="middle">“order 812 paid”</text><text class="t-head" x="455" y="121" text-anchor="middle" font-size="16">/webhooks/pay</text><text class="t" x="455" y="145" text-anchor="middle" font-size="13">trusts every POST</text><text class="t-head t-red" x="670" y="121" text-anchor="middle" font-size="16">shipped</text><text class="t" x="670" y="145" text-anchor="middle" font-size="13">never paid</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Anyone who finds the URL can say “order 812 is paid”.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">a sealed, dated letter</span></h2>
+  <p>A notary's letter carries a <b>wax seal</b> pressed with a stamp only the notary has, and a <b>date</b>. You open it only if the seal is intact and matches, and the date is recent. A forged letter has no matching seal; an old genuine letter posted again is refused because of its date.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a sealed letter. A notary&#x27;s letter carries a wax seal pressed with a stamp only the notary has, and the date. The receiver checks that the seal is intact and matches, and that the date is recent. A forged letter has no matching seal; an old letter sent again is refused because of its date."><g class="rough"><g transform="translate(40 70) scale(1.6)"><g class="d"><rect class="f-y" x="0" y="10" width="60" height="40" rx="3"/><path d="M0 12 L30 34 L60 12"/></g></g><g transform="translate(120 120) scale(1.0)"><g class="d"><circle class="f-paper" cx="30" cy="26" r="20"/><path d="M18 42 l-6 20 l10 -6 l6 8 l2 -18 M42 42 l6 20 l-10 -6 l-6 8 l-2 -18 M22 26 l6 6 l12 -12"/></g></g><rect class="d f-green" x="260" y="40" width="230" height="70" rx="10"/><rect class="d f-green" x="260" y="140" width="230" height="70" rx="10"/></g><text class="t-head" x="375" y="71" text-anchor="middle" font-size="17">seal matches?</text><text class="t" x="375" y="95" text-anchor="middle" font-size="13">only the sender has the stamp</text><text class="t-head" x="375" y="171" text-anchor="middle" font-size="17">dated today?</text><text class="t" x="375" y="195" text-anchor="middle" font-size="13">old letters refused</text><text class="t-s t-green" x="620" y="110" text-anchor="middle" font-size="16">both yes → open it</text><text class="t-s t-red" x="620" y="140" text-anchor="middle" font-size="16">otherwise → bin</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A wax seal only the sender can make, and a date so old letters can't be sent again.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The notary's stamp</td><td>The shared webhook signing secret</td></tr>
+      <tr><td>The wax seal</td><td>The HMAC signature header</td></tr>
+      <tr><td>An intact seal over the whole letter</td><td>Signature over the exact raw body</td></tr>
+      <tr><td>The date on the letter</td><td>The signed timestamp; reject if older than ~5 minutes</td></tr>
+      <tr><td>A letter you've already filed</td><td>An event id already processed: ignore it</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">five checks before you trust it</span></h2>
+  <p>The sender computes <code>HMAC-SHA256(secret, timestamp + "." + raw_body)</code> and sends it in a header with the timestamp. You recompute it over the bytes you received, before parsing (re-serialised JSON won't match), and compare with a <b>constant-time</b> function. Check the timestamp is recent and the event id is new, then return 2xx quickly and queue the work.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="Verifying a signed webhook. The sender computes an HMAC with a shared secret over the timestamp and the exact raw body, and sends it in a header. The receiver reads the raw body before any JSON parsing, recomputes the HMAC, compares it in constant time, rejects timestamps older than five minutes, and skips event ids it has already handled."><g class="rough"><rect class="d f-paper" x="10" y="50" width="121" height="80" rx="10"/><rect class="d f-y" x="165" y="50" width="121" height="80" rx="10"/><path class="d" d="M135 90 L161 90"/><path class="d" d="M150.2 95.2 L161 90 L150.2 84.8"/><rect class="d f-blue" x="320" y="50" width="121" height="80" rx="10"/><path class="d" d="M290 90 L316 90"/><path class="d" d="M305.2 95.2 L316 90 L305.2 84.8"/><rect class="d f-green" x="474" y="50" width="121" height="80" rx="10"/><path class="d" d="M444 90 L470 90"/><path class="d" d="M459.2 95.2 L470 90 L459.2 84.8"/><rect class="d f-green" x="629" y="50" width="121" height="80" rx="10"/><path class="d" d="M599 90 L625 90"/><path class="d" d="M614.2 95.2 L625 90 L614.2 84.8"/></g><text class="t-head" x="70.5" y="86" text-anchor="middle" font-size="16">raw body</text><text class="t" x="70.5" y="110" text-anchor="middle" font-size="12">exact bytes</text><text class="t-head" x="225.5" y="86" text-anchor="middle" font-size="16">HMAC</text><text class="t" x="225.5" y="110" text-anchor="middle" font-size="12">secret + time</text><text class="t-head" x="380.5" y="86" text-anchor="middle" font-size="16">compare</text><text class="t" x="380.5" y="110" text-anchor="middle" font-size="12">constant time</text><text class="t-head" x="534.5" y="86" text-anchor="middle" font-size="16">fresh?</text><text class="t" x="534.5" y="110" text-anchor="middle" font-size="12">≤ 5 min old</text><text class="t-head" x="689.5" y="86" text-anchor="middle" font-size="16">new id?</text><text class="t" x="689.5" y="110" text-anchor="middle" font-size="12">not seen before</text><text class="t-s t-red" x="380" y="176" text-anchor="middle" font-size="16">any check fails → 400 or 401, and nothing is processed</text><text class="t-s t-green" x="380" y="208" text-anchor="middle" font-size="16">all pass → 2xx quickly, do the work in the background</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Raw body + timestamp → HMAC with the shared secret → constant-time compare → fresh? new event id?</figcaption></figure>
+  <ol class="steps">
+    <li><b>Keep the raw body</b><p>Configure the route to give you the bytes (express.raw, request.get_data()) before any JSON parsing.</p></li>
+    <li><b>Recompute and compare</b><p>HMAC-SHA256 with the endpoint's secret over the exact signed string; compare with a timing-safe function.</p></li>
+    <li><b>Reject stale timestamps</b><p>Older than ~5 minutes (or in the future): refuse, so captured requests can't be replayed later.</p></li>
+    <li><b>Deduplicate by event id</b><p>Store processed ids with a unique constraint; a retry of the same event is a no-op.</p></li>
+    <li><b>Answer fast, work later</b><p>Return 2xx within a second or two and process from a queue, or the sender retries and duplicates pile up.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Webhook</dt><dd>An HTTP call a provider makes to your URL when something happens.</dd></div>
+    <div><dt>HMAC</dt><dd>A keyed hash: only holders of the secret can produce the right value.</dd></div>
+    <div><dt>Constant-time compare</dt><dd>Comparing without leaking how many characters matched.</dd></div>
+    <div><dt>Replay</dt><dd>Sending a captured, genuine request again later.</dd></div>
+    <div><dt>Event id</dt><dd>A unique id per event, used to drop duplicates.</dd></div>
+    <div><dt>Secret rotation</dt><dd>Switching to a new signing secret while accepting both for a while.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>webhooks.ts</span><span>Node.js + Express</span></div>
+<pre><code><span class="k">import</span> crypto <span class="k">from</span> <span class="s">"node:crypto"</span>;
+
+app.post(<span class="s">"/webhooks/payment"</span>, express.raw({ <span class="k">type</span>: <span class="s">"application/json"</span> }), <span class="k">async</span> (req, res) =&gt; {
+  <span class="k">const</span> ts = req.header(<span class="s">"webhook-timestamp"</span>) ?? <span class="s">""</span>;
+  <span class="k">const</span> sig = req.header(<span class="s">"webhook-signature"</span>) ?? <span class="s">""</span>;
+  <span class="k">const</span> age = Math.abs(Date.now() / 1000 - Number(ts));
+  <span class="k">if</span> (!ts || age &gt; 300) <span class="k">return</span> res.status(400).send(<span class="s">"stale or missing timestamp"</span>);
+
+  <span class="k">const</span> expected = crypto.createHmac(<span class="s">"sha256"</span>, process.env.WEBHOOK_SECRET!)
+    .update(<span class="s">`${ts}.`</span>).update(req.body)                 <span class="c">// the exact raw bytes</span>
+    .digest(<span class="s">"base64"</span>);
+  <span class="k">const</span> ok = sig.length === expected.length &amp;&amp;
+             crypto.timingSafeEqual(Buffer.<span class="k">from</span>(sig), Buffer.<span class="k">from</span>(expected));
+  <span class="k">if</span> (!ok) <span class="k">return</span> res.status(401).send(<span class="s">"bad signature"</span>);
+
+  <span class="k">const</span> event = JSON.parse(req.body.toString(<span class="s">"utf8"</span>));
+  <span class="k">const</span> isNew = <span class="k">await</span> db.webhookEvents.insertIfAbsent(event.id);   <span class="c">// unique on id</span>
+  <span class="k">if</span> (isNew) <span class="k">await</span> queue.publish(<span class="s">"payment-events"</span>, event);          <span class="c">// work happens later</span>
+  res.status(204).end();
+});</code></pre>
+  </div>
+  <p class="aside">tools: Standard Webhooks libraries (standardwebhooks.com), Stripe <code>constructEvent</code>, GitHub <code>X-Hub-Signature-256</code>, Svix (sending and verifying), smee.io / ngrok for local testing, secrets managers for the signing secrets.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Only the real sender</b> can trigger the endpoint.</li><li><b>Replays are refused</b> by the timestamp check.</li><li><b>Duplicates are harmless</b> with event ids.</li><li><b>Cheap</b>: a hash per request.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>A secret to manage</b> and rotate per endpoint.</li><li><b>Raw body handling</b> trips up frameworks that parse JSON first.</li><li><b>Clock skew</b> can reject genuine requests if servers drift.</li><li><b>Every provider differs</b> in header names and formats.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Security ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>a webhook endpoint that trusts any POST</b> to <b>one that verifies signature, timestamp and event id</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to get right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Five checks, best done by a library.</td></tr>
+      <tr data-before="4" data-after="4"><td>Usability<small>little friction?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Invisible to users.</td></tr>
+      <tr data-before="3" data-after="4"><td>Confidentiality<small>secrets stay secret?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The body can't be read or forged in transit (with HTTPS) or forged at all.</td></tr>
+      <tr data-before="1" data-after="5"><td>Integrity<small>can't be tampered with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Forged and altered requests are rejected.</td></tr>
+      <tr data-before="3" data-after="4"><td>Availability<small>stays up under attack?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Junk is rejected cheaply; work is queued.</td></tr>
+      <tr data-before="2" data-after="4"><td>Containment<small>small blast radius?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A leaked URL alone is useless.</td></tr>
+      <tr data-before="2" data-after="4"><td>Auditability<small>can we tell what happened?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Rejected deliveries can be logged with reasons.</td></tr>
+      <tr data-before="4" data-after="4"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Developer experience<small>easy to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Raw-body setup surprises people once.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Verifying parsed JSON</h3><p>The framework parsed and re-serialised the body; the signature never matches, so someone disables the check. <span class="fix">Fix →</span> verify the raw bytes before parsing.</p></li>
+    <li><h3>Plain string compare</h3><p><code>sig === expected</code> leaks timing information. <span class="fix">Fix →</span> use a constant-time comparison.</p></li>
+    <li><h3>No timestamp check</h3><p>A captured genuine notice can be sent again weeks later. <span class="fix">Fix →</span> sign the timestamp and reject anything older than a few minutes.</p></li>
+    <li><h3>Slow handler</h3><p>The endpoint does all the work before answering; the provider times out and retries, and orders ship twice. <span class="fix">Fix →</span> answer 2xx fast, queue the work, and deduplicate by event id.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Every incoming webhook that changes state: payments, subscriptions, deployments.</li><li>Sending webhooks to customers: sign them the same way.</li><li>Internal callbacks between systems over the internet.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>The sender can't sign: then allow-list its IPs and use mutual TLS, and treat the payload as a hint to fetch the real state.</li><li>Read-only notifications with no effect (still cheap to verify, though).</li><li>Calls inside a private network already authenticated by mTLS.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../../distributed/notes/idempotent-consumer.html"><b>Idempotent consumer</b></a> (Vol. 1)</li><li><a href="../notes/input-validation.html"><b>Validate at the boundary</b></a></li><li><a href="../notes/secrets-management.html"><b>Secrets management</b></a></li><li><a href="../notes/audit-logging.html"><b>Audit logging</b></a></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why must the signature be checked over the raw body?</summary><p>The signature covers exact bytes; parsing and re-serialising JSON changes spacing or order, so the check would fail or be skipped.</p></details>
+    <details><summary>What does the timestamp check prevent?</summary><p>Replays: a captured genuine request sent again later is rejected as too old.</p></details>
+    <details><summary>Why compare signatures in constant time?</summary><p>A normal comparison can leak, through timing, how much of a guessed signature was right.</p></details>
+    <details><summary>Why store event ids?</summary><p>Providers retry deliveries; the id lets you process each event only once.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Your endpoint verifies signatures correctly, but customers are sometimes charged twice for one order. The provider's dashboard shows many retries after timeouts on your endpoint. What do you change?</span></summary><p>Answer 2xx as soon as the request is verified and recorded, and do the work from a queue; and deduplicate by the event id with a unique constraint, so a retried delivery is ignored. Make the charge-side action idempotent too.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Add signature checking to one webhook endpoint (or write a toy one). Send it a request with the right signature, one with a changed body, one with a timestamp from an hour ago, and the same valid request twice. Check that only the first valid request is processed, and that each rejection is logged with its reason.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Check the <span class="hl">seal</span>, check the <span class="hl">date</span>, and never open the same letter twice.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/17-signed-webhooks.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Standard Webhooks specification (standardwebhooks.com).</li><li>Stripe documentation, “Check the webhook signatures”.</li><li>GitHub documentation, “Validating webhook deliveries”.</li><li>RFC 2104, “HMAC: Keyed-Hashing for Message Authentication”.</li></ul>
+  </div>
+  <p class="folio">17</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="passkeys.html"><small>← previous note</small>16 · Passkeys</a>
+  <a href="login-throttling.html"><small>Next note →</small>18 · Rate-Limited Login</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 5 · a student's bullet journal on security patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

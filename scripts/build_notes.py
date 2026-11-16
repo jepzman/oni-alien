@@ -171,6 +171,9 @@ JOURNALS = [
             (16, "replication", "Leader–Follower Replication", "data", "Copy data to followers for reads and failover; one leader takes the writes."),
             (17, "cache-aside", "Cache-Aside", "data", "Check a fast cache first; on a miss, load from the database and keep a copy."),
             (18, "leader-election", "Leader Election", "coordination", "Pick exactly one node to do a job, and safely pick a new one when it dies."),
+            (19, "strangler-fig", "Strangler Fig", "communication", "Put a routing layer in front of the old system and move one route at a time to the new one."),
+            (20, "backpressure", "Backpressure", "resilience", "When work arrives faster than you can finish it, push back instead of queueing without limit."),
+            (21, "consistent-hashing", "Consistent Hashing", "data", "Spread keys across nodes so adding or removing a node moves only a small share of them."),
         ],
     ),
     dict(
@@ -203,6 +206,9 @@ JOURNALS = [
             (13, "micro-frontends", "Micro-Frontends", "architecture", "Split a big frontend into apps owned and deployed by separate teams."),
             (14, "design-tokens", "Design Tokens", "architecture", "Name every colour, size and font once, and use those names everywhere."),
             (15, "error-boundaries", "Error Boundaries", "architecture", "Catch a crashing part of the UI and show a fallback, instead of a blank page."),
+            (16, "debounce-throttle", "Debounce & Throttle", "rendering", "Run a handler once after the user pauses, or at most every so often, instead of on every event."),
+            (17, "web-workers", "Web Workers", "rendering", "Move heavy work off the main thread so the page keeps responding to taps."),
+            (18, "offline-first", "Offline-First Sync", "state", "Write to a local store first and sync with the server when the connection allows."),
         ],
     ),
     dict(
@@ -235,6 +241,9 @@ JOURNALS = [
             (13, "multitenancy", "Multitenancy", "growing", "Serve many customers from one database while keeping each one's data apart."),
             (14, "connection-pooling", "Connection Pooling", "growing", "Reuse a small set of open connections instead of opening one per request."),
             (15, "star-schema", "Star Schema", "growing", "Shape analytics data as facts surrounded by dimensions, for fast reports."),
+            (16, "upserts", "Upserts", "changing", "Insert a row or update the one that's already there, in one atomic statement."),
+            (17, "bitemporal-data", "Bitemporal Data", "modelling", "Record both when a fact was true and when you knew it, so corrections never erase history."),
+            (18, "vector-indexes", "Vector Indexes", "reading", "Find the nearest items by meaning, not by exact value, without comparing against every row."),
         ],
     ),
     dict(
@@ -267,6 +276,9 @@ JOURNALS = [
             (13, "deterministic-tests", "Controlled Time & Randomness", "reliability", "Inject the clock, the random seed and the ids, so every run is the same."),
             (14, "flaky-tests", "Flaky Test Quarantine", "reliability", "Detect tests that pass and fail at random, isolate them and fix the cause."),
             (15, "parallel-selective", "Parallel & Selective Runs", "reliability", "Split the suite across workers and run only the tests a change can affect."),
+            (16, "fuzzing", "Fuzzing", "techniques", "Feed a program huge numbers of generated, malformed inputs and watch for crashes."),
+            (17, "visual-regression", "Visual Regression Tests", "techniques", "Compare screenshots with approved ones so layout and style bugs fail the build."),
+            (18, "fault-injection", "Fault Injection Tests", "reliability", "Make dependencies slow, fail or drop connections in tests, and check the code copes."),
         ],
     ),
     dict(
@@ -299,6 +311,9 @@ JOURNALS = [
             (13, "audit-logging", "Audit Logging", "operations", "Record who did what, when and from where, in a log attackers can't quietly edit."),
             (14, "supply-chain", "Supply-Chain Hygiene", "operations", "Pin, scan and verify the packages and images you depend on."),
             (15, "defense-in-depth", "Defence in Depth", "operations", "Stack independent layers so one failure doesn't mean a breach."),
+            (16, "passkeys", "Passkeys", "identity", "Sign in with a key pair kept on the user's device, so there is no password to steal or phish."),
+            (17, "signed-webhooks", "Signed Webhooks", "input", "Check a signature and timestamp on every incoming webhook before trusting it."),
+            (18, "login-throttling", "Rate-Limited Login", "identity", "Slow down and block password guessing per account, per IP and overall."),
         ],
     ),
     dict(
@@ -331,6 +346,9 @@ JOURNALS = [
             (13, "disaster-recovery", "Backups & Disaster Recovery", "resilience", "Keep tested backups and a rehearsed plan to restore service elsewhere."),
             (14, "postmortems", "Incident Response & Postmortems", "resilience", "Handle incidents with clear roles, then learn from them without blame."),
             (15, "finops", "Cost Visibility (FinOps)", "resilience", "Tag, measure and own cloud spend, so cost is a design input, not a surprise."),
+            (16, "progressive-delivery", "Progressive Delivery", "shipping", "Roll a change out ring by ring, with automatic checks deciding each next step."),
+            (17, "service-catalogue", "Service Catalogue", "running", "One place that says what each service is, who owns it, and how to run it."),
+            (18, "chaos-engineering", "Chaos Engineering", "resilience", "Run planned experiments that break things on purpose, to learn before an incident does."),
         ],
     ),
     # ---- Series 2 · The Solution Architect's Notebook ----
@@ -874,11 +892,10 @@ PLANNED_PROJECT = [
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
     ("Jan 2027", [("↓", "Deep dives, season 2: Replication &amp; Leader Election, Sharding &amp; Partitioning, Indexes &amp; Query Plans"), ("•", "One-page printable cheat sheet per collection")]),
-    ("Feb 2027", [("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
-    ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b>, vols. 3–6 (Sanne): the rest of the PMBOK Guide, one domain at a time, with a project file that grows"), ("•", "Cheat sheets: PMBOK 8 on one page, earned value, critical path"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
-    ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
+    ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b>, vols. 3–6 (Sanne): the rest of the PMBOK Guide, one domain at a time, with a project file that grows"), ("•", "Cheat sheets: PMBOK 8 on one page, earned value, critical path")]),
+    ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations")]),
     ("Mid 2027", [("↓", "More deep dives: Sign-in &amp; Tokens, Observability &amp; SLOs, Rendering on the Web, Multitenancy"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
-    ("Someday", [("•", "Extra notes for Vols. 2, 5 and 6: Debounce &amp; Throttle, Passkeys, Signed Webhooks, Chaos Engineering, Service Catalogues"), ("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
+    ("Someday", [("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
 
 
@@ -2195,6 +2212,8 @@ def load_content(key):
         mod.__dict__["Doodle"] = Doodle
         spec.loader.exec_module(mod)
         for n in getattr(mod, "NOTES", []):
+            if n.get("quiz_sit"):   # situational questions, tagged “what would you do?” (notes written after Nov 2026)
+                n["quiz"] = list(n["quiz"]) + [(sit_q(q), a) for q, a in n["quiz_sit"]]
             notes[n["slug"]] = n
         if hasattr(mod, "REVISIONS"):   # several files may add to the same note (revisions.py, deeper.py)
             for slug, rev in mod.REVISIONS.items():
