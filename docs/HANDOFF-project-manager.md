@@ -1,7 +1,7 @@
 # Handoff: The Project Manager's Notebook (Series 2, Book 3)
 
-Status as of 2026-11-16: **Vols. 1 and 2 are deployed (PR #24). Vol. 3 is written, not yet deployed (section 14).
-Vols. 4–6 are planned. To continue, read sections 13 and 14 first.** Decisions in section 9;
+Status as of 2026-11-16: **Vols. 1–4 are written and merged to `main` (vols. 1–2 in PR #24; 3–4 together after it;
+sections 14–15). Vols. 5–6 are planned. To continue, read sections 13 to 15 first.** Decisions in section 9;
 what was built in section 10.
 
 Story facts: `docs/larder-casebook.md` (source of truth) and the public case file `/larder/`.
@@ -334,3 +334,24 @@ The questions as they were asked:
   “Book 3, Vol. 3”. Suggested “going deeper”: the budget and its reserves, earned value, resource levelling. Earned value
   can use the fit-out network and the €148k fixed price, so the numbers stay one example. Cheat sheets that fit: earned
   value; critical path (from this volume).
+
+## 15. Vol. 4 notes on the build (2026-11-16)
+
+- `project-4` journal, “Money and People”: the **Finance** (4) and **Resources** (5) domains. Content in
+  `content/project-4/01_money.py` (8 notes) and `02_people.py` (7). Story: **January → May 2026**, the same Rotterdam
+  launch, a third pass. Section 5's table had planned Utrecht and The Hague for this volume; staying with Rotterdam kept
+  every number one example (the budget, earned value and the closing cost all reconcile). Facts: casebook, “Book 3, Vol. 4”.
+- Process → notes: Plan Financial Management → money rules · Estimate Costs → cost estimates · Develop Budget → budget and
+  reserves, cash flow · Monitor and Control Finances → committed and spent, earned value, forecasting, payback ·
+  Plan Resource Management → RACI · Estimate Resources → people from demand · Acquire Resources → where they come from ·
+  Lead the Team → leading without authority, team conflict · Monitor and Control Resourcing → levelling, availability.
+- **Going deeper** (4): budget and reserves · earned value · resource levelling · leading without authority.
+- The money reconciles across all four volumes: see the comment block at the top of `01_money.py`. **Vol. 2 corrected**:
+  committed €335k (27 Feb, 13 Mar) and €355.5k (27 Mar), because the equipment order of 23 Feb had been left out.
+- Sanne's mistakes: 20 % on signing without checking the payment run (cash) · “€61k spent” when €335k was committed ·
+  borrowing Noord's pickers on King's Day · planning Eli at 100 % on Rotterdam.
+- Dense figures use `Doodle(..., exact=True)`. 49 figures checked on contact sheets; 375 px; every listed page exists.
+- **Not verified against the guide**: the nine Finance and Resources process names (from public summaries).
+- **Next: Vol. 5, “People Outside, and Surprises”** (Stakeholders 7, Risk 6). Open threads are at the end of the
+  casebook's “Book 3, Vol. 4”. The risk notes can reuse the three-point estimates (Vol. 3) and the reserve (Vol. 4);
+  a Monte Carlo note can use the fit-out network. Antwerp (September 2027) is the natural setting for stakeholders abroad.

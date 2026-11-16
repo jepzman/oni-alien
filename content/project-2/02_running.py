@@ -381,7 +381,7 @@ sr_analogy.icon("map", 40, 60, 1.6)
 sr_analogy.row([("where we are", "against the route", "blue"), ("what's left", "distance", "y"), ("arrival time", "updated as we drive", "green")], x=180, y=60, h=84, w=178, gap=10, size=16, subsize=13)
 sr_analogy.note(460, 196, "position · remaining · forecast", "pen", size=20)
 
-sr_how = Doodle(760, 400, "Rotterdam's status of 27 March 2026, one month before opening. A chart of must-haves done against the plan line: 49 done, the plan said 52. Milestones: fit-out forecast 8 April against a baseline of 3 April, escalated on the 23rd and recovered. Money: 322 thousand euros committed of 380. Overall amber, by the written rules. A forecast: 71 must-haves by 24 April if the rate of four a week rises to six. And two decisions asked of the steering group.",
+sr_how = Doodle(760, 400, "Rotterdam's status of 27 March 2026, one month before opening. A chart of must-haves done against the plan line: 49 done, the plan said 52. Milestones: fit-out forecast 8 April against a baseline of 3 April, escalated on the 23rd and recovered. Money: 355.5 thousand euros committed of 380. Overall amber, by the written rules. A forecast: 71 must-haves by 24 April if the rate of four a week rises to six. And two decisions asked of the steering group.",
                 "Position against the baseline, a forecast, a colour that follows rules, and what is needed from the reader.")
 sr_how.box(14, 14, 420, 230, None, "paper")
 sr_how.line("M50 220 h360 M50 220 v-190", thin=True)
@@ -393,7 +393,7 @@ sr_how.note(330, 82, "plan: 52", size=14)
 sr_how.note(230, 240, "must-haves done, by week (of 71)", size=14)
 sr_how.box(452, 14, 294, 68, "AMBER", "y", sub="by the rules", size=24, subsize=14)
 sr_how.box(452, 94, 294, 68, "forecast", "blue", sub="71 by 24 Apr needs 6 a week", size=18, subsize=13)
-sr_how.box(452, 174, 294, 70, "money", "green", sub="€322k of €380k committed", size=18, subsize=13)
+sr_how.box(452, 174, 294, 70, "money", "green", sub="€355.5k of €380k committed", size=18, subsize=13)
 sr_how.box(14, 264, 732, 100, None, "pink")
 sr_how.head(380, 292, "needed from the steering group", size=18)
 sr_how.text(380, 322, "1 confirm approvals move to June (31 Mar session)  ·  2 nothing new for launch after 3 April", size=14)
@@ -438,12 +438,12 @@ STATUS = dict(
     analogy="""  <p>A <b>sat-nav</b> shows three things: <b>where you are</b> on the planned route, <b>how far is left</b>, and <b>when you'll arrive</b>, recalculated as you drive. When traffic builds it tells you at once and offers another route. It never says “making good progress”, and it never waits until you've missed the ferry to mention the jam.</p>""",
     analogy_figs=[sr_analogy],
     map=[("The planned route", "Baseline v1"),
-         ("The dot on the map", "49 must-haves done; fit-out forecast; €322k committed"),
+         ("The dot on the map", "49 must-haves done; fit-out forecast; €355.5k committed"),
          ("Arrival time", "The forecast: 65 of 71 by go / no-go at the current rate"),
          ("“Traffic ahead: new route?”", "Corrective action, or a decision for the steering group"),
          ("“Making good progress”", "A green that is really a mood")],
     how_side="position, forecast, action, ask — and colours with rules",
-    how="""  <p>For the steering group of <b>27 March</b> Sanne rebuilds the page. <b>Position</b>: a small chart of must-haves done against the plan line (49; the plan said 52), the milestones against baseline, money committed (€322k of €380k). <b>Forecast</b>: at the recent rate of four a week, 65 of 71 by go / no-go. <b>Action</b>: Ben and Eli pair on the six blocked items; nothing new enters the launch list after 3 April. <b>Ask</b>: two decisions. And each colour now follows a <b>written rule</b> (under “going deeper”). By those rules the overall status is amber. Marco reads the rules twice and says: “so next week I can check you.”</p>""",
+    how="""  <p>For the steering group of <b>27 March</b> Sanne rebuilds the page. <b>Position</b>: a small chart of must-haves done against the plan line (49; the plan said 52), the milestones against baseline, money committed (€355.5k of €380k). <b>Forecast</b>: at the recent rate of four a week, 65 of 71 by go / no-go. <b>Action</b>: Ben and Eli pair on the six blocked items; nothing new enters the launch list after 3 April. <b>Ask</b>: two decisions. And each colour now follows a <b>written rule</b> (under “going deeper”). By those rules the overall status is amber. Marco reads the rules twice and says: “so next week I can check you.”</p>""",
     how_figs=[sr_how],
     steps=[("Measure against the baseline", "Done, dates, money."),
            ("Show the trend", "This week against the last few."),
@@ -468,7 +468,7 @@ SCOPE        52 of 71 by now  49 done · 6 blocked  65 by 24 Apr at     AMBER (3
                                                    4 a week            → amber at 4+)
 SCHEDULE     G1 3 Apr         builder said 8 Apr   3 Apr (weekend      GREEN (on baseline
                               on 23 Mar            work, C-02)         after C-02)
-FINANCE      €380k            €322k committed      €379k               AMBER (reserve in
+FINANCE      €380k            €355.5k committed    €379k               AMBER (reserve in
                               reserve €1k                              use)
 GOVERNANCE   ok · STAKEHOLDERS ok (neighbours told 2 Mar) · RESOURCES ok (15 pickers
 start Mon) · RISK amber (I-07 internet line: workaround agreed)

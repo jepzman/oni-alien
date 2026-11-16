@@ -606,8 +606,8 @@ Vol. 2 covers the Governance domain (nine processes). Every template card is a p
   7 April; dry goods stocked from 6 April, chilled from 8 April. G4: go with two conditions (Grace's two reds, fixed 26 Apr).
 - **Weekly rhythm** (from 5 Mar): Monday decision log with Ana, Thursday 09:30 leads, Friday status. Must-haves done (of 71):
   26 Feb 33 · 5 Mar 34 · 12 Mar 41 · 27 Mar 49 (plan 52) · then +6, +5, +9 a week · 24 Apr 69 · 26 Apr 71.
-- **Baseline v1** (13 Mar, steering group): scope signed by Grace (6 app Musts) and Joost (65 others); €287k committed
-  (builder 148, cold room 78, earlier spend 61). The 9 March misread (“approvals at launch”) was Sanne restating a promise
+- **Baseline v1** (13 Mar, steering group): scope signed by Grace (6 app Musts) and Joost (65 others); €335k committed
+  (builder 148, cold room 78, equipment 48, recruiting and marketing contracts 61). The 9 March misread (“approvals at launch”) was Sanne restating a promise
   Grace never made. **Baseline v2** on 31 Mar after C-03.
 - **Quality review** (20 Mar): the nightly script had failed silently 8–11 March (issue I-05; 212 products listed when it ran
   again); 12 of 15 pickers had done their 20 practice orders; RTM-0's weekly order had caught 2 faults. Next review 17 Apr.
@@ -616,7 +616,7 @@ Vol. 2 covers the Governance domain (nine processes). Every template card is a p
   23 raised, 21 closed, 2 handed over (I-21 street numbers in zone RTM-2, I-23 Saturday slots).
 - **Escalation** (23 Mar): builder forecast handover 8 April (electrical inspection re-booked). Option B chosen by Joost at
   16:00: work on the weekend of 28–29 March, €5k, handover held on 3 April.
-- **Status of 27 Mar**: amber; 49 of 71 done; €322k committed; forecast 65 of 71 at 4 a week. Colour rules: schedule red if
+- **Status of 27 Mar**: amber; 49 of 71 done; €355.5k committed; forecast 65 of 71 at 4 a week. Colour rules: schedule red if
   more than 3 days late; scope amber at 4–8 behind the plan line; finance amber when the reserve is in use.
 - **Change log**: C-01 fridges with doors +€14k (Marco, 2 Feb) · C-02 weekend work +€5k (Joost, 23 Mar) · C-03 approvals in
   Rotterdam from launch to June (steering group, 31 Mar; same session as Ana's trade-off sliders) · C-04 4G router +€0.6k
@@ -697,3 +697,57 @@ project-file pages 16–30. Two Vol. 2 slips were corrected on the way: the buil
 - Open threads for Vol. 4 (Finance and Resources): the €380k budget built bottom-up from the WBS, the reserve (20 → 0.4),
   cash flow of the builder's payments and retention, earned value on the fit-out, hiring 40 people under a cap of four
   new office hires, training at Noord, the electrician crew shared by B and F, the e-bike lease.
+
+## Book 3, Vol. 4: Sanne's facts (January → May 2026, Finance and Resources)
+
+Vol. 4 follows the same launch through its money and its people. Template cards are project-file pages 31–45.
+Vol. 2's committed figures were corrected on the way (the €48k of equipment, ordered 23 Feb, had been left out):
+**€335k committed on 27 Feb and at the 13 Mar baseline; €355.5k on 27 Mar** (was €287k and €322k).
+
+- **Money rules** (27 Jan, signed by Marco): € excluding VAT; covers external spend and new store staff until opening;
+  not Larder's own people's time (≈ 170 person-days, tracked by Marco), the e-bike lease or rent (operations); Sanne may
+  commit up to €5,000 within a line, Joost above, Marco vetoes outside the budget; counted as committed, spent, forecast.
+- **Cost estimate** (28 Jan, bottom-up against the top-down €380k per city set in Sept 2025): builder €148k (indicative,
+  ± 10 %; fixed price 26 Feb at the same figure) · cold room + fridges €64k (firm) · equipment + store IT €48k ·
+  people **40 × €1,500** (€500 recruiting + €1,000 paid induction and training) = €60k · marketing €40k → **€360k**.
+- **Budget** (30 Jan, confirmed 6 Feb): baseline €360k + **reserve €20k** (risk list ≈ €10k, doubled by Marco for a
+  first city); no management reserve. S-curve: end Jan 4 · end Feb 64 · end Mar 238 · end Apr 352 · end May 360 (€k).
+- **Cash** (terms table 27 Feb): builder 20 % on signing / 40 % first fix / 35 % handover / 5 % retention (paid 15 May);
+  cold room 30 % with order / 70 % on delivery; equipment on delivery, net 30. Sanne agreed 20 % on signing without
+  checking Larder's monthly 30-day payment run → Kees: “no money, no start”; Marco paid an exception on Mon 2 Mar.
+  Cash paid by month: Jan 4 · Feb 58 · Mar 141 · Apr 129 · May 47.6 = **€379.6k** (planned 4 / 58 / 138 / 132 / 48).
+- **Committed** (Sanne said “€61k spent” at the steering group of 27 Feb; it was the recruiting €30k and marketing €31k
+  contracts of mid-Feb): committed was **€335k** (+ cold room 78, equipment 48, builder 148).
+- **Money table 27 Mar** (budget / committed / spent / forecast, €k): builder 153 / 153 / 96 / 153 · cold room 78 all ·
+  equipment 48 / 48.5 / 48.5 / 48.5 · people 60 / 45 / 21 / **62.5** (agency €575 a hire, not €500) · marketing
+  40 / 31 / 22 / **37** · total 379 / 355.5 / 265.5 / 379; reserve €1k.
+- **Earned value, 20 Mar** (BAC €374k = 360 + the €14k fridge upgrade): **PV 178 · EV 175 · AC 178** → SV −3, CV −3,
+  SPI and CPI 0.98, both in the people line (34 of 40 hired). Agency then fixed its fee for the last 6 hires at €500.
+- **Forecast**: formula 374 ÷ 0.983 ≈ €380k (the whole reserve); owners' lines on 27 Mar: €379k; actual **€379.6k**:
+  fit-out 231 · equipment + IT 49.1 · people 62.5 · marketing 37. The reserve went on C-02 and C-04, not on hiring.
+- **Payback** (22 May, Marco): ≈ €4 contribution per order; 550 orders a day assumed from June ≈ €66k a month →
+  **paid back about December 2026**. A week earlier for a city ≈ €15k; Utrecht in 8 weeks, not 15, ≈ €100k.
+- **RACI** (2 Feb): one A per row; shelving layout → Tomás (A); launch messages → Priya (A), Grace (C).
+- **Resource estimate** (10 Feb): ≈ 350 orders a day in the first month; pickers 9 an hour (Noord 6:40 an order) →
+  **15 pickers**; couriers 2.5 deliveries an hour → **25 couriers**; 40 e-bikes, 30 handhelds. Joost's first answer:
+  “60, like Zuid” (€90k). Second wave (+5 pickers, +12 couriers) for 500 a day, operations budget.
+- **Acquiring**: hired via agency 22, job boards 10, referrals 4, internal moves 4; last hire 17 Apr. Marco's cap of
+  four salaried central hires in 2026: Rotterdam used one (Sanne). **Borrowed**: Sanne agreed 4 Noord pickers from
+  27 Apr with Tomás (30 Mar); Joost caught the King's Day clash (2 Apr) → **2 from Noord + 2 from Zuid, 28 Apr–8 May**.
+  Opening day: Rotterdam's own team, Yara and Grace on the floor, Tomás at Noord for King's Day.
+- **Levelling** (24 Mar): Eli at **160 %** in the week of 23 Mar (platform 2½ d, RFC-003 1½, on call 1, internet line 1,
+  extras 1½, alert fix ½); after: on-call swapped (Ana), Ben does the Dispatch code, alert fix and zone checks moved
+  within float, dashboard paused → 80 / 100 / 100 / 100 / 95 / 75 %. Key people planned at 80 % from then on.
+- **Leading without authority** (16 Mar): Dee's store-page texts from Priya's team were waiting 9 days; Sanne got them
+  next day; Yara's new pickers test approvals for Grace; Dee's team named in the status; both items done 3 Apr.
+- **Rehearsal week conflict** (20–24 Apr): Tomás needs no wrong items; Ben no risky changes; rule: log it, triage at
+  16:00, code if it can cause a wrong item, else a training note → **14 problems: 4 code fixes (2 caused wrong items),
+  7 training notes, 3 parked**.
+- **Availability check** (08:30 daily in hypercare; 29 Apr): orders 470 (plan 350); 3 couriers sick → **Zuid lends 3,
+  29 Apr–2 May**; 4 e-bikes with flat tyres, lease supplier held to 24 h repair with a credit; 2 handhelds broken (4
+  spares left); **second hiring wave pulled forward to 4 May**. Borrowed pickers home on 8 May.
+- Meanwhile links: cost estimates ↔ Grace's business case; payback ↔ Ana's total cost of ownership; levelling ↔ Ana's
+  RFC-003; leading without authority ↔ Ana's influencing without authority; team conflict ↔ Grace's disagree and commit.
+- Open threads for Vol. 5 (Stakeholders and Risk): the neighbours and landlord (not contacted until 2 Mar), the risk
+  register's top three (cold-room delivery, hiring on time, StockPilot's limit), the reserve sized from a risk list,
+  the rival already in Rotterdam, and Antwerp (September 2027) as the next big launch.

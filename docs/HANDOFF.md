@@ -1,8 +1,8 @@
 # Handoff: Jef's Notes (start here)
 
 Status as of **2026-11-16**. Books 1 and 2 are complete (six volumes each). **Book 3, *The Project Manager's Notebook*
-(Sanne, the PMBOK Guide), has vols. 1 and 2 deployed** (PR #24) **and vol. 3 written** (Scope and Schedule, on the
-working branch, not yet deployed); vols. 4–6 are planned. `main` is the deployed branch; work on a branch and open a PR to `main`.
+(Sanne, the PMBOK Guide), has vols. 1–4 written**: vols. 1–2 deployed in PR #24; vols. 3 (Scope, Schedule) and
+4 (Finance, Resources) merged together after it. Vols. 5–6 are planned. `main` is the deployed branch; work on a branch and open a PR to `main`.
 
 Read in this order:
 1. This file: state, next steps, how to build/verify/deploy, gotchas.
@@ -34,6 +34,7 @@ Read in this order:
 | Series 2 · Book 3 (Sanne) | `project-1` | The Lay of the Land (PMBOK foundations) | 15, 4 with deep dives (Jan → Feb 2026) |
 | Series 2 · Book 3 (Sanne) | `project-2` | Starting, Steering, Closing (Governance) | 15, 4 with deep dives (Feb → May 2026) |
 | Series 2 · Book 3 (Sanne) | `project-3` | What, and By When (Scope, Schedule) | 15, 4 going deeper (Feb → Apr 2026) |
+| Series 2 · Book 3 (Sanne) | `project-4` | Money and People (Finance, Resources) | 15, 4 going deeper (Jan → May 2026) |
 
 Book 3, *The Project Manager's Notebook*, covers the whole PMBOK Guide (eighth edition): plan, decisions and build notes in
 `docs/HANDOFF-project-manager.md`. It adds the PMBOK map page (`/pmbok/`), a PMBOK tag on each note, the light / standard /
@@ -58,9 +59,9 @@ cloth, `COVER_ART`). 18 extra notes (3 per volume, `content/<key>/05_extra.py`) 
    fine; the likely cause was a stale cached `bujo.css`, fixed in PR #8 (content-hash `?v=` on assets). **Ask the owner
    to confirm** it now looks right; if not, ask for a screenshot (the sandbox can't open github.io).
 2. **Books 1 and 2 are complete** (PR #16 deployed both Vol. 6s).
-3. **Book 3 is in progress**: Vols. 1 and 2 are live; Vol. 3 is written (section 14 of `docs/HANDOFF-project-manager.md`)
-   and waits for the owner's review and a deploy. **Next is Vol. 4, “Money and People” (Finance and Resources)**; follow
-   section 13.3 of that file, with the open threads at the end of the casebook's “Book 3, Vol. 3”. Three questions are waiting for the owner there
+3. **Book 3 is in progress**: Vols. 1–4 are written and merged (sections 14–15 of `docs/HANDOFF-project-manager.md`).
+   **Next is Vol. 5, “People Outside, and Surprises” (Stakeholders and Risk)**; follow section 13.3 of that file, with
+   the open threads at the end of the casebook's “Book 3, Vol. 4”. Three questions are waiting for the owner there
    (section 13.1): check PMBOK names against the guide, full ten-chapter deep dives for key items, and a look at the live pages. Book 4 (Mo, client management) is in the future log; they should reuse the casebook, the case file timeline and the meanwhile links.
    New journal keys get their shelf cover automatically (CSS matches `book--architect-*` / `book--product-*`).
 4. For each new volume: add every note to the case file `TIMELINE` (`content/larder/casefile.py`, tag `"1"`, `"2"` or `"3"`),

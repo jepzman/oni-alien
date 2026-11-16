@@ -31,9 +31,9 @@ DOMAINS = [
     ("governance", "Governance", "Who decides, how do we start, steer, change and close?", 9, '<a href="../project-2/index.html">Vol. 2</a>'),
     ("scope", "Scope", "What will we deliver, and what not?", 6, '<a href="../project-3/index.html">Vol. 3</a>'),
     ("schedule", "Schedule", "By when?", 3, '<a href="../project-3/index.html">Vol. 3</a>'),
-    ("finance", "Finance", "For how much, and is the money there when we need it?", 4, "Vol. 4"),
+    ("finance", "Finance", "For how much, and is the money there when we need it?", 4, '<a href="../project-4/index.html">Vol. 4</a>'),
     ("stakeholders", "Stakeholders", "Who is affected, and what do they need from us?", 7, "Vol. 5"),
-    ("resources", "Resources", "Which people and things do we need, and how do we lead the team?", 5, "Vol. 4"),
+    ("resources", "Resources", "Which people and things do we need, and how do we lead the team?", 5, '<a href="../project-4/index.html">Vol. 4</a>'),
     ("risk", "Risk", "What could go wrong, or better than planned, and what do we do about it?", 6, "Vol. 5"),
 ]
 DOMAINS_NOTE = ('  <p>The domains are explained together in <a href="../project-1/notes/performance-domains.html">What Must I Keep an Eye On?</a>. '
@@ -42,6 +42,7 @@ DOMAINS_NOTE = ('  <p>The domains are explained together in <a href="../project-
 # Processes, per domain, once its volume is written: (process, focus area, in plain words, [(journal key, slug), …]).
 P2 = "project-2"
 P3 = "project-3"
+P4 = "project-4"
 PROCESSES = [
     ("governance", [
         ("Initiate Project or Phase", "initiating", "Agree that the project, or its next phase, should start: why, for what benefit, who is behind it.",
@@ -85,6 +86,28 @@ PROCESSES = [
           (P3, "critical-path"), (P3, "float-and-buffers"), (P3, "gantt-and-milestones"), (P3, "crashing-and-fast-tracking")]),
         ("Monitor and Control Schedule", "monitoring and controlling", "Measure progress against the schedule baseline, forecast the dates, and act on slips.",
          [(P3, "schedule-tracking")]),
+    ]),
+    ("finance", [
+        ("Plan Financial Management", "planning", "Decide what the budget covers, who may spend what, and how money is counted, reported and controlled.",
+         [(P4, "financial-management")]),
+        ("Estimate Costs", "planning", "Put a money figure on each piece of work, from quotes, rates and past jobs, with how sure each one is.",
+         [(P4, "cost-estimates")]),
+        ("Develop Budget", "planning", "Add the estimates up, add reserves, spread the budget over time and check the cash is there when it's needed.",
+         [(P4, "budget-and-reserves"), (P4, "cash-flow")]),
+        ("Monitor and Control Finances", "monitoring and controlling", "Compare committed, spent and earned with the plan; forecast the final cost; check the value it brings.",
+         [(P4, "committed-and-spent"), (P4, "earned-value"), (P4, "cost-forecasting"), (P4, "payback")]),
+    ]),
+    ("resources", [
+        ("Plan Resource Management", "planning", "Decide who does what, how people and equipment will be found, trained, looked after and released.",
+         [(P4, "raci")]),
+        ("Estimate Resources", "planning", "Work out how many people, with which skills, and which equipment and materials the work needs.",
+         [(P4, "estimating-resources")]),
+        ("Acquire Resources", "executing", "Get the people and things: hire, borrow, lease or buy, with the agreement of whoever owns them.",
+         [(P4, "acquiring-resources")]),
+        ("Lead the Team", "executing", "Lead and develop the people doing the work, including those who don't report to you, and work through conflict.",
+         [(P4, "leading-without-authority"), (P4, "team-conflict")]),
+        ("Monitor and Control Resourcing", "monitoring and controlling", "Check that people and things are available as planned; level overloads; act on shortfalls.",
+         [(P4, "resource-levelling"), (P4, "monitoring-resources")]),
     ]),
 ]
 PROCESSES_NOTE = ('  <p class="aside">process names as listed in public summaries of the eighth edition; check the exact wording against your '

@@ -29,6 +29,7 @@ Live site: https://jepzman.github.io/oni-alien/
 | 2 · 4 | Measuring & Learning (`/product-4/`) | 15 | product ratings |
 | 2 · 5 | Stakeholders & Influence (`/product-5/`) | 15 | product ratings |
 | 2 · 6 | Growing the Product (`/product-6/`) | 15 | product ratings |
+| 3 · 4 | Money and People (`/project-4/`) | 15 | project ratings |
 | 3 · 3 | What, and By When (`/project-3/`) | 15 | project ratings |
 | 3 · 2 | Starting, Steering, Closing (`/project-2/`) | 15 | project ratings |
 | 3 · 1 | The Lay of the Land (`/project-1/`) | 15 | project ratings (value focus, predictability, risk reduction, transparency, stakeholder confidence, team ownership, adaptability, quality built in, low overhead) |
