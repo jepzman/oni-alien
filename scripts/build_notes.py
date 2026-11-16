@@ -276,6 +276,9 @@ JOURNALS = [
             (13, "deterministic-tests", "Controlled Time & Randomness", "reliability", "Inject the clock, the random seed and the ids, so every run is the same."),
             (14, "flaky-tests", "Flaky Test Quarantine", "reliability", "Detect tests that pass and fail at random, isolate them and fix the cause."),
             (15, "parallel-selective", "Parallel & Selective Runs", "reliability", "Split the suite across workers and run only the tests a change can affect."),
+            (16, "fuzzing", "Fuzzing", "techniques", "Feed a program huge numbers of generated, malformed inputs and watch for crashes."),
+            (17, "visual-regression", "Visual Regression Tests", "techniques", "Compare screenshots with approved ones so layout and style bugs fail the build."),
+            (18, "fault-injection", "Fault Injection Tests", "reliability", "Make dependencies slow, fail or drop connections in tests, and check the code copes."),
         ],
     ),
     dict(

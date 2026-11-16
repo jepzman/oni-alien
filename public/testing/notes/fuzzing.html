@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fuzzing · Jef’s Notes</title>
+<meta name="description" content="Feed a program huge numbers of generated, malformed inputs and watch for crashes.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5122ca78ff">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-testing">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 4 · testing patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="fuzzing">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 25.12.26</span><span class="topic">collection · <b>smarter techniques</b></span></div>
+  <p class="kicker">a.k.a. “throw garbage at it, very fast”</p>
+  <h1><span class="hl">Fuzzing</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Code that reads <b>untrusted input</b> (parsers, file importers, decoders, protocol handlers) breaks on inputs nobody thought to write a test for. A <b>fuzzer</b> generates millions of mutated inputs, runs your code on each, and watches for <b>crashes, hangs, sanitizer errors and failed assertions</b>. Coverage-guided fuzzers keep inputs that reach new code, so they dig deeper over time. Run it continuously; turn every finding into a regular test.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> test techniques</li><li><b>Best for:</b> parsers, decoders, file formats, protocols</li><li><b>Kinds:</b> coverage-guided · grammar-based · API fuzzing</li><li><b>Pairs with:</b> property-based testing, validate at the boundary</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">An invoice importer has twelve example tests with tidy files, all green. In production, file #4,812 has a cut-off line and a stray byte, and <span class="hl-pink">the parser loops for ever</span>, hanging the import worker for every customer behind it.</p>
+  <ul>
+    <li>Example tests check the inputs <b>you imagined</b>; real-world and hostile inputs are stranger.</li>
+    <li>Parser bugs are often <b>security bugs</b>: crashes, hangs and memory errors on attacker-chosen input.</li>
+    <li>Writing enough strange examples by hand is impossible.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a parser tested only with sensible examples. Twelve example tests with well-formed invoices pass. In production, an invoice file with a truncated line and an unexpected byte makes the parser loop forever, and the import worker hangs."><g class="rough"><rect class="d f-green" x="20" y="40" width="240" height="70" rx="10"/><rect class="d f-pink d-red" x="20" y="150" width="240" height="70" rx="10"/><path class="d d-green" d="M264 75 L376 110"/><path class="d d-green" d="M364.1 111.8 L376 110 L367.2 101.8"/><path class="d d-red" d="M264 185 L376 140"/><path class="d d-red" d="M367.9 148.9 L376 140 L364.0 139.2"/><rect class="d f-y" x="380" y="90" width="150" height="70" rx="10"/></g><text class="t-head" x="140" y="71" text-anchor="middle" font-size="17">12 example tests</text><text class="t" x="140" y="95" text-anchor="middle" font-size="13">tidy, well-formed files</text><text class="t-head t-red" x="140" y="181" text-anchor="middle" font-size="17">real file #4,812</text><text class="t" x="140" y="205" text-anchor="middle" font-size="13">cut-off line + odd byte</text><text class="t-head" x="455" y="132" text-anchor="middle" font-size="19">parser</text><text class="t-s t-red" x="640" y="110" text-anchor="middle" font-size="17">infinite loop</text><text class="t-s t-red" x="640" y="138" text-anchor="middle" font-size="17">import worker hangs</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Twelve tidy examples pass. The thirteenth file from the real world hangs the worker.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the toddler test</span></h2>
+  <p>Toy makers don't only press the buttons the way the manual says. They let machines <b>bang, twist, drop and chew</b> the toy thousands of times, because that's how a toddler will use it, and the crack nobody planned for shows up by try 3,000.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a toddler testing a toy. Instead of pressing buttons the way the manual says, the toddler bangs, twists, drops and chews it, thousands of times. Toy makers do this on purpose with machines, because it finds the weak spots no careful adult would think of."><g class="rough"><g transform="translate(40 60) scale(1.6)"><g class="d"><path class="f-y" d="M4 18 l26 -12 l26 12 v32 l-26 12 l-26 -12 z"/><path d="M4 18 l26 12 l26 -12 M30 30 v32"/></g></g><rect class="d f-paper" x="200" y="70" width="96" height="44" rx="10"/><rect class="d f-paper" x="310" y="110" width="96" height="44" rx="10"/><rect class="d f-paper" x="420" y="70" width="96" height="44" rx="10"/><rect class="d f-paper" x="530" y="110" width="96" height="44" rx="10"/><rect class="d f-paper" x="640" y="70" width="96" height="44" rx="10"/></g><text class="t-head" x="248" y="99" text-anchor="middle" font-size="15">bang</text><text class="t-head" x="358" y="139" text-anchor="middle" font-size="15">twist</text><text class="t-head" x="468" y="99" text-anchor="middle" font-size="15">drop</text><text class="t-head" x="578" y="139" text-anchor="middle" font-size="15">chew</text><text class="t-head" x="688" y="99" text-anchor="middle" font-size="15">stomp</text><text class="t-s t-pen" x="470" y="214" text-anchor="middle" font-size="16">the crack nobody planned for shows up by try 3,000</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Test the toy the way a toddler would: thousands of times, in every wrong way.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The toy</td><td>The code that reads input: a parser, a decoder</td></tr>
+      <tr><td>Banging, twisting, dropping</td><td>Mutating inputs: flipping bytes, cutting, repeating</td></tr>
+      <tr><td>Thousands of tries by machine</td><td>Millions of runs per hour, automatically</td></tr>
+      <tr><td>Noticing a crack</td><td>A crash, hang, sanitizer report or failed assertion</td></tr>
+      <tr><td>Remembering what broke it</td><td>The saved crashing input, added as a regular test</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">mutate, run, keep what's new</span></h2>
+  <p>A coverage-guided fuzzer starts from a few real inputs (the <b>seed corpus</b>), changes them in small random ways, and runs your code on each, instrumented so it can see which branches ran. Inputs that reach <b>new code</b> are kept and mutated further. Sanitizers turn silent memory errors into crashes the fuzzer can see. Findings are shrunk to a small input that reproduces them.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="A coverage-guided fuzzer loop. It starts from a few seed inputs, mutates them (flipping bytes, cutting, repeating), runs the target, and watches which code paths each input reaches. Inputs that reach new code are kept in the corpus and mutated further. Any crash, hang or failed assertion is saved as a minimal reproducing input."><g class="rough"><rect class="d f-paper" x="20" y="40" width="150" height="80" rx="10"/><rect class="d f-y" x="210" y="40" width="150" height="80" rx="10"/><path class="d" d="M174 80 L206 80"/><path class="d" d="M195.2 85.2 L206 80 L195.2 74.8"/><rect class="d f-blue" x="400" y="40" width="150" height="80" rx="10"/><path class="d" d="M364 80 L396 80"/><path class="d" d="M385.2 85.2 L396 80 L385.2 74.8"/><rect class="d f-green" x="590" y="40" width="150" height="80" rx="10"/><path class="d" d="M554 80 L586 80"/><path class="d" d="M575.2 85.2 L586 80 L575.2 74.8"/><path class="d d-dash" d="M650 124 Q465 200 280 124"/><path class="d" d="M292.0 123.3 L280 124 L288.0 132.9"/><rect class="d f-pink d-red" x="500" y="206" width="240" height="62" rx="10"/><path class="d d-red" d="M560 124 L600 206"/><path class="d d-red" d="M590.6 198.6 L600 206 L600.0 194.0"/></g><text class="t-head" x="95" y="76" text-anchor="middle" font-size="17">seeds</text><text class="t" x="95" y="100" text-anchor="middle" font-size="13">a few real files</text><text class="t-head" x="285" y="76" text-anchor="middle" font-size="17">mutate</text><text class="t" x="285" y="100" text-anchor="middle" font-size="13">flip, cut, repeat</text><text class="t-head" x="475" y="76" text-anchor="middle" font-size="17">run target</text><text class="t" x="475" y="100" text-anchor="middle" font-size="13">with sanitizers</text><text class="t-head" x="665" y="76" text-anchor="middle" font-size="17">new path?</text><text class="t" x="665" y="100" text-anchor="middle" font-size="13">keep in corpus</text><text class="t-s t-pen" x="465" y="194" text-anchor="middle" font-size="15">loop · millions of runs</text><text class="t-head t-red" x="620" y="233" text-anchor="middle" font-size="16">crash or hang</text><text class="t" x="620" y="257" text-anchor="middle" font-size="13">input saved, shrunk</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Mutate, run, keep what reaches new code, repeat millions of times.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Pick a target</b><p>A function that takes bytes or a string from outside: a parser, a decoder, an upload handler.</p></li>
+    <li><b>Write a fuzz harness</b><p>A few lines that pass the fuzzer's input to the target and assert anything that must always hold.</p></li>
+    <li><b>Give it seeds</b><p>A handful of real files, including odd ones; a dictionary of keywords helps text formats.</p></li>
+    <li><b>Run it continuously</b><p>Minutes per pull request, hours nightly (or a service like OSS-Fuzz for open source).</p></li>
+    <li><b>Keep the findings</b><p>Each crash becomes a regular test case and a fix; keep the corpus between runs.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Fuzzing</dt><dd>Running code on huge numbers of generated inputs to find failures.</dd></div>
+    <div><dt>Harness</dt><dd>The small function that hands fuzzer input to your code.</dd></div>
+    <div><dt>Corpus</dt><dd>The set of interesting inputs the fuzzer keeps and mutates.</dd></div>
+    <div><dt>Coverage-guided</dt><dd>The fuzzer favours inputs that reach new code.</dd></div>
+    <div><dt>Sanitizer</dt><dd>Instrumentation that turns memory and undefined-behaviour bugs into crashes.</dd></div>
+    <div><dt>Minimisation</dt><dd>Shrinking a crashing input to the smallest that still fails.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>invoice_fuzz_test.go</span><span>Go 1.18+ native fuzzing</span></div>
+<pre><code>func FuzzParseInvoice(f *testing.F) {
+    <span class="c">// seeds: real files, including odd ones we've seen</span>
+    f.Add([]byte(<span class="s">"INV;2026-03-01;812;4.10\n"</span>))
+    f.Add([]byte(<span class="s">"INV;;;\n"</span>))
+
+    f.Fuzz(func(t *testing.T, data []byte) {
+        inv, err := ParseInvoice(bytes.NewReader(data))  <span class="c">// must never panic or hang</span>
+        <span class="k">if</span> err != nil {
+            <span class="k">return</span>                                       <span class="c">// rejecting bad input is fine</span>
+        }
+        <span class="c">// properties that must hold for anything we accept</span>
+        <span class="k">if</span> inv.TotalCents &lt; 0 {
+            t.Fatalf(<span class="s">"negative total from %q"</span>, data)
+        }
+        again, _ := ParseInvoice(strings.NewReader(inv.String()))
+        <span class="k">if</span> !reflect.DeepEqual(inv, again) {
+            t.Fatalf(<span class="s">"round trip changed the invoice"</span>)
+        }
+    })
+}
+<span class="c">// go test -fuzz=FuzzParseInvoice -fuzztime=10m ; crashes land in testdata/fuzz/</span></code></pre>
+  </div>
+  <p class="aside">tools: Go native fuzzing, libFuzzer and AFL++ (C, C++, Rust via cargo-fuzz), Jazzer (Java), Atheris (Python), Jazzer.js (JavaScript), OSS-Fuzz and ClusterFuzzLite, RESTler and Schemathesis (API fuzzing).</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Finds bugs no one would write a test for</b>.</li><li><b>Finds security bugs</b> in input handling early.</li><li><b>Cheap per bug</b>: machines do the searching.</li><li><b>Reproducible</b>: every finding comes with its input.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Needs a harness</b> per target, and CPU time.</li><li><b>Mostly finds crashes</b>: logic bugs need assertions or properties.</li><li><b>Slow to start</b> on complex formats without good seeds or grammars.</li><li><b>Triage</b>: findings need someone to look at them.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Test-suite ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>example tests only</b> to <b>example tests plus continuous fuzzing of input-handling code</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to read &amp; write?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A harness and a corpus to keep.</td></tr>
+      <tr data-before="4" data-after="3"><td>Fast feedback<small>quick to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Short runs in PRs, long ones nightly.</td></tr>
+      <tr data-before="3" data-after="5"><td>Confidence<small>catches real bugs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Finds the inputs nobody imagined.</td></tr>
+      <tr data-before="4" data-after="4"><td>Reliability<small>no flaky runs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Findings are saved inputs: deterministic.</td></tr>
+      <tr data-before="3" data-after="4"><td>Isolation<small>pinpoints the fault?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A minimised input points at the bug.</td></tr>
+      <tr data-before="4" data-after="4"><td>Maintainability<small>survives refactors?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Harnesses rarely change.</td></tr>
+      <tr data-before="2" data-after="4"><td>Realism<small>close to production?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Real-world strangeness, generated.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low cost<small>cheap to write &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">CPU hours, but little human time.</td></tr>
+      <tr data-before="3" data-after="4"><td>Scalability<small>grows with the code?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Add a harness per new parser.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Fuzzing once</h3><p>A ten-minute run before release, never again. <span class="fix">Fix →</span> run it continuously; coverage keeps growing for days.</p></li>
+    <li><h3>No assertions</h3><p>The fuzzer only finds crashes, while wrong results pass. <span class="fix">Fix →</span> assert properties: round trips, invariants, no negative totals.</p></li>
+    <li><h3>Throwing away the corpus</h3><p>Each run starts from scratch and finds the same shallow bugs. <span class="fix">Fix →</span> store the corpus and reuse it between runs.</p></li>
+    <li><h3>Fixing without a test</h3><p>A crash is fixed, and comes back a year later. <span class="fix">Fix →</span> add the crashing input as a regular test before the fix.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Parsers, decoders, file importers and protocol handlers.</li><li>Anything that reads untrusted input from users or the network.</li><li>Code in memory-unsafe languages (C, C++, unsafe Rust).</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Code that doesn't take external input (most business logic: use property tests).</li><li>UI flows (use other tests).</li><li>No one will look at the findings.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/property-based.html"><b>Property-based testing</b></a> · the same idea for logic</li><li><a href="../../security/notes/input-validation.html"><b>Validate at the boundary</b></a> (Vol. 5)</li><li><a href="../notes/characterization-tests.html"><b>Characterization tests</b></a></li><li><a href="../notes/mutation-testing.html"><b>Mutation testing</b></a></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What kind of code benefits most from fuzzing?</summary><p>Code that reads untrusted or complex input: parsers, decoders, file formats and protocol handlers.</p></details>
+    <details><summary>What does “coverage-guided” mean?</summary><p>The fuzzer keeps inputs that reach new code paths and mutates those further.</p></details>
+    <details><summary>Why add assertions to a fuzz harness?</summary><p>Without them the fuzzer only sees crashes and hangs; assertions turn wrong results into failures too.</p></details>
+    <details><summary>What do you do with a crashing input?</summary><p>Minimise it, add it as a regular test, then fix the bug.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Your team wrote a new parser for a partner's file format. It has 30 example tests and ships next week. Security asks how you know a malformed file can't crash the import service. What do you add before release?</span></summary><p>A fuzz harness for the parser with real partner files as seeds and a few properties (round trip, no negative amounts), run for several hours before release and then in CI and nightly. Add every finding as a regular test, and set a time and size limit on parsing as a second line of defence.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Pick one function in your codebase that parses text or bytes. Write a fuzz harness for it (Go's <code>testing.F</code>, Jazzer.js, Atheris or cargo-fuzz), seed it with three real inputs, and run it for 15 minutes. Add any crashing input as a regular test, fix it, and run again.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Your tests try what you <span class="hl">imagined</span>. A fuzzer tries what you <span class="hl">didn't</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/16-fuzzing.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Barton Miller, Lars Fredriksen and Bryan So, “An Empirical Study of the Reliability of UNIX Utilities” (1990).</li><li>Go documentation, “Go Fuzzing” tutorial.</li><li>Google, OSS-Fuzz documentation.</li><li>Andreas Zeller et al., <i>The Fuzzing Book</i> (fuzzingbook.org).</li></ul>
+  </div>
+  <p class="folio">16</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="parallel-selective.html"><small>← previous note</small>15 · Parallel &amp; Selective Runs</a>
+  <a href="visual-regression.html"><small>Next note →</small>17 · Visual Regression Tests</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 4 · a student's bullet journal on testing patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

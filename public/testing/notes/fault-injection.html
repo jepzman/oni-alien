@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fault Injection Tests · Jef’s Notes</title>
+<meta name="description" content="Make dependencies slow, fail or drop connections in tests, and check the code copes.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5122ca78ff">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-testing">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 4 · testing patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="fault-injection">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 01.01.27</span><span class="topic">collection · <b>reliability &amp; speed</b></span></div>
+  <p class="kicker">a.k.a. “make it fail on purpose, in the test”</p>
+  <h1><span class="hl">Fault Injection Tests</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Timeouts, retries, fallbacks and error messages are code too, but in most test suites they <b>never run</b>, because the fakes and containers always answer quickly and correctly. <b>Fault injection tests</b> put a switchable fault between your code and a dependency (latency, dropped connections, errors, garbage responses) and assert that the code behaves well: it times out, retries safely, shows a useful message and recovers.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> reliability</li><li><b>Faults:</b> latency · connection reset · 5xx · timeouts · bad payloads</li><li><b>Tools:</b> Toxiproxy, WireMock faults, test doubles that fail</li><li><b>Vol. 6 cousin:</b> chaos engineering on running systems</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">In every test the payment provider answers in 50 ms. In production it once took 30 seconds; checkout had no timeout, every thread waited, and <span class="hl-pink">the whole shop stopped</span>. The retry and fallback code written for exactly this had never run once.</p>
+  <ul>
+    <li>Fakes and test containers are <b>always healthy</b>, so error paths go untested.</li>
+    <li>Timeout and retry settings are configured and <b>never checked</b> until an incident.</li>
+    <li>Error handling that's never run is often wrong: double charges, swallowed errors, blank screens.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of code that has only been tested against healthy dependencies. In tests the payment provider always answers in 50 milliseconds. In production it once took 30 seconds; the checkout had no timeout, all its threads waited, and the whole shop stopped. The retry and fallback code that was supposed to handle this had never run."><g class="rough"><rect class="d f-green" x="20" y="40" width="260" height="70" rx="10"/><rect class="d f-pink d-red" x="20" y="150" width="260" height="70" rx="10"/></g><text class="t-head" x="150" y="71" text-anchor="middle" font-size="17">in tests</text><text class="t" x="150" y="95" text-anchor="middle" font-size="13">provider answers in 50 ms, always</text><text class="t-head t-red" x="150" y="181" text-anchor="middle" font-size="17">in production</text><text class="t" x="150" y="205" text-anchor="middle" font-size="13">provider takes 30 s</text><text class="t-s t-red" x="520" y="90" text-anchor="middle" font-size="17">timeout: missing</text><text class="t-s t-red" x="520" y="120" text-anchor="middle" font-size="17">retry code: never ran</text><text class="t-s t-red" x="520" y="150" text-anchor="middle" font-size="17">whole shop stops</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Tested only against a perfect world, the error handling had never run once.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the fire drill</span></h2>
+  <p>A school doesn't wait for a fire to learn whether the exits work. It sets off the <b>alarm on purpose</b>, on a calm day, with someone timing it. Blocked exits and missing classes are found <b>while nothing is burning</b>.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a fire drill. Instead of waiting for a real fire, the school sets off the alarm on purpose, on a calm day, with someone watching the clock. Blocked exits and missing people are found while nothing is burning."><g class="rough"><g transform="translate(60 60) scale(1.6)"><g class="d"><path class="f-y" d="M10 44 q0 -30 20 -30 q20 0 20 30 z"/><path d="M4 46 h52 M30 8 v6 M26 50 a4 4 0 0 0 8 0"/></g></g><rect class="d f-blue" x="240" y="50" width="220" height="120" rx="10"/></g><text class="t-head" x="350" y="106" text-anchor="middle" font-size="19">drill</text><text class="t" x="350" y="130" text-anchor="middle" font-size="14">planned · timed · watched</text><text class="t-s t-green" x="620" y="90" text-anchor="middle" font-size="16">blocked exit: found</text><text class="t-s t-green" x="620" y="120" text-anchor="middle" font-size="16">missing class: found</text><text class="t-s t-green" x="620" y="150" text-anchor="middle" font-size="16">nothing on fire</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A fire drill: set off the alarm on purpose, on a calm day.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Setting off the alarm on purpose</td><td>Turning on a fault in the test</td></tr>
+      <tr><td>A calm day</td><td>A test environment, not production</td></tr>
+      <tr><td>Timing the evacuation</td><td>Asserting timeouts and recovery times</td></tr>
+      <tr><td>Blocked exit found</td><td>A missing timeout or a retry that double-charges</td></tr>
+      <tr><td>The next drill</td><td>The test runs on every build</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">a switchable fault between you and the dependency</span></h2>
+  <p>Route calls to a dependency through something you control in the test: a fault proxy (Toxiproxy) in front of a real container, or a fake that can be told to fail. Each test switches one fault on, exercises the feature, asserts the behaviour, and switches it off. Test the <b>recovery</b> too: once the fault is gone, the feature must work again.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="Fault injection in an integration test. The service under test calls the payment provider through a fault proxy such as Toxiproxy. The test tells the proxy to add 5 seconds of latency, or to cut the connection, or to return errors, then checks the service&#x27;s behaviour: it times out after 2 seconds, shows a friendly message, does not charge twice, and recovers when the fault is removed."><g class="rough"><rect class="d f-y" x="20" y="90" width="170" height="80" rx="10"/><path class="d" d="M194 130 L286 130"/><path class="d" d="M275.2 135.2 L286 130 L275.2 124.8"/><rect class="d f-pink d-red" x="290" y="70" width="180" height="120" rx="10"/><path class="d" d="M474 130 L566 130"/><path class="d" d="M555.2 135.2 L566 130 L555.2 124.8"/><rect class="d f-blue" x="570" y="90" width="170" height="80" rx="10"/></g><text class="t-head" x="105" y="126" text-anchor="middle" font-size="18">service</text><text class="t" x="105" y="150" text-anchor="middle" font-size="13">under test</text><text class="t-head t-red" x="380" y="126" text-anchor="middle" font-size="17">fault proxy</text><text class="t" x="380" y="150" text-anchor="middle" font-size="13">latency · reset · errors</text><text class="t-head" x="655" y="126" text-anchor="middle" font-size="17">payment fake</text><text class="t" x="655" y="150" text-anchor="middle" font-size="13">or a container</text><text class="t-s t-green" x="380" y="230" text-anchor="middle" font-size="15">assert: times out in 2 s · friendly message · no double charge · recovers</text><text class="t-s t-pen" x="380" y="258" text-anchor="middle" font-size="15">the test turns each fault on and off</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Put a switchable fault between the service and its dependency, then assert the behaviour.</figcaption></figure>
+  <ol class="steps">
+    <li><b>List the dependencies</b><p>Database, cache, payment provider, email, other services: everything the feature calls.</p></li>
+    <li><b>List the faults that matter</b><p>Slow (above your timeout), down (connection refused), flaky (some 503s), wrong (malformed or partial answers).</p></li>
+    <li><b>Add a switch</b><p>A fault proxy in front of the container, or a test double with failure modes.</p></li>
+    <li><b>Assert the behaviour</b><p>Timeout in the expected time, safe retries (no double charge), a clear message, metrics and logs written.</p></li>
+    <li><b>Assert recovery</b><p>Remove the fault; the next request succeeds, and the circuit breaker closes.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Fault injection</dt><dd>Causing failures on purpose to test how code handles them.</dd></div>
+    <div><dt>Fault proxy</dt><dd>A proxy that can add latency, drop or corrupt traffic on command.</dd></div>
+    <div><dt>Toxic</dt><dd>Toxiproxy's name for a fault (latency, timeout, reset).</dd></div>
+    <div><dt>Error path</dt><dd>The code that runs only when something fails.</dd></div>
+    <div><dt>Graceful degradation</dt><dd>Doing less, but still working, when a dependency fails.</dd></div>
+    <div><dt>Recovery test</dt><dd>Checking the system works again once the fault is removed.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>checkout.faults.test.ts</span><span>Vitest + Testcontainers + Toxiproxy</span></div>
+<pre><code><span class="c">// the service talks to the payment fake through Toxiproxy (set up once per run)</span>
+test(<span class="s">"checkout times out quickly when payments hang, and doesn't charge twice"</span>, <span class="k">async</span> () =&gt; {
+  <span class="k">await</span> paymentsProxy.addToxic({ <span class="k">type</span>: <span class="s">"latency"</span>, attributes: { latency: 5_000 } });
+
+  <span class="k">const</span> started = Date.now();
+  <span class="k">const</span> res = <span class="k">await</span> api.post(<span class="s">"/checkout"</span>, { cartId: <span class="s">"c-42"</span>, idempotencyKey: <span class="s">"k-1"</span> });
+
+  expect(res.status).toBe(503);
+  expect(res.body.message).toMatch(/<span class="k">try</span> again/i);
+  expect(Date.now() - started).toBeLessThan(2_500);        <span class="c">// our 2 s timeout, not 5 s</span>
+
+  <span class="k">await</span> paymentsProxy.removeAllToxics();                    <span class="c">// recovery</span>
+  <span class="k">const</span> retry = <span class="k">await</span> api.post(<span class="s">"/checkout"</span>, { cartId: <span class="s">"c-42"</span>, idempotencyKey: <span class="s">"k-1"</span> });
+  expect(retry.status).toBe(200);
+  expect(<span class="k">await</span> paymentsFake.chargesFor(<span class="s">"c-42"</span>)).toHaveLength(1);
+});</code></pre>
+  </div>
+  <p class="aside">tools: Toxiproxy (with Testcontainers modules), WireMock fault responses and delays, MockServer, Polly's simmy (.NET), Chaos Mesh / Litmus for cluster-level tests (see Vol. 6), tc netem for network faults.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Error paths actually run</b> in CI.</li><li><b>Timeouts and retries are checked</b>, not assumed.</li><li><b>Fewer incident surprises</b>: the first slow dependency isn't in production.</li><li><b>Safe refactors</b> of resilience code.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Slower tests</b>: waiting for timeouts takes real time.</li><li><b>More setup</b>: proxies, fakes with failure modes.</li><li><b>Many combinations</b>: you can't test every fault everywhere.</li><li><b>Not production</b>: real failures can be stranger.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Test-suite ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>tests against always-healthy dependencies</b> to <b>the same tests plus injected faults on key dependencies</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to read &amp; write?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A proxy or failing fakes to set up.</td></tr>
+      <tr data-before="4" data-after="3"><td>Fast feedback<small>quick to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Timeouts make some tests take seconds.</td></tr>
+      <tr data-before="3" data-after="5"><td>Confidence<small>catches real bugs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The code paths incidents use are tested.</td></tr>
+      <tr data-before="3" data-after="3"><td>Reliability<small>no flaky runs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Timing assertions need generous margins.</td></tr>
+      <tr data-before="3" data-after="4"><td>Isolation<small>pinpoints the fault?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Each test has one named fault.</td></tr>
+      <tr data-before="3" data-after="3"><td>Maintainability<small>survives refactors?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Realism<small>close to production?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Real network faults against real containers.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low cost<small>cheap to write &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More CI time and setup.</td></tr>
+      <tr data-before="3" data-after="3"><td>Scalability<small>grows with the code?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Pick the dependencies that matter, not all.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Faults only in fakes</h3><p>A fake that throws an exception tests nothing about real timeouts and sockets. <span class="fix">Fix →</span> inject faults on the network path (a proxy) for the critical dependencies.</p></li>
+    <li><h3>Tight timing assertions</h3><p>“Within 2,000 ms” fails on a slow CI machine. <span class="fix">Fix →</span> assert with margin (under 2.5 s), or use fake timers where possible.</p></li>
+    <li><h3>Forgetting recovery</h3><p>The service handles the outage but never recovers when the dependency comes back. <span class="fix">Fix →</span> always remove the fault and assert the next request succeeds.</p></li>
+    <li><h3>Every fault, everywhere</h3><p>Hundreds of slow tests nobody can maintain. <span class="fix">Fix →</span> cover the critical paths (payment, login, checkout) with the faults that matter.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Code that calls payment, identity, storage or other critical services.</li><li>Timeouts, retries, circuit breakers and fallbacks you rely on.</li><li>Before and after changing resilience settings.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Pure logic with no external calls.</li><li>Dependencies whose failure is already handled by a platform you trust and tested there.</li><li>Running systems in staging or production: that's chaos engineering (Vol. 6).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../../distributed/notes/circuit-breaker.html"><b>Circuit breaker</b></a> (Vol. 1)</li><li><a href="../../distributed/notes/retry-backoff.html"><b>Retry with backoff</b></a> (Vol. 1)</li><li><a href="../notes/testcontainers.html"><b>Throwaway containers</b></a></li><li><b>Chaos engineering</b> (Vol. 6)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why do error paths often go untested?</summary><p>Fakes and containers in tests always answer quickly and correctly, so timeout, retry and fallback code never runs.</p></details>
+    <details><summary>Name four kinds of fault worth injecting.</summary><p>Latency above the timeout, connection refused or reset, intermittent 5xx errors, and malformed or partial responses.</p></details>
+    <details><summary>Why inject faults with a proxy rather than a fake that throws?</summary><p>A proxy exercises the real network path: socket timeouts, connection pools and retries behave as in production.</p></details>
+    <details><summary>Why test recovery?</summary><p>Code can handle an outage but stay broken after it ends, for example a breaker that never closes.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A service sets a 3-second timeout on its calls to the inventory service, with 2 retries. In an incident, requests took 12 seconds before failing. Your tests never showed this. What test do you add, and what did it probably reveal?</span></summary><p>An integration test with a fault proxy adding 10 s of latency to inventory, asserting the request fails within about 3–4 s. It would show the timeout applies per attempt, so 3 attempts × 3 s plus backoff ≈ 12 s; fix it with an overall deadline or fewer retries.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Pick one feature that calls another service in an integration test. Put Toxiproxy (or WireMock with a fixed delay) between them and add 10 seconds of latency. Check how long the feature takes to fail and what the user sees. Then add a connection reset, and finally remove the fault and check that the next request succeeds.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Your error handling is <span class="hl">code</span>. If no test makes it run, it <span class="hl">doesn't work</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/18-fault-injection.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Shopify, Toxiproxy (github.com/Shopify/toxiproxy).</li><li>Testcontainers documentation, “Toxiproxy module”.</li><li>Michael Nygard, <i>Release It!</i> (2nd ed., 2018), chapters on stability patterns.</li><li>WireMock documentation, “Simulating faults”.</li></ul>
+  </div>
+  <p class="folio">18</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="visual-regression.html"><small>← previous note</small>17 · Visual Regression Tests</a>
+  <a href="../index.html"><small>back to →</small>Index</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 4 · a student's bullet journal on testing patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>
