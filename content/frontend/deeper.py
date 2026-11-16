@@ -1,4 +1,4 @@
-# Vol. 2 · going deeper (November 2026): a longer chapter inside three key notes.
+# Vol. 2 · going deeper (November 2026): a longer chapter inside four key notes.
 # Merged into the notes by scripts/build_notes.py (load_content).
 
 # ------------------------------------------------------------------ State machines
@@ -161,8 +161,53 @@ MICRO_FRONTENDS_DEEP = dict(
     ],
 )
 
+# ------------------------------------------------------------------ Optimistic UI
+ou_d1 = Doodle(760, 280, "Three quick taps on a like button. The screen shows liked, not liked, liked at once. The three requests go out, but their answers arrive out of order: the second request's answer arrives last. Without care the screen ends on not liked, the opposite of the user's last tap. Sending one request per item at a time, or only the latest state with a version, keeps the final screen equal to the last tap.",
+               "Taps arrive in order; answers don't. The last tap must win.")
+for i, (tap, req) in enumerate([("tap 1 → liked", "PUT liked"), ("tap 2 → not liked", "PUT not liked"), ("tap 3 → liked", "PUT liked")]):
+    y = 24 + i * 60
+    ou_d1.box(20, y, 190, 44, tap, "y", size=15)
+    ou_d1.arrow(214, y + 22, 296, y + 22)
+    ou_d1.box(300, y, 170, 44, req, "paper", size=15)
+for i, (ans, y_from) in enumerate([("answer 1", 46), ("answer 3", 166), ("answer 2 (last!)", 106)]):
+    y = 24 + i * 60
+    ou_d1.arrow(474, y_from, 566, y + 22, color="red" if i == 2 else "", dash=True)
+    ou_d1.box(570, y, 170, 44, ans, "pink" if i == 2 else "green", stroke="red" if i == 2 else "", size=15)
+ou_d1.note(380, 226, "naive: screen ends on “not liked” · the user tapped “liked”", "red", size=16)
+ou_d1.note(380, 256, "fix: one request per item at a time, or send the latest state with a version", "pen", size=16)
+
+OPTIMISTIC_UI_DEEP = dict(
+    side="edits in flight, reconciling, telling the user",
+    intro="The note covers the basic loop: snapshot, change, send, settle. Real users add complications: they tap several times before the first answer comes back, the server's answer differs from what was shown, and some failures need more than a quiet rollback. This chapter takes them in turn.",
+    parts=[
+        ("Several edits in flight", """  <p>A user taps like, unlike, like in under a second. Three requests leave in order, but the network doesn't promise their answers come back in order, and a rollback for the second could undo the third. Three ways to keep the screen equal to the last tap:</p>
+  <ul>
+    <li><b>One request per item at a time.</b> Queue changes per item; send the next only when the previous one settled, and collapse the queue to the latest wanted state (three taps become one request for “liked”).</li>
+    <li><b>Send state, not toggles.</b> “Set liked = true” can be applied twice safely; “toggle like” can't. With a version or timestamp, the server ignores an older state that arrives late.</li>
+    <li><b>Roll back only to the right snapshot.</b> A failed request restores its snapshot only if no newer change was made since; otherwise it re-applies the newest local state on top.</li>
+  </ul>
+  <p>Libraries help with the bookkeeping (TanStack Query's mutation scopes run mutations for one key in order), but you still choose the rule.</p>""", [ou_d1]),
+        ("When the server's answer differs", """  <p>The optimistic value is a guess. When the answer comes back, replace the guess with the truth, and make that step quiet when they agree and clear when they don't.</p>
+  <ul>
+    <li><b>Counters:</b> you showed 41 → 42 likes; the server says 57 because others liked it too. Show 57. Users accept a number that moves; they don't accept their own like disappearing.</li>
+    <li><b>New items:</b> a new comment gets a temporary client id so it can be shown and edited at once. When the server answers with the real id, swap it everywhere it's referenced (cache keys, links, pending edits).</li>
+    <li><b>Server-side changes:</b> the server may trim, format or reject part of the input (a too-long title shortened). Show the server's version and, if it changed what the user typed, say so.</li>
+    <li><b>Background refetches:</b> cancel or ignore refetches of the same data while a mutation is pending, or the old server value overwrites the optimistic one for a moment and the screen flickers.</li>
+  </ul>""", []),
+        ("Telling the user when it fails", """  <p>A silent rollback looks like a bug: the user saw their change, and now it's gone. How loud to be depends on what was lost:</p>
+  <ul>
+    <li><b>Small toggles</b> (like, star): roll back with a short message near the item and a retry button.</li>
+    <li><b>Typed content</b> (a comment, a renamed title): never throw away what the user typed. Keep it in place, marked as not saved, with retry and copy options.</li>
+    <li><b>Slow, not failed:</b> if the answer takes more than a couple of seconds, show a small pending mark so the user doesn't close the page thinking it's saved.</li>
+    <li><b>Offline:</b> queue the change, show it as pending, send it when the connection returns, and handle conflicts on arrival the same way as any other server answer.</li>
+  </ul>
+  <p>Track rollback rates per action. If more than about 1% of an action's updates roll back, that action isn't a good fit for optimistic UI, or something on the server needs fixing.</p>""", []),
+    ],
+)
+
 REVISIONS = {
     "state-machines": dict(deep_dive=STATE_MACHINES_DEEP),
     "ssr-hydration": dict(deep_dive=SSR_DEEP),
     "micro-frontends": dict(deep_dive=MICRO_FRONTENDS_DEEP),
+    "optimistic-ui": dict(deep_dive=OPTIMISTIC_UI_DEEP),
 }

@@ -1,4 +1,4 @@
-# Vol. 6 · going deeper (November 2026): a longer chapter inside three key notes.
+# Vol. 6 · going deeper (November 2026): a longer chapter inside four key notes.
 # Blue–green, canary and feature flags already have a full deep dive (Zero-Downtime Change), so they get none here.
 # Merged into the notes by scripts/build_notes.py (load_content).
 
@@ -148,8 +148,52 @@ POSTMORTEM_DEEP = dict(
     ],
 )
 
+# ------------------------------------------------------------------ Autoscaling
+as_d1 = Doodle(760, 290, "Load rising faster than capacity can follow. Traffic climbs steadily from 9:00. The autoscaler notices after a minute, asks for more pods, which need new machines first; machines take two minutes and pods one more. During those three to four minutes, the existing instances must carry the extra load, which is what headroom is for.",
+               "Capacity arrives in steps, minutes after demand. Headroom carries the gap.")
+as_d1.line("M60 30 V240 H740", thin=True)
+as_d1.note(740, 266, "time →", anchor="end", size=15)
+as_d1.text(50, 40, "load", "t-s", anchor="end", size=14)
+as_d1.line("M60 220 L740 50", color="red")
+as_d1.note(700, 46, "demand", "red", anchor="end", size=15)
+as_d1.line("M60 190 H250 V150 H430 V110 H610 V70 H740", color="green")
+as_d1.note(740, 92, "capacity", "green", anchor="end", size=15)
+for x0, x1, cap in [(180, 250, 190), (340, 430, 150), (500, 610, 110), (660, 740, 70)]:   # demand above capacity
+    as_d1.raw(f'<path class="d d-red f-pink" d="M{x0} {cap} L{x1} {220 - 0.25 * (x1 - 60):g} L{x1} {cap} Z"/>')
+as_d1.note(190, 214, "the gaps: headroom must carry these", "red", anchor="start", size=15)
+as_d1.note(400, 284, "notice ~1 min · new machine ~2 min · pod ready ~1 min", "pen", size=16)
+
+AUTOSCALING_DEEP = dict(
+    side="headroom and lag, two layers of scaling, protecting what's behind you",
+    intro="The note covers signals, limits and “up fast, down slow”. This chapter is about the numbers behind those settings: how much spare capacity you need given how slowly new capacity arrives, why scaling pods also means scaling machines, and how to stop a scale-up from overwhelming the database behind it.",
+    parts=[
+        ("Headroom: carrying the gap", """  <p>New capacity always arrives late. The autoscaler needs a minute or so of data to notice a rise, a new machine may take two minutes, and a new pod another minute to become ready. For three to four minutes, the instances you already have must carry the extra load.</p>
+  <p>That sets the <b>target utilisation</b>. If traffic can grow 30% in four minutes at the start of a sale, instances must be able to absorb 30% more than they carry now: a target around 70% CPU, not 90%. Add the loss of one zone: with three zones, the remaining two must carry everything until replacements arrive. Work it out from your own numbers:</p>
+  <ul>
+    <li><b>Lag:</b> time from load rising to a new instance serving. Measure it in a load test, don't guess.</li>
+    <li><b>Ramp:</b> how fast load grows on a bad day (from your metrics, launch days included).</li>
+    <li><b>Headroom</b> = ramp × lag, as a fraction of current capacity. Target utilisation = 100% minus that, minus a margin.</li>
+  </ul>
+  <p>Cutting lag is often cheaper than buying headroom: smaller images, faster start-up, and capacity scheduled ahead of known peaks.</p>""", [as_d1]),
+        ("Two layers: pods and machines", """  <p>In Kubernetes, the pod autoscaler (HPA, or KEDA for queues) only asks for more pods. If the cluster has no room, the new pods wait as <i>Pending</i> until the cluster autoscaler (or Karpenter) adds machines. Two autoscalers, two delays, and the second is usually the slower.</p>
+  <ul>
+    <li><b>Keep a little spare room</b> in the cluster: a few low-priority placeholder pods that reserve space and are evicted the moment real pods need it. Real pods start in seconds; the placeholders wait for the new machine instead.</li>
+    <li><b>Make requests honest.</b> The cluster autoscaler sizes machines from pod <i>requests</i>, not actual use. Requests set too low pack too many pods onto a machine; too high waste money and slow scaling.</li>
+    <li><b>Watch scale-down.</b> Removing a machine evicts its pods. Set pod disruption budgets so a scale-down never takes out too many copies of one service at once.</li>
+  </ul>""", []),
+        ("Protecting what's behind you", """  <p>Autoscaling the web tier moves the bottleneck to whatever it calls. Twenty pods with a database pool of 20 connections each need 400 connections; scale to 60 pods and you need 1,200, far beyond what the database can take (see Connection Pooling, Vol. 3). The scale-up that was supposed to help takes the database down.</p>
+  <ul>
+    <li><b>Set the maximum from the dependency,</b> not just the budget: max pods × pool size must stay below the database's limit, or put a pooler in between.</li>
+    <li><b>Scale workers on the queue, within the downstream limit.</b> More workers than the payment provider's rate limit allows only produce 429s.</li>
+    <li><b>Shed load before the limit.</b> When the maximum is reached, reject excess requests quickly with 429 or 503 rather than queueing them until everything times out.</li>
+    <li><b>Scale to zero only where cold starts are acceptable:</b> background jobs and internal tools, not checkout. Keep a minimum of two or three for anything users wait on.</li>
+  </ul>""", []),
+    ],
+)
+
 REVISIONS = {
     "infrastructure-as-code": dict(deep_dive=IAC_DEEP),
     "slo-error-budgets": dict(deep_dive=SLO_DEEP),
     "postmortems": dict(deep_dive=POSTMORTEM_DEEP),
+    "autoscaling": dict(deep_dive=AUTOSCALING_DEEP),
 }

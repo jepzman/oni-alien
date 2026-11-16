@@ -1,4 +1,4 @@
-# Vol. 5 · going deeper (November 2026): a longer chapter inside three key notes.
+# Vol. 5 · going deeper (November 2026): a longer chapter inside four key notes.
 # Defensive practice only. Merged into the notes by scripts/build_notes.py (load_content).
 
 # ------------------------------------------------------------------ OAuth with PKCE
@@ -182,8 +182,45 @@ SUPPLY_CHAIN_DEEP = dict(
     ],
 )
 
+# ------------------------------------------------------------------ Envelope encryption
+ee_d1 = Doodle(760, 260, "Binding ciphertext to its owner with an encryption context. Tenant 7's document is encrypted with the context tenant equals 7. If someone copies the encrypted document and its wrapped key into tenant 9's records, decryption is asked with context tenant equals 9 and fails, and the failed attempt is logged by the key service.",
+               "The context is checked at decrypt time: a copied ciphertext won't open somewhere else.")
+ee_d1.box(20, 40, 240, 80, "tenant 7's file", "green", sub="context: tenant=7", size=17, subsize=13)
+ee_d1.arrow(264, 80, 336, 80, label="copied", lx=300, ly=70, color="red", dash=True)
+ee_d1.box(340, 40, 240, 80, "into tenant 9's rows", "pink", stroke="red", sub="decrypt asks: tenant=9", size=17, subsize=13)
+ee_d1.arrow(584, 80, 636, 80, color="red")
+ee_d1.box(640, 40, 100, 80, "refused", "pink", stroke="red", sub="and logged", size=17, subsize=13)
+ee_d1.note(380, 170, "for the data itself: AES-GCM associated data (AAD) with the record id", "pen", size=16)
+ee_d1.note(380, 204, "put the owner and the record id in the context, never secrets", size=16)
+
+ENVELOPE_DEEP = dict(
+    side="how many keys, binding data to its owner, rotation in practice",
+    intro="The note shows the mechanism: a data key per object, wrapped by a master key in the KMS. Using it in a real system raises three questions: how many data keys to make and how to avoid calling the KMS for everything, how to stop encrypted data from being moved to the wrong owner, and what rotation and deletion actually require.",
+    parts=[
+        ("How many data keys?", """  <p>A data key per object is the simplest rule and fine for files. For millions of small records it means millions of KMS calls, which cost money, hit rate limits, and add latency to every read. Choose the granularity:</p>
+  <div class="table-scroll"><table class="map"><thead><tr><th scope="col">One data key per…</th><th scope="col">Trade-off</th></tr></thead><tbody>
+    <tr><td><b>Object</b> (file, document)</td><td>Most isolation; one KMS call to read each object. Good for files and large records.</td></tr>
+    <tr><td><b>Tenant</b></td><td>One KMS call per tenant session; deleting the key shreds the whole tenant. Good for multi-tenant SaaS.</td></tr>
+    <tr><td><b>Time period</b> (per hour, per batch)</td><td>Good for logs and event streams written in bulk.</td></tr>
+  </tbody></table></div>
+  <p>Then <b>cache</b> unwrapped data keys in memory for a short time (minutes) and a limited number of uses, as the AWS Encryption SDK's caching does. Never write a plaintext data key to disk, a log or a cache shared between processes.</p>""", []),
+        ("Binding data to its owner", """  <p>Encryption hides the data, but by default it doesn't say <b>whose</b> data it is. If an attacker or a bug copies tenant 7's ciphertext and wrapped key into tenant 9's row, a plain decrypt works and tenant 9 sees tenant 7's document.</p>
+  <p>Fix it with an <b>encryption context</b>: non-secret key–value pairs (tenant id, record id, purpose) passed when the data key is created and required again, exactly, to unwrap it. The KMS refuses a decrypt with a different context and logs the attempt with the context, which also makes the audit log readable (“who decrypted tenant 7's files this week?”). For the data itself, AES-GCM's <b>associated data</b> does the same job: the record id goes in as AAD, and decryption fails if the ciphertext is moved.</p>
+  <p>You can also use the context in key policies: a service may only decrypt with <code>purpose=invoices</code>.</p>""", [ee_d1]),
+        ("Rotation and deletion in practice", """  <p><b>Routine rotation</b> of the master key is cheap: the KMS creates a new version and keeps the old ones to unwrap existing data keys, so nothing needs re-encrypting. New data keys are wrapped with the new version.</p>
+  <p><b>If you suspect the master key was misused</b>, re-wrap: unwrap each data key and wrap it again under a new master key. That touches only the small wrapped keys, not the data. Re-encrypt the data itself only if <b>data keys</b> may have leaked (a dump of process memory, a plaintext key in a log).</p>
+  <p><b>Crypto-shredding</b> (deleting a tenant's key to make their data unreadable) has three traps:</p>
+  <ul>
+    <li><b>Copies of the key:</b> cached data keys in running services, and key backups. Expire caches and check the key service's deletion waiting period.</li>
+    <li><b>Copies of the data in plaintext:</b> search indexes, analytics exports, logs, emails. Shredding only covers what was encrypted with that key.</li>
+    <li><b>Proof:</b> record when the key was scheduled for deletion and when it was destroyed; that record is what you show the customer or the regulator.</li>
+  </ul>""", []),
+    ],
+)
+
 REVISIONS = {
     "oauth-pkce": dict(deep_dive=OAUTH_DEEP),
     "threat-modeling": dict(deep_dive=THREAT_MODEL_DEEP),
     "supply-chain": dict(deep_dive=SUPPLY_CHAIN_DEEP),
+    "envelope-encryption": dict(deep_dive=ENVELOPE_DEEP),
 }

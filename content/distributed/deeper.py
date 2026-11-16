@@ -1,4 +1,4 @@
-# Vol. 1 · going deeper (November 2026): a longer chapter inside three key notes.
+# Vol. 1 · going deeper (November 2026): a longer chapter inside four key notes.
 # Saga, the resilience patterns, the outbox and event sourcing already have full deep dives (Series 3), so they get none here.
 # Merged into the notes by scripts/build_notes.py (load_content).
 
@@ -152,8 +152,55 @@ SHARDING_DEEP = dict(
     ],
 )
 
+# ------------------------------------------------------------------ Sidecar & service mesh
+sc_d1 = Doodle(760, 270, "Two ways to run a mesh's proxies. With sidecars, every pod carries its own proxy: 300 pods means 300 proxies, each with its own CPU and memory, and each call passes through two of them. With node proxies, one shared proxy per machine handles every pod on it: 20 machines means 20 proxies, less memory, but a node proxy is shared, so a problem in it affects every pod on that machine.",
+               "A proxy per pod, or a proxy per machine: the same jobs, a different bill.")
+sc_d1.head(190, 26, "sidecar per pod", size=18)
+for i in range(6):
+    x = 30 + (i % 3) * 110
+    y = 44 + (i // 3) * 92
+    sc_d1.box(x, y, 96, 76, None, "paper")
+    sc_d1.box(x + 8, y + 8, 80, 28, "app", "blue", size=13)
+    sc_d1.box(x + 8, y + 42, 80, 26, "proxy", "y", size=13)
+sc_d1.note(190, 244, "300 pods → 300 proxies", size=16)
+sc_d1.head(580, 26, "proxy per node", size=18)
+sc_d1.box(420, 44, 320, 168, None, "paper", dash=True)
+for i in range(6):
+    sc_d1.box(436 + (i % 3) * 100, 56 + (i // 3) * 50, 88, 40, "app", "blue", size=13)
+sc_d1.box(436, 160, 288, 40, "one node proxy", "y", size=15)
+sc_d1.note(580, 244, "20 nodes → 20 proxies · shared fate", size=16)
+
+SIDECAR_DEEP = dict(
+    side="what it costs, start and stop order, one place for retries",
+    intro="The note explains what a sidecar does and when a mesh is worth it. This chapter covers the parts that surprise teams after they install one: what the proxies cost in resources and latency, the start-up and shutdown order problems, and how to split retries and timeouts between the mesh and the app so they don't multiply.",
+    parts=[
+        ("What the proxies cost", """  <p>Every sidecar is a small program with its own CPU and memory. Typical numbers are around 0.05 CPU and 50–100 MB per proxy at rest, more under load. With 300 pods that is roughly 15 CPUs and 20–30 GB of memory spent on proxies, before any app work. Each call between two services passes through two proxies, adding about a millisecond, which matters for chatty services that make many calls per request.</p>
+  <ul>
+    <li><b>Set resource requests and limits</b> on the proxy, sized from measurements, or the proxy competes with the app for the pod's CPU.</li>
+    <li><b>Limit what each proxy knows.</b> By default a proxy may receive configuration for every service in the mesh; restrict it to the services the app actually calls, which cuts memory sharply in large meshes.</li>
+    <li><b>Consider node proxies.</b> Newer designs (Istio's ambient mode, Cilium) run one shared proxy per machine for the basic jobs (mTLS, telemetry) and add per-service proxies only where advanced routing is needed. Fewer proxies, but a fault in a shared one affects every pod on that machine.</li>
+  </ul>""", [sc_d1]),
+        ("Start-up and shutdown order", """  <p>A pod with a sidecar is two programs that must start and stop in the right order, and by default nothing guarantees it.</p>
+  <ul>
+    <li><b>Start-up:</b> if the app starts first and calls another service before its proxy is ready, the first calls fail. Make the app wait for the proxy (Istio's <code>holdApplicationUntilProxyStarts</code>), or use Kubernetes native sidecars (an init container with <code>restartPolicy: Always</code>, Kubernetes 1.29+), which start before the app and stop after it.</li>
+    <li><b>Shutdown:</b> if the proxy stops first, the app's in-flight requests and its last calls fail. The proxy must drain after the app, not before.</li>
+    <li><b>Jobs:</b> a batch job's pod finishes when all containers exit. A classic sidecar keeps running, so the job never completes. Native sidecars solve this too; on older clusters the job must tell the proxy to exit.</li>
+  </ul>
+  <p>Test it: deploy a pod that makes an outbound call in its first second, and a job that exits after one call. Both should succeed every time.</p>""", []),
+        ("One place for each retry", """  <p>A mesh makes retries and timeouts easy to switch on, so they get switched on in two places. If the app retries 3 times and the mesh retries 3 times, one failing request can become 9 calls, and 27 if the next service does the same. Decide per kind of retry where it lives:</p>
+  <div class="table-scroll"><table class="map"><thead><tr><th scope="col">Kind</th><th scope="col">Where</th></tr></thead><tbody>
+    <tr><td>Connection refused, reset, the target pod just went away</td><td>The mesh: one quick retry to another instance. The app never sees it.</td></tr>
+    <tr><td>Timeouts per call</td><td>The mesh for a default; the app passes a deadline when it knows its own budget.</td></tr>
+    <tr><td>Business retries (try another payment provider, retry with a new idempotency key)</td><td>The app. The mesh doesn't understand the request.</td></tr>
+    <tr><td>Limits on retries</td><td>The mesh: a retry budget (for example at most 20% extra traffic), so a failing service isn't flooded.</td></tr>
+  </tbody></table></div>
+  <p>Write the decision down per service, and check it when an incident shows more traffic to a failing service than users sent.</p>""", []),
+    ],
+)
+
 REVISIONS = {
     "api-gateway": dict(deep_dive=API_GATEWAY_DEEP),
     "service-discovery": dict(deep_dive=SERVICE_DISCOVERY_DEEP),
     "sharding": dict(deep_dive=SHARDING_DEEP),
+    "sidecar": dict(deep_dive=SIDECAR_DEEP),
 }

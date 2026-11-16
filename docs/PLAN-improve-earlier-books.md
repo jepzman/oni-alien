@@ -224,7 +224,7 @@ The owner approved the plan on 2026-11-15 (“do your recommendation”). The wo
 | A6 meanwhile links (Books 1–2) | not started |
 | S1 situational question | **done**, 93 of 93 (tagged “what would you do?”) |
 | S2 try it | **done**, 93 of 93 |
-| S3 going deeper | **done, 19 chapters, 35 figures** (owner, 16 Nov: “continue going deeper for other volumes”). Data: Indexing, Optimistic Locking, Change Data Capture, Multitenancy. Distributed: API Gateway, Service Discovery, Sharding. Frontend: State Machines, SSR & Hydration, Micro-Frontends. Testing: Test Doubles, Contract Testing, Flaky Test Quarantine. Security: OAuth 2.0 with PKCE, Threat Modelling, Supply-Chain Hygiene. Cloud: Infrastructure as Code, SLOs & Error Budgets, Incident Response & Postmortems. Not written (still candidates): Sidecar & Service Mesh, Optimistic UI, Property-Based Testing, Envelope Encryption, Autoscaling |
+| S3 going deeper | **done, 24 chapters (4 per volume), 40 figures** (owner, 16 Nov: “continue going deeper for other volumes”). Data: Indexing, Optimistic Locking, Change Data Capture, Multitenancy. Distributed: API Gateway, Service Discovery, Sharding. Frontend: State Machines, SSR & Hydration, Micro-Frontends. Testing: Test Doubles, Contract Testing, Flaky Test Quarantine. Security: OAuth 2.0 with PKCE, Threat Modelling, Supply-Chain Hygiene. Cloud: Infrastructure as Code, SLOs & Error Budgets, Incident Response & Postmortems. Fourth chapters (16 Nov): Sidecar & Service Mesh, Optimistic UI, Property-Based Testing, Envelope Encryption, Autoscaling |
 | S4 depth pass, S5 freshness pass | not started |
 | 5.1 extra notes, Vol. 7 | not started |
 

@@ -31,7 +31,7 @@
 <article class="sheet" id="envelope-encryption">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Thu · 19.11.26</span><span class="topic">collection · <b>secrets &amp; data</b></span></div>
-  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question and a try it</p>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “room safes and a master vault”</p>
   <h1><span class="hl">Envelope Encryption</span></h1>
   <div class="tldr">
@@ -122,6 +122,34 @@
 }</code></pre>
   </div>
   <p class="aside">tools: AWS KMS + Encryption SDK, Google Cloud KMS + Tink, Azure Key Vault, HashiCorp Vault Transit, cloud HSMs, database TDE and column encryption that use the same model.</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">how many keys, binding data to its owner, rotation in practice</span></h2>
+  <p class="deep-intro">The note shows the mechanism: a data key per object, wrapped by a master key in the KMS. Using it in a real system raises three questions: how many data keys to make and how to avoid calling the KMS for everything, how to stop encrypted data from being moved to the wrong owner, and what rotation and deletion actually require.</p>
+  <h3 class="deep-h"><span>1</span>How many data keys?</h3>
+  <p>A data key per object is the simplest rule and fine for files. For millions of small records it means millions of KMS calls, which cost money, hit rate limits, and add latency to every read. Choose the granularity:</p>
+  <div class="table-scroll"><table class="map"><thead><tr><th scope="col">One data key per…</th><th scope="col">Trade-off</th></tr></thead><tbody>
+    <tr><td><b>Object</b> (file, document)</td><td>Most isolation; one KMS call to read each object. Good for files and large records.</td></tr>
+    <tr><td><b>Tenant</b></td><td>One KMS call per tenant session; deleting the key shreds the whole tenant. Good for multi-tenant SaaS.</td></tr>
+    <tr><td><b>Time period</b> (per hour, per batch)</td><td>Good for logs and event streams written in bulk.</td></tr>
+  </tbody></table></div>
+  <p>Then <b>cache</b> unwrapped data keys in memory for a short time (minutes) and a limited number of uses, as the AWS Encryption SDK's caching does. Never write a plaintext data key to disk, a log or a cache shared between processes.</p>
+
+  <h3 class="deep-h"><span>2</span>Binding data to its owner</h3>
+  <p>Encryption hides the data, but by default it doesn't say <b>whose</b> data it is. If an attacker or a bug copies tenant 7's ciphertext and wrapped key into tenant 9's row, a plain decrypt works and tenant 9 sees tenant 7's document.</p>
+  <p>Fix it with an <b>encryption context</b>: non-secret key–value pairs (tenant id, record id, purpose) passed when the data key is created and required again, exactly, to unwrap it. The KMS refuses a decrypt with a different context and logs the attempt with the context, which also makes the audit log readable (“who decrypted tenant 7's files this week?”). For the data itself, AES-GCM's <b>associated data</b> does the same job: the record id goes in as AAD, and decryption fails if the ciphertext is moved.</p>
+  <p>You can also use the context in key policies: a service may only decrypt with <code>purpose=invoices</code>.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Binding ciphertext to its owner with an encryption context. Tenant 7&#x27;s document is encrypted with the context tenant equals 7. If someone copies the encrypted document and its wrapped key into tenant 9&#x27;s records, decryption is asked with context tenant equals 9 and fails, and the failed attempt is logged by the key service."><g class="rough"><rect class="d f-green" x="20" y="40" width="240" height="80" rx="10"/><path class="d d-red d-dash" d="M264 80 L336 80"/><path class="d d-red" d="M325.2 85.2 L336 80 L325.2 74.8"/><rect class="d f-pink d-red" x="340" y="40" width="240" height="80" rx="10"/><path class="d d-red" d="M584 80 L636 80"/><path class="d d-red" d="M625.2 85.2 L636 80 L625.2 74.8"/><rect class="d f-pink d-red" x="640" y="40" width="100" height="80" rx="10"/></g><text class="t-head" x="140" y="76" text-anchor="middle" font-size="17">tenant 7&#x27;s file</text><text class="t" x="140" y="100" text-anchor="middle" font-size="13">context: tenant=7</text><text class="t-s t-red" x="300" y="70" text-anchor="middle">copied</text><text class="t-head t-red" x="460" y="76" text-anchor="middle" font-size="17">into tenant 9&#x27;s rows</text><text class="t" x="460" y="100" text-anchor="middle" font-size="13">decrypt asks: tenant=9</text><text class="t-head t-red" x="690" y="76" text-anchor="middle" font-size="17">refused</text><text class="t" x="690" y="100" text-anchor="middle" font-size="13">and logged</text><text class="t-s t-pen" x="380" y="170" text-anchor="middle" font-size="16">for the data itself: AES-GCM associated data (AAD) with the record id</text><text class="t-s" x="380" y="204" text-anchor="middle" font-size="16">put the owner and the record id in the context, never secrets</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The context is checked at decrypt time: a copied ciphertext won't open somewhere else.</figcaption></figure>
+  <h3 class="deep-h"><span>3</span>Rotation and deletion in practice</h3>
+  <p><b>Routine rotation</b> of the master key is cheap: the KMS creates a new version and keeps the old ones to unwrap existing data keys, so nothing needs re-encrypting. New data keys are wrapped with the new version.</p>
+  <p><b>If you suspect the master key was misused</b>, re-wrap: unwrap each data key and wrap it again under a new master key. That touches only the small wrapped keys, not the data. Re-encrypt the data itself only if <b>data keys</b> may have leaked (a dump of process memory, a plaintext key in a log).</p>
+  <p><b>Crypto-shredding</b> (deleting a tenant's key to make their data unreadable) has three traps:</p>
+  <ul>
+    <li><b>Copies of the key:</b> cached data keys in running services, and key backups. Expire caches and check the key service's deletion waiting period.</li>
+    <li><b>Copies of the data in plaintext:</b> search indexes, analytics exports, logs, emails. Shredding only covers what was encrypted with that key.</li>
+    <li><b>Proof:</b> record when the key was scheduled for deletion and when it was destroyed; that record is what you show the customer or the regulator.</li>
+  </ul>
+
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">

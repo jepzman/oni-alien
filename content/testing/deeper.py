@@ -1,4 +1,4 @@
-# Vol. 4 · going deeper (November 2026): a longer chapter inside three key notes.
+# Vol. 4 · going deeper (November 2026): a longer chapter inside four key notes.
 # Merged into the notes by scripts/build_notes.py (load_content).
 
 # ------------------------------------------------------------------ Test doubles
@@ -141,8 +141,51 @@ FLAKY_DEEP = dict(
     ],
 )
 
+# ------------------------------------------------------------------ Property-based testing
+pb_d1 = Doodle(760, 260, "Shrinking a failing case. The random input that first broke the split function was 73.41 euros split between 9 people. The tool tries smaller inputs that still fail: 73.41 euros between 3 people, then 1 euro between 3, then 1 cent between 2. The final example, 1 cent between 2 people, is the clearest possible bug report: the parts add up to 2 cents.",
+               "The tool keeps the failure and throws away everything else.")
+for i, (inp, note, fill) in enumerate([("€73.41 ÷ 9", "first failure", "pink"), ("€73.41 ÷ 3", "still fails", "y"),
+                                       ("€1.00 ÷ 3", "still fails", "y"), ("€0.01 ÷ 2", "smallest", "green")]):
+    x = 14 + i * 186
+    pb_d1.box(x, 50, 170, 76, inp, fill, sub=note, size=17, subsize=13)
+    if i:
+        pb_d1.arrow(x - 14, 88, x - 2, 88)
+pb_d1.note(380, 176, "parts: 1 + 1 = 2 cents ≠ 1 cent", "red", size=18)
+pb_d1.note(380, 214, "keep it as a normal example test, and record the seed", "pen", size=16)
+
+PROPERTY_DEEP = dict(
+    side="finding properties, generators that find bugs, testing sequences",
+    intro="The note shows what a property is and why shrinking is so useful. The hard part in practice is finding properties in ordinary application code, writing generators that reach the inputs where bugs live, and testing things that have state. This chapter covers the three.",
+    parts=[
+        ("Finding properties in ordinary code", """  <p>Most code has properties hiding in it. Five shapes cover most of them:</p>
+  <div class="table-scroll"><table class="map"><thead><tr><th scope="col">Shape</th><th scope="col">Example from a typical app</th></tr></thead><tbody>
+    <tr><td><b>Round trip</b></td><td><code>parse(format(order)) == order</code>; save then load from the repository; encode then decode a cursor.</td></tr>
+    <tr><td><b>Invariant</b></td><td>A filtered list only contains matching items; a paginated list never shows an item twice.</td></tr>
+    <tr><td><b>Conservation</b></td><td>Splitting a bill: the parts add up to the total. Moving stock: the total across warehouses doesn't change.</td></tr>
+    <tr><td><b>Idempotence</b></td><td><code>normalise(normalise(x)) == normalise(x)</code>; applying the same event twice gives the same state.</td></tr>
+    <tr><td><b>Metamorphic</b></td><td>Adding an item never lowers the cart total; a longer search query never returns more results.</td></tr>
+  </tbody></table></div>
+  <p>Metamorphic properties are useful when you can't say what the right answer is, only how it should change. And when you have a slow but obviously right version (a simple loop), compare the fast version against it: that's the <b>oracle</b> property.</p>""", []),
+        ("Generators that find bugs", """  <p>A property is only as good as its inputs. Random integers from the full range rarely hit the cases that break code: zero, one, the boundary of a discount, an empty list, a name with an apostrophe, a date on 29 February.</p>
+  <ul>
+    <li><b>Build valid domain objects</b> with generators that compose (an order is a customer, one to twenty lines, a currency), instead of generating junk and filtering most of it away; heavy filtering makes runs slow and hides cases.</li>
+    <li><b>Mix in the edges.</b> Good libraries already bias toward small and boundary values; add your own (amounts just under and over €50, the free-shipping line).</li>
+    <li><b>Check what you generate.</b> Collect statistics on a run (how many empty carts, how many with discounts). A generator that never produces an empty list will never find the empty-list bug.</li>
+  </ul>
+  <p>When it fails, the shrunk case is the bug report. Copy it into a normal example test so it stays fixed, and keep the seed in the CI log so any run can be replayed.</p>""", [pb_d1]),
+        ("Testing sequences of actions", """  <p>Many bugs only appear after a particular order of actions: add, remove, add again, apply a coupon, change the quantity to zero. <b>Stateful (model-based) property testing</b> generates sequences of commands and runs them against two things at once: the real system and a simple model of it.</p>
+  <ol>
+    <li>Write a <b>model</b>: a plain object that represents what the cart should contain (a map of SKU to quantity).</li>
+    <li>Write <b>commands</b>: each one says when it's allowed, how it changes the model, and how to run it on the real cart (an API call or a function).</li>
+    <li>After each command, <b>compare</b> the real system with the model.</li>
+  </ol>
+  <p>The tool generates hundreds of sequences and, on failure, shrinks the sequence too: “add A, add A, remove A” instead of forty steps. fast-check (<code>fc.commands</code>) and Hypothesis (rule-based state machines) both support this. It's the most effective way to test caches, collections, and anything with an undo button.</p>""", []),
+    ],
+)
+
 REVISIONS = {
     "test-doubles": dict(deep_dive=TEST_DOUBLES_DEEP),
     "contract-testing": dict(deep_dive=CONTRACT_DEEP),
     "flaky-tests": dict(deep_dive=FLAKY_DEEP),
+    "property-based": dict(deep_dive=PROPERTY_DEEP),
 }
