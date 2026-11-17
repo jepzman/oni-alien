@@ -659,11 +659,123 @@ def boundary_goblin():
     return p, "The Boundary Goblin", defs, "".join(b)
 
 
+# ================================================================ Act I plates (three only)
+def hidden_thrones():
+    p = "ht"
+    defs = (f'<radialGradient id="{p}-lamp" cx="0" cy=".2" r="1"><stop offset="0" stop-color="#ffcf8a" stop-opacity=".7"/><stop offset="1" stop-color="#ffcf8a" stop-opacity="0"/></radialGradient>'
+            f'<linearGradient id="{p}-leather" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2a0e0a"/><stop offset=".5" stop-color="#140504"/><stop offset="1" stop-color="#050101"/></linearGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#030305"/>', glowlight(p, 260, 200, 260, 180, "#7a8ab0", .14)]
+    # the org chart on the wall
+    boxes = [(200, 60, 160, 40, "VP STRATEGIC SYNERGY", True), (60, 150, 120, 30, "Grid Planning", False), (200, 150, 120, 30, "Network Assets", False),
+             (340, 150, 120, 30, "Customer Ops", False), (60, 230, 120, 30, "Strategy", False), (200, 230, 120, 30, "Lumen", False), (340, 230, 120, 30, "Finance", False)]
+    lines = '<g stroke="#5a6680" stroke-width="1.4" opacity=".6"><path d="M280 100 V128 M120 128 H400 M120 128 V150 M260 128 V150 M400 128 V150 M120 180 V230 M260 180 V230 M400 180 V230"/></g>'
+    b.append(lines)
+    for x, y, w, h, t, big in boxes:
+        b.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="#141824" stroke="#5a6680"/>' + text(x + w / 2, y + h / 2 + 4, t, 12 if big else 10, "#b8c4dc", FELL, "middle"))
+    b.append('<rect x="420" y="70" width="80" height="22" fill="#141824" stroke="#5a6680" stroke-dasharray="3 3"/>' + text(460, 85, "Chief of Staff", 8.5, "#b8c4dc", FELL, "middle")
+             + '<path d="M360 80 H420" stroke="#5a6680" stroke-dasharray="3 3"/>')
+    # the red string: every box really runs to the small one
+    pins = [(174, 156), (314, 156), (454, 156), (174, 236), (314, 236), (454, 236), (354, 66)]
+    b.append('<g stroke="#d4201a" stroke-width="1.3" fill="none" opacity=".9">' + "".join(f'<path d="M{x} {y} Q{(x + 424) / 2} {min(y, 81) - 24} 424 81"/>' for x, y in pins) + "</g>"
+             + "".join(f'<circle cx="{x}" cy="{y}" r="3.4" fill="#ff3a22" filter="url(#{p}-glow)"/>' for x, y in pins + [(424, 81)]))
+    b.append(text(260, 300, "the official map", 13, "#8a96b0", HAND, "middle", 'opacity=".6"') + text(560, 70, "the real one →", 13, "#ff5a4a", HAND, "middle", 'opacity=".7" transform="rotate(-6 560 70)"'))
+    # the high-backed chair and Ottoline in it
+    b.append(f'<path d="M500 470 L500 150 C500 100 530 80 580 80 C630 80 660 100 660 150 L660 470 Z" fill="url(#{p}-leather)"/>'
+             '<g fill="#3a1410" opacity=".6">' + "".join(f'<circle cx="{x}" cy="{y}" r="2.4"/>' for x in (520, 545, 570, 595, 620, 645) for y in (110, 150, 190)) + "</g>"
+             f'<path d="M660 150 L660 470" stroke="#ff5a2a" stroke-width="1.4" opacity=".35"/>')
+    b.append(f'<path d="M300 0 L460 0 L760 470 L260 470 Z" fill="url(#{p}-lamp)" filter="url(#{p}-b24)" opacity=".5"/>')
+    b.append(blouse(p, 580, 233, .78, cardigan="#141016", top="#2a2028", rim="#ffb070", rim_side="left"))
+    b.append(face(p, 1, 580, 170, .7, skin=("#1a1210", "#6a5048", "#c8a890"), light="left", light_col="#ffd6a8", rim="#7a8ab0", rim_side="right",
+                  eye="violet", glow=False, brows="flat", mouth="smile", hair="bob", hair_col="#08060a", ears="none", lip="#7a2a30"))
+    # the desk, a lamp, the mug
+    b.append(table(420, "#070505"))
+    b.append('<path d="M330 420 L350 300 L370 300" stroke="#1a1410" stroke-width="5" fill="none"/><path d="M350 300 L330 270 L390 262 Z" fill="#1a1410"/>'
+             f'<ellipse cx="360" cy="276" rx="22" ry="6" fill="#ffd6a8" filter="url(#{p}-glow)"/>')
+    b.append(mug(430, 368, "I'M NOT", "IN CHARGE", "#d8d0c0", "#5a1a1a") + text(452, 412, "(I am)", 6, "#5a1a1a", HAND, "middle"))
+    b.append(hand(p, 640, 360, .7, rim="#7a8ab0", light="#ffd6a8", claws=False, pose="claw"))
+    return p, "The Map of Hidden Thrones", defs, "".join(b)
+
+
+def ring_kissing_ritual():
+    p = "rk"
+    defs = (f'<radialGradient id="{p}-gold" cx=".5" cy="0" r="1"><stop offset="0" stop-color="#ffd27a" stop-opacity=".55"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient>'
+            f'<linearGradient id="{p}-throne" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a1006"/><stop offset="1" stop-color="#080302"/></linearGradient>'
+            f'<radialGradient id="{p}-ring" cx=".35" cy=".35" r=".7"><stop offset="0" stop-color="#fff2b0"/><stop offset=".5" stop-color="#d8a020"/><stop offset="1" stop-color="#5a3a00"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#040202"/>', f'<path d="M380 0 L540 0 L700 470 L220 470 Z" fill="url(#{p}-gold)" filter="url(#{p}-b24)"/>']
+    # the throne on a dais of A4 boxes
+    b.append('<g fill="#d8d2c4" stroke="#8a8270">' + "".join(f'<rect x="{360 + c * 70 - r * 35}" y="{430 - r * 34}" width="70" height="34"/>' for r in range(2) for c in range(3 - r)) + "</g>"
+             + "".join(text(395 + c * 70, 452, "A4", 11, "#5a5040", FELL, "middle") for c in range(3)))
+    b.append(f'<path d="M380 380 L380 120 C380 60 420 34 470 34 C520 34 560 60 560 120 L560 380 Z" fill="url(#{p}-throne)"/>'
+             '<path d="M470 34 l-10 -20 10 6 10 -6 z" fill="#d8a020"/><path d="M380 120 C380 60 420 34 470 34 C520 34 560 60 560 120" stroke="#d8a020" stroke-width="2" fill="none" opacity=".7"/>')
+    b.append(suit(p, 1, 470, 202, .82, tie="#a07a10", jacket="#0c0a10", shirt="#6a6070", rim="#ffd27a"))
+    b.append(face(p, 1, 470, 150, .62, skin=("#1a1010", "#6a5450", "#c8b0a0"), light="above", light_col="#ffe2a8", rim="#ff3a22",
+                  eye="yellow", glow=True, brows="raised", mouth="smile", hair="slick", hair_col="#0a0806", ears="human"))
+    # the extended hand with the signet ring
+    b.append('<path d="M420 300 C390 310 360 320 334 322" stroke="#0c0a10" stroke-width="22" stroke-linecap="round" fill="none"/>')
+    b.append(f'<g transform="rotate(-96 318 322)">{hand(p, 318, 322, .62, rim="#ffd27a", light="#ffe2a8", claws=False, pose="open")}</g>')
+    b.append(f'<ellipse cx="300" cy="326" rx="9" ry="7" fill="url(#{p}-ring)" filter="url(#{p}-glow)"/><path d="M298 321 l-3 5 3 0 -2 5 5 -6 -3 0 2 -4z" fill="#5a3a00"/>')
+    # nameplate
+    b.append('<rect x="400" y="392" width="140" height="22" fill="#2a1a06" stroke="#d8a020"/>' + text(470, 407, "S. VARNISH · VP STRATEGIC SYNERGY", 8, "#ffd27a", FELL, "middle"))
+    # the queue of the devoted, bowing, lanyards on
+    for k, (x, sc) in enumerate(((286, 1.2), (214, 1.05), (152, .92), (98, .8), (52, .7))):
+        bow = 34 if k == 0 else 22
+        b.append(f'<g transform="translate({x} 470) scale({sc})"><path d="M-22 0 L-18 -70 C-14 -96 6 -104 24 -96 L30 -60 L24 0 Z" fill="#0a0806"/>'
+                 f'<circle cx="{30 + bow * .2}" cy="{-98 + bow}" r="15" fill="#0a0806"/><path d="M14 -90 L22 -60" stroke="#1e3e6a" stroke-width="2"/>'
+                 f'<rect x="18" y="-62" width="10" height="13" fill="#c9cfdc" opacity=".8"/>'
+                 f'<path d="M-18 -70 C-14 -96 6 -104 24 -96 L30 -60" stroke="#ffd27a" stroke-width="1.6" fill="none" opacity=".75"/>'
+                 f'<path d="M{16 + bow * .2} {-110 + bow} a15 15 0 0 1 26 4" stroke="#ffd27a" stroke-width="1.4" fill="none" opacity=".7"/></g>')
+    b.append(text(286, 492, "Dorian (first, as always)", 10, "#c9b8a0", HAND, "middle", 'opacity=".6"'))
+    # candles
+    for x in (360, 600, 640):
+        b.append(f'<rect x="{x}" y="{400}" width="12" height="40" fill="#e0d4b0"/><ellipse cx="{x + 6}" cy="394" rx="4" ry="9" fill="#ffd27a" filter="url(#{p}-glow)"/>')
+    b.append(text(660, 120, "“Great point,", 16, "#ffd27a", HAND, "middle", 'opacity=".55"') + text(660, 140, "Simon.”", 16, "#ffd27a", HAND, "middle", 'opacity=".55"'))
+    return p, "The Ring-Kissing Ritual", defs, "".join(b)
+
+
+def sacrificial_lamb():
+    p = "sl"
+    defs = (f'<radialGradient id="{p}-wool" cx=".4" cy=".3" r=".8"><stop offset="0" stop-color="#fbf8f0"/><stop offset=".6" stop-color="#b8b2a6"/><stop offset="1" stop-color="#3a3630"/></radialGradient>'
+            f'<radialGradient id="{p}-cand" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffcf7a" stop-opacity=".5"/><stop offset="1" stop-color="#ffcf7a" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#030202"/>']
+    # the screen behind: cheerful, terrible
+    b.append('<rect x="250" y="30" width="300" height="130" fill="#14100c" stroke="#2a2018"/>' + text(400, 74, "WELCOME, NEW", 22, "#e8d8b0", BLACK, "middle", 'opacity=".8"')
+             + text(400, 102, "PROJECT LEAD! 🎉", 22, "#e8d8b0", BLACK, "middle", 'opacity=".8"') + text(400, 136, "Project Orion · a great opportunity", 11, "#a89878", SERIF, "middle", 'font-style="italic"'))
+    # the long table in perspective
+    b.append('<path d="M300 250 L500 250 L720 500 L80 500 Z" fill="#0e0907"/><path d="M300 250 L500 250" stroke="#4a3020" stroke-width="1.2"/>')
+    # seven hooded figures with candles
+    for k, (x, y, sc) in enumerate(((270, 250, .55), (530, 250, .55), (200, 300, .72), (600, 300, .72), (120, 370, .9), (680, 370, .9), (400, 230, .45))):
+        b.append(f'<circle cx="{x}" cy="{y - 40 * sc}" r="{70 * sc}" fill="url(#{p}-cand)"/>'
+                 f'<g transform="translate({x} {y}) scale({sc})"><path d="M0 -150 C-40 -146 -56 -100 -58 -40 C-60 10 -70 60 -80 120 L80 120 C70 60 60 10 58 -40 C56 -100 40 -146 0 -150 Z" fill="#050303"/>'
+                 '<ellipse cx="0" cy="-96" rx="26" ry="32" fill="#000"/>'
+                 '<circle cx="-9" cy="-98" r="3" fill="#ff3a22"/><circle cx="9" cy="-98" r="3" fill="#ff3a22"/>'
+                 '<rect x="-5" y="-30" width="10" height="34" fill="#e0d4b0"/><ellipse cx="0" cy="-38" rx="4" ry="9" fill="#ffd27a"/>'
+                 '<path d="M0 -150 C40 -146 56 -100 58 -40" stroke="#ffb070" stroke-width="2" fill="none" opacity=".35"/></g>')
+    b.append(f'<g filter="url(#{p}-glow)" opacity=".8">' + "".join(f'<circle cx="{x}" cy="{y - 38 * sc}" r="{3 * sc + 1}" fill="#ffd27a"/>' for x, y, sc in ((270, 250, .55), (530, 250, .55), (200, 300, .72), (600, 300, .72), (120, 370, .9), (680, 370, .9), (400, 230, .45))) + "</g>")
+    # the lamb on the table
+    b.append(f'<g transform="translate(400 380)">'
+             '<g fill="#1a1612"><rect x="-38" y="20" width="9" height="40" rx="3"/><rect x="-18" y="24" width="9" height="40" rx="3"/><rect x="12" y="24" width="9" height="40" rx="3"/><rect x="30" y="20" width="9" height="40" rx="3"/></g>'
+             + "".join(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="url(#{p}-wool)"/>' for cx, cy, r in ((-40, 0, 24), (-16, -12, 26), (12, -12, 26), (38, 0, 24), (-26, 16, 22), (0, 12, 26), (26, 16, 22), (0, -22, 22)))
+             + '<ellipse cx="-58" cy="-26" rx="18" ry="22" fill="#2a2420"/><ellipse cx="-74" cy="-38" rx="10" ry="5" fill="#2a2420" transform="rotate(-30 -74 -38)"/>'
+             '<ellipse cx="-44" cy="-42" rx="10" ry="5" fill="#2a2420" transform="rotate(30 -44 -42)"/>'
+             '<circle cx="-64" cy="-30" r="3" fill="#f0e8d8"/><circle cx="-63.4" cy="-30" r="1.6" fill="#000"/><circle cx="-52" cy="-30" r="3" fill="#f0e8d8"/><circle cx="-51.4" cy="-30" r="1.6" fill="#000"/>'
+             '<path d="M-66 -38 l6 3 M-50 -38 l-6 3" stroke="#000" stroke-width="1.4"/>'
+             '<path d="M-62 -14 L-50 10 L-40 -12" stroke="#1e3e6a" stroke-width="2.4" fill="none"/>'
+             '<g transform="rotate(-8 -50 20)"><rect x="-68" y="10" width="40" height="24" fill="#c9cfdc"/><rect x="-68" y="10" width="40" height="7" fill="#6a0d0d"/></g>'
+             + text(-48, 30, "PROJECT LEAD", 5.4, "#1b1b22", SERIF, "middle", 'font-weight="700" transform="rotate(-8 -50 20)"') + "</g>")
+    # the folder
+    b.append('<g transform="rotate(6 540 440)"><rect x="480" y="420" width="130" height="50" fill="#5a3a1a"/><rect x="486" y="426" width="118" height="38" fill="#e8dcc0"/>'
+             + text(545, 440, "PROJECT ORION", 9, "#2a1a10", FELL, "middle") + text(545, 452, "18 months late", 7.5, "#7a1010", SERIF, "middle")
+             + text(545, 461, "£2.4m over · lead #4", 7.5, "#7a1010", SERIF, "middle") + "</g>")
+    b.append(text(170, 486, "“Real visibility for you.”", 13, "#ffcf7a", HAND, "middle", 'opacity=".6"'))
+    return p, "The Sacrificial Lamb", defs, "".join(b)
+
+
 PLATES = {
     "meeting-lich": meeting_lich, "gaslight-wraith": gaslight_wraith, "bulldozer-ogre": bulldozer_ogre,
     "passive-aggressive-poltergeist": passive_aggressive_poltergeist, "coasting-zombie": coasting_zombie,
     "doppelganger": doppelganger, "martyr-banshee": martyr_banshee, "know-it-all-basilisk": know_it_all_basilisk,
     "doom-prophet": doom_prophet, "toxic-positivity-siren": toxic_positivity_siren, "boundary-goblin": boundary_goblin,
+    "hidden-thrones": hidden_thrones, "ring-kissing-ritual": ring_kissing_ritual, "sacrificial-lamb": sacrificial_lamb,
 }
 
 
