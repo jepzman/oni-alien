@@ -751,3 +751,85 @@ Vol. 2's committed figures were corrected on the way (the €48k of equipment, o
 - Open threads for Vol. 5 (Stakeholders and Risk): the neighbours and landlord (not contacted until 2 Mar), the risk
   register's top three (cold-room delivery, hiring on time, StockPilot's limit), the reserve sized from a risk list,
   the rival already in Rotterdam, and Antwerp (September 2027) as the next big launch.
+
+## Book 3, Vol. 5: Sanne's facts (October 2026 → October 2027, Stakeholders and Risk: Antwerp)
+
+Vol. 5 covers the Stakeholders (7) and Risk (6) domains through **the Antwerp launch**, the first city abroad. Template
+cards are the **Antwerp** pages of the project file (`antwerp/01`–`15`; the page `/rotterdam/` is now “The Project File”,
+grouped by project). Every number below was checked by script (weekdays, sums, the simulation); the block at the top of
+`content/project-5/01_involved.py` holds them in one place. **Chosen on purpose (no other book said): why Antwerp
+slipped.** It was risk R-07, the city's environmental permit, on the register from November 2026, scored low by people
+who knew Rotterdam, with no Larder owner.
+
+- **Project** starts Mon **5 Oct 2026**; sponsor **Femke**; steering group Femke, Marco, Joost, Priya, Lena (first Friday
+  monthly). Sanne runs Utrecht (12 Apr 2027) and The Hague (14 Jun 2027) from the playbook alongside.
+- **Store**: a former tyre depot in Berchem, **640 m²**, a terrace of **46 houses** behind the loading yard, a school on the
+  corner (drop-off 07:30–08:30). Lease signed **Tue 15 Dec 2026**, keys **Tue 1 Jun 2027**.
+- **New people**: **Maarten** (Antwerp lawyer, works with Lena from Oct 2026) · **Pieter** (site manager, the Belgian
+  builder) · **Hilde** (permit agent, from Mon 8 Mar 2027, €6k) · **Koen** (sales manager, a produce wholesaler at the early
+  market) · **Inès** (Antwerp store manager, starts Mon 7 Jun 2027).
+- **Stakeholder register** (2 Nov): v0 copied Rotterdam's (14) → **31** from four sources (charter, Rotterdam lessons, a walk
+  round on Sat 31 Oct with Joost, Lena + Maarten): Larder 12, partners 8, authorities 5 (permit office, FAVV-AFSCA, fire
+  service, VAT office, mobility department), community 6 (46 households, school, shops, **3,100 waitlist**, a rival, press).
+- **Grid** (9 Nov, Sanne's mistake in “Who's involved”): permit office placed **keep informed** (power “low”: in Rotterdam
+  the cold room needed nothing), owner “builder”; moved to **manage closely**, unaware → supportive, on **8 Feb 2027**.
+- **Communications plan** (23 Nov): Dutch (Flemish) for city, landlord, street; French or Dutch by choice for customers;
+  English inside Larder; one owner per audience; outside Dutch texts written or checked by a Flemish writer (the first
+  landlord letter, drafted in Amsterdam, came back “correct, but blunt”).
+- **Neighbours' meeting** (Thu 21 Jan 2027, community centre, 19:00): **28 people** of 46 households + the school's head.
+  Raised: lorries before 07:00 **12**, e-bikes on the pavement 9, condenser noise 5, litter 2. Promised: e-bikes by the back
+  lane, a named contact, a quarterly meeting, a daily litter walk; lorry times not promised (“answer by 31 March”). The
+  lorry concern was logged but **not linked to R-07**. Investor wording (Femke, 25 Jan): “planning date September 2027,
+  confirmed when the store's permits are in.”
+- **Supplier meetings** (Sanne's mistake in “Abroad”): Wed 3 Feb, English, no agenda → Sanne heard 07:00 and free crates,
+  Koen's proposal (12 Feb) said **05:30** and a **€2 deposit** a crate. Re-run Wed 17 Feb in Dutch (agenda Mon 15 Feb,
+  read-backs, summary within 24 h, confirmed Thu 18 Feb): deliveries 05:30 at the back door Mon–Sat; €2 deposit credited on
+  return; order by 14:00 the day before; a trial week before opening. The 05:30 delivery needs the permit's early hours.
+- **Belgian differences** (Mon 8 Feb, Lena, Maarten, Sanne): environmental permit (cooling plant + deliveries before 07:00,
+  30-day public inquiry), food-safety registration (Lena), VAT 6 % / 21 % (Marco, Mar), Bancontact (Cho, Jul), staff
+  documents in Dutch (Joost), sector pay scales (Joost), courier contracts (Joost + Lena), alcohol 16 / 18 (Grace), structured
+  e-invoices (Ana, later). Habits: formal letters; meet the city informally before applying; confirm decisions in writing.
+- **Engagement review** monthly from Fri 5 Mar: permit office U → N (pre-application meeting **Thu 11 Mar**); Koen R → S;
+  neighbours scored N in May from low attendance (9 at the April meeting) → **14 objections** in the inquiry (closed 22 Jun) →
+  R → door to door with Inès **26–30 Jul** → N in Sep; nine came to the opening. Rule from June: no evidence, no score.
+  Waitlist emails opened nl 58 % / fr 31 % → French subject lines rewritten → fr 44 % in August.
+- **Risk approach** (16 Nov, signed by Femke): appetite ≤ 2 weeks' slip, money within budget + contingency, no rent before
+  1 Jun (Femke refused €9k for keys on 1 May); thresholds to Femke: slip > 2 weeks, beyond contingency, score ≥ 20; scales
+  P 1–5 (<10 % … >70 %), I 1–5 (<1 week/€2k … >8 weeks/€50k); red ≥ 12; every risk a **Larder** owner; leads review every
+  other Thursday. Missing: the price of a week late (≈ €15k contribution + ≈ €2k rent), added to playbook v3.
+- **Risk register** (workshop Thu 26 Nov, written Mon 30 Nov; Sanne's mistake in “What could happen”): 23 rows (19 threats,
+  4 opportunities). Top: R-02 hiring 9, R-03 builder 9, R-08 couriers 9; **R-07 permit 1 × 3 = 3, owner “builder”**; R-09
+  neighbours 2 × 2, no owner. O-01 Rotterdam shelving design (Tomás), O-02 landlord insulation (Femke), O-04 bakery offer.
+- **Re-score** (Wed 10 Feb, after Maarten and Pieter: “the permit is yours, not ours; four to six months is normal”): R-07
+  → **4 × 4 = 16**, owner Sanne, R-09 merged in as a cause; R-03 → 2 × 3 = 6 (Pieter's second crew); R-08 → 6.
+- **Responses** (Mon 22 Feb): avoid (no early deliveries + a smaller plant) rejected by Joost; transfer: Hilde; mitigate:
+  city meeting 11 Mar, cooling drawings by **Mon 15 Mar**, lodge by **Fri 26 Mar**; accept the rest with a trigger. Before
+  60 % × €40k = €24k, after 30 % × €40k = €12k, responses €8k (agent 6, early drawings 2). R-04 Bancontact escalated to
+  Cho's payments roadmap; R-10 rival accepted; O-01 exploited (≈ €6k saved), O-02 enhanced (landlord said no), O-04 shared.
+- **Budget** (Mon 1 Mar): builder 160 · cold room + fridges 84 · equipment + IT 52 · people 68 (40 × €1.7k) · marketing
+  fr + nl 46 · Belgian set-up 20 = **€430k**; EMV threats 23.1 − opportunities 4.0 = 19.1 → **contingency €20k** (Sanne)
+  → €450k; **management reserve €15k** (Femke) → **€465k** authorised.
+- **Simulation** (1 Mar, 1,000 runs, **seed 2027**; script with Eli): P10 6 Sep · **P50 13 Sep** (51 %) · **P80 27 Sep** ·
+  P90 11 Oct; 18 Oct ≈ P96. Late runs (after 27 Sep) 162, the permit set the date in 157. Steering group Fri 5 Mar: planning
+  date stays 13 Sep; investors told “September or early October”; no earlier keys. Re-runs: 9 Apr (lodging 19 Apr) P50 20 Sep,
+  P80 11 Oct; July (objections in) P50 11 Oct, P80 25 Oct.
+- **The response with no owner** (risk review Fri 2 Apr; Sanne's mistake in “Doing something about it”): drawings owner
+  “cooling supplier”, waiting for Larder's 640 m² layout; trigger of 26 Mar watched by nobody. Layout sent Tue 6 Apr,
+  drawings Fri 9 Apr, **lodged Mon 19 Apr**, complete Mon 10 May, **public inquiry Mon 24 May–Tue 22 Jun**. Rules: every
+  action a task in the plan; every owner at Larder; every trigger in the Friday status with a watcher. Told the steering
+  group on Fri 7 May.
+- **Risk → issue** (Thu 15 Jul): the city's case officer: 14 objections, change the hours or bring a noise study, no decision
+  before September → R-07 closed, **I-12** opened. Extra steering group **Fri 23 Jul**: A wait (rejected), **B deliveries from
+  07:00 + an acoustic screen, open Mon 18 Oct (chosen)**, C dry goods only (rejected, Lena). Cost in the project **€27k**
+  (staff starts held 11, marketing re-booked 9, installer re-booked 4, screen 3): contingency 14 → 0 (earlier draws: hiring
+  4, translation rework 2), management reserve 15 → 2. Outside: rent ≈ €10k, ≈ €75k contribution (5 × €15k).
+- **Permit granted Mon 6 Sep** · cold room tested Fri 17 Sep · food-safety visit Wed 29 Sep · stocking 4–15 Oct ·
+  **opened Mon 18 Oct 2027**; week 1 2.4 tickets per 100 (Utrecht 2.9). Forecast final cost **€457k** of €465k.
+- **Playbook v3** (Oct): regulators are stakeholders (manage closely until the permit is granted); score risks with people who
+  have done it in that country; every response action has a Larder owner and a trigger with a watcher; price a week late in
+  every appetite statement (≈ €15k + ≈ €2k).
+- Meanwhile links: register ↔ Ana's stakeholder map; stakeholders abroad ↔ Grace's localisation; risk register ↔ Ana's risk
+  register and Grace's pre-mortem; risk monitoring ↔ Grace's launching a new city (playbook v3).
+- Open threads for Vol. 6 (tailoring, models, artefacts, growing): Eindhoven (22 Nov 2027) from playbook v4; the 2028
+  programme (eight cities); which of the 73 project-file pages were used again; a second project manager; the Antwerp
+  closing report (final cost vs €457k forecast) and its benefits check.
