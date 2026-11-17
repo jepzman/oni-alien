@@ -10,7 +10,7 @@ Read in this order:
 3. The plan for the book you're writing:
    - Book 1 (Ana, architect): `docs/HANDOFF-solution-architect.md`
    - Book 2 (Grace, product owner): `docs/HANDOFF-product-owner.md`
-   - **Book 3 (Sanne, project manager): `docs/HANDOFF-project-manager.md`** ← the book in progress; start at its section 13
+   - **Book 3 (Sanne, project manager): `docs/HANDOFF-project-manager.md`** ← the book in progress; start at its section 16
 
 ## 1. What's on the shelf
 
@@ -60,8 +60,8 @@ cloth, `COVER_ART`). 18 extra notes (3 per volume, `content/<key>/05_extra.py`) 
    to confirm** it now looks right; if not, ask for a screenshot (the sandbox can't open github.io).
 2. **Books 1 and 2 are complete** (PR #16 deployed both Vol. 6s).
 3. **Book 3 is in progress**: Vols. 1–4 are written and merged (sections 14–15 of `docs/HANDOFF-project-manager.md`).
-   **Next is Vol. 5, “People Outside, and Surprises” (Stakeholders and Risk)**; follow section 13.3 of that file, with
-   the open threads at the end of the casebook's “Book 3, Vol. 4”. Three questions are waiting for the owner there
+   **Next are Vols. 5 and 6**, planned note by note in section 16 of that file (settings, facts already fixed by other
+   books, suggested notes, the one story gap to fill on purpose: why Antwerp slipped). Three questions are waiting for the owner there
    (section 13.1): check PMBOK names against the guide, full ten-chapter deep dives for key items, and a look at the live pages. Book 4 (Mo, client management) is in the future log; they should reuse the casebook, the case file timeline and the meanwhile links.
    New journal keys get their shelf cover automatically (CSS matches `book--architect-*` / `book--product-*`).
 4. For each new volume: add every note to the case file `TIMELINE` (`content/larder/casefile.py`, tag `"1"`, `"2"` or `"3"`),
