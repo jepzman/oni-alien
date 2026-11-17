@@ -43,20 +43,47 @@ happens to his hope. Learn from it.</p>""",
             threat=4, habitat="steering committees, all-hands slides, any email that starts “great work team”",
             weakness="daylight: other people knowing what you did, before the meeting",
             summary="The Credit Vampire presents your work as theirs. How to spot it, the counter-spells that put your name in daylight, and the forbidden spells that backfire.",
-            sighting=f"""<p>On the 3rd of March, Pip spent eleven evenings building the <b>Q3 load forecast</b>, a model that
-predicted the heatwave peak to within 2% and saved MetroVolt an estimated €1.4 million in emergency power purchases.
-On the 4th, at the all-hands in the atrium, Dorian from Strategy presented it. Slide 7 read <i>“Dorian's model.”</i>
-Pip's name appeared nowhere. Not in the title, not in the footer, not even in the font.</p>
-<p>Lord Varnish called it “exactly the kind of initiative we need.” Dorian looked humble. Pip clapped, because
-everyone was clapping, and then went to the bathroom on floor 9 and stared at the hand dryer for some time.</p>""",
+            sighting=f"""<p class="beat"><span>Monday 24 February · 21:40</span></p>
+<p>It started, as these things do, with a good piece of work. For eleven evenings Pip stayed late on floor 9, rebuilding the
+<b>Q3 load forecast</b> from the raw meter data. He found a flaw in the old model (it ignored air-conditioning
+in new-build flats), fixed it, and tested it against three past heatwaves. On the last night the model predicted the
+2025 peak to within 2%. Pip sat alone under one buzzing light and allowed himself a small, private “yes”.</p>
+<p class="beat"><span>Tuesday 25 February · 09:12</span></p>
+<p>Dorian from Strategy appeared at Pip's desk with two coffees, which should have been the first warning. “I hear
+you've built something special,” he said. “Send it over? I'll take it from here, get it in front of the right
+people.” Pip, flattered, sent it. Dorian replied with a thumbs-up and the words <i>“legend, leave it with me”</i>.</p>
+<p class="beat"><span>Tuesday 4 March · 10:02 · the atrium all-hands</span></p>
+<p>Four hundred people, one big screen. Slide 7: <i>“Q3 forecast: Dorian's model.”</i> Dorian spoke beautifully
+about “a fresh approach to air-conditioning load in new-build housing”. The fresh approach was Pip's. Pip's name
+appeared nowhere: not in the title, not in the footer, not even in the font. Lord Varnish called it “exactly
+the kind of initiative we need”. Dorian looked humble. Pip clapped, because everyone was clapping, then went to
+the bathroom on floor 9 and stared at the hand dryer for some time.</p>
+<p class="beat"><span>Tuesday 4 March · 14:30</span></p>
+<p>Pip found Dorian by the lifts and said, carefully, that it would have been nice to be mentioned. Dorian looked
+genuinely hurt. “Pip, we're one team. I said ‘we’ at least twice.” He had. Pip walked away feeling he had somehow
+been the rude one. In June, it happened again, with the substation model.</p>
+{note("Notice the pattern: the coffee, the “I'll take it from here”, the meeting you're not invited to, and the hurt face when you mention it. That's not one bad day. That's a feeding cycle.")}""",
             know=f"""<p>The Vampire is rarely evil. It is <b>hungry</b>. It lives where work is invisible and only the
-presenter is seen. In most companies, the person who stands in front of leadership gets the credit by default.
-Nobody checks the git history of a slide deck.</p>
-<p>So the Vampire does not need to lie. It only needs your work to stay in the dark until it can carry it into
-a room you are not in. Feed it darkness and it grows fat. Sunlight kills it.</p>
-{note("“Sunlight” means other people knowing what you did, before the meeting. Not literal sun. HR has asked me to stop saying this.")}
-<p>The ones to watch are not the dramatic thieves. They are the gentle ones who say “we” about the work and
-“I” about the idea, and who always, always offer to “take it from here.”</p>""",
+presenter is seen. Feed it darkness and it grows fat. Sunlight kills it.</p>
+<h3 class="kh">What it wants</h3>
+<p>Visibility. A promotion case. The feeling of being the one with the good ideas. Most Vampires are under pressure
+to look impressive to their own bosses, and your work is the quickest way to get there.</p>
+<h3 class="kh">Why it thrives here</h3>
+<p>Because the organisation lets it. In most companies, <b>the person who presents gets the credit by default</b>.
+Leaders see slides, not spreadsheets, and nobody checks the history of a deck. Phrases like “great work, team”
+blur who did what, and the people who build things are often busy building things instead of presenting them.
+A Vampire doesn't even need to lie. It only needs your work to stay in the dark until it can carry it into a room
+you're not in.</p>
+<h3 class="kh">What it fears</h3>
+<ul class="fears"><li>Your name on the work before it travels.</li><li>You in the room when the work is presented.</li>
+<li>Detailed questions about the method, in public.</li><li>Written records with dates on them.</li></ul>
+<h3 class="kh">The three breeds</h3>
+<div class="breeds">
+<div><b>The Careless</b><p>Forgot to mention you. Mortified when told. Fixes it at once. Most common breed.</p></div>
+<div><b>The Opportunist</b><p>Takes credit when it's easy and safe. Backs off when you're visible. Needs daylight, not war.</p></div>
+<div><b>The Feeder</b><p>Does it systematically, and hurt-faces you when challenged. Needs records, allies and, eventually, your manager.</p></div>
+</div>
+{note("“Sunlight” means other people knowing what you did, before the meeting. Not literal sun. HR has asked me to stop saying this.")}""",
             omens=[
                 "“Send me the file, I'll take it from here.”",
                 "You are not invited to the meeting where your work is presented.",
@@ -80,18 +107,59 @@ a room you are not in. Feed it darkness and it grows fat. Sunlight kills it.</p>
                 ("The Whisper Campaign", 3, "Complaining to everyone at the coffee machine. The coffee machine reports to Lord Varnish."),
             ],
             difficulty=dict(
-                normal="A careless peer who forgot to mention you. A friendly word fixes it: “Mind adding my name on slide 7?” Most people are mortified and do.",
-                nightmare="A habit. They do it every quarter. Cast the Dawn Ward every single time, keep the Weekly Deeds Scroll, and mention the pattern calmly to your manager with dates.",
-                hell="It's your boss, and the culture rewards it. Your paper trail is now your shield: keep the scroll, build relationships with your skip-level, and read Act III, entry 12 (the Escape Portal).",
+                normal=dict(
+                    who="The Careless. A peer who forgot to mention you, once.",
+                    know=["It's the first time.", "They're new, rushed or junior.", "When you mention it, they're embarrassed, not defensive."],
+                    do=["Assume good intent and have a quick, friendly word in private.",
+                        "Ask for a specific fix: “Could you add my name on slide 7 before it goes out?”",
+                        "From now on, cast the Dawn Ward on anything you hand over."],
+                    avoid="Making a big thing of it. Careless people become allies when treated kindly.",
+                    next="If it happens again with the same person, you're at Nightmare."),
+                nightmare=dict(
+                    who="The Opportunist. A habit: it happens every quarter, with you or with others.",
+                    know=["It's the second or third time.", "You're never invited to the meetings where your work appears.",
+                          "Others have quietly told you the same thing happened to them."],
+                    do=["Cast the Dawn Ward every single time: your name and your manager in daylight before the work travels.",
+                        "Keep the Weekly Deeds Scroll so your manager knows what you built.",
+                        "Ask to present the part you built (the Invitation Hex).",
+                        "Raise the pattern calmly with your manager, with dates, not adjectives."],
+                    avoid="Confronting them in public, or recruiting the others into a whisper campaign.",
+                    next="If your manager rewards it or does it too, you're at Hell."),
+                hell=dict(
+                    who="The Feeder, protected. Or worse: it's your own manager (see Act III, the Credit-Taking Crown).",
+                    know=["The culture rewards it: presenters rise, builders don't.", "Your manager is the Vampire, or protects one.",
+                          "Your work has disappeared from your review."],
+                    do=["Keep a private, dated record of what you built and where it went.",
+                        "Build a direct relationship with your skip-level and with the people who use your work.",
+                        "Put your name in every artefact, every time, without comment.",
+                        "Decide how long you're willing to feed it (Act III, the Escape Portal)."],
+                    avoid="Sabotage, or going quiet. Both make you smaller; neither makes them smaller.",
+                    next="If it's affecting your pay or promotion, raise it formally with HR, with your record."),
             ),
-            stats=[4, 5, 4, 4, 4, 3, 5, 5, 4], stats_for="The Dawn Ward",
-            loot=("The Weekly Deeds Scroll",
-                  "A three-line Friday note to your manager. Five minutes a week. Your work is in daylight before anyone can carry it into a meeting.",
-                  """Subject: Week 10 · Pip · Grid Planning
-
-SHIPPED     Q3 load forecast v4 (heatwave peak within 2%). Shared with Ops + Trading.
-IN PROGRESS Substation 14 capacity check, due 21 Mar.
-NEED HELP   Access to the 2025 smart-meter data (waiting on IT, ticket #4471)."""),
+            mirror=dict(
+                intro="Every Vampire was once bitten. Before you hunt one, check your own teeth. Tick honestly.",
+                signs=["You've said “I” in a presentation about work that three people did.",
+                       "You've forwarded someone's analysis upwards without their name on it.",
+                       "You describe your team's results as “my” results in your review.",
+                       "You've ever said “I'll take it from here” and meant it.",
+                       "You can't name who built the last thing you presented."],
+                cure="Name names. In every update, every deck, every review: who built it, specifically. It costs nothing, it makes you look like a leader, and it makes people want to work with you.",
+            ),
+            rehearsal=dict(
+                title="Scene: Tuesday, 09:12. Pip's desk. Dorian arrives with two coffees.",
+                intro="The counter-spells, said out loud. Read it once, then practise it with a friend. The words matter less than the calm.",
+                lines=[
+                    ("Dorian", "I hear you've built something special. Send it over? I'll take it from here."),
+                    ("", "Pip takes the coffee. Smiles. Does not open his laptop."),
+                    ("Pip", "Thanks! It's nearly ready. I'm sending it to Marcus and the Ops leads this afternoon, so everyone has the same version."),
+                    ("Dorian", "Great, great. I could present it on the 4th, save you the hassle?"),
+                    ("Pip", "That'd be brilliant, a bigger stage. Could I take the five minutes on the method? It'll save you the detailed questions."),
+                    ("Dorian", "…Sure. Of course. One team."),
+                    ("Pip", "One team. I'll put us both on the cover slide."),
+                    ("", "That afternoon, the file arrives in four inboxes as Q3-load-forecast_Pip_v4.xlsx. The Dawn Ward is cast. Nobody had to be rude."),
+                ],
+                note="Notice what Pip never says: “you're trying to steal my work”. He doesn't need to. Daylight does it for him.",
+            ),
             trial=[
                 ("Dorian asks for your file “to tidy the formatting” the day before the steering committee. What do you do?",
                  "Send it, with your name already in the file name and on the cover, and copy your manager: “Here's the forecast for tomorrow. Happy to join for the method questions.” You helped, and you're in daylight."),

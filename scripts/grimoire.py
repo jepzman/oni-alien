@@ -201,15 +201,46 @@ def render_entry(act, i, e):
         f'<button type="button" role="tab" id="d-{k}" aria-controls="dp-{k}" aria-selected="{"true" if k == "normal" else "false"}"'
         f' tabindex="{0 if k == "normal" else -1}" class="dt dt-{k}">{label}</button>'
         for k, label in (("normal", "Normal"), ("nightmare", "Nightmare"), ("hell", "Hell")))
+    def diff_body(d):
+        """Old format: one paragraph. New format: dict(who=, know=[], do=[], avoid=, next=)."""
+        if isinstance(d, str):
+            return f"<p>{d}</p>"
+        li = lambda xs: "".join(f"<li>{x}</li>" for x in xs)
+        return (f'<p class="dp-who">{d["who"]}</p>'
+                f'<div class="dp-grid"><div><h4>You’ll know it’s this level when</h4><ul>{li(d["know"])}</ul></div>'
+                f'<div><h4>Do</h4><ol>{li(d["do"])}</ol></div></div>'
+                f'<p class="dp-avoid"><b>Don’t:</b> {d["avoid"]}</p>'
+                + (f'<p class="dp-next"><b>If it gets worse:</b> {d["next"]}</p>' if d.get("next") else ""))
     panels = "".join(
         f'<div class="dp dp-{k}" role="tabpanel" id="dp-{k}" aria-labelledby="d-{k}"{"" if k == "normal" else " data-hide"}>'
-        f'<p class="dp-h">{label}</p><p>{diff[k]}</p></div>'
+        f'<p class="dp-h">{label}</p>{diff_body(diff[k])}</div>'
         for k, label in (("normal", "Normal"), ("nightmare", "Nightmare"), ("hell", "Hell")))
-    stats = "".join(
+    v2 = "mirror" in e   # the new format: no stats or loot; a mirror and a rehearsal instead
+    stats = "" if v2 else "".join(
         f'<li><span class="sn" title="{esc(m)}">{name}</span><span class="pips" aria-label="{v} of 5">'
         + "".join(f'<i class="{"on" if p < v else "off"}"></i>' for p in range(5)) + f'</span><span class="sv">{v}</span></li>'
         for (name, m), v in zip(STATS, e["stats"]))
-    loot_name, loot_desc, loot_body = e["loot"]
+    loot_name, loot_desc, loot_body = e["loot"] if not v2 else ("", "", "")
+    if v2:
+        mirror = "".join(f"<li>{OMEN_EYE}<span>{m}</span></li>" for m in e["mirror"]["signs"])
+        lines = "".join(
+            (f'<p class="dir">{t}</p>' if who == "" else f'<p class="ln"><b>{who}</b><span>{t}</span></p>')
+            for who, t in e["rehearsal"]["lines"])
+        tail = f'''<section class="sec" id="mirror"><h2><span class="rn">VII</span>Are you the creature?</h2>
+  {thorns(7)}
+  <p class="lede">{e["mirror"]["intro"]}</p>
+  <ul class="omens mirror">{mirror}</ul>
+  <p class="mirror-cure"><b>The cure, if you ticked two:</b> {e["mirror"]["cure"]}</p>
+  </section>
+
+  <section class="sec" id="rehearsal"><h2><span class="rn">VIII</span>The rehearsal</h2>
+  {thorns(8)}
+  <p class="lede">{e["rehearsal"]["intro"]}</p>
+  <div class="script"><p class="script-h">{e["rehearsal"]["title"]}</p>{lines}</div>
+  {note(e["rehearsal"]["note"]) if e["rehearsal"].get("note") else ""}
+  </section>'''
+    else:
+        tail = None
     trial = "".join(f"<details><summary>{q}</summary><p>{a}</p></details>" for q, a in e["trial"])
     prev = entries[i - 1] if i > 0 else None
     nxt = entries[i + 1] if i + 1 < len(entries) else None
@@ -268,7 +299,7 @@ def render_entry(act, i, e):
   <div class="diff" data-diff><div class="dtabs" role="tablist" aria-label="Difficulty">{tabs}</div>{panels}</div>
   </section>
 
-  <section class="sec" id="stats"><h2><span class="rn">VII</span>Survival stats</h2>
+  {tail if v2 else ""}{"" if v2 else f'''<section class="sec" id="stats"><h2><span class="rn">VII</span>Survival stats</h2>
   {thorns(7)}
   <p class="lede">For the counter-spell <b>{e["stats_for"]}</b>. All stats: high = good for you.</p>
   <ul class="stats">{stats}</ul>
@@ -278,7 +309,7 @@ def render_entry(act, i, e):
   {thorns(8)}
   <div class="loot"><p class="loot-h"><span class="chest" aria-hidden="true">⚿</span><b>{loot_name}</b></p><p>{loot_desc}</p>
   <pre>{esc(loot_body.strip(chr(10)))}</pre></div>
-  </section>
+  </section>'''}
 
   <section class="sec" id="trial"><h2><span class="rn">IX</span>The trial</h2>
   {thorns(9)}
