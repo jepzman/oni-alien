@@ -162,6 +162,18 @@ FOUNDATIONS = [
     ("The seven performance domains", ("project-1", "performance-domains")),
     ("Tailoring", ("project-1", "tailoring")),
     ("The project management office (PMO)", ("project-1", "pmo")),
+    ("Tailoring a whole project", ("project-6", "tailoring-a-whole-project")),
+    ("A repeatable method: the playbook", ("project-6", "city-launch-playbook")),
+    ("Projects, programmes and portfolios", ("project-6", "programmes-and-portfolios")),
+    ("Benefits realisation", ("project-6", "benefits-realisation")),
+    ("Models and methods: choosing among them", ("project-6", "models-and-methods")),
+    ("Artifacts: which documents earn their keep", ("project-6", "artefact-review")),
+    ("AI in project work (a newer topic)", ("project-6", "ai-in-project-work")),
+    ("Sustainability in practice", ("project-6", "sustainability-in-practice")),
+    ("The PMO grown up", ("project-6", "pmo-grown-up")),
+    ("Servant leadership and coaching", ("project-6", "servant-leadership")),
+    ("Ethics and professional conduct", ("project-6", "ethics")),
+    ("Growing as a project manager; certification", ("project-6", "growing-as-a-project-manager")),
 ]
 
 EDITIONS = """  <p>Most courses and many colleagues still speak sixth or seventh edition. The ideas are the same; the shelves they sit on moved.

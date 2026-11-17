@@ -1,7 +1,7 @@
 # Handoff: The Project Manager's Notebook (Series 2, Book 3)
 
-Status as of 2026-11-17: **Vols. 1–4 are written and deployed (PR #24 and PR #29). Vol. 5 is written (section 17), on
-branch `ccr-98bbf05d-6dvq28`, not yet merged. Vol. 6 is planned in detail in section 16.4: start there.** Decisions in section 9;
+Status as of 2026-11-17: **Vols. 1–4 are written and deployed (PR #24 and PR #29). Vols. 5 and 6 are written (sections 17
+and 18) and deployed together. Book 3 is complete.** Decisions in section 9;
 what was built in section 10.
 
 Story facts: `docs/larder-casebook.md` (source of truth) and the public case file `/larder/`.
@@ -370,7 +370,7 @@ added to the toolkit. The story facts are in `docs/larder-casebook.md`; the Book
 | 3 · What, and By When | `project-3` | Scope (6), Schedule (3) | 15 | live (PR #29) |
 | 4 · Money and People | `project-4` | Finance (4), Resources (5) | 15 | live (PR #29; deploy run 43813764513 succeeded) |
 | 5 · People Outside, and Surprises | `project-5` | Stakeholders (7), Risk (6) | 15 | written (section 17) |
-| 6 · Making It Yours | `project-6` | tailoring, models, methods, artefacts, newer topics | 15 planned | this section |
+| 6 · Making It Yours | `project-6` | tailoring, models, methods, artefacts, newer topics | 15 | written (section 18) |
 
 After Vol. 5, all **40 processes** are covered (9 + 6 + 3 + 4 + 5 + 7 + 6). Vol. 6 adds no processes: it covers the
 guide's chapters around them (tailoring, models / methods / artefacts, the newer topics) and closes the book.
@@ -541,3 +541,21 @@ Jonas, Grace's two-year review, Ana's Ghent register).
 - Meanwhile links: register ↔ Ana's stakeholder map · abroad ↔ Grace's localisation · risk register ↔ Ana's risk register and
   Grace's pre-mortem · risk monitoring ↔ Grace's launching a new city.
 - **Next: Vol. 6, “Making It Yours”** (section 16.4). Open threads at the end of the casebook's “Book 3, Vol. 5”.
+
+## 18. Vol. 6 notes on the build (2026-11-17), and Book 3 complete
+
+- `project-6` journal, “Making It Yours”. Content in `content/project-6/01_fitting.py` (4), `02_models.py` (4),
+  `03_leading.py` (3), `04_growing.py` (4). Story: Eindhoven (27 Sep → 22 Nov 2027), then the **Cities 2028** programme
+  (Ghent 19 Jun, Haarlem 11 Sep 2028), a second PM (**Nadia**, from 7 Feb 2028), and the closing note (25 Sep 2028).
+  Facts: casebook, “Book 3, Vol. 6”; the comment block at the top of `01_fitting.py`.
+- Changed from the plan in 16.4: collections are “Fitting it to the work” (1–4), “Models, methods, artefacts” (5–8),
+  “Leading others” (9–11), “Growing” (12–15). Note 6 is the artefact review (73 pages → 18 templates).
+- **Going deeper** (4): tailoring a whole project · the playbook · AI in project work · growing as a project manager.
+- No processes; the notes use `processes=[]` (the tag then shows no process row) and are listed on the PMBOK map under
+  “The ground under it” (`FOUNDATIONS` in `content/pmbok/map.py`).
+- Sanne's mistakes: the +12-week benefit check never held · an unchecked AI-drafted status · rewriting Nadia's status ·
+  deciding on the builder's call after handing over Haarlem.
+- Fixes on the way: the map's “Still to come” paragraph now disappears when nothing is planned; `PLANNED_PROJECT` is
+  empty; the case file says “complete: 6 volumes”; project file group “Eindhoven and the 2028 programme” (`programme/`).
+- **Still open**: the six Risk process names and all process names against the guide itself; cheat sheets (PMBOK 8 on one
+  page, earned value, critical path); full ten-chapter deep dives for key items (never answered); Book 4.

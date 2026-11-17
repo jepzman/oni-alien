@@ -991,6 +991,46 @@ JOURNALS = [
             (15, "risk-monitoring", "Is the List Still True?", "doing", "Review risks on a rhythm, close the dead ones, and when one happens, move it to the issue log."),
         ],
     ),
+    dict(
+        key="project-6", vol=6, title="Making It Yours", short="making it yours",
+        series=2, book="The Project Manager's Notebook", narrator="Sanne", brand="project manager's notebook", book_no=3,
+        title_block=True, sheet_doodles="project",
+        theme="theme-project", fonts="Patrick+Hand+SC", subject="project management",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Spring term · 2030", weekdays=(1, 3), start=date(2030, 4, 2),
+        kicker="the project manager's notebook · book 3 · vol. 6",
+        story="<b>September 2027 → September 2028.</b> Antwerp opened five weeks late and taught Larder that regulators are stakeholders. Eindhoven opened eight weeks after its first page, run from the playbook with a third of Rotterdam's paperwork. In 2028 Sanne runs a programme instead of a launch: Ghent in June and Haarlem in September, eight cities by the board of 28 September. She hires a second project manager, Nadia, coaches her, and hands Haarlem to her. This last volume is about fitting the method to the work, choosing tools and documents that earn their keep, and growing: yourself, and the next person.",
+        lead="Volume 6 of <span class=\"hl\">The Project Manager's Notebook</span>, the last: the parts of the PMBOK Guide (eighth edition) around the forty processes. {n} notes in {c} collections: tailoring a whole project, the playbook, programmes and benefits; models, methods and artefacts, AI and sustainability; the PMO, servant leadership and ethics; and growing, hiring and handing over. Template cards are the <b>programme</b> pages of the project file. Four notes go further with a <b>going deeper</b> chapter: tailoring a whole project, the playbook, AI in project work, and growing as a project manager.",
+        blurb="Tailoring a whole project, the city launch playbook, programmes and portfolios, benefits realisation, models and methods, artefacts, AI in project work, sustainability, the PMO, servant leadership, ethics, growing, hiring and handing over.",
+        attrs=PROJECT_ATTRS, attrs_title="The nine project ratings", attrs_side="what a good project practice is judged on", ratings_h2="Project ratings",
+        first_law="The plan is the team's, the truth is yours, and the thing that sets your date is usually outside the room.",
+        disclaimer=PMI_NOTE, pmbok=True,
+        deep_dives={"tailoring-a-whole-project", "city-launch-playbook", "ai-in-project-work", "growing-as-a-project-manager"},
+        handmade=set(),
+        collections=[
+            ("fitting", "Fitting it to the work", "size the method, write the recipe, group the projects, check the benefits"),
+            ("models", "Models, methods, artefacts", "choose tools by the question, keep the documents that are used, use AI and think long-term"),
+            ("leading", "Leading others", "an office that helps, a colleague you coach, and the truth under pressure"),
+            ("growing", "Growing", "get better on purpose, hire well, hand over, and look back"),
+        ],
+        catalogue=[
+            (1, "tailoring-a-whole-project", "How Light Can We Go?", "fitting", "Set the whole method for one project on one page: keep, shorten, drop, and check the fit."),
+            (2, "city-launch-playbook", "Can a Launch Be a Recipe?", "fitting", "Turn repeated projects into a versioned playbook: fixed, local, a kit, and changes after every launch."),
+            (3, "programmes-and-portfolios", "One Project, or Many?", "fitting", "Run projects that share a benefit as a programme; choose what to fund as a portfolio."),
+            (4, "benefits-realisation", "Did We Get What We Paid For?", "fitting", "Check each benefit, by its owner, on dates booked before the project closes."),
+            (5, "models-and-methods", "Which Tools, When?", "models", "Choose models and methods by the question the project must answer, not by name."),
+            (6, "artefact-review", "Which Documents Earn Their Keep?", "models", "Keep the documents that were used after they were written; make the rest examples."),
+            (7, "ai-in-project-work", "Can AI Help?", "models", "Use AI for drafts, summaries and checks; check every fact, own every line, keep decisions human."),
+            (8, "sustainability-in-practice", "What Does It Leave Behind?", "models", "Decide what a project leaves running while it's still on paper, priced over its life."),
+            (9, "pmo-grown-up", "Who Helps the Project Managers Now?", "leading", "A supportive office with few mandatory rules, measured by what it makes easier."),
+            (10, "servant-leadership", "Who Serves Whom?", "leading", "Coach what's new, delegate what's known, unblock, give credit, and don't grab the pan."),
+            (11, "ethics", "What Would You Do?", "leading", "Never shade a report; offer the person under pressure a true version that helps."),
+            (12, "growing-as-a-project-manager", "How Do I Get Better at This?", "growing", "A log, feedback, a weak thing, a stretch, someone to coach, and a standard."),
+            (13, "hiring-a-project-manager", "Who Do We Hire?", "growing", "A role card, a real work sample, a scoring sheet written first, and a mixed panel."),
+            (14, "handing-over-a-programme", "Can Someone Else Run This?", "growing", "Move decision rights, tell everyone who calls, step out on a date, and stop answering."),
+            (15, "what-was-it-all-for", "What Was It All For?", "growing", "The six principles revisited: the day each one changed a decision."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
@@ -1004,12 +1044,11 @@ PLANNED_PRODUCT = [
 ]
 # Planned volumes of Series 2, book 3 (see docs/HANDOFF-project-manager.md).
 PLANNED_PROJECT = [
-    (6, "Making It Yours", "Tailoring a whole project, a launch playbook, programmes, AI in project work, benefits and growing as a project manager."),
 ]
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
     ("Jan 2027", [("↓", "Deep dives, season 2: Replication &amp; Leader Election, Sharding &amp; Partitioning, Indexes &amp; Query Plans"), ("•", "One-page printable cheat sheet per collection")]),
-    ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b>, vol. 6 (Sanne): tailoring, models and methods, programmes, AI in project work, and growing as a project manager"), ("•", "Cheat sheets: PMBOK 8 on one page, earned value, critical path")]),
+    ("Mar 2027", [("•", "Cheat sheets for Book 3: PMBOK 8 on one page, earned value, critical path")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations")]),
     ("Mid 2027", [("↓", "More deep dives: Sign-in &amp; Tokens, Observability &amp; SLOs, Rendering on the Web, Multitenancy"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
     ("Someday", [("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
@@ -1641,7 +1680,7 @@ def render_index(j):
         story_box(j),
         ('  <p class="map-link"><a href="../pmbok/index.html"><b>The PMBOK map</b>: every principle, domain and focus area of the guide, '
          'and the note that covers it →</a><br><a href="../rotterdam/index.html"><b>The project file</b>: every page from '
-         'Sanne\'s binder, Rotterdam and Antwerp, in order →</a></p>') if j.get("pmbok") else "",
+         'Sanne\'s binder, Rotterdam, Antwerp and the 2028 programme, in order →</a></p>') if j.get("pmbok") else "",
         KEY,
         '  <h2 id="index"><span class="num">✎</span>Index <span class="side">tap a note to open it</span></h2>',
         index_list(j),
@@ -1821,7 +1860,7 @@ SPINE_TITLES = {
     "architect-4": "Integration", "architect-5": "Qualities", "architect-6": "Delivery",
     "product-1": "Discovering", "product-2": "Deciding", "product-3": "Idea to Backlog",
     "product-4": "Measuring", "product-5": "Stakeholders", "product-6": "Growing",
-    "pmbok": "PMBOK Map", "project-1": "Lay of the Land", "project-2": "Start, Steer, Close", "project-3": "What, By When", "project-4": "Money and People", "project-5": "People Outside",
+    "pmbok": "PMBOK Map", "project-1": "Lay of the Land", "project-2": "Start, Steer, Close", "project-3": "What, By When", "project-4": "Money and People", "project-5": "People Outside", "project-6": "Making It Yours",
     "People Outside, and Surprises": "People &amp; Surprises",
     "Docker &amp; Kubernetes": "Docker &amp; K8s",   # cheat sheets are looked up by their full title
 }
@@ -2062,6 +2101,7 @@ def processes_block(m, link):
 PROJECT_FILE_GROUPS = [
     (("rotterdam/", "larder/"), "rotterdam", "Rotterdam", "Jan → May 2026 · vols. 1–4"),
     (("antwerp/",), "antwerp", "Antwerp", "Oct 2026 → Oct 2027 · vol. 5"),
+    (("programme/",), "programme", "Eindhoven and the 2028 programme", "Sep 2027 → Sep 2028 · vol. 6"),
 ]
 PROJECT_FILE_PREFIXES = tuple(p for g in PROJECT_FILE_GROUPS for p in g[0])
 
@@ -2101,7 +2141,7 @@ def render_project_file(loaded):
         for i, (j, num, slug, title, c) in enumerate(pages, 1))
     j = dict(theme="theme-project pmbokmap projectfile", disclaimer=PMI_NOTE)
     return "\n".join([
-        head("The Project File · Jef’s Notes", "Every page from Sanne's binder for the Rotterdam and Antwerp launches: two complete, worked sets of project documents.", 1, "Patrick+Hand+SC"),
+        head("The Project File · Jef’s Notes", "Every page from Sanne's binder: Rotterdam, Antwerp and the 2028 programme, complete, worked sets of project documents.", 1, "Patrick+Hand+SC"),
         body_open(j),
         '<a class="skip-link" href="#main">Skip to the project file</a>',
         bar(None, 1),
@@ -2109,10 +2149,10 @@ def render_project_file(loaded):
         '<article class="sheet">',
         f'  {ROUGH}',
         PROJECT_DOODLES,
-        '  <div class="page-meta"><span class="day">Rotterdam 2026 · Antwerp 2026–27</span><span class="topic">book 3 · <b>the worked example</b></span></div>',
+        '  <div class="page-meta"><span class="day">Rotterdam 2026 · Antwerp 2026–27 · programme 2028</span><span class="topic">book 3 · <b>the worked example</b></span></div>',
         '  <p class="kicker">the project manager\'s notebook · Sanne\'s binder</p>',
         '  <h1 class="cover-title"><span class="hl">The Project File</span></h1>',
-        f'  <p class="lead">Every note in <b>The Project Manager\'s Notebook</b> ends its “how” section with a page from Sanne\'s binder. Here they are together, in order: <b>{len(pages)} pages</b> so far, from two launches. <b>Rotterdam</b> (vols. 1–4) runs from its first week to its closing report; <b>Antwerp</b> (vol. 5), the first city abroad, adds the stakeholder and risk pages. Within each project the numbers carry from page to page: the budget in the charter is the budget in the status report and in the closing report. Copy any page as a starting point; each links to the note that explains it.</p>',
+        f'  <p class="lead">Every note in <b>The Project Manager\'s Notebook</b> ends its “how” section with a page from Sanne\'s binder. Here they are together, in order: <b>{len(pages)} pages</b> so far, from two launches. <b>Rotterdam</b> (vols. 1–4) runs from its first week to its closing report; <b>Antwerp</b> (vol. 5), the first city abroad, adds the stakeholder and risk pages; <b>Eindhoven and the 2028 programme</b> (vol. 6) add the pages for tailoring, the playbook, programmes and growing. Within each project the numbers carry from page to page: the budget in the charter is the budget in the status report and in the closing report. Copy any page as a starting point; each links to the note that explains it.</p>',
         f'  <ul class="drivers">{toc_groups}</ul>',
         '  <p class="map-link"><a href="../pmbok/index.html"><b>The PMBOK map</b>: where each of these pages sits in the guide →</a></p>',
         '  <h2 id="index"><span class="num">✎</span>Contents <span class="side">tap a page to jump to it</span></h2>',
@@ -2197,7 +2237,7 @@ def render_pmbok_map(loaded):
         f'  <ul class="drivers">\n{foundations}\n  </ul>',
         '  <h2 id="notes"><span class="num">6</span>Every note, by volume <span class="side">the question, and what it covers</span></h2>',
         "\n".join(vols),
-        f'  <p>Still to come:</p>\n  <ul class="drivers">{planned}</ul>',
+        f'  <p>Still to come:</p>\n  <ul class="drivers">{planned}</ul>' if planned else '',
         '  <h2 id="editions"><span class="num">7</span>If you learned an older edition <span class="side">6th → 7th → 8th</span></h2>',
         m.EDITIONS,
         '  <div class="table-scroll"><table class="maptable">\n    <thead><tr><th scope="col"></th><th scope="col">6th (2017)</th><th scope="col">7th (2021)</th>'

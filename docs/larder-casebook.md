@@ -833,3 +833,58 @@ who knew Rotterdam, with no Larder owner.
 - Open threads for Vol. 6 (tailoring, models, artefacts, growing): Eindhoven (22 Nov 2027) from playbook v4; the 2028
   programme (eight cities); which of the 73 project-file pages were used again; a second project manager; the Antwerp
   closing report (final cost vs €457k forecast) and its benefits check.
+
+## Book 3, Vol. 6: Sanne's facts (September 2027 → September 2028, tailoring, methods, growing)
+
+Vol. 6 adds no PMBOK processes; it covers tailoring, models / methods / artefacts, the newer topics and the project
+manager's growth. Template cards are the **programme** pages of the project file (`programme/01`–`15`).
+
+- **Eindhoven** tailoring sheet Mon **27 Sep 2027** (five dials; keep gates, risk register with Larder owners, store IT in
+  week 1, go / no-go; drop communications plan, separate quality review, earned value, Monday decision log; one meeting,
+  Thu 09:30; steering note every other Friday; fit check Mon 25 Oct put back a 10-minute call before go / no-go). File
+  **20 pages** (Rotterdam 58). Opened **Mon 22 Nov 2027**, eight weeks from the sheet.
+- **Artefact review** Mon **6 Dec 2027** (Sanne, Grace): 73 pages → used as is 21 · shortened 14 · merged 12 · not used 26
+  → **launch kit of 18 templates**. Nothing deleted.
+- **Playbook v4** Mon **13 Dec 2027** (Sanne + Grace merged): v1 Utrecht Apr 2027, v2 The Hague Jun, v3 Antwerp Oct, v4
+  Eindhoven; 11 pages shorter than v3 + Grace's; fixed vs local marked; v4.1 after Nadia plans Ghent (Feb); v4.2 adds a
+  sustainability line (Mar). Lessons → changes: Rotterdam 41 → 12, Antwerp 33 → 4.
+- **Programme Cities 2028** Mon **10 Jan 2028** (Sanne programme manager, sponsor Femke): Ghent, Haarlem, launch office,
+  courier renewal; lockers pilot (Ana) outside with one dependency; board every 4 weeks; benefit = eight cities and 60,000
+  orders a day by end 2028 (board plan Mon 20 Mar 2028).
+- **Rotterdam benefits check** Mon **17 Jan 2028** (Sanne's mistake: the +12-week check of Aug 2026 was never held): 500 a
+  day met (590 week 4); 90 % on time missed (86 % Sep 2026, 90 % Nov 2026, after courier wave 2 and the RTM-2 fix, I-21);
+  next city ≤ 8 weeks met (Utrecht 15 Feb → 12 Apr 2027, The Hague 8, Eindhoven 8); payback ≈ Dec 2026 forecast, Jan 2027
+  actual. Rule in v4: checks at +4 and +12 weeks by the benefit owner, booked before closing. Antwerp +12 weeks 10 Jan
+  2028, Eindhoven 14 Feb.
+- **Two-year review** Wed **12 Jan 2028** with Joost (Sanne's manager); feedback from Joost, Femke, Grace, Ana, Eli, Yara;
+  work on: outside stakeholders, letting go, programme thinking. **PMP passed Fri 21 Apr 2028**. The notebook: ~90 pages.
+- **Hiring** (role card Mon 8 Nov 2027): 34 applicants → 9 screening calls → 4 work samples (6–10 Dec; Antwerp's status
+  and issue log of 15 Jul 2027, names removed; panel Sanne, Joost, Yara; scoring sheet written 1 Dec) → offer Fri 17 Dec.
+  **Nadia** (six years opening stores for a retail chain) starts **Mon 7 Feb 2028**: one of Marco's four central hires for
+  2028.
+- **Launch office** Tue **1 Feb 2028**: supportive, one mandatory rule (gates, go / no-go); owns playbook + kit, people
+  booking, Femke's portfolio sheet, lessons; monthly peer review; kick-off → agreed plan Rotterdam ≈ 35 days, Ghent 14;
+  Ghent used 16 of 18 templates; Nadia keeps the kit from April.
+- **AI trial** 1 Feb → 10 Mar 2028 (approved assistant, Lena's rules): status 90 → 30 min; Ghent risks 23 suggested, 9
+  kept, 2 new, 1 wrong (“no permit needed”); 3 date clashes found. Sanne's mistake Fri **11 Feb**: unchecked draft said
+  “Ghent lease signed” (agreed in principle; **signed Thu 2 Mar**). Rules: approved tool; every fact checked; sender owns
+  it; say when AI drafted it.
+- **Toolbox page** Mon 14 Feb 2028 (with Nadia): tools sorted by question; Ghent uses 9.
+- **Coaching Nadia** (Sanne's mistake Fri **25 Feb**: rewrote Nadia's first Ghent status at 22:00); from Mon 28 Feb weekly
+  1:1 Tuesdays, three status questions, delegate fit-out, coach Larder and Belgium.
+- **Ghent**: pre-application meeting Tue 7 Feb; lease signed Thu 2 Mar; permit lodged Mon 13 Mar, **granted Fri 12 May**
+  (deliveries from 07:00 by design, CO₂ cooling, no objections). Sustainability (6–13 Mar; Korenwolf questionnaire
+  answered Mon 13 Mar): CO₂ cooling +€7k, ≈ €1.8k a year back; shelving reused from Zuid ≈ €5k saved; batteries back to
+  the lease supplier; food bank from week 1. G1 planned Fri 2 Jun, forecast Thu 8 Jun on Mon **22 May** (amber; Femke asked
+  for green before the investor update of Thu 25 May; Sanne gave amber with recovery: stocking 12 → 8 days, second shift
+  +€2.1k); G1 passed Wed 7 Jun; **opened Mon 19 Jun 2028**.
+- **Haarlem handover**: plan Mon 26 Jun; shadow 19–30 Jun; Nadia leads from Mon 3 Jul; **17 Jul** Nadia and Ana move the
+  opening 4 → 11 Sep (new ordering database); Sanne's mistake Wed **26 Jul** (agreed the chargers move on the builder's
+  call), fixed Fri 28 Jul (letter to every supplier); Sanne steps out Mon 7 Aug; **Haarlem opened Mon 11 Sep 2028**.
+- **Closing note** Mon **25 Sep 2028**: eight cities; ≈ 51,000 orders a day in September, on course for 60,000 by December;
+  one line for 12 Jan 2026: “the plan is the team's, the truth is yours, and the thing that sets your date is usually
+  outside the room.”
+- Meanwhile links: tailoring ↔ Ana's just-enough design; playbook ↔ Grace's launching a new city; sustainability ↔ Ana's
+  green software; servant leadership ↔ Ana's growing architects; ethics ↔ Grace's bad news; growing ↔ Grace's growing as a
+  PO; hiring ↔ Grace's hiring a PO; handover ↔ Grace's handing over and Ana's handover to operations.
+- **Book 3 is complete.** Open threads for Book 4 (Mo): Korenwolf's supplier questionnaire (Mar 2028) and the renewal.
