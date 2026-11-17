@@ -399,3 +399,16 @@ in writing."*
   Story facts used: Project Orion (billing integration, 18 months late, £2.4m over, lead #4 is Pip); 11,400 smart meters
   not reporting for 63 days on average; Grid Planning's budget cut 12% after Pip volunteered savings.
 - Next by the plan's order: Act III (The Throne Room, bad managers).
+
+## 16. Act III written (17 Nov 2026)
+
+- `content/darkside/act-3.py`: The Throne Room, 12 entries: All-Seeing Eye ★ (micromanager), Absent Lord, Seagull
+  Overlord ★, Weather Tyrant, Conflict Phantom, Credit-Taking Crown, New Lord Arrives, Ritual Circle of the 1:1,
+  Skip-Level Séance, Puppet King, Friend Who Became Your Boss, Escape Portal ★. Plates for the three flagships only
+  (`all_seeing_eye`, `seagull_overlord`, `escape_portal` in `scripts/plates.py`).
+- Story (winter 2026–27, after Act I's reorg): Pip (now level 4) reports to Victor Kraal (he/him, Head of Grid Analytics,
+  ex-consultant), under Benedict Crane (he/him, Director of Strategy, always travelling). Rupert Thorne (he/him,
+  Interim Transformation Director from the parent group) visits monthly and leaves on the 14:05 to London. Pip is
+  seconded to Gareth's Network Assets for the meter fix. Jules becomes Pip's team lead in January. In February Priya
+  offers Pip an analytics lead role in Customer Ops; **he has not decided** (pick this up in Act IV or V).
+- Deployed together with Act I.

@@ -770,12 +770,141 @@ def sacrificial_lamb():
     return p, "The Sacrificial Lamb", defs, "".join(b)
 
 
+# ================================================================ Act III plates (three only)
+def all_seeing_eye():
+    p = "ae"
+    defs = (f'<radialGradient id="{p}-scr" cx=".5" cy=".5" r=".6"><stop offset="0" stop-color="#cfe6ff" stop-opacity=".95"/><stop offset="1" stop-color="#6a8ab8"/></radialGradient>'
+            f'<radialGradient id="{p}-spill" cx=".2" cy=".6" r=".8"><stop offset="0" stop-color="#bcd6ff" stop-opacity=".45"/><stop offset="1" stop-color="#bcd6ff" stop-opacity="0"/></radialGradient>'
+            f'<radialGradient id="{p}-loupe" cx=".42" cy=".38" r=".6"><stop offset="0" stop-color="#ffd27a"/><stop offset=".3" stop-color="#ff3a1a"/><stop offset=".75" stop-color="#7a0000"/><stop offset="1" stop-color="#1a0000"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#030306"/>']
+    # the wall of webcams, each one recording
+    for r in range(3):
+        for c in range(9):
+            x, y = 40 + c * 84, 30 + r * 52
+            b.append(f'<g transform="translate({x} {y})"><rect x="-14" y="-10" width="28" height="20" rx="4" fill="#0c0c12" stroke="#1a1a24"/>'
+                     f'<circle cx="0" cy="0" r="6" fill="#020203" stroke="#2a2a38"/><circle cx="0" cy="0" r="2.6" fill="#3a5aa0" opacity=".8"/>'
+                     f'<circle cx="10" cy="-6" r="1.6" fill="#ff2a20" filter="url(#{p}-glow)"/></g>')
+    b.append(f'<rect width="{W}" height="{H}" fill="url(#{p}-spill)"/>')
+    # the monitor, Pip's work on it, the sticky note
+    b.append('<path d="M40 190 L330 200 L326 380 L46 386 Z" fill="#0a0c12"/>'
+             f'<path d="M52 202 L318 210 L314 368 L56 374 Z" fill="url(#{p}-scr)"/>'
+             '<g stroke="#4a6a9a" stroke-width="1" opacity=".55">' + "".join(f'<path d="M64 {226 + k * 16} L306 {232 + k * 16}"/>' for k in range(8)) + "</g>"
+             '<polyline points="70,350 110,330 150,338 190,300 230,306 270,270 300,262" stroke="#1a3a7a" stroke-width="3" fill="none"/>'
+             '<rect x="168" y="388" width="40" height="40" fill="#0a0c12"/>'
+             '<g transform="rotate(5 290 210)"><rect x="252" y="176" width="74" height="60" fill="#f0e070"/>'
+             + text(289, 194, "UPDATE PLS", 8.5, "#3a2a00", HAND, "middle", 'font-weight="700"') + text(289, 208, "(3rd time", 8, "#3a2a00", HAND, "middle")
+             + text(289, 220, "today) — V.", 8, "#3a2a00", HAND, "middle") + "</g>")
+    # Pip, from behind, shoulders up
+    b.append('<path d="M60 500 C70 440 120 410 180 404 C240 410 290 440 300 500 Z" fill="#040406"/><circle cx="180" cy="372" r="40" fill="#040406"/>'
+             '<path d="M140 372 a40 40 0 0 1 60 -36" stroke="#bcd6ff" stroke-width="1.6" fill="none" opacity=".55"/>'
+             '<path d="M70 470 C84 432 120 414 160 408" stroke="#bcd6ff" stroke-width="1.4" fill="none" opacity=".45"/>')
+    # Victor, leaning in over Pip's shoulder
+    b.append(suit(p, 1, 520, 192, .9, tie="#2a3a5a", jacket="#0b0b10", shirt="#5a6478", rim="#bcd6ff", rim_side="left"))
+    b.append(face(p, 1, 520, 175, .66, skin=("#0e1018", "#3c4458", "#7a86a0"), light="left", light_col="#cfe6ff", rim="#ff3a22", rim_side="right",
+                  eye="red", glow=True, brows="angry", mouth="thin", hair="slick", hair_col="#06060a", ears="human", tilt=-6))
+    # the loupe over one eye: an enormous, unblinking eye
+    b.append('<g transform="translate(520 175) rotate(-6) scale(.66)">'
+             '<path d="M-21 -8 L-60 40 L-70 36" stroke="#1a1a20" stroke-width="5" fill="none"/>'
+             '<circle cx="-21" cy="-8" r="28" fill="#cbbab2"/>'
+             '<g stroke="#b01414" stroke-width="1" fill="none" opacity=".8"><path d="M-46 -8 l10 -2 6 4 M-46 2 l12 0 M4 -10 l-10 2 M2 4 l-10 -2"/></g>'
+             '<circle cx="-21" cy="-8" r="15" fill="url(#ae-loupe)"/><ellipse cx="-21" cy="-8" rx="3" ry="12" fill="#000"/><circle cx="-26" cy="-14" r="3" fill="#fff"/>'
+             '<circle cx="-21" cy="-8" r="28" fill="none" stroke="#c9a24a" stroke-width="5"/><circle cx="-21" cy="-8" r="28" fill="#fff" opacity=".07"/>'
+             f'<circle cx="-21" cy="-8" r="18" fill="#ff2a14" opacity=".35" filter="url(#{p}-b6)"/></g>')
+    b.append(hand(p, 400, 300, .9, flip=True, rim="#ff3a22", light="#cfe6ff", claws=False, pose="point"))
+    # the notifications
+    for k, (x, y, t) in enumerate(((600, 290, "Any update?"), (612, 336, "Just checking in 🙂"), (580, 382, "Can you share your screen?"), (640, 428, "?"))):
+        b.append(f'<g opacity="{.95 - k * .12}"><rect x="{x}" y="{y}" width="{len(t) * 7 + 28}" height="30" rx="6" fill="#1c2030" stroke="#3a4a7a"/>'
+                 f'<circle cx="{x + 14}" cy="{y + 15}" r="7" fill="#5a6aa0"/>' + text(x + 26, y + 20, t, 11, "#cfd8f0") + "</g>")
+    b.append(text(740, 40, "16:02", 18, "#ff3a22", MONO, "middle", f'filter="url(#{p}-glow)"'))
+    return p, "The All-Seeing Eye", defs, "".join(b)
+
+
+def seagull_overlord():
+    p = "so"
+    defs = (f'<linearGradient id="{p}-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5a6a7a"/><stop offset="1" stop-color="#1a2028"/></linearGradient>'
+            f'<linearGradient id="{p}-wing" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9aa0aa"/><stop offset=".6" stop-color="#4a4e58"/><stop offset="1" stop-color="#14161c"/></linearGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#06070a"/>']
+    # window wall with a grey seaside sky; gulls circling
+    b.append(f'<rect x="0" y="0" width="{W}" height="230" fill="url(#{p}-sky)" opacity=".85"/>'
+             '<g stroke="#0a0c10" stroke-width="5">' + "".join(f'<path d="M{x} 0 V230"/>' for x in (130, 270, 530, 670)) + '<path d="M0 230 H800"/></g>')
+    for k, (x, y, sc) in enumerate(((90, 60, 1), (210, 110, .8), (600, 50, 1.2), (720, 120, .9), (360, 30, .7), (470, 140, .6))):
+        b.append(f'<path d="M{x - 18 * sc} {y} q{9 * sc} {-10 * sc} {18 * sc} 0 q{9 * sc} {-10 * sc} {18 * sc} 0" stroke="#e8ecf0" stroke-width="{2.4 * sc}" fill="none" opacity=".8"/>')
+    # the strategy board, decorated by the visit
+    b.append('<rect x="40" y="250" width="220" height="150" fill="#d8dcd8"/><rect x="40" y="250" width="220" height="150" fill="#000" opacity=".45"/>'
+             + text(150, 276, "LUMEN PLAN v12", 14, "#1a2a4a", FELL, "middle")
+             + '<g stroke="#1a2a4a" stroke-width="2" opacity=".7"><path d="M60 300 h80 M60 320 h120 M60 340 h60 M60 360 h140"/><path d="M60 300 l150 70" stroke="#a01818"/></g>'
+             + "".join(f'<g fill="#f4f4f0"><ellipse cx="{x}" cy="{y}" rx="{r}" ry="{r * .8}"/><path d="M{x - 2} {y} q2 {r * 2.2} 4 0z"/></g>' for x, y, r in ((120, 296, 8), (196, 330, 6), (90, 360, 5), (226, 286, 7)))
+             + text(150, 392, "(quick thoughts from Rupert)", 10, "#2a2a2a", HAND, "middle"))
+    # papers flying
+    for k in range(9):
+        x, y, r = 300 + (k * 61) % 460, 230 + (k * 47) % 200, (k * 41) % 80 - 40
+        b.append(f'<rect x="{x}" y="{y}" width="26" height="34" fill="#e8e4d8" opacity=".55" transform="rotate({r} {x} {y})"/>')
+    # Rupert, coat spread like wings, mid-swoop
+    b.append(f'<path d="M500 300 C430 270 360 220 300 230 C340 250 330 262 300 270 C340 280 336 292 306 304 C350 306 350 320 330 334 C380 330 420 330 470 350 Z" fill="url(#{p}-wing)"/>'
+             f'<path d="M600 300 C670 270 740 220 790 230 C756 250 766 262 794 270 C756 280 760 292 790 304 C748 306 748 320 768 334 C718 330 678 330 630 350 Z" fill="url(#{p}-wing)"/>'
+             '<path d="M300 230 C360 220 430 270 500 300 M790 230 C740 220 670 270 600 300" stroke="#e8ecf0" stroke-width="1.6" fill="none" opacity=".6"/>')
+    b.append(suit(p, 1, 550, 229, .82, tie="#e8b020", jacket="#16181e", shirt="#8a96a8", rim="#e8ecf0"))
+    b.append(face(p, 1, 550, 180, .66, skin=("#14161c", "#5a5e6a", "#b8bcc8"), light="left", light_col="#e8f0ff", rim="#e8ecf0", rim_side="right",
+                  eye="yellow", glow=True, brows="angry", mouth="shout", hair="slick", hair_col="#b8bcc4", ears="human"))
+    # sunglasses pushed up on his head
+    b.append('<g transform="translate(550 180) scale(.66)"><path d="M-46 -98 Q0 -112 46 -98" stroke="#0a0a0a" stroke-width="4" fill="none"/>'
+             '<ellipse cx="-22" cy="-100" rx="18" ry="9" fill="#0a0a0a"/><ellipse cx="22" cy="-100" rx="18" ry="9" fill="#0a0a0a"/>'
+             '<path d="M-30 -104 l10 -2" stroke="#fff" stroke-width="2" opacity=".5"/></g>')
+    b.append(hand(p, 650, 270, .85, rim="#e8ecf0", light="#e8f0ff", claws=False, pose="point"))
+    # flat white, and the departure board
+    b.append(table(440, "#08090c"))
+    b.append('<g transform="translate(700 392)"><path d="M0 0 L36 0 L32 46 L4 46 Z" fill="#e8e0d0"/><rect x="-2" y="-6" width="40" height="8" rx="2" fill="#3a3028"/>'
+             + text(18, 26, "FLAT", 7, "#5a3a20", FELL, "middle") + text(18, 35, "WHITE", 7, "#5a3a20", FELL, "middle") + "</g>")
+    b.append('<rect x="60" y="410" width="170" height="40" fill="#0a0a08" stroke="#2a2a20"/>' + text(145, 426, "DEPARTURES", 9, "#c8a030", MONO, "middle")
+             + text(145, 442, "14:05  LONDON  ON TIME", 10, "#ffd060", MONO, "middle", f'filter="url(#{p}-glow)"'))
+    b.append(text(400, 488, "“I've seen this work in Rotterdam.”", 13, "#e8ecf0", SERIF, "middle", 'font-style="italic" opacity=".6"'))
+    return p, "The Seagull Overlord", defs, "".join(b)
+
+
+def escape_portal():
+    p = "ep"
+    defs = (f'<radialGradient id="{p}-door" cx=".5" cy=".5" r=".6"><stop offset="0" stop-color="#fffbe8"/><stop offset=".4" stop-color="#ffe2a0"/><stop offset="1" stop-color="#ffb050"/></radialGradient>'
+            f'<linearGradient id="{p}-beam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe2a0" stop-opacity=".55"/><stop offset="1" stop-color="#ffe2a0" stop-opacity="0"/></linearGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#030204"/>']
+    # the dark throne room on the left: a desk, a crown-shaped shadow, two red eyes
+    b.append('<path d="M0 340 L260 340 L260 470 L0 470 Z" fill="#0a0708"/><rect x="40" y="250" width="140" height="90" fill="#0c0a10"/>'
+             '<path d="M70 190 L82 160 L96 182 L110 152 L124 182 L138 160 L150 190 Z" fill="#000" stroke="#3a2a10" stroke-width="1"/>'
+             '<ellipse cx="110" cy="230" rx="40" ry="46" fill="#000"/>'
+             f'<g filter="url(#{p}-glow)"><circle cx="96" cy="226" r="3.4" fill="#ff2a20"/><circle cx="124" cy="226" r="3.4" fill="#ff2a20"/></g>'
+             '<path d="M70 280 C60 330 40 380 30 470 L190 470 C180 380 160 330 150 280 Z" fill="#000"/>'
+             '<g stroke="#5a5a62" stroke-width="2" fill="none" opacity=".55"><path d="M150 330 C200 350 230 400 250 470"/><path d="M156 330 c6 4 6 10 0 14 c-6 4 -6 10 0 14 c6 4 6 10 0 14"/></g>'
+             + text(110, 140, "Victor", 13, "#7a6a6a", HAND, "middle", 'opacity=".55"'))
+    # the portal: a door blazing with light, runes on the frame
+    b.append(f'<path d="M520 470 L520 110 L680 110 L680 470" fill="#020203"/><rect x="536" y="126" width="128" height="344" fill="url(#{p}-door)" filter="url(#{p}-glow)"/>'
+             f'<path d="M536 470 L664 470 L800 500 L300 500 Z" fill="url(#{p}-beam)"/>'
+             f'<path d="M536 126 L340 500 M664 126 L800 420" stroke="#ffe2a0" stroke-width="40" opacity=".08" filter="url(#{p}-b12)"/>'
+             '<g fill="#c99a43" opacity=".8" font-family="EB Garamond, serif" font-size="12">'
+             + "".join(f'<text x="526" y="{140 + k * 28}">{c}</text>' for k, c in enumerate("ᛖᚲᛋᛁᛏᛚᛖᚨᚡᛖᚹᛖ"))
+             + "".join(f'<text x="668" y="{140 + k * 28}">{c}</text>' for k, c in enumerate("ᚷᛟᛟᛞᛞᚨᚤᛈᛚᚨᚾ")) + "</g>")
+    b.append('<rect x="560" y="70" width="80" height="28" fill="#04140a" stroke="#0a3a1a"/>' + text(600, 90, "EXIT", 18, "#5aff8a", FELL, "middle", f'filter="url(#{p}-glow)"'))
+    # Pip, from behind, walking towards it with a box of his things
+    b.append('<g transform="translate(600 474) scale(1.15)">'
+             '<path d="M-34 0 L-30 -110 C-28 -140 28 -140 30 -110 L34 0 Z" fill="#050406"/>'
+             '<circle cx="0" cy="-160" r="24" fill="#050406"/>'
+             '<path d="M24 -160 a24 24 0 0 0 -16 -22 M30 -110 L34 0" stroke="#ffe2a0" stroke-width="2" fill="none" opacity=".75"/>'
+             '<rect x="-40" y="-110" width="80" height="54" fill="#6a4a2a"/><path d="M-40 -110 L40 -110" stroke="#ffe2a0" stroke-width="1.4" opacity=".6"/>'
+             '<path d="M-20 -110 C-24 -130 -10 -140 -6 -126 C-2 -140 12 -136 6 -112" fill="#2a4a1a"/>'
+             '<rect x="14" y="-124" width="16" height="16" rx="2" fill="#d8d0c0"/>'
+             + text(0, -78, "PIP · DESK", 8, "#2a1a0a", FELL, "middle") + "</g>")
+    # the phone on the floor, still glowing
+    b.append(f'<g transform="rotate(-12 340 440)"><rect x="310" y="420" width="76" height="40" rx="6" fill="#0a0a0a"/><rect x="314" y="424" width="68" height="32" rx="4" fill="#d8eaff" filter="url(#{p}-glow)"/>'
+             + text(348, 436, "Priya:", 7, "#1a2a4a", SERIF, "middle", 'font-weight="700"') + text(348, 448, "no pressure 🙂", 7, "#1a2a4a", SERIF, "middle") + "</g>")
+    b.append(text(260, 60, "Floor 9 · 19:40", 14, "#8a7a6a", FELL, "middle", 'letter-spacing="2" opacity=".6"'))
+    return p, "The Escape Portal", defs, "".join(b)
+
+
 PLATES = {
     "meeting-lich": meeting_lich, "gaslight-wraith": gaslight_wraith, "bulldozer-ogre": bulldozer_ogre,
     "passive-aggressive-poltergeist": passive_aggressive_poltergeist, "coasting-zombie": coasting_zombie,
     "doppelganger": doppelganger, "martyr-banshee": martyr_banshee, "know-it-all-basilisk": know_it_all_basilisk,
     "doom-prophet": doom_prophet, "toxic-positivity-siren": toxic_positivity_siren, "boundary-goblin": boundary_goblin,
     "hidden-thrones": hidden_thrones, "ring-kissing-ritual": ring_kissing_ritual, "sacrificial-lamb": sacrificial_lamb,
+    "all-seeing-eye": all_seeing_eye, "seagull-overlord": seagull_overlord, "escape-portal": escape_portal,
 }
 
 
