@@ -8,6 +8,7 @@ Styles: public/assets/grimoire.css (two looks: candlelight and parchment); scrip
 (the look switch and the difficulty tabs). Plan: docs/HANDOFF-darkside.md.
 """
 import html
+import re
 import importlib.util
 from pathlib import Path
 
@@ -19,18 +20,6 @@ SERIES = "The Darkside of the Corporation"
 SUBTITLE = "A Survival Grimoire for the Cursed Employed"
 COMPANY = "MetroVolt Electric Corporation"
 
-# Survival stats (all "high = good for you"); see docs/HANDOFF-darkside.md section 5.
-STATS = [
-    ("Sanity kept", "Emotional toll. High = little toll."),
-    ("Career XP", "Visibility, skills and progress gained."),
-    ("Mana saved", "Political capital it costs. High = cheap."),
-    ("Armor", "Protects you later: paper trail, witnesses."),
-    ("Stealth", "Low drama, little visibility risk."),
-    ("Allies won", "Relationships gained, not spent."),
-    ("Soul intact", "Could you explain it to your gran?"),
-    ("Time drain", "How long it takes. High = quick."),
-    ("Backfire safety", "A failed attempt costs little."),
-]
 
 # The eight Acts. Live ones have a content file; the rest show as planned.
 ACTS = [
@@ -119,7 +108,19 @@ def load_act(n):
     mod = importlib.util.module_from_spec(spec)
     mod.__dict__["note"] = note   # the Annotator's margin note helper
     spec.loader.exec_module(mod)
-    return mod.ACT
+    act = mod.ACT
+    story = CONTENT / f"story-act-{n}.py"   # the long-form fields: sighting, origin, know, difficulty, mirror, rehearsal
+    if story.exists():
+        sspec = importlib.util.spec_from_file_location(f"darkside_story_{n}", story)
+        smod = importlib.util.module_from_spec(sspec)
+        smod.__dict__["note"] = note
+        sspec.loader.exec_module(smod)
+        for e in act["entries"]:
+            e.update(smod.STORY.get(e["slug"], {}))
+    missing = [e["slug"] for e in act["entries"] if not all(k in e for k in ("sighting", "know", "difficulty", "mirror", "rehearsal"))]
+    if missing:
+        raise SystemExit(f"[darkside] act {n}: story fields missing for {', '.join(missing)}")
+    return act
 
 
 # ---------------------------------------------------------------- page frame
@@ -201,15 +202,48 @@ def render_entry(act, i, e):
         f'<button type="button" role="tab" id="d-{k}" aria-controls="dp-{k}" aria-selected="{"true" if k == "normal" else "false"}"'
         f' tabindex="{0 if k == "normal" else -1}" class="dt dt-{k}">{label}</button>'
         for k, label in (("normal", "Normal"), ("nightmare", "Nightmare"), ("hell", "Hell")))
+    def diff_body(d):
+        """Old format: one paragraph. New format: dict(who=, know=[], do=[], avoid=, next=)."""
+        if isinstance(d, str):
+            return f"<p>{d}</p>"
+        li = lambda xs: "".join(f"<li>{x}</li>" for x in xs)
+        return (f'<p class="dp-who">{d["who"]}</p>'
+                f'<div class="dp-grid"><div><h4>You’ll know it’s this level when</h4><ul>{li(d["know"])}</ul></div>'
+                f'<div><h4>Do</h4><ol>{li(d["do"])}</ol></div></div>'
+                f'<p class="dp-avoid"><b>Don’t:</b> {d["avoid"]}</p>'
+                + (f'<p class="dp-next"><b>If it gets worse:</b> {d["next"]}</p>' if d.get("next") else ""))
     panels = "".join(
         f'<div class="dp dp-{k}" role="tabpanel" id="dp-{k}" aria-labelledby="d-{k}"{"" if k == "normal" else " data-hide"}>'
-        f'<p class="dp-h">{label}</p><p>{diff[k]}</p></div>'
+        f'<p class="dp-h">{label}</p>{diff_body(diff[k])}</div>'
         for k, label in (("normal", "Normal"), ("nightmare", "Nightmare"), ("hell", "Hell")))
-    stats = "".join(
-        f'<li><span class="sn" title="{esc(m)}">{name}</span><span class="pips" aria-label="{v} of 5">'
-        + "".join(f'<i class="{"on" if p < v else "off"}"></i>' for p in range(5)) + f'</span><span class="sv">{v}</span></li>'
-        for (name, m), v in zip(STATS, e["stats"]))
-    loot_name, loot_desc, loot_body = e["loot"]
+    origin_html = ""
+    if e.get("origin"):
+        o = e["origin"]
+        beats = "".join(f'<li><span class="ob-when">{w}</span><p>{t}</p></li>' for w, t in o["beats"])
+        origin_html = (f'<section class="sec" id="origin"><h2><span class="rn">II</span>Origin</h2>\n  {thorns(10)}\n'
+                       f'  <div class="origin"><p class="origin-h"><span>flashback</span>{o["title"]}</p><ol class="origin-beats">{beats}</ol>'
+                       f'<p class="origin-turn"><b>The turning point.</b> {o["turning"]}</p>'
+                       f'<p class="origin-saved"><b>What might have saved them.</b> {o["saved"]}</p></div>\n'
+                       + (f'  {note(o["note"])}\n' if o.get("note") else "") + '  </section>\n')
+    mirror_title = e["mirror"].get("title", "Are you the creature?")
+    mirror = "".join(f"<li>{OMEN_EYE}<span>{m}</span></li>" for m in e["mirror"]["signs"])
+    lines = "".join(
+        (f'<p class="dir">{t}</p>' if who == "" else f'<p class="ln"><b>{who}</b><span>{t}</span></p>')
+        for who, t in e["rehearsal"]["lines"])
+    tail = f'''<section class="sec" id="mirror"><h2><span class="rn">VII</span>{mirror_title}</h2>
+  {thorns(7)}
+  <p class="lede">{e["mirror"]["intro"]}</p>
+  <ul class="omens mirror">{mirror}</ul>
+  <p class="mirror-cure"><b>The cure, if you ticked two:</b> {e["mirror"]["cure"]}</p>
+  </section>
+
+  <section class="sec" id="rehearsal"><h2><span class="rn">VIII</span>The rehearsal</h2>
+  {thorns(8)}
+  <p class="lede">{e["rehearsal"]["intro"]}</p>
+  <div class="script"><p class="script-h">{e["rehearsal"]["title"]}</p>{lines}</div>
+  {note(e["rehearsal"]["note"]) if e["rehearsal"].get("note") else ""}
+  </section>'''
+
     trial = "".join(f"<details><summary>{q}</summary><p>{a}</p></details>" for q, a in e["trial"])
     prev = entries[i - 1] if i > 0 else None
     nxt = entries[i + 1] if i + 1 < len(entries) else None
@@ -240,6 +274,7 @@ def render_entry(act, i, e):
   {e["sighting"]}
   </section>
 
+  {origin_html}
   <section class="sec" id="know"><h2><span class="rn">II</span>Know thy enemy</h2>
   {thorns(2)}
   {e["know"]}
@@ -268,17 +303,7 @@ def render_entry(act, i, e):
   <div class="diff" data-diff><div class="dtabs" role="tablist" aria-label="Difficulty">{tabs}</div>{panels}</div>
   </section>
 
-  <section class="sec" id="stats"><h2><span class="rn">VII</span>Survival stats</h2>
-  {thorns(7)}
-  <p class="lede">For the counter-spell <b>{e["stats_for"]}</b>. All stats: high = good for you.</p>
-  <ul class="stats">{stats}</ul>
-  </section>
-
-  <section class="sec" id="loot"><h2><span class="rn">VIII</span>Loot drop</h2>
-  {thorns(8)}
-  <div class="loot"><p class="loot-h"><span class="chest" aria-hidden="true">⚿</span><b>{loot_name}</b></p><p>{loot_desc}</p>
-  <pre>{esc(loot_body.strip(chr(10)))}</pre></div>
-  </section>
+  {tail}
 
   <section class="sec" id="trial"><h2><span class="rn">IX</span>The trial</h2>
   {thorns(9)}
@@ -288,6 +313,8 @@ def render_entry(act, i, e):
   </section>
   {pager}
 </article>'''
+    order = iter(["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"])
+    body = re.sub(r'<span class="rn">[IVX]+</span>', lambda m: f'<span class="rn">{next(order)}</span>', body)
     crumb = (f'<a href="../index.html">Grimoire</a><span>›</span><a href="index.html">Act {ROMAN[act["no"]]}</a>'
              f'<span>›</span><b>{e["name"]}</b>')
     return page(f'{e["name"]} · {SERIES}', e["summary"], 2, body, crumb)
@@ -319,10 +346,12 @@ def render_act(act):
   <ul class="cast">{cast}</ul>
   <h2 class="plain">How to read an entry</h2>
   <ol class="howto">
-    <li><b>A sighting</b>: the creature in the wild, at {COMPANY}.</li>
-    <li><b>Know thy enemy</b>: why it behaves like this. Most monsters are just scared people with calendars.</li>
+    <li><b>A sighting</b>: the creature in the wild, at {COMPANY}, scene by scene.</li>
+    <li><b>Origin</b>: how it came to be. Most monsters were bitten once, and the company rewarded what happened next.</li>
+    <li><b>Know thy enemy</b>: what it wants, why it thrives, what it fears, and its three breeds.</li>
     <li><b>Signs and omens</b>, <b>counter-spells</b> (with the exact words: the <i>incantation</i>) and the <b>forbidden spells</b> you must not cast.</li>
-    <li><b>Difficulty</b> (Normal, Nightmare, Hell), <b>survival stats</b>, a <b>loot drop</b> to copy, and <b>the trial</b>.</li>
+    <li><b>Difficulty</b> (Normal, Nightmare, Hell): how to tell which you're facing, and what to do at each.</li>
+    <li><b>Are you the creature?</b> A mirror. Then <b>the rehearsal</b> (the counter-spells, said out loud) and <b>the trial</b>.</li>
   </ol>
 </article>'''
     crumb = f'<a href="../index.html">Grimoire</a><span>›</span><b>Act {ROMAN[act["no"]]}</b>'

@@ -412,3 +412,32 @@ in writing."*
   seconded to Gareth's Network Assets for the meter fix. Jules becomes Pip's team lead in January. In February Priya
   offers Pip an analytics lead role in Customer Ops; **he has not decided** (pick this up in Act IV or V).
 - Deployed together with Act I.
+
+## 17. Entry format v2 (draft on the Credit Vampire, 17 Nov 2026; awaiting owner sign-off to apply to all 36)
+
+Owner asked to remove survival stats and loot, expand sighting / know thy enemy / difficulty, and add an origin story.
+An entry is "v2" when it has a `mirror` field; the renderer then drops stats and loot and numbers sections automatically.
+Sections: I A sighting (time-stamped beats: `<p class="beat"><span>…</span></p>`) · II Origin (`origin=dict(title, beats=[(when, html)], turning, saved, note)`)
+· III Know thy enemy (`<h3 class="kh">` What it wants / Why it thrives here / What it fears / The three breeds `.breeds`)
+· IV Signs and omens · V Counter-spells · VI Forbidden spells
+· VII Difficulty (`difficulty=dict(normal=dict(who, know=[], do=[], avoid, next), nightmare=…, hell=…)`)
+· VIII Are you the creature? (`mirror=dict(intro, signs=[], cure)`) · IX The rehearsal (`rehearsal=dict(title, intro, lines=[(speaker or "", text)], note)`)
+· X The trial. New cast: Clive (he/him), Dorian's manager in 2017–18, who presented Dorian's winter model as his own.
+
+## 18. Format v2 applied to all 36 entries (17 Nov 2026)
+
+- Owner approved the draft and asked to apply it everywhere. Survival stats and loot drops are gone from every entry
+  (and from `grimoire.py`: `STATS` removed; the template only knows v2).
+- **Where the text lives now:** `content/darkside/act-N.py` keeps the short fields (name, epithet, threat, habitat,
+  weakness, sigil, ring, scrawl, summary, omens, counters, forbidden, trial, last_word, plate_caption).
+  `content/darkside/story-act-N.py` holds the long-form fields per slug (`STORY = {slug: dict(sighting, origin, know,
+  difficulty, mirror, rehearsal)}`), with a `beat(when)` helper for the time-stamped sighting scenes. The loader merges
+  them and stops the build if any entry is missing a story field.
+- `mirror` takes an optional `title` (Act I and III use “Are you on the map?”, “Are you the Eye?” etc.).
+- Section numbers are assigned automatically in order: I sighting · II origin · III know · IV omens · V counters ·
+  VI forbidden · VII difficulty · VIII mirror · IX rehearsal · X trial.
+- Origins added to the cast and story: Clive (Dorian's 2018 manager); the 2009 blackout (Morag, Terrence, Gareth);
+  the 2011 transformer winter (Lionel); the 2013 Kessler board incident; the 2014 alarm storm; the 2017 layoffs read in
+  the press; the 2019 arrival of Dame Helena and Ottoline; the 2020 reorg leak; the 2021 restructure (separate targets);
+  the 2023 Strategy consultancy scandal (approvals centralised); Benedict's 2024 open-door policy; the Annotator left
+  MetroVolt in March 2023 after a resignation on a bad Tuesday. Keep later Acts consistent with these.
