@@ -369,3 +369,19 @@ in writing."*
   (e.g. `cv-`) so plates never clash. Done: Credit Vampire. To do: the other 11, after the owner signs off the style.
 - Limit: hand-drawn SVG, not photo-realistic. If photo-realism is wanted, the owner could generate images
   elsewhere from prompts we write and drop them in as `<slug>.webp`.
+
+## 14. Act II complete: all 12 plates (17 Nov 2026)
+
+- Owner chose option 1 (painted SVG plates, no image generator). The Credit Vampire is hand-made
+  (`content/darkside/art/credit-vampire.svg`); the other 11 are painted by `scripts/plates.py` (run it by hand:
+  `python3 scripts/plates.py`, then the normal build). It shares one toolkit so every plate matches: `face()`
+  (a lit, textured head: light from below/above/left/right, rim light, iris colours, brows, mouths, hair, ears,
+  extras such as tusks, glasses, rot, wrinkles), `suit()`, `blouse()`, `hand()`, `window()`, `badge()`, `mug()`,
+  and the grade (vignette + grain). Place a body with `body_y = face_y + 85*face_s - 43*body_s` so heads sit on necks.
+- The Act contents page is now an illustrated bestiary: one card per creature with its plate, number, epithet and threat.
+- Scenes (serious face, joke in the props): Lich at meeting #112 with “AGENDA: TBD”; Wraith in the lift on floor 13 with
+  a gas lamp and a shredded sticky note; Ogre with a crushed talking stick under “MY PLAN!!!”; Poltergeist in the office
+  kitchen with “PER MY LAST EMAIL” mugs; Zombie at 15% since 4 March; Doppelgänger with buns, and a knife in the
+  reflection; Banshee at 23:58 with 412 unread; Basilisk with glasses and Pip turned to stone; Prophet in the alarm-red
+  control room with the 2014 incident report; Siren under GOOD VIBES ONLY as the office floods; Goblin at the foot of the bed.
+- Next: Act I (The Court of Whispers), same format, plates from the same toolkit.

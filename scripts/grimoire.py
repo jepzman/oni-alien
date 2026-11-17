@@ -43,7 +43,7 @@ ACTS = [
     (7, "The New Plagues", "The modern workplace", "Return-to-office decrees, the green dot of doom, the AI replacement prophecy and the cult of family."),
     (8, "The Inner Sanctum", "Keeping your soul", "Burnout, boundaries, the dark pact and knowing when to leave the dungeon."),
 ]
-ROMAN = {1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI", 7: "VII", 8: "VIII"}
+ROMAN = {1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI", 7: "VII", 8: "VIII", 9: "IX", 10: "X", 11: "XI", 12: "XII"}
 
 FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com">\n'
          '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
@@ -295,11 +295,15 @@ def render_entry(act, i, e):
 
 # ---------------------------------------------------------------- an Act's contents
 def render_act(act):
+    def thumb(e):
+        f = ART / f"{e['slug']}.svg"
+        art = f.read_text(encoding="utf-8") if f.exists() else f'<span class="seal seal-sm" aria-hidden="true"><span>{e["sigil"]}</span></span>'
+        return f'<span class="card-art" aria-hidden="true">{art}</span>'
     rows = "".join(
-        f'<li><a href="{e["slug"]}.html"><span class="seal seal-sm" aria-hidden="true"><span>{e["sigil"]}</span></span>'
-        f'<span class="row-t"><b>{e["name"]}{" ★" if e.get("flagship") else ""}</b><small>{e["epithet"]}</small></span>'
-        f'<span class="row-m">{skulls(e["threat"])}<small>{e["habitat"]}</small></span></a></li>'
-        for e in act["entries"])
+        f'<li><a href="{e["slug"]}.html">{thumb(e)}'
+        f'<span class="card-t"><small class="card-n">{ROMAN.get(i, i)}</small><b>{e["name"]}{" ★" if e.get("flagship") else ""}</b>'
+        f'<i>{e["epithet"]}</i></span><span class="card-m">{skulls(e["threat"])}</span></a></li>'
+        for i, e in enumerate(act["entries"], 1))
     cast = "".join(f'<li><b>{name}</b> <i>({pron})</i> {who}</li>' for name, pron, who in act["cast"])
     body = f'''<article class="leaf">
   {CORNERS}
@@ -308,7 +312,7 @@ def render_act(act):
   <p class="epithet">{act["sub"]}</p>
   {act["intro"]}
   <h2 class="plain">The creatures <small>{len(act["entries"])} entries · ★ flagship</small></h2>
-  <ul class="bestiary">{rows}</ul>
+  <ul class="bestiary-cards">{rows}</ul>
   <h2 class="plain">The souls you will meet</h2>
   <ul class="cast">{cast}</ul>
   <h2 class="plain">How to read an entry</h2>
