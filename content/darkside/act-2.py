@@ -136,8 +136,21 @@ you're not in.</p>
                     avoid="Sabotage, or going quiet. Both make you smaller; neither makes them smaller.",
                     next="If it's affecting your pay or promotion, raise it formally with HR, with your record."),
             ),
+            origin=dict(
+                title="How a junior analyst became the Credit Vampire",
+                beats=[
+                    ("2017 · floor 4, Grid Planning", "Dorian is 24, a junior analyst, and good at it. In his own time he builds MetroVolt's first proper winter-peak model. It's clever. He's proud of it. He shows his mum."),
+                    ("March 2018 · the leadership off-site", "His manager, Clive, presents it to the board as <i>“my winter model”</i>. Dorian isn't invited. He hears about it in the lift. He goes to the bathroom on floor 4 and stares at the hand dryer for some time."),
+                    ("Autumn 2018 · Clive's promotion drinks", "Clive becomes Head of Department. In his speech he thanks “the whole team”. Dorian, holding a warm prosecco, learns the only lesson MetroVolt has taught him so far: <b>the person who presents is the person who rises</b>."),
+                    ("2020 · a move to Strategy", "Dorian moves to a team that builds nothing and presents everything. He is extremely good at it. Two promotions in three years. Nobody asks where the slides come from."),
+                    ("2025 · the hunger", "Dorian hasn't built a model in six years. Lord Varnish wants “fresh thinking” every quarter. Dorian has none left of his own. The juniors on floor 9 do. He starts buying two coffees."),
+                ],
+                turning="The day he stopped building and started carrying. Nobody punished it. Everybody rewarded it.",
+                saved="One sentence from Clive in 2018 (“Dorian built this”) might have done it. So might a company that celebrated builders as loudly as presenters. And it's not too late: Vampires who are named generously in daylight sometimes start naming others.",
+                note="Every Vampire was once bitten. That explains them. It doesn't excuse them. Both are true, and you need both to deal with one.",
+            ),
             mirror=dict(
-                intro="Every Vampire was once bitten. Before you hunt one, check your own teeth. Tick honestly.",
+                intro="Before you hunt a Vampire, check your own teeth. Tick honestly.",
                 signs=["You've said “I” in a presentation about work that three people did.",
                        "You've forwarded someone's analysis upwards without their name on it.",
                        "You describe your team's results as “my” results in your review.",

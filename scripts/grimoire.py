@@ -8,6 +8,7 @@ Styles: public/assets/grimoire.css (two looks: candlelight and parchment); scrip
 (the look switch and the difficulty tabs). Plan: docs/HANDOFF-darkside.md.
 """
 import html
+import re
 import importlib.util
 from pathlib import Path
 
@@ -216,6 +217,15 @@ def render_entry(act, i, e):
         f'<p class="dp-h">{label}</p>{diff_body(diff[k])}</div>'
         for k, label in (("normal", "Normal"), ("nightmare", "Nightmare"), ("hell", "Hell")))
     v2 = "mirror" in e   # the new format: no stats or loot; a mirror and a rehearsal instead
+    origin_html = ""
+    if e.get("origin"):
+        o = e["origin"]
+        beats = "".join(f'<li><span class="ob-when">{w}</span><p>{t}</p></li>' for w, t in o["beats"])
+        origin_html = (f'<section class="sec" id="origin"><h2><span class="rn">II</span>Origin</h2>\n  {thorns(10)}\n'
+                       f'  <div class="origin"><p class="origin-h"><span>flashback</span>{o["title"]}</p><ol class="origin-beats">{beats}</ol>'
+                       f'<p class="origin-turn"><b>The turning point.</b> {o["turning"]}</p>'
+                       f'<p class="origin-saved"><b>What might have saved them.</b> {o["saved"]}</p></div>\n'
+                       + (f'  {note(o["note"])}\n' if o.get("note") else "") + '  </section>\n')
     stats = "" if v2 else "".join(
         f'<li><span class="sn" title="{esc(m)}">{name}</span><span class="pips" aria-label="{v} of 5">'
         + "".join(f'<i class="{"on" if p < v else "off"}"></i>' for p in range(5)) + f'</span><span class="sv">{v}</span></li>'
@@ -271,6 +281,7 @@ def render_entry(act, i, e):
   {e["sighting"]}
   </section>
 
+  {origin_html}
   <section class="sec" id="know"><h2><span class="rn">II</span>Know thy enemy</h2>
   {thorns(2)}
   {e["know"]}
@@ -319,6 +330,8 @@ def render_entry(act, i, e):
   </section>
   {pager}
 </article>'''
+    order = iter(["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"])
+    body = re.sub(r'<span class="rn">[IVX]+</span>', lambda m: f'<span class="rn">{next(order)}</span>', body)
     crumb = (f'<a href="../index.html">Grimoire</a><span>›</span><a href="index.html">Act {ROMAN[act["no"]]}</a>'
              f'<span>›</span><b>{e["name"]}</b>')
     return page(f'{e["name"]} · {SERIES}', e["summary"], 2, body, crumb)

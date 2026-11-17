@@ -412,3 +412,14 @@ in writing."*
   seconded to Gareth's Network Assets for the meter fix. Jules becomes Pip's team lead in January. In February Priya
   offers Pip an analytics lead role in Customer Ops; **he has not decided** (pick this up in Act IV or V).
 - Deployed together with Act I.
+
+## 17. Entry format v2 (draft on the Credit Vampire, 17 Nov 2026; awaiting owner sign-off to apply to all 36)
+
+Owner asked to remove survival stats and loot, expand sighting / know thy enemy / difficulty, and add an origin story.
+An entry is "v2" when it has a `mirror` field; the renderer then drops stats and loot and numbers sections automatically.
+Sections: I A sighting (time-stamped beats: `<p class="beat"><span>…</span></p>`) · II Origin (`origin=dict(title, beats=[(when, html)], turning, saved, note)`)
+· III Know thy enemy (`<h3 class="kh">` What it wants / Why it thrives here / What it fears / The three breeds `.breeds`)
+· IV Signs and omens · V Counter-spells · VI Forbidden spells
+· VII Difficulty (`difficulty=dict(normal=dict(who, know=[], do=[], avoid, next), nightmare=…, hell=…)`)
+· VIII Are you the creature? (`mirror=dict(intro, signs=[], cure)`) · IX The rehearsal (`rehearsal=dict(title, intro, lines=[(speaker or "", text)], note)`)
+· X The trial. New cast: Clive (he/him), Dorian's manager in 2017–18, who presented Dorian's winter model as his own.
