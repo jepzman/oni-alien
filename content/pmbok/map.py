@@ -32,9 +32,9 @@ DOMAINS = [
     ("scope", "Scope", "What will we deliver, and what not?", 6, '<a href="../project-3/index.html">Vol. 3</a>'),
     ("schedule", "Schedule", "By when?", 3, '<a href="../project-3/index.html">Vol. 3</a>'),
     ("finance", "Finance", "For how much, and is the money there when we need it?", 4, '<a href="../project-4/index.html">Vol. 4</a>'),
-    ("stakeholders", "Stakeholders", "Who is affected, and what do they need from us?", 7, "Vol. 5"),
+    ("stakeholders", "Stakeholders", "Who is affected, and what do they need from us?", 7, '<a href="../project-5/index.html">Vol. 5</a>'),
     ("resources", "Resources", "Which people and things do we need, and how do we lead the team?", 5, '<a href="../project-4/index.html">Vol. 4</a>'),
-    ("risk", "Risk", "What could go wrong, or better than planned, and what do we do about it?", 6, "Vol. 5"),
+    ("risk", "Risk", "What could go wrong, or better than planned, and what do we do about it?", 6, '<a href="../project-5/index.html">Vol. 5</a>'),
 ]
 DOMAINS_NOTE = ('  <p>The domains are explained together in <a href="../project-1/notes/performance-domains.html">What Must I Keep an Eye On?</a>. '
                 'Each one then gets its own volume, where every one of its processes is covered and listed here by name.</p>')
@@ -43,6 +43,7 @@ DOMAINS_NOTE = ('  <p>The domains are explained together in <a href="../project-
 P2 = "project-2"
 P3 = "project-3"
 P4 = "project-4"
+P5 = "project-5"
 PROCESSES = [
     ("governance", [
         ("Initiate Project or Phase", "initiating", "Agree that the project, or its next phase, should start: why, for what benefit, who is behind it.",
@@ -97,6 +98,22 @@ PROCESSES = [
         ("Monitor and Control Finances", "monitoring and controlling", "Compare committed, spent and earned with the plan; forecast the final cost; check the value it brings.",
          [(P4, "committed-and-spent"), (P4, "earned-value"), (P4, "cost-forecasting"), (P4, "payback")]),
     ]),
+    ("stakeholders", [
+        ("Identify Stakeholders", "initiating", "Find everyone the project affects or who can affect it, from more than one source, and record what each one needs and can do.",
+         [(P5, "stakeholder-register"), (P5, "stakeholders-abroad")]),
+        ("Plan Stakeholder Engagement", "planning", "Decide how much attention each stakeholder needs, where they are now and where the project needs them, and what to do about the gaps.",
+         [(P5, "power-and-interest"), (P5, "stakeholders-abroad")]),
+        ("Plan Communications Management", "planning", "Decide who hears what, how, how often, in which language and from whom.",
+         [(P5, "communications-plan")]),
+        ("Manage Stakeholder Engagement", "executing", "Work with stakeholders early, keep the promises made to them, and set honest expectations.",
+         [(P5, "managing-expectations")]),
+        ("Manage Communications", "executing", "Send information so it is received and understood; run meetings that end in shared, written decisions.",
+         [(P5, "meetings-that-work")]),
+        ("Monitor Stakeholder Engagement", "monitoring and controlling", "Re-score stakeholders regularly from evidence, and change the approach when one slips.",
+         [(P5, "monitoring-engagement")]),
+        ("Monitor Communications", "monitoring and controlling", "Check that messages were read and understood, and fix the ones that weren't.",
+         [(P5, "monitoring-engagement")]),
+    ]),
     ("resources", [
         ("Plan Resource Management", "planning", "Decide who does what, how people and equipment will be found, trained, looked after and released.",
          [(P4, "raci")]),
@@ -108,6 +125,20 @@ PROCESSES = [
          [(P4, "leading-without-authority"), (P4, "team-conflict")]),
         ("Monitor and Control Resourcing", "monitoring and controlling", "Check that people and things are available as planned; level overloads; act on shortfalls.",
          [(P4, "resource-levelling"), (P4, "monitoring-resources")]),
+    ]),
+    ("risk", [
+        ("Plan Risk Management", "planning", "Agree the sponsor's appetite, the thresholds, the scales, the owners and the rhythm before listing risks.",
+         [(P5, "risk-approach")]),
+        ("Identify Risks", "planning", "Find threats and opportunities, write each as cause, event and effect, and record them with owners in the register.",
+         [(P5, "risk-register")]),
+        ("Analyze Risks", "planning", "Rank risks by probability and impact; put money and dates on the big ones (expected value, simulation) and size the reserves.",
+         [(P5, "probability-and-impact"), (P5, "expected-monetary-value"), (P5, "monte-carlo")]),
+        ("Plan Risk Responses", "planning", "Choose what to do about each important threat or opportunity, check it's worth its cost, and set triggers.",
+         [(P5, "risk-responses")]),
+        ("Implement Risk Responses", "executing", "Carry the responses out as planned work, with owners inside the organisation and triggers someone watches.",
+         [(P5, "implementing-responses")]),
+        ("Monitor Risks", "monitoring and controlling", "Review risks on a rhythm, close them, and move those that happen to the issue log.",
+         [(P5, "risk-monitoring")]),
     ]),
 ]
 PROCESSES_NOTE = ('  <p class="aside">process names as listed in public summaries of the eighth edition; check the exact wording against your '
@@ -131,6 +162,18 @@ FOUNDATIONS = [
     ("The seven performance domains", ("project-1", "performance-domains")),
     ("Tailoring", ("project-1", "tailoring")),
     ("The project management office (PMO)", ("project-1", "pmo")),
+    ("Tailoring a whole project", ("project-6", "tailoring-a-whole-project")),
+    ("A repeatable method: the playbook", ("project-6", "city-launch-playbook")),
+    ("Projects, programmes and portfolios", ("project-6", "programmes-and-portfolios")),
+    ("Benefits realisation", ("project-6", "benefits-realisation")),
+    ("Models and methods: choosing among them", ("project-6", "models-and-methods")),
+    ("Artifacts: which documents earn their keep", ("project-6", "artefact-review")),
+    ("AI in project work (a newer topic)", ("project-6", "ai-in-project-work")),
+    ("Sustainability in practice", ("project-6", "sustainability-in-practice")),
+    ("The PMO grown up", ("project-6", "pmo-grown-up")),
+    ("Servant leadership and coaching", ("project-6", "servant-leadership")),
+    ("Ethics and professional conduct", ("project-6", "ethics")),
+    ("Growing as a project manager; certification", ("project-6", "growing-as-a-project-manager")),
 ]
 
 EDITIONS = """  <p>Most courses and many colleagues still speak sixth or seventh edition. The ideas are the same; the shelves they sit on moved.
