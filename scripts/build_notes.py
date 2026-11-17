@@ -952,6 +952,86 @@ JOURNALS = [
             (15, "monitoring-resources", "Are the People and Things Still There?", "people-lead", "Check every day that the people, equipment and suppliers the plan needs are actually available."),
         ],
     ),
+    dict(
+        key="project-5", vol=5, title="People Outside, and Surprises", short="people outside, and surprises",
+        series=2, book="The Project Manager's Notebook", narrator="Sanne", brand="project manager's notebook", book_no=3,
+        title_block=True, sheet_doodles="project",
+        theme="theme-project", fonts="Patrick+Hand+SC", subject="project management",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Winter term · 2030", weekdays=(1, 3), start=date(2030, 1, 8),
+        kicker="the project manager's notebook · book 3 · vol. 5",
+        story="<b>October 2026 → October 2027: Antwerp.</b> Rotterdam opened on time and on budget, and Utrecht and The Hague open in 2027 from its playbook. Antwerp is different: <b>the first city abroad</b>, with Belgian rules, Flemish and French, a city permit office, a food-safety agency and a street of forty-six houses behind the loading yard. Sanne planned it for Monday 13 September 2027. It opened on <b>Monday 18 October</b>, five weeks late, and the reason had been on her risk register since November, rated low, with no owner. This volume is how that happened, and everything else that went right around it.",
+        lead="Volume 5 of <span class=\"hl\">The Project Manager's Notebook</span>: the <b>Stakeholders</b> and <b>Risk</b> domains of the PMBOK Guide (eighth edition), all thirteen of their processes. {n} notes in {c} collections: finding everyone the project touches, working abroad, finding and sizing what could happen, and doing something about it. The worked example is the Antwerp launch, and every template card is a page of its <b>project file</b>. Four notes go further with a <b>going deeper</b> chapter: the engagement matrix, the risk register, simulation, and risk responses.",
+        blurb="The Stakeholders and Risk domains: the stakeholder register, power and interest, the communications plan, managing expectations, meetings, stakeholders abroad, the risk register, probability and impact, expected monetary value, Monte Carlo simulation, risk responses, and risks becoming issues.",
+        attrs=PROJECT_ATTRS, attrs_title="The nine project ratings", attrs_side="what a good project practice is judged on", ratings_h2="Project ratings",
+        first_law="The people outside the project and the things that might happen to it are the same list seen twice. Whoever can stop you is a stakeholder and a risk: give them both an owner.",
+        disclaimer=PMI_NOTE, pmbok=True,
+        deep_dives={"power-and-interest", "risk-register", "monte-carlo", "risk-responses"},
+        handmade=set(),
+        collections=[
+            ("involved", "Who's involved?", "find everyone the project touches, and decide how much of you each one needs"),
+            ("abroad", "Abroad", "new rules, a new language, and knowing whether people are still with you"),
+            ("could-happen", "What could happen?", "plan for risk, list it, and size it in days and euros"),
+            ("doing", "Doing something about it", "choose responses, carry them out, and keep the list true"),
+        ],
+        catalogue=[
+            (1, "stakeholder-register", "Who Cares About This?", "involved", "Find everyone the project affects or who can affect it, from more than one source, and write down what each one needs."),
+            (2, "power-and-interest", "Who Matters Most, and How Much?", "involved", "Place stakeholders by power and interest, mark where they are and where you need them, and act on the gaps."),
+            (3, "communications-plan", "Who Hears What, and When?", "involved", "One table: what each audience needs, how, how often, in which language and from whom."),
+            (4, "managing-expectations", "How Do We Keep Them With Us?", "involved", "Meet people early, promise only what you control, and turn every concern into something the plan can see."),
+            (5, "meetings-that-work", "Are We Being Understood?", "abroad", "A meeting is only finished when everyone leaves with the same decisions, in writing, in their language."),
+            (6, "stakeholders-abroad", "Different Country, Different Rules", "abroad", "A new country brings new regulators, new laws and new habits. Map them with someone local, early."),
+            (7, "monitoring-engagement", "Are They Still With Us?", "abroad", "Re-score every key stakeholder each month, from what they say and do, not from what you hope."),
+            (8, "risk-approach", "How Will We Handle Risk?", "could-happen", "Agree, before listing risks, how much risk the sponsor will take, the scales, the owners and the rhythm."),
+            (9, "risk-register", "What Could Happen?", "could-happen", "Write each risk as cause, event and effect, with an owner and a response, and include the good surprises."),
+            (10, "probability-and-impact", "How Likely, and How Bad?", "could-happen", "Score each risk on scales everyone agreed, and re-score it whenever someone who knows more speaks up."),
+            (11, "expected-monetary-value", "What Is It Worth?", "could-happen", "Put a likely cost on each risk, add them up, and size the contingency and the management reserve from it."),
+            (12, "monte-carlo", "What If We Ran It a Thousand Times?", "could-happen", "Run the plan a thousand times with its uncertainties and read the date off as odds, not a single day."),
+            (13, "risk-responses", "What Do We Do About It?", "doing", "Avoid, transfer, mitigate or accept a threat; exploit, enhance, share or accept an opportunity; escalate what isn't yours."),
+            (14, "implementing-responses", "Did We Do What We Said?", "doing", "A response is only real when a named person does it by a date, and someone watches its trigger."),
+            (15, "risk-monitoring", "Is the List Still True?", "doing", "Review risks on a rhythm, close the dead ones, and when one happens, move it to the issue log."),
+        ],
+    ),
+    dict(
+        key="project-6", vol=6, title="Making It Yours", short="making it yours",
+        series=2, book="The Project Manager's Notebook", narrator="Sanne", brand="project manager's notebook", book_no=3,
+        title_block=True, sheet_doodles="project",
+        theme="theme-project", fonts="Patrick+Hand+SC", subject="project management",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Spring term · 2030", weekdays=(1, 3), start=date(2030, 4, 2),
+        kicker="the project manager's notebook · book 3 · vol. 6",
+        story="<b>September 2027 → September 2028.</b> Antwerp opened five weeks late and taught Larder that regulators are stakeholders. Eindhoven opened eight weeks after its first page, run from the playbook with a third of Rotterdam's paperwork. In 2028 Sanne runs a programme instead of a launch: Ghent in June and Haarlem in September, eight cities by the board of 28 September. She hires a second project manager, Nadia, coaches her, and hands Haarlem to her. This last volume is about fitting the method to the work, choosing tools and documents that earn their keep, and growing: yourself, and the next person.",
+        lead="Volume 6 of <span class=\"hl\">The Project Manager's Notebook</span>, the last: the parts of the PMBOK Guide (eighth edition) around the forty processes. {n} notes in {c} collections: tailoring a whole project, the playbook, programmes and benefits; models, methods and artefacts, AI and sustainability; the PMO, servant leadership and ethics; and growing, hiring and handing over. Template cards are the <b>programme</b> pages of the project file. Four notes go further with a <b>going deeper</b> chapter: tailoring a whole project, the playbook, AI in project work, and growing as a project manager.",
+        blurb="Tailoring a whole project, the city launch playbook, programmes and portfolios, benefits realisation, models and methods, artefacts, AI in project work, sustainability, the PMO, servant leadership, ethics, growing, hiring and handing over.",
+        attrs=PROJECT_ATTRS, attrs_title="The nine project ratings", attrs_side="what a good project practice is judged on", ratings_h2="Project ratings",
+        first_law="The plan is the team's, the truth is yours, and the thing that sets your date is usually outside the room.",
+        disclaimer=PMI_NOTE, pmbok=True,
+        deep_dives={"tailoring-a-whole-project", "city-launch-playbook", "ai-in-project-work", "growing-as-a-project-manager"},
+        handmade=set(),
+        collections=[
+            ("fitting", "Fitting it to the work", "size the method, write the recipe, group the projects, check the benefits"),
+            ("models", "Models, methods, artefacts", "choose tools by the question, keep the documents that are used, use AI and think long-term"),
+            ("leading", "Leading others", "an office that helps, a colleague you coach, and the truth under pressure"),
+            ("growing", "Growing", "get better on purpose, hire well, hand over, and look back"),
+        ],
+        catalogue=[
+            (1, "tailoring-a-whole-project", "How Light Can We Go?", "fitting", "Set the whole method for one project on one page: keep, shorten, drop, and check the fit."),
+            (2, "city-launch-playbook", "Can a Launch Be a Recipe?", "fitting", "Turn repeated projects into a versioned playbook: fixed, local, a kit, and changes after every launch."),
+            (3, "programmes-and-portfolios", "One Project, or Many?", "fitting", "Run projects that share a benefit as a programme; choose what to fund as a portfolio."),
+            (4, "benefits-realisation", "Did We Get What We Paid For?", "fitting", "Check each benefit, by its owner, on dates booked before the project closes."),
+            (5, "models-and-methods", "Which Tools, When?", "models", "Choose models and methods by the question the project must answer, not by name."),
+            (6, "artefact-review", "Which Documents Earn Their Keep?", "models", "Keep the documents that were used after they were written; make the rest examples."),
+            (7, "ai-in-project-work", "Can AI Help?", "models", "Use AI for drafts, summaries and checks; check every fact, own every line, keep decisions human."),
+            (8, "sustainability-in-practice", "What Does It Leave Behind?", "models", "Decide what a project leaves running while it's still on paper, priced over its life."),
+            (9, "pmo-grown-up", "Who Helps the Project Managers Now?", "leading", "A supportive office with few mandatory rules, measured by what it makes easier."),
+            (10, "servant-leadership", "Who Serves Whom?", "leading", "Coach what's new, delegate what's known, unblock, give credit, and don't grab the pan."),
+            (11, "ethics", "What Would You Do?", "leading", "Never shade a report; offer the person under pressure a true version that helps."),
+            (12, "growing-as-a-project-manager", "How Do I Get Better at This?", "growing", "A log, feedback, a weak thing, a stretch, someone to coach, and a standard."),
+            (13, "hiring-a-project-manager", "Who Do We Hire?", "growing", "A role card, a real work sample, a scoring sheet written first, and a mixed panel."),
+            (14, "handing-over-a-programme", "Can Someone Else Run This?", "growing", "Move decision rights, tell everyone who calls, step out on a date, and stop answering."),
+            (15, "what-was-it-all-for", "What Was It All For?", "growing", "The six principles revisited: the day each one changed a decision."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
@@ -965,13 +1045,11 @@ PLANNED_PRODUCT = [
 ]
 # Planned volumes of Series 2, book 3 (see docs/HANDOFF-project-manager.md).
 PLANNED_PROJECT = [
-    (5, "People Outside, and Surprises", "The Stakeholders and Risk domains: engagement, communication, the risk register, responses and reserves."),
-    (6, "Making It Yours", "Tailoring a whole project, a launch playbook, programmes, AI in project work, benefits and growing as a project manager."),
 ]
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
     ("Jan 2027", [("↓", "Deep dives, season 2: Replication &amp; Leader Election, Sharding &amp; Partitioning, Indexes &amp; Query Plans"), ("•", "One-page printable cheat sheet per collection")]),
-    ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b>, vols. 5–6 (Sanne): the rest of the PMBOK Guide, one domain at a time, with a project file that grows"), ("•", "Cheat sheets: PMBOK 8 on one page, earned value, critical path")]),
+    ("Mar 2027", [("•", "Cheat sheets for Book 3: PMBOK 8 on one page, earned value, critical path")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations")]),
     ("Mid 2027", [("↓", "More deep dives: Sign-in &amp; Tokens, Observability &amp; SLOs, Rendering on the Web, Multitenancy"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
     ("Someday", [("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
@@ -1602,8 +1680,8 @@ def render_index(j):
          if j["key"] in REVISION_NOTE else ""),
         story_box(j),
         ('  <p class="map-link"><a href="../pmbok/index.html"><b>The PMBOK map</b>: every principle, domain and focus area of the guide, '
-         'and the note that covers it →</a><br><a href="../rotterdam/index.html"><b>The Rotterdam project file</b>: every page from '
-         'Sanne\'s binder, in order →</a></p>') if j.get("pmbok") else "",
+         'and the note that covers it →</a><br><a href="../rotterdam/index.html"><b>The project file</b>: every page from '
+         'Sanne\'s binder, Rotterdam, Antwerp and the 2028 programme, in order →</a></p>') if j.get("pmbok") else "",
         KEY,
         '  <h2 id="index"><span class="num">✎</span>Index <span class="side">tap a note to open it</span></h2>',
         index_list(j),
@@ -1783,7 +1861,7 @@ SPINE_TITLES = {
     "architect-4": "Integration", "architect-5": "Qualities", "architect-6": "Delivery",
     "product-1": "Discovering", "product-2": "Deciding", "product-3": "Idea to Backlog",
     "product-4": "Measuring", "product-5": "Stakeholders", "product-6": "Growing",
-    "pmbok": "PMBOK Map", "project-1": "Lay of the Land", "project-2": "Start, Steer, Close", "project-3": "What, By When", "project-4": "Money and People",
+    "pmbok": "PMBOK Map", "project-1": "Lay of the Land", "project-2": "Start, Steer, Close", "project-3": "What, By When", "project-4": "Money and People", "project-5": "People Outside", "project-6": "Making It Yours",
     "People Outside, and Surprises": "People &amp; Surprises",
     "Docker &amp; Kubernetes": "Docker &amp; K8s",   # cheat sheets are looked up by their full title
 }
@@ -2043,20 +2121,43 @@ def processes_block(m, link):
     return "\n".join(out) + (f"\n{m.PROCESSES_NOTE}" if out else "")
 
 
+# The project file's projects: (card folder, anchor, heading, period). A card joins the file when its file starts with one.
+PROJECT_FILE_GROUPS = [
+    (("rotterdam/", "larder/"), "rotterdam", "Rotterdam", "Jan → May 2026 · vols. 1–4"),
+    (("antwerp/",), "antwerp", "Antwerp", "Oct 2026 → Oct 2027 · vol. 5"),
+    (("programme/",), "programme", "Eindhoven and the 2028 programme", "Sep 2027 → Sep 2028 · vol. 6"),
+]
+PROJECT_FILE_PREFIXES = tuple(p for g in PROJECT_FILE_GROUPS for p in g[0])
+
+
 def render_project_file(loaded):
-    """The Rotterdam project file: every template card whose file is under rotterdam/, in book order."""
+    """The project file: every template card whose file is under a project's folder (rotterdam/, antwerp/), in book order,
+    grouped by project. Served at /rotterdam/ (the first project's name; kept so older links still work)."""
     pages = []
     for j in JOURNALS:
         if not j.get("pmbok"):
             continue
         for num, slug, title, ckey, summary in j["catalogue"]:
             n = loaded[j["key"]].get(slug)
-            if n and n["code"]["file"].startswith(("rotterdam/", "larder/")):
+            if n and n["code"]["file"].startswith(PROJECT_FILE_PREFIXES):
                 pages.append((j, num, slug, title, n["code"]))
     toc = "".join(f'<li><a href="#p{i}"><span class="toc-n">{i:02d}</span><span class="toc-t">{esc(c["file"].split("/")[-1])}'
                   f'<small>{esc(c["note"])}</small></span><span class="toc-p">vol. {j["vol"]} · {num:02d}</span></a></li>'
                   for i, (j, num, slug, title, c) in enumerate(pages, 1))
+    def group(c):
+        return next(g for g in PROJECT_FILE_GROUPS if c["file"].startswith(g[0]))
+
+    def group_head(i, c):
+        g = group(c)
+        prev = pages[i - 2][4] if i > 1 else None
+        if prev is not None and group(prev) is g:
+            return ""
+        return f'  <h2 class="file-group" id="{g[1]}"><span class="num">▤</span>{g[2]} <span class="side">{g[3]}</span></h2>\n'
+
+    toc_groups = "".join(f'<li><a href="#{g[1]}"><b>{g[2]}</b> · {g[3]}</a></li>' for g in PROJECT_FILE_GROUPS
+                         if any(group(c) is g for *_, c in pages))
     cards = "\n".join(
+        group_head(i, c) +
         f'  <h3 class="file-h" id="p{i}"><span>{i:02d}</span>{esc(c["file"].split("/")[-1])} <small>explained in '
         f'<a href="../{j["key"]}/notes/{slug}.html">{esc(title)}</a> (vol. {j["vol"]} · {num:02d})</small></h3>\n'
         f'  <div class="card">\n    <div class="card-head"><span>{esc(c["file"])}</span><span>{esc(c["note"])}</span></div>\n'
@@ -2064,7 +2165,7 @@ def render_project_file(loaded):
         for i, (j, num, slug, title, c) in enumerate(pages, 1))
     j = dict(theme="theme-project pmbokmap projectfile", disclaimer=PMI_NOTE)
     return "\n".join([
-        head("The Rotterdam Project File · Jef’s Notes", "Every page from Sanne's binder for the Rotterdam launch: a complete, worked set of project documents.", 1, "Patrick+Hand+SC"),
+        head("The Project File · Jef’s Notes", "Every page from Sanne's binder: Rotterdam, Antwerp and the 2028 programme, complete, worked sets of project documents.", 1, "Patrick+Hand+SC"),
         body_open(j),
         '<a class="skip-link" href="#main">Skip to the project file</a>',
         bar(None, 1),
@@ -2072,14 +2173,15 @@ def render_project_file(loaded):
         '<article class="sheet">',
         f'  {ROUGH}',
         PROJECT_DOODLES,
-        '  <div class="page-meta"><span class="day">Rotterdam · 12 Jan → 22 May 2026</span><span class="topic">book 3 · <b>the worked example</b></span></div>',
+        '  <div class="page-meta"><span class="day">Rotterdam 2026 · Antwerp 2026–27 · programme 2028</span><span class="topic">book 3 · <b>the worked example</b></span></div>',
         '  <p class="kicker">the project manager\'s notebook · Sanne\'s binder</p>',
-        '  <h1 class="cover-title"><span class="hl">The Rotterdam Project File</span></h1>',
-        f'  <p class="lead">Every note in <b>The Project Manager\'s Notebook</b> ends its “how” section with a page from Sanne\'s binder. Here they are together, in order: <b>{len(pages)} pages</b> so far, one real project from its first week to its closing report. The numbers carry from page to page: the budget in the charter is the budget in the status report and in the closing report. Copy any page as a starting point; each links to the note that explains it.</p>',
+        '  <h1 class="cover-title"><span class="hl">The Project File</span></h1>',
+        f'  <p class="lead">Every note in <b>The Project Manager\'s Notebook</b> ends its “how” section with a page from Sanne\'s binder. Here they are together, in order: <b>{len(pages)} pages</b> so far, from two launches. <b>Rotterdam</b> (vols. 1–4) runs from its first week to its closing report; <b>Antwerp</b> (vol. 5), the first city abroad, adds the stakeholder and risk pages; <b>Eindhoven and the 2028 programme</b> (vol. 6) add the pages for tailoring, the playbook, programmes and growing. Within each project the numbers carry from page to page: the budget in the charter is the budget in the status report and in the closing report. Copy any page as a starting point; each links to the note that explains it.</p>',
+        f'  <ul class="drivers">{toc_groups}</ul>',
         '  <p class="map-link"><a href="../pmbok/index.html"><b>The PMBOK map</b>: where each of these pages sits in the guide →</a></p>',
         '  <h2 id="index"><span class="num">✎</span>Contents <span class="side">tap a page to jump to it</span></h2>',
         f'  <ol class="toc">{toc}</ol>',
-        '  <h2 id="pages"><span class="num">§</span>The pages <span class="side">in the order Sanne wrote them</span></h2>',
+        '  <h2 id="pages"><span class="num">§</span>The pages <span class="side">project by project, in the order Sanne wrote them</span></h2>',
         cards,
         '  <p class="aside">this file grows with the book: each new volume adds its pages.</p>',
         '  <p class="folio">✦</p>',
@@ -2159,7 +2261,7 @@ def render_pmbok_map(loaded):
         f'  <ul class="drivers">\n{foundations}\n  </ul>',
         '  <h2 id="notes"><span class="num">6</span>Every note, by volume <span class="side">the question, and what it covers</span></h2>',
         "\n".join(vols),
-        f'  <p>Still to come:</p>\n  <ul class="drivers">{planned}</ul>',
+        f'  <p>Still to come:</p>\n  <ul class="drivers">{planned}</ul>' if planned else '',
         '  <h2 id="editions"><span class="num">7</span>If you learned an older edition <span class="side">6th → 7th → 8th</span></h2>',
         m.EDITIONS,
         '  <div class="table-scroll"><table class="maptable">\n    <thead><tr><th scope="col"></th><th scope="col">6th (2017)</th><th scope="col">7th (2021)</th>'

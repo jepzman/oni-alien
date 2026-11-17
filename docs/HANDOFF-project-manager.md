@@ -1,7 +1,7 @@
 # Handoff: The Project Manager's Notebook (Series 2, Book 3)
 
-Status as of 2026-11-16: **Vols. 1–4 are written and merged to `main` (vols. 1–2 in PR #24; 3–4 together after it;
-sections 14–15). Vols. 5–6 are planned. To continue, read sections 13 to 15 first.** Decisions in section 9;
+Status as of 2026-11-17: **Vols. 1–4 are written and deployed (PR #24 and PR #29). Vols. 5 and 6 are written (sections 17
+and 18) and deployed together. Book 3 is complete.** Decisions in section 9;
 what was built in section 10.
 
 Story facts: `docs/larder-casebook.md` (source of truth) and the public case file `/larder/`.
@@ -355,3 +355,207 @@ The questions as they were asked:
 - **Next: Vol. 5, “People Outside, and Surprises”** (Stakeholders 7, Risk 6). Open threads are at the end of the
   casebook's “Book 3, Vol. 4”. The risk notes can reuse the three-point estimates (Vol. 3) and the reserve (Vol. 4);
   a Monte Carlo note can use the fit-out network. Antwerp (September 2027) is the natural setting for stakeholders abroad.
+
+## 16. Handoff: Vols. 5 and 6 (2026-11-17)
+
+Read this section, then 13.3 (the steps) and 13.4 (the conventions). Sections 14–15 explain what the last two volumes
+added to the toolkit. The story facts are in `docs/larder-casebook.md`; the Book 3 sections there end with open threads.
+
+### 16.1 Where Book 3 stands
+
+| Vol. | Key | Domains | Notes | State |
+| --- | --- | --- | --- | --- |
+| 1 · The Lay of the Land | `project-1` | foundations, principles | 15 | live (PR #24) |
+| 2 · Starting, Steering, Closing | `project-2` | Governance (9) | 15 | live (PR #24) |
+| 3 · What, and By When | `project-3` | Scope (6), Schedule (3) | 15 | live (PR #29) |
+| 4 · Money and People | `project-4` | Finance (4), Resources (5) | 15 | live (PR #29; deploy run 43813764513 succeeded) |
+| 5 · People Outside, and Surprises | `project-5` | Stakeholders (7), Risk (6) | 15 | written (section 17) |
+| 6 · Making It Yours | `project-6` | tailoring, models, methods, artefacts, newer topics | 15 | written (section 18) |
+
+After Vol. 5, all **40 processes** are covered (9 + 6 + 3 + 4 + 5 + 7 + 6). Vol. 6 adds no processes: it covers the
+guide's chapters around them (tailoring, models / methods / artefacts, the newer topics) and closes the book.
+
+Still waiting for the owner (unchanged from 13.1): the PMBOK names have never been checked against the guide; no answer
+on full ten-chapter deep dives for key items; nobody has looked at the live Book 3 pages.
+
+### 16.2 Rules that held for Vols. 1–4 (keep them)
+
+- **One worked example per volume, reconciled by script.** Vols. 2–4 all used the Rotterdam launch, so every number
+  agrees. Write the numbers into a comment block at the top of the first content file (as `content/project-4/01_money.py`
+  does) and check sums, dates and weekdays with a short Python script before writing prose. Weekdays matter:
+  27 April 2026 is a Monday and King's Day; Easter Monday 6 April 2026 is a day off for the builder.
+- **Fix earlier volumes when you find a contradiction**, and say so in the casebook section and the PR. Vols. 3 and 4
+  each corrected Vol. 2 (one weekend, not two; committed €335k / €355.5k).
+- **One mistake of Sanne's per collection**, told plainly, with what it cost and how she fixed the cause.
+- **Template cards are project-file pages**: `file="rotterdam/NN-name.md"` (Vol. 4 ended at 45). For the Antwerp and
+  Eindhoven volumes use a new prefix (see 16.3) and extend `render_project_file()` so its title and lead name more than
+  one project (it now says “The Rotterdam Project File”; rename the page to “The Project File” and group by project, or
+  add a second page; decide before the first Vol. 5 card).
+- **Figures**: plain rows and boxes render with the stylesheet's fixed sizes (heads 21px, body 19px; the `size=`
+  argument has no effect). Charts, tables and grids use `Doodle(..., exact=True)` so the sizes apply. Check every figure
+  on contact sheets (scripts in section 4 of `docs/HANDOFF.md`).
+- **Meanwhile links** go both ways automatically; four to six per volume.
+- Process names on the map are **unverified** (public summaries); keep the caption.
+
+### 16.3 Vol. 5, “People Outside, and Surprises”: Stakeholders and Risk
+
+**Setting: the Antwerp launch, October 2026 → October 2027.** It's the first city abroad and the one launch where the
+risk register matters most, and the other books already fix its shape. Sanne runs Utrecht (12 Apr 2027) and The Hague
+(14 Jun 2027) from the playbook in the background; Antwerp is the project. Use the prefix `antwerp/NN-name.md` for its
+cards, numbering from 01.
+
+**Facts already fixed by other books (don't contradict):**
+- Antwerp planning date **September 2027** (not committed, Apr 2026). Decision calendar: store lease by **Dec 2026**
+  (Femke), Belgian invoices and VAT by **Mar 2027** (Marco), French and Dutch in the apps by **May 2027** (Grace),
+  courier contracts by **May 2027** (Joost), **Bancontact** by **Jul 2027** (Cho).
+- French shipped in **May 2027**; **40 Antwerp households** tested in **July and September**; Belgian VAT 6 % / 21 %;
+  fr-BE and nl-BE by native writers (Grace, Vol. 6 of Book 2, `content/product-6/01_markets.py`).
+- **ADR 0024** (2 Aug 2027): the Antwerp test found **212 products** disagreeing across Catalogue, WMS B and billing.
+- **Antwerp opened Mon 18 Oct 2027, slipped from September**; week 1: 2.4 tickets per 100. Eindhoven opened 22 Nov 2027.
+- Ana's first architecture kata (19 Jan 2027) was “Larder in Antwerp”. Ana's capacity plan (18 Oct 2027) assumed it.
+
+**One gap to fill on purpose: why Antwerp slipped.** No book says. Vol. 5 should make it a **risk that was on the
+register and was managed badly**, so the volume has its central story. Recommended: the city's **permit for the
+store's cooling plant and night-time deliveries** (Antwerp is not Rotterdam; different rules, a different language of
+officialdom). Sanne's stakeholder mistake: she treated the city's permit office as a form to fill, not a stakeholder,
+and the risk sat on the register rated “low” with no owner and no response. Planned opening **Mon 13 Sep 2027**, actual
+**Mon 18 Oct 2027** (five weeks). It mustn't contradict the data mismatch (ADR 0024, fixed by 30 Sep) or Grace's
+testing in September; it doesn't. Record the choice in the casebook.
+
+**Processes (names unverified; earlier searches found the counts, not the names).** Likely, from public summaries of
+older editions: Stakeholders: identify stakeholders · plan stakeholder engagement · plan communications · manage
+stakeholder engagement · manage communications · monitor stakeholder engagement · monitor communications. Risk: plan
+risk management · identify risks · analyse risks · plan risk responses · implement risk responses · monitor risks.
+Search again for the eighth edition's exact names before filling `PROCESSES` in `content/pmbok/map.py`.
+
+**Suggested notes (15), with the titles earlier volumes already promise in bold.** Earlier volumes link to
+“Contingency vs management reserve”, “Simulation in plain words” and “Risks vs issues” as plain text; either use those
+phrases in the kickers or update those `related` lines (grep for `(vol. 5)` in `content/project-*`).
+
+| # | Title (the question) | Covers | Antwerp scene |
+| --- | --- | --- | --- |
+| 1 | Who Cares About This? | identify stakeholders, the register | landlord, city permit office, food-safety agency (FAVV-AFSCA), neighbours, Belgian couriers, Bancontact provider, local suppliers |
+| 2 | Who Matters Most, and How Much? ★ | power / interest, engagement matrix (current vs desired) | the permit office rated “keep informed” when it should have been “manage closely” (Sanne's mistake) |
+| 3 | Who Hears What, and When? | communications plan | Dutch for the city, French for some customers, English inside Larder |
+| 4 | How Do We Keep Them With Us? | managing engagement and expectations | the neighbours' meeting Rotterdam never had (Rotterdam told them on 2 Mar, late) |
+| 5 | Are We Being Understood? | managing communications, meetings that work | a Belgian supplier meeting that agreed nothing |
+| 6 | Different Country, Different Rules | stakeholders abroad: language, culture, regulators | Lena and a Belgian lawyer; the permit language |
+| 7 | Are They Still With Us? | monitoring engagement | the engagement matrix re-scored monthly |
+| 8 | How Will We Handle Risk? | plan risk management: appetite, scales, owners | Femke's appetite for a five-week slip vs a second rent month |
+| 9 | What Could Happen? ★ | identify risks, the risk register, opportunities | the register in Nov 2026; the permit risk scored low (the mistake, again) |
+| 10 | How Likely, and How Bad? | qualitative analysis, probability × impact | re-scored after a call with a Belgian builder |
+| 11 | What Is It Worth? | expected monetary value; **contingency vs management reserve** | sizing Antwerp's reserve from EMV (Vol. 4 sized Rotterdam's by doubling a list) |
+| 12 | What If We Ran It a Thousand Times? ★ | **simulation in plain words** (Monte Carlo) | the opening date as a range: P50, P80; script it, record the seed |
+| 13 | What Do We Do About It? ★ | responses: avoid, transfer, mitigate, accept; exploit, enhance, share; escalate | the permit: a local agent (transfer), early drawings (mitigate) |
+| 14 | Did We Do What We Said? | implementing responses, owners, triggers | the response that had no owner |
+| 15 | Is the List Still True? | monitoring risks; **risks vs issues** | the permit risk becomes an issue in July; the slip; the lesson into the playbook v3 (Oct) |
+
+Collections: “Who's involved” (1–4), “Abroad” (5–7), “What could happen” (8–12), “Doing something about it” (13–15).
+Going deeper ★: the engagement matrix, the risk register, simulation, risk responses.
+Meanwhile links: Ana's stakeholder map and risk-storming (`architect-1`), Ana's risk register (`architect-6`),
+Grace's pre-mortem (`product-3`), Grace's localisation and launching a new city (`product-6`).
+New characters (add to the casebook's cast if used): Antwerp's store manager; a Belgian lawyer working with Lena.
+Money and dates: Antwerp needs its own budget, written as Rotterdam's was (lines, reserve sized from EMV). Invent it
+once, reconcile it by script, and keep it in the casebook.
+
+### 16.4 Vol. 6, “Making It Yours”: tailoring, models, methods, artefacts, and growing
+
+**Setting: Eindhoven and the 2028 plan, November 2027 → mid-2028.** Eindhoven opened **22 Nov 2027**, run from the
+playbook. The board plan of 20 Mar 2028 is **eight cities and 60,000 orders a day by end 2028**. Ana's Vol. 6 risk
+register (`content/architect-6/03_risk.py`, started 24 Apr 2028) already names **Ghent (June 2028; store opening 19 Jun)** and
+**Haarlem (September 2028)**; reuse them. Grace hands
+part of her area to Jonas in Jan–Feb 2028; Ana's Vol. 6 runs Apr–Sep 2028. Sanne's arc: from running launches to
+running the **programme** of 2028 cities, hiring a second project manager under Marco's cap, and handing launches over.
+Card prefix: `programme/NN-name.md` (or `eindhoven/`).
+
+**Titles earlier volumes promise:** “Tailoring a whole project”, “The city launch playbook”, “benefits realisation”
+(grep `(vol. 6)`).
+
+| # | Title | Covers | Scene |
+| --- | --- | --- | --- |
+| 1 | How Light Can We Go? | **tailoring a whole project** | Eindhoven: the playbook, one page of tailoring, half the meetings |
+| 2 | Can a Launch Be a Recipe? ★ | **the city launch playbook** (v1 Utrecht, v2 The Hague, v3 Antwerp, v4 Eindhoven) | what changed after each city |
+| 3 | One Project, or Many? | projects, programmes and portfolios | eight cities in 2028: Sanne's programme board |
+| 4 | Did We Get What We Paid For? | **benefits realisation** | Rotterdam's three benefits checked (500 a day met in May 2026; on time; the 8-week playbook) |
+| 5 | Which Tools, When? | models (situational leadership, Tuckman, change models), methods (Scrum, Kanban, CPM), choosing among them | the toolbox page |
+| 6 | Which Documents Earn Their Keep? | artefacts: the project file reviewed | which of the 58 Rotterdam pages were used again |
+| 7 | Can AI Help? ★ | AI in project work (a newer topic in the eighth edition) | summarising status, drafting risks, checking a plan; limits and confidentiality |
+| 8 | What Does It Leave Behind? | sustainability in practice | Korenwolf's supplier questionnaire (casebook, carbon, 6 Mar 2028) |
+| 9 | Who Helps the Project Managers Now? | the PMO grown up (from Vol. 1's launch desk) | a second PM; templates that are actually reused |
+| 10 | Who Serves Whom? | servant leadership in practice | Sanne coaching the new PM through Ghent |
+| 11 | What Would You Do? | ethics and professional conduct | pressure to report green before an investor meeting |
+| 12 | How Do I Get Better at This? ★ | growing as a project manager (and what certification is for) | Sanne's two-year review |
+| 13 | Who Do We Hire? | hiring a project manager | the work-sample interview |
+| 14 | Can Someone Else Run This? | handing over a programme | Ghent, then Haarlem, handed to the new PM |
+| 15 | What Was It All For? | the book's closing note: the six principles revisited | back to Vol. 1, two years on |
+
+Collections: “Fitting it to the work” (1–4), “Models, methods, artefacts” (5–8), “Growing” (9–15; or split 9–11 and
+12–15). Going deeper ★: playbook, AI, growing, plus tailoring a whole project.
+Meanwhile links: Grace's hiring a PO and handing over (`product-6`), Ana's growing architects and handover to
+operations (`architect-6`), Grace's launching a new city (`product-6`).
+Check before writing: the casebook's “Book 2, Vol. 6” and “Book 1, Vols. 5–6” sections for 2027–28 facts (openings,
+Jonas, Grace's two-year review, Ana's Ghent register).
+
+### 16.5 When Book 3 is complete (after Vol. 6)
+
+- `PLANNED_PROJECT` empty; case file `BOOKS` card “complete: 6 volumes”; future log: remove the Book 3 line, keep Book 4
+  (Mo, client management) as the next book.
+- PMBOK map: every row linked; the “Still to come” list disappears by itself when `PLANNED_PROJECT` is empty (check it).
+- README, `docs/HANDOFF.md` (status, table, next steps) and this file's status line.
+- Cheat sheets not yet made (from section 6): PMBOK 8 on one page; earned value; critical path. They fit after Vol. 6.
+- Before deploying: fetch and merge `main` (other sessions merge to it); verify; PR; merge when the owner asks.
+
+## 17. Vol. 5 notes on the build (2026-11-17)
+
+- `project-5` journal, “People Outside, and Surprises”: the **Stakeholders** (7) and **Risk** (6) domains. Content in
+  `content/project-5/01_involved.py` (4 notes), `02_abroad.py` (3), `03_could_happen.py` (5), `04_doing.py` (3). Story:
+  **the Antwerp launch, 5 Oct 2026 → 18 Oct 2027**. Facts: casebook, “Book 3, Vol. 5”; every number in the comment block at
+  the top of `01_involved.py`.
+- **The story gap, filled as planned:** Antwerp slipped five weeks (13 Sep → 18 Oct 2027) because of **R-07, the city's
+  environmental permit** (cooling plant + deliveries before 07:00, a 30-day public inquiry). The arc runs through the whole
+  volume: placed in the wrong box (9 Nov) → scored 3 with owner “builder” (30 Nov) → found by Maarten and Pieter (8 and
+  10 Feb, re-scored 16) → responses (22 Feb) → the drawings action had no Larder owner (2 Apr; lodged 19 Apr) → 14 objections
+  in the inquiry (22 Jun) → issue I-12 (15 Jul) → option B, open 18 Oct (23 Jul) → permit 6 Sep → playbook v3.
+- Process → notes (also on the map): Identify Stakeholders → register, abroad · Plan Stakeholder Engagement → power and
+  interest, abroad · Plan Communications Management → communications plan · Manage Stakeholder Engagement → expectations ·
+  Manage Communications → meetings · Monitor Stakeholder Engagement + Monitor Communications → monitoring engagement ·
+  Plan Risk Management → risk approach · Identify Risks → register · Analyze Risks → probability and impact, EMV, Monte Carlo
+  · Plan Risk Responses → responses · Implement Risk Responses → implementing · Monitor Risks → risk monitoring.
+  **All 40 processes now have a note.**
+- **Process names:** the seven Stakeholders names match a public summary of the eighth edition. The six Risk names are
+  **not confirmed** (searches on 17 Nov found the count, not the names); “Analyze Risks” stands for the older qualitative and
+  quantitative pair. The map's caption already says to check them against the guide.
+- **Going deeper** (4): the engagement matrix (four boxes, C vs D, salience, wrong boxes) · the risk register (cause-event-
+  effect, sources, opportunities, five columns) · Monte Carlo (the model, ranges, reading P50 / P80, limits, was 18 Oct in
+  the chart) · risk responses (five threat and four opportunity responses, is it worth it, residual and secondary).
+- **Simulation**: a seeded script (1,000 runs, seed 2027) gave P50 13 Sep, P80 27 Sep, P90 11 Oct; 97 % of late runs
+  permit-driven. Re-runs with lodging fixed at week 7 (P50 20 Sep, P80 11 Oct) and with objections (P50 11 Oct, P80 25 Oct)
+  are quoted in the notes. The model is written out in card `antwerp/12-opening-range.md`; re-create it from there.
+- **The project file** (`/rotterdam/`, kept for old links) is now **“The Project File”**, grouped by project:
+  `PROJECT_FILE_GROUPS` in `scripts/build_notes.py` (Rotterdam: `rotterdam/`, `larder/`; Antwerp: `antwerp/`). 73 pages.
+  Vol. 6 adds a group (e.g. `programme/`) with one line there.
+- Earlier volumes' plain-text promises (“Contingency vs management reserve”, “Simulation in plain words”, “Risks vs
+  issues”) now resolve through the kickers of notes 11, 12 and 15 (`a.k.a. “…”`).
+- Sanne's mistakes: the permit office in “keep informed” (stakeholders) · the supplier meeting in English with no agenda
+  (abroad) · R-07 scored by Rotterdam's rules with an outside owner (risk) · the response action with no Larder owner (doing).
+- Meanwhile links: register ↔ Ana's stakeholder map · abroad ↔ Grace's localisation · risk register ↔ Ana's risk register and
+  Grace's pre-mortem · risk monitoring ↔ Grace's launching a new city.
+- **Next: Vol. 6, “Making It Yours”** (section 16.4). Open threads at the end of the casebook's “Book 3, Vol. 5”.
+
+## 18. Vol. 6 notes on the build (2026-11-17), and Book 3 complete
+
+- `project-6` journal, “Making It Yours”. Content in `content/project-6/01_fitting.py` (4), `02_models.py` (4),
+  `03_leading.py` (3), `04_growing.py` (4). Story: Eindhoven (27 Sep → 22 Nov 2027), then the **Cities 2028** programme
+  (Ghent 19 Jun, Haarlem 11 Sep 2028), a second PM (**Nadia**, from 7 Feb 2028), and the closing note (25 Sep 2028).
+  Facts: casebook, “Book 3, Vol. 6”; the comment block at the top of `01_fitting.py`.
+- Changed from the plan in 16.4: collections are “Fitting it to the work” (1–4), “Models, methods, artefacts” (5–8),
+  “Leading others” (9–11), “Growing” (12–15). Note 6 is the artefact review (73 pages → 18 templates).
+- **Going deeper** (4): tailoring a whole project · the playbook · AI in project work · growing as a project manager.
+- No processes; the notes use `processes=[]` (the tag then shows no process row) and are listed on the PMBOK map under
+  “The ground under it” (`FOUNDATIONS` in `content/pmbok/map.py`).
+- Sanne's mistakes: the +12-week benefit check never held · an unchecked AI-drafted status · rewriting Nadia's status ·
+  deciding on the builder's call after handing over Haarlem.
+- Fixes on the way: the map's “Still to come” paragraph now disappears when nothing is planned; `PLANNED_PROJECT` is
+  empty; the case file says “complete: 6 volumes”; project file group “Eindhoven and the 2028 programme” (`programme/`).
+- **Still open**: the six Risk process names and all process names against the guide itself; cheat sheets (PMBOK 8 on one
+  page, earned value, critical path); full ten-chapter deep dives for key items (never answered); Book 4.

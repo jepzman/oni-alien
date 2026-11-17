@@ -1,7 +1,7 @@
 # Handoff: Jef's Notes (start here)
 
-Status as of **2026-11-16**. Books 1 and 2 are complete (six volumes each). **Book 3, *The Project Manager's Notebook*
-(Sanne, the PMBOK Guide), has vols. 1–4 written**: vols. 1–2 deployed in PR #24; vols. 3 (Scope, Schedule) and
+Status as of **2026-11-17**. Books 1 and 2 are complete (six volumes each). **Book 3, *The Project Manager's Notebook*
+(Sanne, the PMBOK Guide), is complete (six volumes)**: vols. 5 (Stakeholders, Risk: Antwerp) and 6 (tailoring, methods, growing) deployed together from branch `ccr-98bbf05d-6dvq28`; vols. 1–2 deployed in PR #24; vols. 3 (Scope, Schedule) and
 4 (Finance, Resources) merged together after it. Vols. 5–6 are planned. `main` is the deployed branch; work on a branch and open a PR to `main`.
 
 Read in this order:
@@ -10,7 +10,7 @@ Read in this order:
 3. The plan for the book you're writing:
    - Book 1 (Ana, architect): `docs/HANDOFF-solution-architect.md`
    - Book 2 (Grace, product owner): `docs/HANDOFF-product-owner.md`
-   - **Book 3 (Sanne, project manager): `docs/HANDOFF-project-manager.md`** ← the book in progress; start at its section 13
+   - **Book 3 (Sanne, project manager): `docs/HANDOFF-project-manager.md`** ← the book in progress; start at its section 16
 
 ## 1. What's on the shelf
 
@@ -35,12 +35,14 @@ Read in this order:
 | Series 2 · Book 3 (Sanne) | `project-2` | Starting, Steering, Closing (Governance) | 15, 4 with deep dives (Feb → May 2026) |
 | Series 2 · Book 3 (Sanne) | `project-3` | What, and By When (Scope, Schedule) | 15, 4 going deeper (Feb → Apr 2026) |
 | Series 2 · Book 3 (Sanne) | `project-4` | Money and People (Finance, Resources) | 15, 4 going deeper (Jan → May 2026) |
+| Series 2 · Book 3 (Sanne) | `project-5` | People Outside, and Surprises (Stakeholders, Risk) | 15, 4 going deeper (Oct 2026 → Oct 2027, Antwerp) |
+| Series 2 · Book 3 (Sanne) | `project-6` | Making It Yours (tailoring, methods, growing) | 15, 4 going deeper (Sep 2027 → Sep 2028) |
 
 Book 3, *The Project Manager's Notebook*, covers the whole PMBOK Guide (eighth edition): plan, decisions and build notes in
 `docs/HANDOFF-project-manager.md`. It adds the PMBOK map page (`/pmbok/`), a PMBOK tag on each note, the light / standard /
 heavy dial, deep dives and the Rotterdam project file (`/rotterdam/`).
 
-Planned: nothing left in Books 1–2 (`PLANNED_2` and `PLANNED_PRODUCT` are empty), Book 3 vols. 3–6 (`PLANNED_PROJECT`),
+Planned: nothing left in Books 1–2 (`PLANNED_2` and `PLANNED_PRODUCT` are empty), nothing in Book 3 (`PLANNED_PROJECT` is empty),
 Series 1 Vol. 7 AI App Patterns (`PLANNED`), Book 4 (Mo: client management, Korenwolf) in the future log.
 
 **Series 3 · Deep dives** started on 14 Nov 2026: Season 1 is written (`/deep-dives/<slug>/`): Saga, Reliable Messaging, The Resilience Stack, Event Sourcing & CQRS
@@ -59,9 +61,8 @@ cloth, `COVER_ART`). 18 extra notes (3 per volume, `content/<key>/05_extra.py`) 
    fine; the likely cause was a stale cached `bujo.css`, fixed in PR #8 (content-hash `?v=` on assets). **Ask the owner
    to confirm** it now looks right; if not, ask for a screenshot (the sandbox can't open github.io).
 2. **Books 1 and 2 are complete** (PR #16 deployed both Vol. 6s).
-3. **Book 3 is in progress**: Vols. 1–4 are written and merged (sections 14–15 of `docs/HANDOFF-project-manager.md`).
-   **Next is Vol. 5, “People Outside, and Surprises” (Stakeholders and Risk)**; follow section 13.3 of that file, with
-   the open threads at the end of the casebook's “Book 3, Vol. 4”. Three questions are waiting for the owner there
+3. **Book 3 is complete** (sections 17–18 of `docs/HANDOFF-project-manager.md`). Next: the Book 3 cheat sheets (PMBOK 8 on one
+   page, earned value, critical path) and Book 4 (Mo, client management). Three questions are waiting for the owner there
    (section 13.1): check PMBOK names against the guide, full ten-chapter deep dives for key items, and a look at the live pages. Book 4 (Mo, client management) is in the future log; they should reuse the casebook, the case file timeline and the meanwhile links.
    New journal keys get their shelf cover automatically (CSS matches `book--architect-*` / `book--product-*`).
 4. For each new volume: add every note to the case file `TIMELINE` (`content/larder/casefile.py`, tag `"1"`, `"2"` or `"3"`),
