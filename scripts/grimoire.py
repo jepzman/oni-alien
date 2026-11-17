@@ -297,8 +297,10 @@ def render_entry(act, i, e):
 def render_act(act):
     def thumb(e):
         f = ART / f"{e['slug']}.svg"
-        art = f.read_text(encoding="utf-8") if f.exists() else f'<span class="seal seal-sm" aria-hidden="true"><span>{e["sigil"]}</span></span>'
-        return f'<span class="card-art" aria-hidden="true">{art}</span>'
+        if f.exists():
+            return f'<span class="card-art" aria-hidden="true">{f.read_text(encoding="utf-8")}</span>'
+        return (f'<span class="card-art card-art--sigil" aria-hidden="true">{sigil(e.get("ring", ""), e["name"])}'
+                f'<span class="card-glyph">{e["sigil"]}</span></span>')
     rows = "".join(
         f'<li><a href="{e["slug"]}.html">{thumb(e)}'
         f'<span class="card-t"><small class="card-n">{ROMAN.get(i, i)}</small><b>{e["name"]}{" ★" if e.get("flagship") else ""}</b>'
@@ -311,7 +313,7 @@ def render_act(act):
   <h1>{act["title"]}</h1>
   <p class="epithet">{act["sub"]}</p>
   {act["intro"]}
-  <h2 class="plain">The creatures <small>{len(act["entries"])} entries · ★ flagship</small></h2>
+  <h2 class="plain">{act.get("contents_title", "The creatures")} <small>{len(act["entries"])} entries · ★ flagship</small></h2>
   <ul class="bestiary-cards">{rows}</ul>
   <h2 class="plain">The souls you will meet</h2>
   <ul class="cast">{cast}</ul>

@@ -385,3 +385,30 @@ in writing."*
   reflection; Banshee at 23:58 with 412 unread; Basilisk with glasses and Pip turned to stone; Prophet in the alarm-red
   control room with the 2014 incident report; Siren under GOOD VIBES ONLY as the office floods; Goblin at the foot of the bed.
 - Next: Act I (The Court of Whispers), same format, plates from the same toolkit.
+
+## 15. Act I written (17 Nov 2026)
+
+- `content/darkside/act-1.py`: The Court of Whispers, 12 entries: Map of Hidden Thrones ★, Meeting Before the Meeting,
+  Blood Pacts, Ghost Decision, Rumour Mill Familiar, CC Inquisition, Turf Wars of the Two Towers, Empire Builder,
+  Ring-Kissing Ritual ★, Chosen One, Sacrificial Lamb ★, Art of Plausible Silence.
+- Owner asked for fewer illustrations: plates for the three flagships only (`hidden_thrones`, `ring_kissing_ritual`,
+  `sacrificial_lamb` in `scripts/plates.py`). Entries without a plate show their turning sigil as card art.
+- New cast (keep consistent): Marcus Bell (he/him, Pip's manager), Ottoline Grey (she/her, Chief of Staff, the hidden
+  throne), Dame Helena Strand (she/her, CEO), Priya Nair (she/her, Customer Ops), Gareth Pound (he/him, Network Assets,
+  the empire builder), Tamsin (she/her, EA on 27), Jules (they/them, the favourite). Lord Varnish's first name is Simon.
+  Story facts used: Project Orion (billing integration, 18 months late, £2.4m over, lead #4 is Pip); 11,400 smart meters
+  not reporting for 63 days on average; Grid Planning's budget cut 12% after Pip volunteered savings.
+- Next by the plan's order: Act III (The Throne Room, bad managers).
+
+## 16. Act III written (17 Nov 2026)
+
+- `content/darkside/act-3.py`: The Throne Room, 12 entries: All-Seeing Eye ★ (micromanager), Absent Lord, Seagull
+  Overlord ★, Weather Tyrant, Conflict Phantom, Credit-Taking Crown, New Lord Arrives, Ritual Circle of the 1:1,
+  Skip-Level Séance, Puppet King, Friend Who Became Your Boss, Escape Portal ★. Plates for the three flagships only
+  (`all_seeing_eye`, `seagull_overlord`, `escape_portal` in `scripts/plates.py`).
+- Story (winter 2026–27, after Act I's reorg): Pip (now level 4) reports to Victor Kraal (he/him, Head of Grid Analytics,
+  ex-consultant), under Benedict Crane (he/him, Director of Strategy, always travelling). Rupert Thorne (he/him,
+  Interim Transformation Director from the parent group) visits monthly and leaves on the 14:05 to London. Pip is
+  seconded to Gareth's Network Assets for the meter fix. Jules becomes Pip's team lead in January. In February Priya
+  offers Pip an analytics lead role in Customer Ops; **he has not decided** (pick this up in Act IV or V).
+- Deployed together with Act I.

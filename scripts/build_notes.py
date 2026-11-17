@@ -1901,10 +1901,10 @@ def darkside_items(acts):
         out.append(f'''    <li class="book book--darkside">
       <a class="book-cover" href="{href}" aria-label="Open Act {grimoire.ROMAN[no]}: {esc(act['title'])}">
         <span class="book-band" aria-hidden="true"></span>
-        <span class="book-label"><small>act {grimoire.ROMAN[no]}</small><b>{esc(act['title'])}</b><i>{len(act['entries'])} creatures</i></span>
+        <span class="book-label"><small>act {grimoire.ROMAN[no]}</small><b>{esc(act['title'])}</b><i>{len(act['entries'])} entries</i></span>
       </a>
       <div class="book-meta">
-        <p>{esc(act['sub'])}. {len(act['entries'])} difficult-colleague creatures, the counter-spells that work and the forbidden spells that backfire.</p>
+        <p>{esc(act['sub'])}. {len(act['entries'])} entries, each with the counter-spells that work and the forbidden spells that backfire.</p>
         <p class="book-actions"><a class="btn" href="{href}">Open the Act</a><a class="btn btn--ghost" href="darkside/index.html">All eight Acts</a></p>
       </div>
     </li>''')
