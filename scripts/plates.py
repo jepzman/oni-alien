@@ -2064,6 +2064,346 @@ def peter_principle():
     return p, "The Peter Principle Curse", defs, "".join(b)
 
 
+# ================================================================ Act VI plates (all twelve)
+PIP_SKIN = ("#14100c", "#5a4a3c", "#c8a888")
+
+
+def client_demon():
+    p = "cd6"
+    wg, wb = window(p, 560, 240)
+    defs = wg + f'<radialGradient id="{p}-ph" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#bfe0ff" stop-opacity=".75"/><stop offset="1" stop-color="#bfe0ff" stop-opacity="0"/></radialGradient>'
+    b = [f'<rect width="{W}" height="{H}" fill="#030406"/>', wb]
+    # the horned shadow the phone throws on the wall
+    b.append('<g opacity=".55" fill="#000"><path d="M140 40 C120 90 150 120 170 130 C150 150 140 200 160 250 L420 250 C440 200 430 150 410 130 C430 120 460 90 440 40 C420 80 400 100 380 110 C350 90 230 90 200 110 C180 100 160 80 140 40 Z"/></g>'
+             + '<g opacity=".6"><ellipse cx="250" cy="160" rx="12" ry="6" fill="#ff2a1a"/><ellipse cx="330" cy="160" rx="12" ry="6" fill="#ff2a1a"/></g>')
+    b.append(f'<ellipse cx="300" cy="420" rx="260" ry="120" fill="url(#{p}-ph)"/>')
+    fp = (300, 270)
+    b.append(suit(p, 1, fp[0], by(fp[1], .62, .8), .8, jacket="#16181e", tie="#2a3a4a", shirt="#4a5060", rim="#bfe0ff", rim_side="left"))
+    b.append(face(p, 1, fp[0], fp[1], .62, skin=PIP_SKIN, light="below", light_col="#cfe8ff", rim="#bfe0ff", rim_side="left",
+                  eye="human", glow=False, brows="worried", mouth="thin", hair="slick", hair_col="#08060a", ears="human"))
+    b.append(table(440, "#0c0a08"))
+    # phone, glowing, ringing
+    b.append(f'<g transform="translate(330 452) rotate(-8)"><rect x="-34" y="-18" width="68" height="36" rx="6" fill="#0a0a0c"/><rect x="-30" y="-14" width="60" height="28" rx="3" fill="#cfe8ff" filter="url(#{p}-glow)"/>'
+             + text(0, -2, "GAVIN (3)", 8, "#0a1a2a", MONO, "middle", 'font-weight="700"') + text(0, 9, "22:07", 7, "#2a3a4a", MONO, "middle") + "</g>"
+             '<path d="M380 430 C388 438 388 452 380 460 M392 424 C404 436 404 456 392 468" stroke="#cfe8ff" stroke-width="2" fill="none" opacity=".7"/>')
+    # laptop with the goals doc
+    b.append('<path d="M520 470 L700 470 L690 440 L530 440 Z" fill="#1a1c22"/><rect x="535" y="330" width="150" height="110" fill="#0a0c12" stroke="#3a3c48"/>'
+             '<rect x="543" y="338" width="134" height="94" fill="#e8ecf0"/>' + text(610, 354, "goals_v11.docx", 9, "#1a2a3a", MONO, "middle", 'font-weight="700"')
+             + "".join(f'<rect x="551" y="{364 + k * 10}" width="{60 + (k * 37) % 60}" height="4" fill="#9aa4b0"/>' for k in range(6))
+             + '<path d="M551 392 L660 392" stroke="#c4161c" stroke-width="2"/>' + text(610, 428, "(changed again)", 9, "#c4161c", HAND, "middle"))
+    b.append(text(140, 470, "22:07 · 22:31 · 22:58", 13, "#9ab8d8", MONO, "middle", 'opacity=".75"'))
+    return p, "The Client Demon", defs, "".join(b)
+
+
+def scope_creep_swarm():
+    p = "scs"
+    defs = f'<radialGradient id="{p}-l" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#e8d8a0" stop-opacity=".45"/><stop offset="1" stop-color="#e8d8a0" stop-opacity="0"/></radialGradient>'
+    b = [f'<rect width="{W}" height="{H}" fill="#040403"/>', f'<ellipse cx="380" cy="260" rx="330" ry="220" fill="url(#{p}-l)"/>']
+    # the plan on the wall: a Gantt chart that was meant to end in August
+    b.append('<rect x="160" y="140" width="440" height="230" fill="#e4dcc4"/><rect x="160" y="140" width="440" height="24" fill="#3a3020"/>'
+             + text(380, 157, "WEXLEY · PROJECT PLAN", 11, "#f0e8d0", FELL, "middle", 'letter-spacing="2"'))
+    for k, m in enumerate(("JUL", "AUG", "SEP", "OCT")):
+        b.append(text(220 + k * 110, 182, m, 9, "#3a3020", MONO, "middle") + f'<path d="M{165 + k * 110} 170 V365" stroke="#b8ae94"/>')
+    for k, (x0, w, c) in enumerate(((170, 120, "#3a6a4a"), (230, 110, "#3a6a4a"), (290, 90, "#3a6a4a"), (330, 60, "#3a6a4a"), (280, 300, "#9b221b"))):
+        b.append(f'<rect x="{x0}" y="{196 + k * 32}" width="{w}" height="16" fill="{c}" opacity=".85"/>')
+    b.append('<path d="M380 172 V365" stroke="#c4161c" stroke-width="2" stroke-dasharray="4 3"/>' + text(384, 360, "was the end", 11, "#9b221b", HAND))
+    # the swarm
+    import random
+    rnd = random.Random(23)
+    words = ("just", "also", "quick", "while you're at it", "one small thing", "could you", "iPad?", "schools", "bus depots", "colour?")
+    for k in range(23):
+        x, y = rnd.uniform(60, 740), rnd.uniform(40, 470)
+        if 150 < x < 610 and 130 < y < 375 and k % 3:
+            y = rnd.choice((rnd.uniform(40, 120), rnd.uniform(390, 470)))
+        s = rnd.uniform(.7, 1.2)
+        b.append(f'<g transform="translate({x:.0f} {y:.0f}) scale({s:.2f})"><ellipse cx="-6" cy="-6" rx="7" ry="4" fill="#cfd8e0" opacity=".45" transform="rotate(-30 -6 -6)"/><ellipse cx="6" cy="-6" rx="7" ry="4" fill="#cfd8e0" opacity=".45" transform="rotate(30 6 -6)"/>'
+                 f'<ellipse cx="0" cy="0" rx="5" ry="8" fill="#1a1408"/><circle cx="0" cy="-8" r="3" fill="#ff3a22"/></g>'
+                 + text(x + 10, y + 4, words[k % len(words)], 10, "#e8d8a0", HAND, "start", 'opacity=".8"'))
+    # Asha's tally
+    b.append('<g transform="rotate(4 690 420)"><rect x="630" y="380" width="130" height="90" fill="#f0e8d0"/>' + text(695, 400, "Asha's count", 10, "#3a2a1a", HAND, "middle")
+             + text(695, 432, "23", 30, "#9b221b", BLACK, "middle") + text(695, 456, "= 31 days of 40", 10, "#3a2a1a", HAND, "middle") + "</g>")
+    return p, "The Scope-Creep Swarm", defs, "".join(b)
+
+
+def eleven_headed_hydra():
+    import math
+    p = "eh"
+    defs = (f'<radialGradient id="{p}-l" cx=".5" cy=".9" r=".9"><stop offset="0" stop-color="#5a8a6a" stop-opacity=".45"/><stop offset="1" stop-color="#5a8a6a" stop-opacity="0"/></radialGradient>'
+            f'<linearGradient id="{p}-sk" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0a120c"/><stop offset=".5" stop-color="#1e3024"/><stop offset="1" stop-color="#0a120c"/></linearGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#030504"/>', f'<rect width="{W}" height="{H}" fill="url(#{p}-l)"/>']
+    labels = ("Planning", "Highways", "Housing", "Cllr. Ames", "Comms", "Legal", "Cllr. Hoyle", "Estates", "Transport", "Parks", "Finance")
+    said = ("ward lines!", "road segments!", "estates!", "my ward first", "the colours…", "risk?", "MY ward first", "is it ours?", "buses!", "trees?", "…")
+    bx, byy = 400, 430
+    heads = []
+    for k in range(11):
+        a = math.pi * (1.08 + k * 0.084)
+        r = 300 if k % 2 else 250
+        hx, hy = bx + r * math.cos(a) * 1.25, byy + r * math.sin(a) * 1.15
+        heads.append((hx, hy))
+        cx1, cy1 = bx + (hx - bx) * .3, byy - 40
+        b.append(f'<path d="M{bx - 30 + k * 6} {byy} C{cx1:.0f} {cy1:.0f} {hx:.0f} {hy + 120:.0f} {hx:.0f} {hy + 14:.0f}" stroke="url(#{p}-sk)" stroke-width="{22 - abs(k - 5)}" fill="none" stroke-linecap="round"/>'
+                 f'<path d="M{bx - 30 + k * 6} {byy} C{cx1:.0f} {cy1:.0f} {hx:.0f} {hy + 120:.0f} {hx:.0f} {hy + 14:.0f}" stroke="#7ab88a" stroke-width="1" fill="none" opacity=".35"/>')
+    for k, (hx, hy) in enumerate(heads):
+        flip = -1 if hx < bx else 1
+        b.append(f'<g transform="translate({hx:.0f} {hy:.0f}) scale({flip} 1)"><path d="M-16 6 C-18 -12 0 -18 14 -10 L30 -4 C34 0 30 6 26 6 L10 8 C0 16 -14 14 -16 6 Z" fill="#14241a" stroke="#7ab88a" stroke-width=".8"/>'
+                 + ('<circle cx="10" cy="-6" r="3" fill="#ffd23a"/>' if k != 10 else '<path d="M6 -6 L14 -6" stroke="#ffd23a" stroke-width="2"/>')
+                 + '<path d="M18 2 L30 2" stroke="#3a0a0a" stroke-width="1.6"/></g>'
+                 + text(hx, hy - 24, labels[k], 9.5, "#c8e8d0", FELL, "middle") + text(hx + flip * 4, hy + 30, said[k], 10, "#ffd890", HAND, "middle", 'opacity=".85"'))
+    # the body: a long table in a council chamber, and Nadia, the decider nobody had named
+    b.append('<ellipse cx="400" cy="450" rx="120" ry="44" fill="#0e1a12" stroke="#3a5a44"/>' + text(400, 452, "one body", 14, "#c8e8d0", BLACK, "middle"))
+    b.append(text(400, 486, "Wexley steering group · 11 heads · decisions made: 0", 12, "#9ac8a8", MONO, "middle", 'opacity=".75"'))
+    b.append(text(400, 36, "Who decides?", 18, "#ffd890", HAND, "middle", 'opacity=".9"'))
+    return p, "The Eleven-Headed Hydra", defs, "".join(b)
+
+
+def unpaid_invoice_wraith():
+    p = "uw"
+    defs = (f'<radialGradient id="{p}-gh" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#e8f0ff" stop-opacity=".9"/><stop offset="1" stop-color="#9ab0d8" stop-opacity=".15"/></radialGradient>'
+            f'<radialGradient id="{p}-h" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#9ab8ff" stop-opacity=".45"/><stop offset="1" stop-color="#9ab8ff" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#030408"/>', f'<ellipse cx="400" cy="240" rx="260" ry="200" fill="url(#{p}-h)"/>']
+    # two realms: Brackenfield's unread mailbox (left), MetroVolt's ledger (right)
+    b.append('<g transform="translate(40 300)"><rect width="190" height="150" fill="#0c0e14" stroke="#2a3040"/>' + text(95, 22, "BRACKENFIELD WATER", 10, "#9ab0d8", FELL, "middle")
+             + text(95, 40, "ap-manual-review@", 9, "#7a88a8", MONO, "middle") + text(95, 80, "214", 34, "#c4161c", BLACK, "middle") + text(95, 104, "unread", 11, "#9ab0d8", MONO, "middle")
+             + text(95, 136, "(since 2023)", 11, "#7a88a8", HAND, "middle") + "</g>")
+    b.append('<g transform="translate(570 300)"><rect width="190" height="150" fill="#0e0c0a" stroke="#40342a"/>' + text(95, 22, "METROVOLT LEDGER", 10, "#d8c0a0", FELL, "middle")
+             + "".join(text(14, 46 + k * 18, t, 9, c, MONO) for k, (t, c) in enumerate((("0044  paid", "#7aba6a"), ("0045  paid", "#7aba6a"), ("0046  paid", "#7aba6a"), ("0047  ???  97 days", "#ff5a3a"), ("0048  paid", "#7aba6a"))))
+             + text(95, 140, "whose is this?", 11, "#d8c0a0", HAND, "middle") + "</g>")
+    # the wraith: an invoice with a wailing face, trailing off into mist
+    b.append(f'<g filter="url(#{p}-b2)" opacity=".5"><path d="M330 300 C310 360 360 380 340 440 C380 400 420 430 410 470 C440 420 470 400 460 330 Z" fill="#cfe0ff"/></g>')
+    b.append(f'<g transform="translate(400 200) rotate(-5)"><path d="M-80 -120 L80 -120 L80 100 C60 120 40 90 20 110 C0 130 -20 96 -40 116 C-60 132 -70 104 -80 110 Z" fill="url(#{p}-gh)"/>'
+             + text(0, -96, "INVOICE 0047", 12, "#1a2a4a", FELL, "middle", 'letter-spacing="2"') + text(0, -74, "£84,000", 20, "#1a2a4a", BLACK, "middle")
+             + text(0, -56, "PO no.: ______", 9, "#9b221b", MONO, "middle")
+             + '<ellipse cx="-24" cy="-16" rx="11" ry="15" fill="#0a1020"/><ellipse cx="24" cy="-16" rx="11" ry="15" fill="#0a1020"/><ellipse cx="0" cy="40" rx="18" ry="28" fill="#0a1020"/>'
+             + f'<circle cx="-24" cy="-14" r="3" fill="#cfe8ff" filter="url(#{p}-glow)"/><circle cx="24" cy="-14" r="3" fill="#cfe8ff" filter="url(#{p}-glow)"/></g>')
+    b.append(text(400, 40, "“It's with finance.”", 16, "#cfe0ff", SERIF, "middle", 'font-style="italic" opacity=".7"'))
+    b.append('<path d="M240 370 C300 330 330 330 330 300 M560 370 C500 330 470 330 470 300" stroke="#9ab0d8" stroke-dasharray="4 5" fill="none" opacity=".4"/>')
+    return p, "The Unpaid Invoice Wraith", defs, "".join(b)
+
+
+def bake_off_arena():
+    p = "ba"
+    defs = (f'<radialGradient id="{p}-sp" cx=".5" cy="0" r="1"><stop offset="0" stop-color="#ffe2a0" stop-opacity=".6"/><stop offset="1" stop-color="#ffe2a0" stop-opacity="0"/></radialGradient>'
+            f'<linearGradient id="{p}-pod" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2018"/><stop offset="1" stop-color="#0a0806"/></linearGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#040304"/>']
+    # the arena: three podiums under three lights
+    vend = ((150, "CORVID", "6 WEEKS!", "#ff6a3a", "#2a0a06"), (400, "VEXMOOR", "TRANSFORMATIONAL", "#c8a0ff", "#140a20"), (650, "GRIDSIGHT", "16 weeks, and why", "#9ad8a8", "#0a1a10"))
+    for x, n, claim, col, bg in vend:
+        b.append(f'<path d="M{x - 60} 0 L{x + 60} 0 L{x + 120} 330 L{x - 120} 330 Z" fill="url(#{p}-sp)" opacity=".7" filter="url(#{p}-b12)"/>'
+                 f'<path d="M{x - 70} 330 L{x + 70} 330 L{x + 60} 420 L{x - 60} 420 Z" fill="url(#{p}-pod)" stroke="{col}" stroke-opacity=".5"/>'
+                 + text(x, 362, n, 14, col, FELL, "middle", 'letter-spacing="2"')
+                 + f'<rect x="{x - 72}" y="40" width="144" height="40" fill="{bg}" stroke="{col}"/>' + text(x, 66, claim, 13 if len(claim) < 12 else 10.5, col, BLACK if len(claim) < 12 else SERIF, "middle", '' if len(claim) < 12 else 'font-style="italic"'))
+    # Zara (left), a Vexmoor partner's silhouette (centre), Pip (right)
+    b.append(blouse(p, 150, by(200, .5, .64), .64, cardigan="#1a0e0a", top="#4a1a10", rim="#ff6a3a", rim_side="right", necklace=True))
+    b.append(face(p, 1, 150, 200, .5, skin=("#120a06", "#4a3022", "#a0704e"), light="above", light_col="#ffe2c0", rim="#ff6a3a", rim_side="right",
+                  eye="human", glow=False, brows="raised", mouth="grin", hair="long", hair_col="#060404", ears="none", lip="#6a2a2a"))
+    b.append(person(400, 330, 1.05, fill="#0a0612", rim="#c8a0ff", rim_op=.8))
+    b.append(suit(p, 2, 650, by(200, .5, .64), .64, jacket="#121814", tie="#2a4a34", shirt="#5a6a60", rim="#9ad8a8", rim_side="left"))
+    b.append(face(p, 2, 650, 200, .5, skin=PIP_SKIN, light="above", light_col="#ffe8c0", rim="#9ad8a8", rim_side="left",
+                  eye="human", glow=False, brows="flat", mouth="thin", hair="slick", hair_col="#08060a", ears="human"))
+    # the panel, from behind, and the clock
+    for k in range(7):
+        b.append(person(110 + k * 97, 520, 1.1, fill="#020203", rim="#ffe2a0", rim_op=.35, sitting=True))
+    b.append('<circle cx="400" cy="140" r="26" fill="#0e0c0a" stroke="#ffe2a0" stroke-opacity=".6"/><path d="M400 140 L400 122 M400 140 L414 146" stroke="#ffe2a0" stroke-width="2"/>')
+    b.append(text(400, 480, "Northshire · room 3 · the shortlist", 13, "#ffe2a0", FELL, "middle", 'letter-spacing="2" opacity=".75"'))
+    return p, "The Bake-Off Arena", defs, "".join(b)
+
+
+def incumbent_dragon():
+    p = "id6"
+    defs = (f'<radialGradient id="{p}-h" cx=".5" cy=".7" r=".7"><stop offset="0" stop-color="#ffb84a" stop-opacity=".5"/><stop offset="1" stop-color="#ffb84a" stop-opacity="0"/></radialGradient>'
+            f'<linearGradient id="{p}-sc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a1e14"/><stop offset="1" stop-color="#0a0604"/></linearGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#040302"/>', f'<ellipse cx="420" cy="400" rx="340" ry="160" fill="url(#{p}-h)"/>']
+    # the hoard: tapes, binders and servers
+    for k in range(9):
+        x = 240 + k * 42
+        b.append(f'<rect x="{x}" y="{392 - (k % 3) * 14}" width="36" height="{70 + (k % 3) * 14}" fill="{["#3a2a1a", "#2a3a4a", "#4a3a1a"][k % 3]}" stroke="#c99a43" stroke-opacity=".5"/>')
+    b.append(text(420, 486, "12 years of billing data · 34 integrations · the tariff engine", 11, "#ffd890", MONO, "middle", 'opacity=".8"'))
+    # the dragon, curled around it, asleep on a contract pillow
+    b.append(f'<path d="M120 460 C80 360 160 260 300 250 C420 240 540 240 620 280 C700 320 720 420 680 470 L620 470 C650 420 640 340 560 320 C480 300 360 300 280 320 C200 340 180 410 200 470 Z" fill="url(#{p}-sc)" stroke="#c99a43" stroke-opacity=".35"/>')
+    b.append('<path d="M260 270 C240 200 230 140 250 90 C290 120 320 110 350 80 C370 120 410 120 440 70 C460 120 500 130 530 110 C520 170 540 220 580 270 Z" fill="#140e08" stroke="#c99a43" stroke-opacity=".4"/>'
+             '<path d="M250 90 L330 260 M350 80 L380 258 M440 70 L450 256 M530 110 L520 262" stroke="#c99a43" stroke-opacity=".25"/>')
+    b.append("".join(f'<path d="M{200 + k * 40} {300 - (k % 2) * 6} l14 -22 l10 22" fill="#1a120a" stroke="#c99a43" stroke-opacity=".4"/>' for k in range(11)))
+    b.append('<path d="M620 280 C660 240 720 230 760 250 C770 270 750 290 720 290 C700 300 680 300 660 300 Z" fill="#1e1610" stroke="#c99a43" stroke-opacity=".5"/>'
+             f'<path d="M716 262 C724 258 734 258 740 262" stroke="#ffb84a" stroke-width="2.6" fill="none" filter="url(#{p}-glow)"/>'
+             '<path d="M660 240 L650 200 L680 236 M690 236 L700 196 L708 240" fill="#1a120a" stroke="#c99a43" stroke-opacity=".5"/>')
+    b.append('<g transform="rotate(-6 690 330)"><rect x="620" y="300" width="150" height="40" rx="18" fill="#e8dcc0"/>' + text(695, 318, "CONTRACT", 9, "#3a2a10", FELL, "middle")
+             + text(695, 332, "renewed 2020 · 2024 · auto", 8, "#9b221b", HAND, "middle") + "</g>")
+    b.append(text(700, 214, "zzz… switching is risky…", 12, "#ffd890", HAND, "middle", 'opacity=".75"'))
+    # Sven, small, with biscuits
+    b.append(person(80, 470, .8, fill="#2a2418", rim="#ffd890", rim_op=1) + '<rect x="94" y="380" width="34" height="20" rx="4" fill="#5a2a3a" stroke="#ffd890" stroke-opacity=".6"/>'
+             + text(111, 394, "biscuits", 7, "#ffd890", HAND, "middle") + text(80, 490, "Sven", 11, "#d8c0a0", HAND, "middle", 'opacity=".75"'))
+    b.append(text(400, 50, "HALVORSEN SYSTEMS · since 2016", 15, "#ffd890", FELL, "middle", 'letter-spacing="2" opacity=".75"'))
+    return p, "The Incumbent Dragon", defs, "".join(b)
+
+
+def rigged_rfp():
+    p = "rr"
+    defs = (f'<radialGradient id="{p}-c" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffcf7a" stop-opacity=".6"/><stop offset="1" stop-color="#ffcf7a" stop-opacity="0"/></radialGradient>'
+            f'<linearGradient id="{p}-pg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#d8c8a0"/><stop offset=".5" stop-color="#ece0c4"/><stop offset="1" stop-color="#d0c098"/></linearGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#050403"/>', f'<ellipse cx="400" cy="250" rx="360" ry="240" fill="url(#{p}-c)"/>']
+    # the scroll
+    b.append(f'<rect x="200" y="60" width="380" height="380" fill="url(#{p}-pg)"/><rect x="186" y="44" width="408" height="24" rx="12" fill="#a08a5a"/><rect x="186" y="432" width="408" height="24" rx="12" fill="#a08a5a"/>'
+             + text(390, 96, "ARDMORE COUNTY COUNCIL", 13, "#2a1a10", FELL, "middle", 'letter-spacing="2"') + text(390, 116, "Invitation to Tender · Grid Capacity Study", 11, "#2a1a10", SERIF, "middle", 'font-style="italic"')
+             + text(390, 134, "“open and competitive”", 10, "#5a4a3a", SERIF, "middle"))
+    for k in range(9):
+        b.append(f'<rect x="230" y="{152 + k * 14}" width="{300 - (k * 41) % 110}" height="4" fill="#9a8a6a"/>')
+    b.append('<rect x="222" y="284" width="336" height="44" fill="#ffd23a" opacity=".45"/>' + text(230, 300, "4.7 The supplier must demonstrate at least", 11, "#2a1a10", SERIF)
+             + text(230, 318, "five years' experience of the Corvid platform.", 11, "#2a1a10", SERIF, "start", 'font-weight="700"'))
+    for k in range(4):
+        b.append(f'<rect x="230" y="{344 + k * 14}" width="{280 - k * 30}" height="4" fill="#9a8a6a"/>')
+    # the seal: a crow
+    b.append('<g transform="translate(520 400)"><circle r="28" fill="#5a0a0a"/><circle r="22" fill="none" stroke="#9b221b" stroke-width="2"/>'
+             '<path d="M-14 4 C-10 -8 2 -12 10 -6 L18 -8 L12 -2 C14 6 6 12 -4 10 L-12 14 Z" fill="#1a0404"/><circle cx="8" cy="-4" r="1.6" fill="#ffd23a"/></g>')
+    # magnifying glass and the calendar
+    b.append('<g transform="translate(610 300) rotate(30)"><circle r="44" fill="#cfe0ff" opacity=".18" stroke="#c99a43" stroke-width="6"/><rect x="-6" y="44" width="12" height="80" rx="4" fill="#3a2a1a"/></g>')
+    b.append('<g transform="rotate(-8 110 120)"><rect x="50" y="80" width="120" height="100" fill="#e8e4d8"/><rect x="50" y="80" width="120" height="24" fill="#9b221b"/>'
+             + text(110, 97, "DUE", 12, "#f0e8d0", FELL, "middle") + text(110, 150, "3 JAN", 26, "#2a1a10", BLACK, "middle") + text(110, 172, "(over Christmas)", 10, "#9b221b", HAND, "middle") + "</g>")
+    b.append(text(670, 440, "bid? 2 / 10", 18, "#ffd890", HAND, "middle") + text(100, 440, "“Does equivalent", 12, "#ffd890", HAND, "middle", 'opacity=".8"')
+             + text(100, 458, "experience count?” · “No.”", 12, "#ffd890", HAND, "middle", 'opacity=".8"'))
+    return p, "The Rigged RFP", defs, "".join(b)
+
+
+def frenemy_pact():
+    p = "fp"
+    defs = f'<radialGradient id="{p}-l" cx=".5" cy=".3" r=".7"><stop offset="0" stop-color="#ffe2a0" stop-opacity=".45"/><stop offset="1" stop-color="#ffe2a0" stop-opacity="0"/></radialGradient>'
+    b = [f'<rect width="{W}" height="{H}" fill="#040304"/>', f'<rect width="{W}" height="{H}" fill="url(#{p}-l)"/>']
+    fp, ft = (200, 200), (600, 200)
+    b.append(suit(p, 1, fp[0], by(fp[1], .58, .76), .76, jacket="#121418", tie="#2a3a4a", shirt="#5a6070", rim="#ffe2a0", rim_side="right"))
+    b.append(face(p, 1, fp[0], fp[1], .58, skin=PIP_SKIN, light="right", light_col="#ffe8c0", rim="#ffe2a0", rim_side="right",
+                  eye="human", glow=False, brows="flat", mouth="smile", hair="slick", hair_col="#08060a", ears="human"))
+    b.append(suit(p, 2, ft[0], by(ft[1], .58, .76), .76, jacket="#141016", tie="#5a1a3a", shirt="#6a5a60", rim="#ffe2a0", rim_side="left"))
+    b.append(face(p, 2, ft[0], ft[1], .58, skin=("#1a1210", "#6a5048", "#d0a888"), light="left", light_col="#ffe8c0", rim="#c8a0ff", rim_side="right",
+                  eye="violet", glow=False, brows="raised", mouth="grin", hair="slick", hair_col="#3a2414", ears="human"))
+    # the handshake over the table
+    b.append('<path d="M290 330 C330 320 360 320 384 326 L392 340 C368 346 330 350 296 352 Z" fill="#121418" stroke="#ffe2a0" stroke-opacity=".5"/>'
+             '<path d="M510 330 C470 320 440 320 416 326 L408 340 C432 346 470 350 504 352 Z" fill="#141016" stroke="#ffe2a0" stroke-opacity=".5"/>'
+             '<ellipse cx="400" cy="334" rx="26" ry="16" fill="#8a7058"/><path d="M382 330 C392 322 410 322 420 330" stroke="#3a2a1a" stroke-width="1.4" fill="none"/>')
+    b.append(table(380, "#100a06"))
+    b.append('<rect x="320" y="356" width="160" height="22" fill="#e8dcc0"/>' + text(400, 371, "JOINT BID · FLEXIBILITY", 9, "#2a1a10", FELL, "middle"))
+    # under the table, the other hand
+    b.append('<rect x="0" y="384" width="800" height="116" fill="#020101"/>')
+    b.append(f'<g transform="translate(560 440) rotate(-6)"><rect x="-70" y="-26" width="140" height="52" fill="#d8ccb0"/>' + text(0, -6, "NORTHGATE ENERGY", 9, "#2a1a10", FELL, "middle")
+             + text(0, 12, "pitch: WEXLEY phase 3", 10, "#9b221b", HAND, "middle") + "</g>")
+    b.append(hand(p, 660, 450, .55, flip=True, rim="#c8a0ff", light="#d8c8f0", claws=False, pose="open"))
+    b.append('<g transform="rotate(4 170 440)"><rect x="110" y="410" width="120" height="60" fill="#f0ece0"/>' + text(170, 430, "THE PACT (1 page)", 9, "#2a1a10", FELL, "middle")
+             + text(170, 448, "shared: data ×3", 9, "#1a5a3a", HAND, "middle") + text(170, 462, "not: prices, clients", 9, "#9b221b", HAND, "middle") + "</g>")
+    b.append(text(400, 40, "“Partners on this one.”", 16, "#ffe2a0", SERIF, "middle", 'font-style="italic" opacity=".75"'))
+    return p, "The Frenemy Pact", defs, "".join(b)
+
+
+def overpromise_golem():
+    p = "og"
+    defs = f'<radialGradient id="{p}-g" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#ffb04a" stop-opacity=".45"/><stop offset="1" stop-color="#ffb04a" stop-opacity="0"/></radialGradient>'
+    b = [f'<rect width="{W}" height="{H}" fill="#040304"/>', f'<ellipse cx="420" cy="220" rx="300" ry="240" fill="url(#{p}-g)"/>']
+    # the golem, built from stacked slides
+    def slide(x, y, w, h, t, rot=0, col="#e8e0cc"):
+        return (f'<g transform="rotate({rot} {x + w / 2} {y + h / 2})"><rect x="{x}" y="{y}" width="{w}" height="{h}" fill="{col}" stroke="#5a4a30"/>'
+                + text(x + w / 2, y + h / 2 + 4, t, min(12, w / max(len(t), 1) * 1.7), "#2a1a10", FELL, "middle") + "</g>")
+    parts = [(370, 70, 100, 70, "", 0), (340, 150, 160, 110, "REAL-TIME", 2), (300, 160, 40, 120, "AI", -8), (500, 160, 40, 120, "AI", 8),
+             (350, 270, 140, 60, "6 WEEKS", -2), (350, 340, 60, 120, "BASICALLY", -2), (430, 340, 60, 120, "DONE", 2), (280, 290, 50, 40, "ROI", -14), (510, 290, 50, 40, "SYNERGY", 14)]
+    for x, y, w, h, t, r in parts:
+        b.append(slide(x, y, w, h, t, r))
+    b.append(f'<circle cx="400" cy="100" r="8" fill="#ffb04a" filter="url(#{p}-glow)"/><circle cx="440" cy="100" r="8" fill="#ffb04a" filter="url(#{p}-glow)"/>'
+             '<path d="M396 124 L444 124" stroke="#5a1a0a" stroke-width="3"/>' + text(420, 60, "(mockup)", 10, "#9b221b", HAND, "middle"))
+    # Felix, proud, pointing up at it
+    b.append(suit(p, 1, 150, by(250, .5, .66), .66, jacket="#1a1410", tie="#c4161c", shirt="#8a8070", rim="#ffb04a", rim_side="right"))
+    b.append(face(p, 1, 150, 250, .5, skin=("#1a120c", "#6a4a38", "#d8b090"), light="right", light_col="#ffe2c0", rim="#ffb04a", rim_side="right",
+                  eye="human", glow=False, brows="raised", mouth="grin", hair="slick", hair_col="#4a2a14", ears="human"))
+    b.append(hand(p, 250, 230, .5, rim="#ffb04a", light="#ffe2c0", claws=False, pose="point"))
+    b.append(text(150, 120, "“Basically done!”", 15, "#ffd890", HAND, "middle"))
+    # Brackenfield's door, and the contract
+    b.append('<rect x="640" y="200" width="120" height="270" fill="#0c1018" stroke="#3a4a6a"/><rect x="650" y="210" width="100" height="250" fill="#141c2a"/>'
+             + text(700, 190, "BRACKENFIELD WATER", 9, "#9ab8d8", FELL, "middle") + '<circle cx="738" cy="340" r="4" fill="#c99a43"/>')
+    b.append('<g transform="rotate(-8 600 440)"><rect x="540" y="410" width="130" height="60" fill="#f0ece0"/>' + text(605, 430, "SIGNED · £120k", 10, "#2a1a10", FELL, "middle")
+             + text(605, 452, "live by 7 Nov", 11, "#9b221b", HAND, "middle") + "</g>")
+    b.append(text(420, 492, "Asha's estimate: 16 weeks. Real-time: needs sensors they don't have.", 11.5, "#ffd890", MONO, "middle", 'opacity=".7"'))
+    return p, "The Overpromise Golem", defs, "".join(b)
+
+
+def procurement_labyrinth():
+    p = "pl6"
+    defs = f'<radialGradient id="{p}-c" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffd27a" stop-opacity=".8"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient>'
+    b = [f'<rect width="{W}" height="{H}" fill="#040406"/>']
+    # concentric walls of paper
+    cx, cy = 400, 260
+    labels = ("SUPPLIER REG.", "INSURANCE ×2", "MODERN SLAVERY", "DPIA", "412 SECURITY QUESTIONS", "LEGAL REDLINES")
+    for k, r in enumerate((220, 180, 140, 104, 70)):
+        gap = (k * 73) % 360
+        import math
+        a0, a1 = math.radians(gap + 14), math.radians(gap + 360 - 14)
+        x0, y0 = cx + r * math.cos(a0), cy + r * .62 * math.sin(a0)
+        x1, y1 = cx + r * math.cos(a1), cy + r * .62 * math.sin(a1)
+        b.append(f'<path d="M{x0:.0f} {y0:.0f} A{r} {r * .62:.0f} 0 1 1 {x1:.0f} {y1:.0f}" stroke="#d8ccb0" stroke-width="14" fill="none" opacity="{.5 + k * .08}"/>'
+                 f'<path d="M{x0:.0f} {y0:.0f} A{r} {r * .62:.0f} 0 1 1 {x1:.0f} {y1:.0f}" stroke="#8a7a5a" stroke-width="1" fill="none" stroke-dasharray="2 8"/>')
+        tx, ty = cx + r * math.cos(math.radians(gap + 180)), cy + r * .62 * math.sin(math.radians(gap + 180))
+        b.append(f'<rect x="{tx - 64:.0f}" y="{ty - 9:.0f}" width="128" height="16" fill="#0a0a10"/>' + text(tx, ty + 3, labels[k], 8.5, "#ffd890", MONO, "middle"))
+    # the contract at the centre
+    b.append(f'<ellipse cx="{cx}" cy="{cy}" rx="60" ry="40" fill="url(#{p}-c)"/><rect x="{cx - 24}" y="{cy - 30}" width="48" height="56" fill="#f0e8d0"/>'
+             + text(cx, cy - 12, "CONTRACT", 7, "#2a1a10", FELL, "middle") + f'<circle cx="{cx + 12}" cy="{cy + 16}" r="7" fill="#9b221b"/>')
+    # Bernard at the entrance, holding the map
+    b.append(person(110, 470, .95, fill="#0c0a10", rim="#ffd890", rim_op=.8)
+             + '<g transform="rotate(-10 150 390)"><rect x="128" y="370" width="60" height="44" fill="#e8dcc0"/><path d="M134 380 h20 v10 h16 v12" stroke="#9b221b" fill="none"/></g>'
+             + text(110, 490, "Bernard (has the map)", 12, "#ffd890", HAND, "middle", 'opacity=".8"'))
+    b.append(person(690, 470, .9, fill="#0a0c10", rim="#9ad8a8", rim_op=.8) + text(690, 490, "Pip: “Can I see it?”", 12, "#9ad8a8", HAND, "middle", 'opacity=".8"'))
+    b.append(text(400, 36, "Won 30 Nov · signed 21 Feb · average: 20 weeks", 14, "#d8ccb0", FELL, "middle", 'letter-spacing="1.5" opacity=".75"'))
+    return p, "The Labyrinth of Procurement", defs, "".join(b)
+
+
+def escalation_summoning():
+    import math
+    p = "es"
+    defs = f'<radialGradient id="{p}-c" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ff3a22" stop-opacity=".55"/><stop offset="1" stop-color="#ff3a22" stop-opacity="0"/></radialGradient>'
+    b = [f'<rect width="{W}" height="{H}" fill="#030202"/>', f'<ellipse cx="400" cy="300" rx="330" ry="190" fill="url(#{p}-c)"/>']
+    # the circle of CCs on the floor
+    cx, cy, rx, ry = 400, 330, 300, 130
+    names = ("Ruth", "Pip", "Felix", "Nadia", "Cllr. ×2")
+    pts = [(cx + rx * math.cos(math.radians(-90 + k * 72)), cy + ry * math.sin(math.radians(-90 + k * 72))) for k in range(5)]
+    b.append(f'<ellipse cx="{cx}" cy="{cy}" rx="{rx}" ry="{ry}" fill="none" stroke="#ff5a3a" stroke-width="2" opacity=".8"/><ellipse cx="{cx}" cy="{cy}" rx="{rx - 14}" ry="{ry - 8}" fill="none" stroke="#ff5a3a" opacity=".5"/>')
+    star = [pts[(k * 2) % 5] for k in range(6)]
+    b.append('<path d="M' + " L".join(f"{x:.0f} {y:.0f}" for x, y in star) + f'" stroke="#ff5a3a" stroke-width="1.6" fill="none" opacity=".7" filter="url(#{p}-glow)"/>')
+    for (x, y), n in zip(pts, names):
+        b.append(f'<circle cx="{x:.0f}" cy="{y:.0f}" r="7" fill="#ffcf7a" filter="url(#{p}-glow)"/>' + text(x, y + (24 if y > cy else -14), "cc: " + n, 11, "#ffd8b0", MONO, "middle"))
+    # Dame Helena, summoned at the centre
+    fh = (400, 200)
+    b.append(blouse(p, fh[0], by(fh[1], .5, .62), .62, cardigan="#14141c", top="#2a2a3a", rim="#ff5a3a", rim_side="left", necklace=True))
+    b.append(face(p, 1, fh[0], fh[1], .5, skin=("#1a1210", "#6a5048", "#d0b098"), light="below", light_col="#ffb08a", rim="#ff5a3a", rim_side="right",
+                  eye="human", glow=False, brows="raised", mouth="thin", hair="bob", hair_col="#a8a8b0", ears="none", lip="#6a2a2a"))
+    # the email, floating
+    b.append('<g transform="rotate(-4 160 110)"><rect x="40" y="60" width="250" height="90" fill="#f0ece0"/><rect x="40" y="60" width="250" height="18" fill="#3a3a4a"/>'
+             + text(48, 73, "From: Gavin Pike · 07:04", 9, "#e8e8f0", MONO) + text(52, 100, "Subject:", 10, "#5a5a6a", MONO) + text(52, 126, "Unacceptable.", 22, "#9b221b", BLACK) + "</g>")
+    b.append('<g transform="rotate(5 660 90)"><rect x="580" y="50" width="170" height="70" fill="#f0ece0"/>' + text(665, 72, "Reply all · 11:02", 9, "#3a3a4a", MONO, "middle")
+             + text(665, 96, "“Ruth has it in hand.”", 12, "#1a5a3a", HAND, "middle") + "</g>")
+    b.append(text(400, 486, "07:12, on the train: Ruth already knew.", 13, "#ffd8b0", SERIF, "middle", 'font-style="italic" opacity=".7"'))
+    return p, "The Escalation Summoning", defs, "".join(b)
+
+
+def banishing_client():
+    p = "bc6"
+    defs = (f'<linearGradient id="{p}-d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff0c8"/><stop offset="1" stop-color="#d8a860"/></linearGradient>'
+            f'<radialGradient id="{p}-f" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffe2a0" stop-opacity=".5"/><stop offset="1" stop-color="#ffe2a0" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#040303"/>']
+    # the doorway, bright; Rex's shadow receding through it
+    b.append(f'<rect x="460" y="60" width="200" height="380" fill="url(#{p}-d)"/><rect x="452" y="52" width="216" height="8" fill="#2a1a0a"/>'
+             f'<path d="M460 440 L660 440 L780 500 L340 500 Z" fill="url(#{p}-f)"/>')
+    b.append('<path d="M530 440 L534 240 C536 210 584 210 586 240 L590 440 Z" fill="#0a0404"/><circle cx="560" cy="210" r="24" fill="#0a0404"/>'
+             '<path d="M522 280 L500 360 M598 280 L620 360" stroke="#0a0404" stroke-width="16" stroke-linecap="round"/>'
+             '<path d="M534 240 C536 210 584 210 586 240" stroke="#c4161c" stroke-width="2" fill="none" opacity=".7"/>' + text(560, 470, "Rex, leaving", 12, "#9b221b", HAND, "middle", 'opacity=".8"'))
+    # the banishing objects on the table: notice, handover pack, contract clause
+    b.append(table(400, "#0c0806"))
+    b.append('<g transform="rotate(-6 150 420)"><rect x="80" y="390" width="140" height="80" fill="#f0e8d0"/>' + text(150, 410, "NOTICE", 12, "#2a1a10", FELL, "middle", 'letter-spacing="2"')
+             + text(150, 432, "ends 31 March 2029", 10, "#2a1a10", SERIF, "middle") + text(150, 454, "— Ruth", 11, "#2a1a10", HAND, "middle") + "</g>")
+    b.append('<rect x="240" y="400" width="120" height="70" fill="#3a5a3a"/><rect x="240" y="400" width="120" height="14" fill="#2a4a2a"/>' + text(300, 440, "HANDOVER", 11, "#e8f0e0", FELL, "middle")
+             + text(300, 456, "+ 3 other firms", 9, "#d8e8d0", HAND, "middle"))
+    # Asha, foreground left, breathing out
+    fa = (250, 230)
+    b.append(blouse(p, fa[0], by(fa[1], .62, .8), .8, cardigan="#1a1418", top="#5a3a4a", rim="#ffe2a0", rim_side="right", necklace=True))
+    b.append(face(p, 1, fa[0], fa[1], .62, skin=("#120a06", "#4a3022", "#a87a58"), light="right", light_col="#ffe8c0", rim="#ffe2a0", rim_side="right",
+                  eye="human", glow=False, brows="flat", mouth="smile", hair="long", hair_col="#050303", ears="none", lip="#5a2a2a"))
+    b.append('<path d="M330 260 C350 256 362 262 372 254 M334 272 C352 270 366 276 380 270" stroke="#e8f0ff" stroke-width="1.4" fill="none" opacity=".45"/>')
+    b.append(text(250, 46, "True cost: −£11,000 a year, and Asha's evenings.", 13, "#ffe2a0", MONO, "middle", 'opacity=".75"'))
+    return p, "Banishing a Client", defs, "".join(b)
+
+
 PLATES = {
     "meeting-lich": meeting_lich, "gaslight-wraith": gaslight_wraith, "bulldozer-ogre": bulldozer_ogre,
     "passive-aggressive-poltergeist": passive_aggressive_poltergeist, "coasting-zombie": coasting_zombie,
@@ -2080,6 +2420,10 @@ PLATES = {
     "calibration-council": calibration_council, "raise-duel": raise_duel, "rival-for-throne": rival_for_throne,
     "title-without-gold": title_without_gold, "poisoned-chalice": poisoned_chalice, "passed-over": passed_over,
     "sponsors-mark": sponsors_mark, "first-minions": first_minions, "peter-principle": peter_principle,
+    "client-demon": client_demon, "scope-creep-swarm": scope_creep_swarm, "eleven-headed-hydra": eleven_headed_hydra,
+    "unpaid-invoice-wraith": unpaid_invoice_wraith, "bake-off-arena": bake_off_arena, "incumbent-dragon": incumbent_dragon,
+    "rigged-rfp": rigged_rfp, "frenemy-pact": frenemy_pact, "overpromise-golem": overpromise_golem,
+    "procurement-labyrinth": procurement_labyrinth, "escalation-summoning": escalation_summoning, "banishing-client": banishing_client,
     "hiring-freeze-frost": hiring_freeze_frost, "budget-bloodletting": budget_bloodletting, "more-with-less": more_with_less,
     "reorg-ritual": reorg_ritual, "suits-from-beyond": suits_from_beyond, "executioners-burden": executioners_burden,
     "survivors-haunting": survivors_haunting, "quiet-culling": quiet_culling, "go-bag-scroll": go_bag_scroll,
