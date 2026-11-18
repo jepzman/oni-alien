@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DTOs &amp; Remote Facade · Jef’s Notes</title>
+<meta name="description" content="Send one shaped message per use case, not your entities, and not thirty small calls.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=05fa3d0241">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-app">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 8 · inside the application</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="dto-remote-facade">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 16.04.27</span><span class="topic">collection · <b>inside your orm</b></span></div>
+  <p class="kicker">a.k.a. “one order form, not twelve phone calls”</p>
+  <h1><span class="hl">DTOs &amp; Remote Facade</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Across a network, every call costs. A <b>remote facade</b> offers <b>coarse-grained</b> operations (one call per screen or use case) on top of a fine-grained domain. A <b>DTO</b> (data transfer object) is the <b>shape</b> sent over the wire: just the fields the client needs, separate from your entities. You get fewer round trips, no leaked internals, and an API contract that can <b>stay stable</b> while the domain changes.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> distribution pattern</li><li><b>From:</b> Fowler, PoEAA (2002)</li><li><b>Today also:</b> BFF, GraphQL, OpenAPI-typed DTOs</li><li><b>Pairs with:</b> open host service (Vol. 7), BFF</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Exposing fine-grained objects over a network leads to <span class="hl-pink">chatty APIs</span> or <span class="hl-pink">leaked internals</span>.</p>
+  <ul>
+    <li>A screen needs fifteen calls on a slow mobile network.</li>
+    <li>Entities serialised straight to JSON leak hashes and internal flags.</li>
+    <li>A database rename breaks the mobile app.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="Doodle of two API mistakes. Left: a chatty API where the mobile app calls get order, get customer, get address, then get each of twelve lines, fifteen round trips on a slow network. Right: the API returns the Customer entity directly as JSON, including the password hash and internal flags, and renaming a database column breaks the app."><g class="rough"><rect class="d f-pink d-red" x="20" y="30" width="340" height="160" rx="10"/><rect class="d d-thin f-y" x="50" y="90" width="24" height="17.28" rx="2"/><path class="d d-thin" d="M50 90 l12 9.6 l12 -9.6"/><rect class="d d-thin f-y" x="80" y="90" width="24" height="17.28" rx="2"/><path class="d d-thin" d="M80 90 l12 9.6 l12 -9.6"/><rect class="d d-thin f-y" x="110" y="90" width="24" height="17.28" rx="2"/><path class="d d-thin" d="M110 90 l12 9.6 l12 -9.6"/><rect class="d d-thin f-y" x="140" y="90" width="24" height="17.28" rx="2"/><path class="d d-thin" d="M140 90 l12 9.6 l12 -9.6"/><rect class="d d-thin f-y" x="170" y="90" width="24" height="17.28" rx="2"/><path class="d d-thin" d="M170 90 l12 9.6 l12 -9.6"/><rect class="d d-thin f-y" x="200" y="90" width="24" height="17.28" rx="2"/><path class="d d-thin" d="M200 90 l12 9.6 l12 -9.6"/><rect class="d d-thin f-y" x="230" y="90" width="24" height="17.28" rx="2"/><path class="d d-thin" d="M230 90 l12 9.6 l12 -9.6"/><rect class="d d-thin f-y" x="260" y="90" width="24" height="17.28" rx="2"/><path class="d d-thin" d="M260 90 l12 9.6 l12 -9.6"/><rect class="d d-thin f-y" x="290" y="90" width="24" height="17.28" rx="2"/><path class="d d-thin" d="M290 90 l12 9.6 l12 -9.6"/><rect class="d d-thin f-y" x="320" y="90" width="24" height="17.28" rx="2"/><path class="d d-thin" d="M320 90 l12 9.6 l12 -9.6"/><rect class="d f-pink d-red" x="400" y="30" width="340" height="160" rx="10"/></g><text class="t-head" x="190" y="62" text-anchor="middle">chatty API</text><text class="t" x="190" y="150" text-anchor="middle">15 round trips</text><text class="t-head" x="570" y="62" text-anchor="middle">entity as JSON</text><text class="t" x="570" y="104" text-anchor="middle">passwordHash: “…”</text><text class="t" x="570" y="140" text-anchor="middle">column rename → app breaks</text><text class="t-s t-red" x="380" y="240" text-anchor="middle">too many calls, or the wrong shape</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Left: 15 small calls on a phone network. Right: entities as JSON, leaking a password hash.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the mail-order form</span></h2>
+  <p>You don't <b>phone the shop</b> once per item to ask its size, price and stock. You fill in <b>one order form</b> and get <b>one confirmation</b> with what you need. The form is designed for customers, not a photocopy of the <b>warehouse ledger</b>.</p>
+  <ul>
+    <li>The shop counter is the <b>remote facade</b>.</li>
+    <li>The form and the confirmation are <b>DTOs</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a mail-order form. Instead of phoning the shop once per item to ask its price, size and stock, you fill in one order form with everything on it, and get back one confirmation with exactly what you need. The form is designed for customers, not a copy of the warehouse ledger."><g class="rough"><g transform="translate(40 60) scale(1.6)"><g class="d"><rect class="f-paper" x="16" y="0" width="30" height="56" rx="6"/><path d="M26 48 h10"/></g></g><path class="d" d="M240 100 L330 100"/><path class="d" d="M319.2 105.2 L330 100 L319.2 94.8"/><g transform="translate(360 50) scale(1.6)"><g class="d"><path class="f-paper" d="M6 0 h48 v62 l-8 -6 l-8 6 l-8 -6 l-8 6 l-8 -6 l-8 6 z"/><path d="M14 12 h32 M14 22 h24 M14 32 h32 M14 42 h18"/></g></g></g><text class="t-s t-red" x="170" y="70" text-anchor="middle">× 12 calls</text><text class="t-s t-green" x="560" y="70" text-anchor="middle">one form, one reply</text><text class="t-s t-green" x="560" y="120" text-anchor="middle">shaped for the customer</text><text class="t-s t-pen" x="560" y="170" text-anchor="middle">not the warehouse ledger</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One order form with everything, not one phone call per item, and not the warehouse ledger.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>A phone call per item</td><td>A chatty, fine-grained remote API</td></tr>
+      <tr><td>One order form</td><td>One coarse call per use case</td></tr>
+      <tr><td>The confirmation slip</td><td>A response DTO shaped for the screen</td></tr>
+      <tr><td>The warehouse ledger</td><td>Your entities and tables, which stay inside</td></tr>
+      <tr><td>A new form layout, same ledger</td><td>A new API version, same domain</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">coarse calls, shaped data</span></h2>
+  <p>Fowler designed these to cut <b>round trips</b> in the EJB era. Today the bigger reason is the <b>contract</b>: a DTO is your published language (Vol. 7), and keeping it separate from entities lets both change at their own pace. For many differently-shaped clients, a <b>BFF</b> or <b>GraphQL</b> lets each client shape its own DTOs.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 320" role="img" aria-label="A remote facade with DTOs. The mobile app calls one coarse endpoint, GET order summary 7, and receives one DTO: order number, status, delivery address, line names and quantities, and totals. Inside, a facade calls the domain and repositories, then maps to the DTO. The DTO is versioned and documented separately from the domain classes."><g class="rough"><rect class="d f-paper" x="20" y="100" width="180" height="80" rx="10"/><path class="d" d="M204 140 L266 140"/><path class="d" d="M255.2 145.2 L266 140 L255.2 134.8"/><rect class="d f-y" x="270" y="70" width="220" height="140" rx="10"/><path class="d" d="M494 140 L556 140"/><path class="d" d="M545.2 145.2 L556 140 L545.2 134.8"/><path class="d" d="M504.8 134.8 L494 140 L504.8 145.2"/><rect class="d f-blue" x="560" y="70" width="180" height="140" rx="10"/><rect class="d f-green" x="170" y="240" width="420" height="60" rx="10"/></g><text class="t-head" x="110" y="147" text-anchor="middle" font-size="17">mobile app</text><text class="t-s" x="235" y="128" text-anchor="middle">1 call</text><text class="t-head" x="380" y="104" text-anchor="middle">remote facade</text><text class="t" x="380" y="144" text-anchor="middle">GET /order-summary/7</text><text class="t" x="380" y="180" text-anchor="middle">maps → DTO</text><text class="t-head" x="650" y="136" text-anchor="middle">domain</text><text class="t" x="650" y="160" text-anchor="middle" font-size="17">entities, rules</text><text class="t-head" x="380" y="277" text-anchor="middle" font-size="16">OrderSummaryDto (versioned)</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One coarse call per screen or use case; a DTO shaped for it; mapping happens inside, behind the facade.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Start from the screen or use case</b><p>What does the client need in one go?</p></li>
+    <li><b>Design the DTO for that</b><p>Only those fields, named for the client, with no internal IDs or flags.</p></li>
+    <li><b>Offer one coarse operation</b><p><code>GET /order-summary/7</code>, <code>POST /checkout</code>.</p></li>
+    <li><b>Map inside the facade</b><p>Domain → DTO in one place, tested.</p></li>
+    <li><b>Document and version it</b><p>OpenAPI schema; additive changes, new versions for breaking ones.</p></li>
+    <li><b>Consider a BFF or GraphQL</b><p>When several clients need very different shapes.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>DTO</dt><dd>A plain object carrying data across a boundary, with no behaviour.</dd></div>
+    <div><dt>Remote facade</dt><dd>A coarse-grained interface over fine-grained objects, for remote callers.</dd></div>
+    <div><dt>Chatty interface</dt><dd>One that needs many small calls to do one job.</dd></div>
+    <div><dt>Over-posting / mass assignment</dt><dd>Accepting fields in a request that clients shouldn't set.</dd></div>
+    <div><dt>BFF</dt><dd>Backend for frontend: a server-side facade per client type.</dd></div>
+    <div><dt>Mapper</dt><dd>Code that converts between domain objects and DTOs.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>order-summary.ts</span><span>a DTO for one screen, mapped inside</span></div>
+<pre><code><span class="c">// the contract: what the app needs, nothing more</span>
+<span class="k">export</span> <span class="k">type</span> OrderSummaryDto = {
+  number: string; status: <span class="s">"placed"</span> | <span class="s">"shipped"</span> | <span class="s">"delivered"</span>;
+  deliverTo: { name: string; street: string; city: string };
+  lines: { name: string; qty: number; price: string }[];
+  total: string;
+};
+
+app.get(<span class="s">"/order-summary/:id"</span>, <span class="k">async</span> (req, res) =&gt; {
+  <span class="k">const</span> order = <span class="k">await</span> orders.get(orderId(req.params.id));
+  <span class="k">const</span> customer = <span class="k">await</span> customers.get(order.customerId);
+  res.json(toSummary(order, customer));   <span class="c">// never res.json(order)</span>
+});
+
+<span class="k">const</span> toSummary = (o: Order, c: Customer): OrderSummaryDto =&gt; ({
+  number: o.number, status: o.status, deliverTo: c.deliveryAddress.toDto(c.name),
+  lines: o.lines.map((l) =&gt; ({ name: l.productName, qty: l.qty.value, price: l.subtotal().format() })),
+  total: o.total().format(),
+});</code></pre>
+  </div>
+  <p class="aside">tools: OpenAPI with generated client types, Zod or class-validator schemas for request DTOs, mapping helpers (or plain functions), BFF services, GraphQL with DataLoader, gRPC/Protobuf messages for service-to-service DTOs.</p>
+  <section class="thennow verdict-rethought" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="the idea holds, the way the book did it has changed">rethought</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Fowler, PoEAA 2002</small></h3><p>Fowler introduced DTOs and remote facades mainly for performance: remote calls in EJB and CORBA were expensive, so you batched data into serialisable objects and offered coarse operations.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>The performance reason still applies on mobile networks, but the main reason now is the <b>contract</b>: DTOs as OpenAPI or Protobuf schemas, separate from entities, safe against over-posting. BFFs and GraphQL let each client shape its own DTOs.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> Rethought: same patterns, now mostly for stable, safe contracts rather than raw speed.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Fewer round trips</b>.</li><li><b>No leaked internals</b> or over-posting.</li><li><b>Stable API</b> while the domain changes.</li><li><b>Clear contracts</b> for clients and docs.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Mapping code</b> to write and test.</li><li><b>More types</b>: DTOs per use case.</li><li><b>Coarse calls</b> may over-fetch for some clients.</li><li><b>Duplication</b> between DTO and entity fields.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Code-design ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>fine-grained APIs or entities serialised directly</b> to <b>a coarse remote facade returning use-case DTOs</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="4"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One call and one shape per screen.</td></tr>
+      <tr data-before="3" data-after="4"><td>Domain clarity<small>reads like the business?</small></td><td class="dcell"></td><td class="score"></td><td class="why">DTOs named for what clients see.</td></tr>
+      <tr data-before="2" data-after="4"><td>Correctness<small>rules can't be broken?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No mass assignment or leaked fields.</td></tr>
+      <tr data-before="2" data-after="4"><td>Changeability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Domain changes don't break clients.</td></tr>
+      <tr data-before="3" data-after="4"><td>Testability<small>test without the world?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Mappers and contracts tested separately.</td></tr>
+      <tr data-before="2" data-after="5"><td>Low coupling<small>parts change alone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Clients depend on DTOs, not entities.</td></tr>
+      <tr data-before="2" data-after="4"><td>Performance<small>fast enough?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Far fewer round trips.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low ceremony<small>little boilerplate?</small></td><td class="dcell"></td><td class="score"></td><td class="why">DTOs and mappers to write.</td></tr>
+      <tr data-before="3" data-after="4"><td>Team scalability<small>many teams at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Client and server teams agree on a contract.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Returning entities</h3><p><code>res.json(customer)</code> leaks the password hash. <span class="fix">Fix →</span> always map to a DTO; never serialise entities.</p></li>
+    <li><h3>Binding requests to entities</h3><p>Clients set <code>isAdmin</code> by adding a field. <span class="fix">Fix →</span> request DTOs with an allow-list of fields.</p></li>
+    <li><h3>One DTO for everything</h3><p>A 60-field OrderDto used by every screen. <span class="fix">Fix →</span> DTOs per use case or per client (BFF).</p></li>
+    <li><h3>Generic CRUD over HTTP</h3><p>Every table exposed as fine-grained endpoints. <span class="fix">Fix →</span> design operations around use cases.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Any API crossing a network, especially to mobile or third parties.</li><li>Screens that need data from several objects.</li><li>Keeping an API stable while the domain changes.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>In-process calls between modules (pass domain objects or plain values).</li><li>Prototypes where the API and the model are deliberately the same.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/lazy-loading.html"><b>Lazy Loading</b></a></li><li><a href="../notes/adapter-facade.html"><b>Adapter &amp; Facade</b></a></li><li><a href="../../ddd/notes/open-host-service.html"><b>Open Host Service &amp; Published Language</b></a> (Vol. 7)</li><li><a href="../../architect-4/notes/backend-for-frontend.html"><b>Backend for Frontend</b></a> (Ana, vol. 4)</li><li><a href="../../distributed/notes/api-gateway.html"><b>API Gateway</b></a> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What's a remote facade?</summary><p>A coarse-grained interface over fine-grained objects, so remote clients need few calls.</p></details>
+    <details><summary>What's a DTO?</summary><p>A plain data object shaped for transfer across a boundary, with no behaviour.</p></details>
+    <details><summary>Why not return entities as JSON?</summary><p>They leak internals, invite mass assignment, and tie clients to the database shape.</p></details>
+    <details><summary>When do a BFF or GraphQL help?</summary><p>When different clients need very different shapes of the same data.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A security review finds that <code>PATCH /users/:id</code> accepts any JSON and saves it into the User entity; a tester made themselves an admin. What do you change?</span></summary><p>Accept a request DTO with an explicit allow-list of editable fields (name, phone), validate it, map it onto the entity through domain methods, and never bind request bodies to entities directly. Add a test that sending <code>isAdmin</code> has no effect.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Find one endpoint that returns an ORM entity directly. Write a DTO type with only what the client uses, a mapper function with a test, and compare the JSON size before and after.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Send <span class="hl">one order form</span>, never the <span class="hl">warehouse ledger</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/10-dto-remote-facade.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Martin Fowler, <i>Patterns of Enterprise Application Architecture</i> (2002), “Data Transfer Object”, “Remote Facade”.</li><li>Martin Fowler, “LocalDTO” (bliki, 2004).</li><li>OWASP API Security Top 10 (2023), “Broken Object Property Level Authorization”.</li><li>Sam Newman, “Backends For Frontends” (2015).</li></ul>
+  </div>
+  <p class="folio">10</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="offline-locks.html"><small>← previous note</small>09 · Offline Locks &amp; ETags</a>
+  <a href="transaction-script.html"><small>Next note →</small>11 · Transaction Script vs Domain Model</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 8 · a student's bullet journal on inside the application</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

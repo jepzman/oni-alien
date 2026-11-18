@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Liskov Substitution · Jef’s Notes</title>
+<meta name="description" content="A subtype must keep every promise its parent makes, or callers break.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=05fa3d0241">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-app">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 8 · inside the application</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="liskov-substitution">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 23.03.27</span><span class="topic">collection · <b>solid, read today</b></span></div>
+  <p class="kicker">a.k.a. “the substitute teacher must follow the plan”</p>
+  <h1><span class="hl">Liskov Substitution</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>If code works with a type, it must keep working with <b>any subtype or implementation</b> of it. A subtype may not <b>demand more</b> (stricter inputs) or <b>promise less</b> (weaker results, new exceptions) than its parent. When an implementation can't keep a promise, it isn't really that type: <b>split the interface</b> by ability instead of throwing “not supported”.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> SOLID principle</li><li><b>From:</b> Barbara Liskov (1987); Liskov &amp; Wing (1994)</li><li><b>Applies to:</b> subclasses, interfaces, API versions</li><li><b>Check with:</b> contract tests</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">A subtype that quietly <span class="hl-pink">breaks a promise</span> of its parent compiles fine and <span class="hl-pink">fails at runtime</span>, far from where it was written.</p>
+  <ul>
+    <li><code>ReadOnlyCart extends Cart</code>, but <code>add()</code> throws.</li>
+    <li>A cached repository returns stale data where callers expect fresh.</li>
+    <li>Callers fill up with <code>if (x instanceof …)</code> checks.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a subtype that breaks its promise. Checkout accepts any Cart and calls add on it. A ReadOnlyCart extends Cart for saved wish lists, but its add method throws an error. When a wish list reaches checkout, the app crashes. The code compiled fine."><g class="rough"><rect class="d f-blue" x="20" y="40" width="220" height="80" rx="10"/><rect class="d f-paper" x="300" y="20" width="200" height="60" rx="10"/><rect class="d f-pink d-red" x="300" y="120" width="200" height="60" rx="10"/><path class="d d-dash" d="M400 116 L400 84"/><path class="d" d="M405.2 94.8 L400 84 L394.8 94.8"/><path class="d d-red" d="M244 80 L296 140"/><path class="d d-red" d="M285.0 135.3 L296 140 L292.9 128.4"/></g><text class="t-head" x="130" y="76" text-anchor="middle">checkout(cart)</text><text class="t" x="130" y="100" text-anchor="middle" font-size="17">calls cart.add()</text><text class="t-head" x="400" y="46" text-anchor="middle" font-size="18">Cart</text><text class="t" x="400" y="70" text-anchor="middle" font-size="17">add() works</text><text class="t-head t-red" x="400" y="146" text-anchor="middle" font-size="17">ReadOnlyCart</text><text class="t" x="400" y="170" text-anchor="middle" font-size="17">add() throws!</text><text class="t-s t-pen" x="620" y="110" text-anchor="middle">compiles fine</text><text class="t-s t-red" x="620" y="140" text-anchor="middle">crashes at runtime</text><text class="t-s t-red" x="380" y="230" text-anchor="middle">the subtype broke a promise the parent made</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>ReadOnlyCart “is a” Cart, but its add() throws; checkout crashes on a wish list.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the substitute teacher</span></h2>
+  <p>When a teacher is ill, the <b>substitute</b> must teach from the same plan, take the register and mark homework. One who only answers in French or refuses to mark isn't really a substitute: the class plan breaks.</p>
+  <ul>
+    <li>The lesson plan is the <b>contract</b>.</li>
+    <li>A good substitute is a <b>proper subtype</b>.</li>
+    <li>The class shouldn't notice the swap.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a substitute teacher. When the regular teacher is ill, the substitute must be able to teach from the same lesson plan, take the register, and follow the school rules. A substitute who only takes questions in French, or refuses to mark homework, isn&#x27;t a substitute: the class plan breaks."><g class="rough"><rect class="d f-green" x="20" y="50" width="220" height="90" rx="10"/><rect class="d f-green" x="270" y="50" width="220" height="90" rx="10"/><rect class="d f-pink d-red" x="520" y="50" width="220" height="90" rx="10"/></g><text class="t-head" x="130" y="91" text-anchor="middle">teacher</text><text class="t" x="130" y="115" text-anchor="middle" font-size="17">the lesson plan</text><text class="t-head" x="380" y="91" text-anchor="middle">good substitute</text><text class="t" x="380" y="115" text-anchor="middle" font-size="17">same plan works</text><text class="t-head t-red" x="630" y="91" text-anchor="middle">bad substitute</text><text class="t" x="630" y="115" text-anchor="middle" font-size="17">“no marking”</text><text class="t-s t-pen" x="380" y="200" text-anchor="middle">the class shouldn&#x27;t notice the swap</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A substitute teacher must keep the class plan working. One who refuses half of it isn't a substitute.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The lesson plan</td><td>The parent type's contract</td></tr>
+      <tr><td>The substitute</td><td>A subclass or another implementation</td></tr>
+      <tr><td>“I don't mark homework”</td><td><code>throw new Error('not supported')</code></td></tr>
+      <tr><td>Class notices the swap</td><td>Callers need <code>instanceof</code> checks</td></tr>
+      <tr><td>Hire a different role</td><td>Split the interface by ability</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">keep the promises, or split the type</span></h2>
+  <p>The rules: <b>preconditions</b> can't be stronger, <b>postconditions</b> can't be weaker, <b>invariants</b> must hold, and no <b>new exceptions</b> callers don't expect. It applies to interface implementations and to API versions too.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Fixing the hierarchy. Instead of ReadOnlyCart extending Cart, split the abilities: a CartView interface with lines and total that both a cart and a wish list satisfy, and an EditableCart with add and remove that only real carts implement. Checkout asks for EditableCart; the wish list page asks for CartView. A shared contract test runs against every implementation."><g class="rough"><rect class="d f-y" x="270" y="20" width="220" height="70" rx="10"/><rect class="d f-green" x="40" y="160" width="220" height="70" rx="10"/><rect class="d f-blue" x="500" y="160" width="220" height="70" rx="10"/><path class="d d-dash" d="M150 156 L330 94"/><path class="d" d="M321.5 102.5 L330 94 L318.1 92.6"/><path class="d d-dash" d="M610 156 L430 94"/><path class="d" d="M441.9 92.6 L430 94 L438.5 102.5"/></g><text class="t-head" x="380" y="51" text-anchor="middle">CartView</text><text class="t" x="380" y="75" text-anchor="middle" font-size="17">lines · total</text><text class="t-head" x="150" y="191" text-anchor="middle">EditableCart</text><text class="t" x="150" y="215" text-anchor="middle" font-size="17">+ add · remove</text><text class="t-head" x="610" y="191" text-anchor="middle">WishList</text><text class="t" x="610" y="215" text-anchor="middle" font-size="17">view only</text><text class="t-s t-green" x="150" y="270" text-anchor="middle">checkout asks for this</text><text class="t-s t-pen" x="610" y="270" text-anchor="middle">wish-list page uses this</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Split by ability: everything can be viewed, only real carts can be edited. One contract test for all.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Write the contract down</b><p>What does the type accept, return and promise? Comments, types and tests.</p></li>
+    <li><b>Check each implementation</b><p>Does it accept everything the parent accepts and return what the parent promises?</p></li>
+    <li><b>Watch for “not supported”</b><p>An implementation that throws for part of the interface is a sign of a wrong type.</p></li>
+    <li><b>Split by ability</b><p>Separate interfaces for what different implementations really can do.</p></li>
+    <li><b>Prefer composition</b><p>Reuse code by holding an object, not by inheriting one you can't fully honour.</p></li>
+    <li><b>Run one contract test for all</b><p>The same test suite against every implementation.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Liskov substitution principle</dt><dd>Subtypes must be usable wherever their base type is expected.</dd></div>
+    <div><dt>Precondition</dt><dd>What must be true before calling: a subtype can't demand more.</dd></div>
+    <div><dt>Postcondition</dt><dd>What's true after: a subtype can't promise less.</dd></div>
+    <div><dt>Invariant</dt><dd>What's always true about the object.</dd></div>
+    <div><dt>Contract test</dt><dd>A test suite every implementation of an interface must pass.</dd></div>
+    <div><dt>Refused bequest</dt><dd>A subclass that doesn't want what it inherits: a hint of the wrong hierarchy.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>cart.contract.test.ts</span><span>one contract, every implementation</span></div>
+<pre><code><span class="k">export</span> <span class="k">interface</span> CartView     { lines(): readonly Line[]; total(): Money }
+<span class="k">export</span> <span class="k">interface</span> EditableCart extends CartView { add(p: ProductId, q: Quantity): void }
+
+<span class="c">// every EditableCart must pass this, whatever its storage</span>
+<span class="k">export</span> <span class="k">function</span> editableCartContract(make: () =&gt; EditableCart) {
+  test(<span class="s">"adding a product increases the total"</span>, () =&gt; {
+    <span class="k">const</span> cart = make();
+    <span class="k">const</span> before = cart.total();
+    cart.add(productId(<span class="s">"BIKE-42"</span>), Quantity.<span class="k">of</span>(1));
+    expect(cart.total().cents).toBeGreaterThan(before.cents);
+  });
+}
+
+describe(<span class="s">"InMemoryCart"</span>, () =&gt; editableCartContract(() =&gt; <span class="k">new</span> InMemoryCart()));
+describe(<span class="s">"RedisCart"</span>,    () =&gt; editableCartContract(() =&gt; <span class="k">new</span> RedisCart(testRedis)));</code></pre>
+  </div>
+  <p class="aside">tools: shared contract test suites, TypeScript and Kotlin type checkers (they check signatures, not behaviour), property-based tests that run the same properties against each implementation, and consumer contract tests for API versions.</p>
+  <section class="thennow verdict-core" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="as useful as when it was written">still core</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Liskov, 1987; Liskov &amp; Wing, 1994</small></h3><p>Liskov's 1987 keynote defined behavioural subtyping; with Wing (1994) it became precise rules about preconditions, postconditions and invariants. Martin made it the “L” in SOLID, mostly about class hierarchies.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>Deep inheritance is rarer, but the principle applies equally to interface implementations, plug-ins, mocks and API versions. Contract tests and consumer-driven contracts are the practical tools.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> Still core. It's the most precise of the five, and the least fashion-dependent.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Safe substitution</b>: swap implementations without surprises.</li><li><b>No type checks</b> scattered through callers.</li><li><b>Honest types</b>: they say what things can do.</li><li><b>Reusable tests</b> across implementations.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More, smaller interfaces</b>.</li><li><b>Contracts take thought</b> to write down.</li><li><b>Reworking hierarchies</b> that already exist.</li><li><b>Behaviour isn't checked</b> by compilers alone.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Code-design ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>subtypes that sometimes refuse or change their parent's promises</b> to <b>types split by ability, checked by contract tests</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="4"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No surprises when swapping.</td></tr>
+      <tr data-before="3" data-after="4"><td>Domain clarity<small>reads like the business?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Types say what things can really do.</td></tr>
+      <tr data-before="2" data-after="5"><td>Correctness<small>rules can't be broken?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The point: substitutes keep every promise.</td></tr>
+      <tr data-before="3" data-after="4"><td>Changeability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New implementations slot in safely.</td></tr>
+      <tr data-before="3" data-after="5"><td>Testability<small>test without the world?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One contract suite for all implementations.</td></tr>
+      <tr data-before="3" data-after="4"><td>Low coupling<small>parts change alone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Callers depend on the contract, not the concrete class.</td></tr>
+      <tr data-before="3" data-after="3"><td>Performance<small>fast enough?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low ceremony<small>little boilerplate?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More interfaces, fewer type checks.</td></tr>
+      <tr data-before="3" data-after="4"><td>Team scalability<small>many teams at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Teams can add implementations without breaking callers.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>“Not supported” methods</h3><p>An implementation throws for half the interface. <span class="fix">Fix →</span> split the interface by ability.</p></li>
+    <li><h3>Inheriting for reuse</h3><p>A class extends another only to reuse a few methods. <span class="fix">Fix →</span> compose: hold the other object instead.</p></li>
+    <li><h3>Stricter inputs in a subtype</h3><p>The subclass rejects values the parent accepts. <span class="fix">Fix →</span> accept at least what the parent accepts.</p></li>
+    <li><h3>Trusting the compiler</h3><p>Signatures match, so it “must” be fine. <span class="fix">Fix →</span> contract tests check behaviour, not just types.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Designing interfaces with several implementations (storage, payment, carriers).</li><li>Class hierarchies where callers check concrete types.</li><li>Versioning an API that old clients still call.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>There's only one implementation and no hierarchy.</li><li>Internal test doubles that deliberately do less (keep them in tests).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/interface-segregation.html"><b>Interface Segregation</b></a></li><li><a href="../notes/open-closed.html"><b>Open–Closed</b></a></li><li><a href="../../testing/notes/contract-testing.html"><b>Contract Testing</b></a> (Vol. 4)</li><li><a href="../../testing/notes/fakes.html"><b>Fakes</b></a> (Vol. 4)</li></ul>
+  <p class="aside deeper">on a card → <a href="../../cheatsheets/refactoring/index.html">Refactoring: the cheat sheet</a></p>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>State the Liskov substitution principle simply.</summary><p>Code that works with a type must keep working with any of its subtypes or implementations.</p></details>
+    <details><summary>Can a subtype require stricter inputs than its parent?</summary><p>No: preconditions may not be strengthened.</p></details>
+    <details><summary>What does a method that throws “not supported” suggest?</summary><p>The type is wrong: the implementation can't honour the contract, so split the interface.</p></details>
+    <details><summary>How do you check behaviour across implementations?</summary><p>A shared contract test suite run against each one.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Your <code>FileStorage</code> interface has <code>delete()</code>, and the new archive storage throws “archives are immutable” on delete. A cleanup job crashed overnight. What do you change?</span></summary><p>Split the interface: a readable/writable storage for everything, and a deletable one only for storages that support it. The cleanup job asks for the deletable kind, so the archive can't be passed to it. Add a contract test for each interface.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Pick an interface with two or more implementations in your code. Write three contract tests describing what every implementation must do, run them against each, and fix or split whatever fails.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>A good <span class="hl">substitute</span> follows the <span class="hl">whole lesson plan</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/03-liskov-substitution.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Barbara Liskov, “Data Abstraction and Hierarchy” (OOPSLA keynote, 1987).</li><li>Barbara Liskov &amp; Jeannette Wing, “A Behavioral Notion of Subtyping” (1994).</li><li>Robert C. Martin, “The Liskov Substitution Principle” (C++ Report, 1996).</li><li>Bertrand Meyer, <i>Object-Oriented Software Construction</i>, 2nd ed. (1997), Design by Contract.</li></ul>
+  </div>
+  <p class="folio">03</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="open-closed.html"><small>← previous note</small>02 · Open–Closed</a>
+  <a href="interface-segregation.html"><small>Next note →</small>04 · Interface Segregation</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 8 · a student's bullet journal on inside the application</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

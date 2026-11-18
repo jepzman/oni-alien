@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Offline Locks &amp; ETags · Jef’s Notes</title>
+<meta name="description" content="Stop one user&#x27;s save silently overwriting another&#x27;s, across minutes of editing.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=05fa3d0241">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-app">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 8 · inside the application</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="offline-locks">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 13.04.27</span><span class="topic">collection · <b>inside your orm</b></span></div>
+  <p class="kicker">a.k.a. “changed since you opened it”</p>
+  <h1><span class="hl">Offline Locks &amp; ETags</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>A database transaction can't stay open while a person edits a form for ten minutes, so two people can <b>overwrite each other</b> without knowing. An <b>optimistic offline lock</b> saves a <b>version</b> with the data; a save succeeds only if the version is unchanged, otherwise the user sees a <b>conflict</b> instead of silently losing work. Over HTTP this is <b>ETag + If-Match → 412</b>. Use a <b>pessimistic</b> lock (a lease with an expiry) only where conflicts are costly and frequent.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> offline concurrency</li><li><b>From:</b> Fowler, PoEAA (2002)</li><li><b>Over HTTP:</b> ETag, If-Match, 412 Precondition Failed</li><li><b>Pairs with:</b> optimistic locking (Vol. 3)</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">When two people edit the same record over minutes, the second save <span class="hl-pink">silently erases</span> the first.</p>
+  <ul>
+    <li>Two agents edit one order; one agent's address change vanishes.</li>
+    <li>A mobile app syncs an old copy over a newer one.</li>
+    <li>No error, so nobody knows until the parcel goes astray.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a lost update across two browser tabs. Support agent Sam opens order 7 at 10:00 and changes the address. Agent Priya opens the same order at 10:02 and adds a discount. Sam saves at 10:05; Priya saves at 10:08 with the old address still in her form. Sam&#x27;s address change is silently lost and the parcel goes to the old address."><g class="rough"><rect class="d f-blue" x="20" y="30" width="220" height="70" rx="10"/><rect class="d f-y" x="20" y="140" width="220" height="70" rx="10"/><rect class="d f-green" x="300" y="30" width="200" height="70" rx="10"/><rect class="d f-pink d-red" x="300" y="140" width="200" height="70" rx="10"/><path class="d" d="M244 65 L296 65"/><path class="d" d="M285.2 70.2 L296 65 L285.2 59.8"/><path class="d" d="M244 175 L296 175"/><path class="d" d="M285.2 180.2 L296 175 L285.2 169.8"/></g><text class="t-head" x="130" y="61" text-anchor="middle">Sam 10:00</text><text class="t" x="130" y="85" text-anchor="middle" font-size="17">changes address</text><text class="t-head" x="130" y="171" text-anchor="middle">Priya 10:02</text><text class="t" x="130" y="195" text-anchor="middle" font-size="17">adds discount</text><text class="t-head" x="400" y="61" text-anchor="middle">save 10:05</text><text class="t" x="400" y="85" text-anchor="middle" font-size="17">new address</text><text class="t-head t-red" x="400" y="171" text-anchor="middle">save 10:08</text><text class="t" x="400" y="195" text-anchor="middle" font-size="17">old address!</text><text class="t-s t-red" x="630" y="120" text-anchor="middle">Sam&#x27;s change: gone</text><text class="t-s t-red" x="380" y="246" text-anchor="middle">no error, no warning</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Sam and Priya edit the same order; Priya's later save silently overwrites Sam's new address.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the shared document and the room key</span></h2>
+  <p>A shared online <b>document</b> warns you: “this paragraph was changed since you opened it”, and lets you review. A <b>meeting room</b> works differently: one person takes the key for an hour; others wait.</p>
+  <ul>
+    <li>The warning is an <b>optimistic</b> lock: check at save time.</li>
+    <li>The key is a <b>pessimistic</b> lock: block others up front.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a shared online document. When you try to save after someone else changed the same paragraph, the editor says: this was changed since you opened it, review the changes. For a booked meeting room, a different approach: you take the key for an hour, and others wait or come back later."><g class="rough"><rect class="d f-green" x="20" y="40" width="340" height="120" rx="10"/><rect class="d f-y" x="400" y="40" width="340" height="120" rx="10"/></g><text class="t-head" x="190" y="74" text-anchor="middle">shared document</text><text class="t" x="190" y="112" text-anchor="middle">“changed since you opened it”</text><text class="t-head" x="570" y="74" text-anchor="middle">meeting-room key</text><text class="t" x="570" y="112" text-anchor="middle">one person, for an hour</text><text class="t-s t-pen" x="190" y="200" text-anchor="middle">optimistic</text><text class="t-s t-pen" x="570" y="200" text-anchor="middle">pessimistic</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A shared doc warns “changed since you opened it”. A meeting room key lets one person in at a time.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>“Changed since you opened it”</td><td>Version mismatch → 409 / 412 conflict</td></tr>
+      <tr><td>The version you opened</td><td>An ETag or version number sent back on save</td></tr>
+      <tr><td>Review the changes</td><td>Showing the user the newer data to merge</td></tr>
+      <tr><td>Taking the room key</td><td>A pessimistic lease: “Sam is editing until 10:15”</td></tr>
+      <tr><td>Key with a return time</td><td>A lock that expires if Sam walks away</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">versions, ETags and conflicts</span></h2>
+  <p>This is the same idea as optimistic locking in the database (Vol. 3), stretched over a whole <b>user session</b>: the version travels to the browser and back. Conflicts are rare in most apps, so optimistic is the default.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 320" role="img" aria-label="Optimistic offline lock over HTTP. GET order 7 returns the order with an ETag header containing version 12. The browser sends the edit with If-Match version 12. The server updates only if the version is still 12, and returns the new ETag 13. If someone saved in between, the version is 13 and the server answers 412 Precondition Failed; the client shows the changes and lets the user merge."><g class="rough"><rect class="d f-paper" x="20" y="30" width="200" height="70" rx="10"/><rect class="d f-blue" x="540" y="30" width="200" height="70" rx="10"/><path class="d" d="M224 50 L536 50"/><path class="d" d="M525.2 55.2 L536 50 L525.2 44.8"/><path class="d" d="M224 130 L536 130"/><path class="d" d="M525.2 135.2 L536 130 L525.2 124.8"/><rect class="d f-green" x="540" y="170" width="200" height="60" rx="10"/><rect class="d f-pink d-red" x="540" y="246" width="200" height="60" rx="10"/></g><text class="t-head" x="120" y="72" text-anchor="middle" font-size="18">browser</text><text class="t-head" x="640" y="72" text-anchor="middle" font-size="18">server</text><text class="t-s" x="380" y="40" text-anchor="middle">GET → ETag: &quot;v12&quot;</text><text class="t-s" x="380" y="120" text-anchor="middle">PUT, If-Match: &quot;v12&quot;</text><text class="t-head" x="640" y="207" text-anchor="middle" font-size="16">200 · ETag v13</text><text class="t-head t-red" x="640" y="283" text-anchor="middle" font-size="16">412 if now v13</text><text class="t-s t-pen" x="250" y="230" text-anchor="middle">UPDATE … WHERE version = 12</text><text class="t-s t-pen" x="250" y="270" text-anchor="middle">0 rows → someone saved first</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>GET returns an ETag; PUT sends If-Match; a changed version means 412, never a silent overwrite.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Add a version</b><p>A column incremented on every update (or a timestamp, or a hash).</p></li>
+    <li><b>Send it to the client</b><p>As an ETag header or a field in the response.</p></li>
+    <li><b>Require it on save</b><p>If-Match header or a version field; reject saves without one.</p></li>
+    <li><b>Update conditionally</b><p><code>UPDATE … WHERE id = ? AND version = ?</code>; zero rows means conflict.</p></li>
+    <li><b>Show the conflict</b><p>412 or 409 with the current data; let the user merge or retry.</p></li>
+    <li><b>Pessimistic only where needed</b><p>A lease with an owner and an expiry, released on save or timeout.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Lost update</dt><dd>A later save overwriting an earlier one without noticing.</dd></div>
+    <div><dt>Optimistic offline lock</dt><dd>Check a version at save time; fail on conflict.</dd></div>
+    <div><dt>Pessimistic offline lock</dt><dd>Mark the record as being edited so others can't.</dd></div>
+    <div><dt>ETag</dt><dd>An HTTP header identifying a version of a resource.</dd></div>
+    <div><dt>If-Match</dt><dd>A request header: only apply if the ETag still matches.</dd></div>
+    <div><dt>412 Precondition Failed</dt><dd>The response when If-Match doesn't match.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>orders.route.ts</span><span>ETag and If-Match on an edit endpoint</span></div>
+<pre><code>app.get(<span class="s">"/orders/:id"</span>, <span class="k">async</span> (req, res) =&gt; {
+  <span class="k">const</span> o = <span class="k">await</span> orders.find(req.params.id);
+  res.set(<span class="s">"ETag"</span>, <span class="s">`"${o.version}"`</span>).json(toDto(o));
+});
+
+app.put(<span class="s">"/orders/:id"</span>, <span class="k">async</span> (req, res) =&gt; {
+  <span class="k">const</span> ifMatch = req.get(<span class="s">"If-Match"</span>);
+  <span class="k">if</span> (!ifMatch) <span class="k">return</span> res.status(428).send(<span class="s">"If-Match required"</span>);
+  <span class="k">const</span> expected = Number(ifMatch.replaceAll(<span class="s">'"'</span>, <span class="s">""</span>));
+  <span class="k">const</span> updated = <span class="k">await</span> db.updateTable(<span class="s">"orders"</span>)
+    .set({ ...fromDto(req.body), version: expected + 1 })
+    .where(<span class="s">"id"</span>, <span class="s">"="</span>, req.params.id).where(<span class="s">"version"</span>, <span class="s">"="</span>, expected)
+    .executeTakeFirst();
+  <span class="k">if</span> (Number(updated.numUpdatedRows) === 0) <span class="k">return</span> res.status(412).json(<span class="k">await</span> currentDto(req.params.id));
+  res.set(<span class="s">"ETag"</span>, <span class="s">`"${expected + 1}"`</span>).sendStatus(204);
+});</code></pre>
+  </div>
+  <p class="aside">tools: ORM version columns (<code>@Version</code> in JPA, concurrency tokens in EF Core, Rails <code>lock_version</code>), HTTP ETag/If-Match support in frameworks and API gateways, merge UIs for conflicts.</p>
+  <section class="thennow verdict-core" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="as useful as when it was written">still core</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Fowler, PoEAA 2002</small></h3><p>Fowler described optimistic, pessimistic, coarse-grained and implicit offline locks for web and rich-client apps where a business transaction spans several requests.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>Exactly the same problem, with more clients (tabs, phones, offline apps). HTTP's ETag and If-Match made the optimistic version a web standard, and ORMs add version columns with one annotation.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> Still core: every app where two people can edit the same thing needs it.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>No silent lost updates</b>.</li><li><b>No long database locks</b>.</li><li><b>Standard HTTP</b> mechanism for clients.</li><li><b>Users see conflicts</b> and can fix them.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Conflict handling UI</b> to build.</li><li><b>Version field</b> on every editable resource.</li><li><b>Retries</b> under heavy contention.</li><li><b>Pessimistic leases</b> need expiry and cleanup.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Code-design ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>last-write-wins saves of long edits</b> to <b>versioned saves with ETags and conflict responses</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A version to carry, but a clear rule.</td></tr>
+      <tr data-before="3" data-after="3"><td>Domain clarity<small>reads like the business?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="5"><td>Correctness<small>rules can't be broken?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The point: no silent overwrites.</td></tr>
+      <tr data-before="3" data-after="3"><td>Changeability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Testability<small>test without the world?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Conflicts are a testable response, not a race.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low coupling<small>parts change alone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Performance<small>fast enough?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No database locks held while people think.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low ceremony<small>little boilerplate?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Version columns, headers and a conflict view.</td></tr>
+      <tr data-before="3" data-after="4"><td>Team scalability<small>many teams at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Many people can edit safely at once.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Version not sent back</h3><p>The client never sends If-Match, so nothing is checked. <span class="fix">Fix →</span> require it: 428 Precondition Required without it.</p></li>
+    <li><h3>Database transactions across user think time</h3><p>A transaction open while the form is on screen. <span class="fix">Fix →</span> short transactions; carry a version instead.</p></li>
+    <li><h3>Pessimistic locks without expiry</h3><p>Sam goes home; the order stays locked all weekend. <span class="fix">Fix →</span> leases with an owner, an expiry and an admin override.</p></li>
+    <li><h3>Unhelpful conflicts</h3><p>“Error 412” with no detail. <span class="fix">Fix →</span> return the current data and show what changed.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Records edited by several people or devices.</li><li>APIs where clients read, edit and write back.</li><li>Offline-capable or mobile apps that sync.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Append-only data (new rows, no edits).</li><li>Single-user data where nobody else can edit it.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../../data/notes/optimistic-locking.html"><b>Optimistic Locking</b></a> (Vol. 3)</li><li><a href="../notes/unit-of-work.html"><b>Unit of Work &amp; Identity Map</b></a></li><li><a href="../../ddd/notes/aggregate.html"><b>Aggregate</b></a> (Vol. 7)</li><li><a href="../../frontend/notes/offline-first.html"><b>Offline-First Sync</b></a> (Vol. 2)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What is a lost update?</summary><p>A later save overwriting an earlier one without noticing.</p></details>
+    <details><summary>How does an optimistic offline lock work?</summary><p>A version travels with the data; a save succeeds only if the stored version is unchanged.</p></details>
+    <details><summary>What do ETag and If-Match do in HTTP?</summary><p>ETag identifies the version; If-Match makes the server apply the change only if that version is still current, else 412.</p></details>
+    <details><summary>When is a pessimistic lock worth it?</summary><p>When conflicts are frequent and costly to merge, with a lease that expires.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Warehouse staff on tablets keep complaining that stock counts “jump back”. Two tablets edit the same bin and the last sync wins. What do you change?</span></summary><p>Add a version per bin, send it with each sync, and reject stale updates with a conflict the tablet must resolve. Better still for counts, send deltas (“−3”) instead of absolute values so concurrent changes add up.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Pick one edit screen in your app. Open it in two tabs, change different fields in each, and save both. If the first change disappears, add a version column, return it as an ETag, and reject mismatched saves with 412.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>If it <span class="hl">changed since you opened it</span>, say so; never <span class="hl">overwrite silently</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/09-offline-locks.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Martin Fowler, <i>Patterns of Enterprise Application Architecture</i> (2002), “Optimistic Offline Lock”, “Pessimistic Offline Lock”.</li><li>RFC 9110, “HTTP Semantics” (2022), sections on ETag, If-Match and 412.</li><li>Microsoft, “Handling Concurrency Conflicts” (EF Core docs).</li><li>Zalando RESTful API Guidelines, “Optimistic locking”.</li></ul>
+  </div>
+  <p class="folio">09</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="lazy-loading.html"><small>← previous note</small>08 · Lazy Loading</a>
+  <a href="dto-remote-facade.html"><small>Next note →</small>10 · DTOs &amp; Remote Facade</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 8 · a student's bullet journal on inside the application</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

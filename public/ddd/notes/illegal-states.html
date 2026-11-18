@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Make Illegal States Unrepresentable · Jef’s Notes</title>
+<meta name="description" content="Use types so a wrong combination of data can&#x27;t even be built.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=05fa3d0241">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-ddd">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 7 · domain-driven design</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="illegal-states">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 08.03.27</span><span class="topic">collection · <b>keeping it honest</b></span></div>
+  <p class="kicker">a.k.a. “a form that can't be filled in wrongly”</p>
+  <h1><span class="hl">Make Illegal States Unrepresentable</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Design your types so that <b>invalid combinations can't be built</b>. Instead of one class with many optional fields and a status string, use <b>one type per state</b> (a union), each with <b>exactly</b> the fields that make sense: a <code>Delivered</code> parcel always has a delivery date; a <code>Pending</code> one never has a tracking number. Parse input into these types <b>once at the edge</b>, and the compiler <b>enforces the rules</b> everywhere else.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> modelling with types</li><li><b>Coined by:</b> Yaron Minsky (2011)</li><li><b>Popular from:</b> Wlaschin (2018), “Parse, don't validate” (2019)</li><li><b>Pairs with:</b> value object, aggregate</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">One class with many <span class="hl-pink">optional fields and a status string</span> allows combinations the business says are impossible, so every function must check for them.</p>
+  <ul>
+    <li>A parcel is “delivered” but has no delivery date.</li>
+    <li>A “pending” parcel already has a tracking number.</li>
+    <li>Null checks everywhere, and the one that's missing causes the bug.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="Doodle of a parcel class where impossible combinations are allowed. It has status, trackingNumber, deliveredAt and failureReason, all optional. The code creates a parcel that is delivered but has no delivery date, one that is pending but has a tracking number, and one that failed with no reason. Every function checks for nulls defensively, and some checks are missing."><g class="rough"><rect class="d d-thin d-red f-paper" x="20" y="30" width="280" height="136" rx="4"/><path class="d d-thin d-red f-pink" d="M20 34 a4 4 0 0 1 4 -4 h272 a4 4 0 0 1 4 4 v28 h-280 z"/><path class="d d-thin d-soft" d="M26 88 h268"/><path class="d d-thin d-soft" d="M26 114 h268"/><path class="d d-thin d-soft" d="M26 140 h268"/></g><text class="t-head" x="160" y="53" text-anchor="middle" font-size="17">Parcel</text><text class="t" x="30" y="81" font-size="16">status: string</text><text class="t" x="30" y="107" font-size="16">trackingNo?: string</text><text class="t" x="30" y="133" font-size="16">deliveredAt?: Date</text><text class="t" x="30" y="159" font-size="16">failureReason?: string</text><text class="t-s t-red" x="530" y="60" text-anchor="middle">delivered, deliveredAt = null</text><text class="t-s t-red" x="530" y="110" text-anchor="middle">pending, but has a tracking no.</text><text class="t-s t-red" x="530" y="160" text-anchor="middle">failed, no reason</text><text class="t-s t-pen" x="380" y="248" text-anchor="middle">if (p.deliveredAt != null &amp;&amp; …) everywhere</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Everything optional: “delivered” with no date, “pending” with a tracking number, “failed” with no reason.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the well-designed form</span></h2>
+  <p>A badly designed paper form lets you tick both <b>“married”</b> and <b>“single”</b>, and always asks for a spouse's name. A good one has <b>one</b> choice, and only shows the spouse field if you picked “married”. Wrong answers <b>can't be written down</b>, so nobody has to check for them later.</p>
+  <ul>
+    <li>One choice: a <b>union</b> of states.</li>
+    <li>The spouse field only with “married”: <b>state-specific fields</b>.</li>
+    <li>No checking later: the <b>type system</b> did it.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a well-designed form. A paper form with tick boxes lets you tick both married and single. A good form has one question with exactly one choice, and only asks for the spouse&#x27;s name if you chose married. Wrong combinations can&#x27;t even be filled in."><g class="rough"><rect class="d f-pink d-red" x="20" y="40" width="320" height="140" rx="10"/><rect class="d f-green" x="420" y="40" width="320" height="140" rx="10"/></g><text class="t-head" x="180" y="72" text-anchor="middle">bad form</text><text class="t" x="180" y="112" text-anchor="middle">☑ married  ☑ single</text><text class="t" x="180" y="150" text-anchor="middle">spouse: ______ (always)</text><text class="t-head" x="580" y="72" text-anchor="middle">good form</text><text class="t" x="580" y="112" text-anchor="middle">◉ married  ○ single</text><text class="t" x="580" y="150" text-anchor="middle">spouse: only if married</text><text class="t-s t-green" x="380" y="222" text-anchor="middle">wrong combinations can&#x27;t be written down</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A good form can't be filled in wrongly: pick one status, and the spouse field only appears for “married”.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Exactly one tick box</td><td>A union type: <code>Pending | InTransit | Delivered | Failed</code></td></tr>
+      <tr><td>Spouse field only if married</td><td><code>deliveredAt</code> exists only on <code>Delivered</code></td></tr>
+      <tr><td>Can't tick both</td><td>The compiler rejects impossible combinations</td></tr>
+      <tr><td>Checked when the form is handed in</td><td>Parse input into types once, at the edge</td></tr>
+      <tr><td>No re-checking later</td><td>Functions receive types that are already valid</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">types that match the business's states</span></h2>
+  <p>This is the type-level version of value objects and aggregates: the same goal, <b>impossible to break the rules</b>, enforced by the compiler instead of runtime checks. It works best in languages with union types and pattern matching: TypeScript, Kotlin, Swift, Rust, F#, Scala, and Java 21 sealed types.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 320" role="img" aria-label="The parcel modelled as a union of states. Pending has no tracking number. InTransit has a tracking number. Delivered has a tracking number and a delivery date. Failed has a tracking number and a reason. Each state carries exactly the fields that make sense. Transition functions take one state and return the next: ship takes a Pending and returns InTransit. The compiler stops code from reading a delivery date from a parcel that isn&#x27;t Delivered."><g class="rough"><rect class="d f-paper" x="14" y="40" width="153" height="90" rx="10"/><rect class="d f-blue" x="207" y="40" width="153" height="90" rx="10"/><rect class="d f-green" x="400" y="40" width="153" height="90" rx="10"/><rect class="d f-pink" x="593" y="40" width="153" height="90" rx="10"/><path class="d" d="M178 85 L210 85"/><path class="d" d="M199.2 90.2 L210 85 L199.2 79.8"/><path class="d" d="M372 85 L404 85"/><path class="d" d="M393.2 90.2 L404 85 L393.2 79.8"/><path class="d d-dash" d="M372 110 Q486 200 598 110"/><path class="d" d="M592.8 120.8 L598 110 L586.3 112.7"/></g><text class="t-head" x="90.5" y="81" text-anchor="middle" font-size="17">Pending</text><text class="t" x="90.5" y="105" text-anchor="middle" font-size="13">id</text><text class="t-head" x="283.5" y="81" text-anchor="middle" font-size="17">InTransit</text><text class="t" x="283.5" y="105" text-anchor="middle" font-size="13">+ trackingNo</text><text class="t-head" x="476.5" y="81" text-anchor="middle" font-size="17">Delivered</text><text class="t" x="476.5" y="105" text-anchor="middle" font-size="13">+ deliveredAt</text><text class="t-head" x="669.5" y="81" text-anchor="middle" font-size="17">Failed</text><text class="t" x="669.5" y="105" text-anchor="middle" font-size="13">+ reason</text><text class="t-s" x="194" y="150" text-anchor="middle">ship()</text><text class="t-s" x="388" y="150" text-anchor="middle">deliver()</text><text class="t-s" x="486" y="176" text-anchor="middle">fail()</text><text class="t-s t-green" x="380" y="240" text-anchor="middle">parcel.deliveredAt only exists on Delivered</text><text class="t-s t-pen" x="380" y="280" text-anchor="middle">the compiler rejects impossible combinations</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One type per state, each with exactly its own fields; functions move from one state to the next.</figcaption></figure>
+  <ol class="steps">
+    <li><b>List the states</b><p>With the experts: what states can this thing be in, and what's always true in each?</p></li>
+    <li><b>One type per state</b><p>Each with exactly the fields that exist in that state, none optional by accident.</p></li>
+    <li><b>A union of them</b><p><code>type Parcel = Pending | InTransit | Delivered | Failed</code>.</p></li>
+    <li><b>Transitions as functions</b><p><code>ship(p: Pending): InTransit</code>. You can't ship a delivered parcel.</p></li>
+    <li><b>Parse at the edge</b><p>Turn JSON or rows into these types once, rejecting what doesn't fit.</p></li>
+    <li><b>Match exhaustively</b><p>Handle every state with a switch the compiler checks is complete.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Union type</dt><dd>A type that is exactly one of several alternatives (sum type, sealed class).</dd></div>
+    <div><dt>Discriminator</dt><dd>A field like <code>kind</code> that tells which alternative it is.</dd></div>
+    <div><dt>Exhaustive matching</dt><dd>The compiler checks every alternative is handled.</dd></div>
+    <div><dt>Parse, don't validate</dt><dd>Turn raw input into a precise type once, instead of re-checking it everywhere.</dd></div>
+    <div><dt>Smart constructor</dt><dd>A function that only builds a value if it's valid.</dd></div>
+    <div><dt>State machine</dt><dd>The allowed states and transitions between them.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>parcel.ts</span><span>one type per state</span></div>
+<pre><code><span class="k">type</span> Pending   = { kind: <span class="s">"pending"</span>;    id: ParcelId };
+<span class="k">type</span> InTransit = { kind: <span class="s">"in-transit"</span>; id: ParcelId; trackingNo: TrackingNo };
+<span class="k">type</span> Delivered = { kind: <span class="s">"delivered"</span>;  id: ParcelId; trackingNo: TrackingNo; deliveredAt: Date };
+<span class="k">type</span> Failed    = { kind: <span class="s">"failed"</span>;     id: ParcelId; trackingNo: TrackingNo; reason: FailureReason };
+<span class="k">export</span> <span class="k">type</span> Parcel = Pending | InTransit | Delivered | Failed;
+
+<span class="k">export</span> <span class="k">const</span> ship    = (p: Pending, t: TrackingNo): InTransit =&gt; ({ kind: <span class="s">"in-transit"</span>, id: p.id, trackingNo: t });
+<span class="k">export</span> <span class="k">const</span> deliver = (p: InTransit, at: Date): Delivered =&gt; ({ ...p, kind: <span class="s">"delivered"</span>, deliveredAt: at });
+
+<span class="k">export</span> <span class="k">function</span> label(p: Parcel): string {
+  <span class="k">switch</span> (p.kind) {                                   <span class="c">// the compiler checks all four are handled</span>
+    <span class="k">case</span> <span class="s">"pending"</span>:    <span class="k">return</span> <span class="s">"Waiting for pickup"</span>;
+    <span class="k">case</span> <span class="s">"in-transit"</span>: <span class="k">return</span> <span class="s">`On its way (${p.trackingNo})`</span>;
+    <span class="k">case</span> <span class="s">"delivered"</span>:  <span class="k">return</span> <span class="s">`Delivered ${p.deliveredAt.toDateString()}`</span>;  <span class="c">// always there</span>
+    <span class="k">case</span> <span class="s">"failed"</span>:     <span class="k">return</span> <span class="s">`Failed: ${p.reason}`</span>;
+  }
+}</code></pre>
+  </div>
+  <p class="aside">tools: TypeScript discriminated unions with Zod or Valibot to parse at the edge, Kotlin and Java sealed classes, Rust and Swift enums with data, F# and Scala ADTs, XState for state machines.</p>
+  <section class="thennow verdict-grown" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="more relevant today than when it was written">matters more now</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Minsky, 2011; Wlaschin, 2018 (after Evans)</small></h3><p>In 2003 the DDD way to protect rules was runtime checks: constructors that validate, methods that throw, invariants asserted in aggregates. Languages like Java had no practical union types.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>Mainstream languages gained union types and pattern matching (TypeScript, Kotlin, Swift, Rust, Java 21). Wlaschin's <i>Domain Modeling Made Functional</i> showed DDD done with types, and “parse, don't validate” spread widely. The compiler now does part of the aggregate's job.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> A modern addition that makes the old goals cheaper to reach. Use it wherever your language allows.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Bugs become compile errors</b>.</li><li><b>Fewer null checks</b> and defensive code.</li><li><b>Types document the rules</b>: read the type, know the states.</li><li><b>Safe refactoring</b>: add a state, the compiler lists every place to update.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Mapping to tables</b> and JSON takes work.</li><li><b>Unfamiliar</b> to teams used to classes with setters.</li><li><b>Weaker in languages</b> without union types.</li><li><b>Can over-engineer</b> simple data.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Code-design ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>one class with optional fields and a status string</b> to <b>a union of state types that rules out impossible combinations</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="4"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Read the type to know the states.</td></tr>
+      <tr data-before="3" data-after="5"><td>Domain clarity<small>reads like the business?</small></td><td class="dcell"></td><td class="score"></td><td class="why">States named exactly as the business names them.</td></tr>
+      <tr data-before="2" data-after="5"><td>Correctness<small>rules can't be broken?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The point: invalid combinations can't be built.</td></tr>
+      <tr data-before="3" data-after="4"><td>Changeability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Add a state; the compiler finds every place to update.</td></tr>
+      <tr data-before="3" data-after="4"><td>Testability<small>test without the world?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fewer cases to test: impossible ones can't happen.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low coupling<small>parts change alone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Performance<small>fast enough?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low ceremony<small>little boilerplate?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More types, fewer checks.</td></tr>
+      <tr data-before="3" data-after="4"><td>Team scalability<small>many teams at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Rules enforced by the compiler, not by memory.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Optional fields “just in case”</h3><p><code>deliveredAt?</code> on every parcel. <span class="fix">Fix →</span> put each field only on the states where it exists.</p></li>
+    <li><h3>Validating instead of parsing</h3><p>Check JSON, then keep passing the raw object around. <span class="fix">Fix →</span> parse into the precise type once; pass that type inward.</p></li>
+    <li><h3>Non-exhaustive switches</h3><p>A new state is added and silently falls into <code>default</code>. <span class="fix">Fix →</span> no default case; let the compiler require every state.</p></li>
+    <li><h3>Types for trivial data</h3><p>A union for a field that has no rules. <span class="fix">Fix →</span> use it where wrong combinations are real bugs.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Things with clear states and different data in each (orders, parcels, payments).</li><li>Bugs caused by impossible combinations or missing null checks.</li><li>Languages with union types or sealed classes.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Simple data with no states or rules.</li><li>Teams and languages where it would fight every tool you use.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/value-object.html"><b>Value Object</b></a></li><li><a href="../notes/aggregate.html"><b>Aggregate</b></a></li><li><a href="../../frontend/notes/state-machines.html"><b>State Machines</b></a> (Vol. 2)</li><li><a href="../../security/notes/input-validation.html"><b>Validate at the Boundary</b></a> (Vol. 5)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does “make illegal states unrepresentable” mean?</summary><p>Design types so invalid combinations of data can't be constructed at all.</p></details>
+    <details><summary>What's a union (sum) type?</summary><p>A type that is exactly one of several alternatives, each with its own fields.</p></details>
+    <details><summary>What does “parse, don't validate” mean?</summary><p>Turn raw input into a precise type once at the edge, instead of checking it and passing raw data around.</p></details>
+    <details><summary>Why avoid a default case in a switch over states?</summary><p>So the compiler forces you to handle any new state you add.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A payment class has <code>status</code>, <code>refundedAt?</code>, <code>failureCode?</code> and <code>capturedAmount?</code>. Last month a refund was issued on a payment that had failed. How would you redesign it?</span></summary><p>Model a union: Authorised, Captured (with amount), Failed (with code), Refunded (with date and amount). Make <code>refund</code> accept only a Captured payment, so refunding a failed one doesn't compile, and parse stored rows into these types at the repository.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Find a class in your code with a status field and several optional fields. Write its states as a union of types, each with only its own fields, and one transition function. Count how many null checks disappear.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Design the form so it <span class="hl">can't be filled in wrongly</span>, and nobody has to <span class="hl">check it later</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/17-illegal-states.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Yaron Minsky, “Effective ML” (talk, 2010) and “Effective ML Revisited” (Jane Street blog, 2011).</li><li>Scott Wlaschin, <i>Domain Modeling Made Functional</i> (2018).</li><li>Alexis King, “Parse, don't validate” (2019).</li><li>TypeScript Handbook, “Narrowing: discriminated unions”.</li></ul>
+  </div>
+  <p class="folio">17</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="specification.html"><small>← previous note</small>16 · Specification</a>
+  <a href="anemic-domain-model.html"><small>Next note →</small>18 · Anemic Domain Model</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 7 · a student's bullet journal on domain-driven design</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

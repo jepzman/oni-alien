@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ports &amp; Adapters · Jef’s Notes</title>
+<meta name="description" content="Put the business core in the middle; HTTP, databases and APIs are adapters around it.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=05fa3d0241">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-app">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 8 · inside the application</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="ports-adapters">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 23.04.27</span><span class="topic">collection · <b>shaping the app</b></span></div>
+  <p class="kicker">a.k.a. “hexagonal architecture, or the laptop with USB-C ports”</p>
+  <h1><span class="hl">Ports &amp; Adapters</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Put the <b>business core</b> (use cases and domain) in the middle, with <b>no framework, database or SDK imports</b>. The core declares <b>ports</b>: what it offers (use cases) and what it needs (repositories, payments). <b>Adapters</b> connect the outside world: HTTP, queues, CLIs and tests <b>drive</b> the core; Postgres, Stripe and email are <b>driven</b> by it. All dependencies point <b>inward</b>, so the core runs, and is tested, without the outside.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> application architecture</li><li><b>From:</b> Alistair Cockburn (2005)</li><li><b>Cousins:</b> onion (2008), clean architecture (2012)</li><li><b>Built on:</b> dependency inversion</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">When business rules live <span class="hl-pink">inside the framework's handlers</span>, they can't be tested, reused or kept through a framework change.</p>
+  <ul>
+    <li>Rules sit in route handlers calling the ORM directly.</li>
+    <li>A queue consumer for the same use case copies the logic.</li>
+    <li>Tests need a running server and a database.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="Doodle of business logic welded to its framework. The order rules live inside Express route handlers and use Prisma calls directly. To test a discount rule you start an HTTP server and a database. Adding a CLI or a queue consumer for the same use case means copying the logic. Upgrading the framework means touching every rule."><g class="rough"><rect class="d f-pink d-red" x="160" y="30" width="440" height="150" rx="10"/></g><text class="t-head" x="380" y="62" text-anchor="middle">app.post(&#x27;/orders&#x27;, …)</text><text class="t" x="380" y="100" text-anchor="middle">req.body → prisma.order.update</text><text class="t" x="380" y="134" text-anchor="middle">if (vip) discount… → res.json</text><text class="t-s t-red" x="380" y="216" text-anchor="middle">queue consumer? copy it · tests? start a server</text><text class="t-s t-red" x="380" y="252" text-anchor="middle">framework upgrade? touch every rule</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Rules welded into route handlers: tests need HTTP and a database; a queue consumer copies the logic.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the laptop and its ports</span></h2>
+  <p>A <b>laptop</b> has standard ports. It doesn't care which brand the monitor is, or whether power comes from a wall or a power bank: <b>adapters</b> connect whatever you have. In a hotel abroad, you change the plug adapter, not the laptop.</p>
+  <ul>
+    <li>The laptop is the <b>core</b>.</li>
+    <li>USB-C is a <b>port</b>.</li>
+    <li>Cables and plugs are <b>adapters</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a laptop with standard ports. The laptop doesn&#x27;t care whether the screen is from one brand or another, or whether power comes from a wall socket or a power bank; it has USB-C ports, and adapters connect whatever you have. In a hotel abroad, you change the plug adapter, not the laptop."><g class="rough"><rect class="d f-y" x="260" y="60" width="240" height="120" rx="10"/><rect class="d f-paper" x="20" y="40" width="180" height="60" rx="10"/><rect class="d f-paper" x="20" y="140" width="180" height="60" rx="10"/><rect class="d f-paper" x="560" y="40" width="180" height="60" rx="10"/><rect class="d f-paper" x="560" y="140" width="180" height="60" rx="10"/><path class="d" d="M204 70 L256 120"/><path class="d" d="M244.6 116.3 L256 120 L251.8 108.7"/><path class="d" d="M556 70 L504 120"/><path class="d" d="M508.2 108.7 L504 120 L515.4 116.3"/><path class="d" d="M204 170 L256 120"/><path class="d" d="M251.8 131.3 L256 120 L244.6 123.7"/><path class="d" d="M556 170 L504 120"/><path class="d" d="M515.4 123.7 L504 120 L508.2 131.3"/></g><text class="t-head" x="380" y="116" text-anchor="middle">laptop</text><text class="t" x="380" y="140" text-anchor="middle" font-size="17">USB-C ports</text><text class="t-head" x="110" y="77" text-anchor="middle" font-size="17">monitor</text><text class="t-head" x="110" y="177" text-anchor="middle" font-size="17">keyboard</text><text class="t-head" x="650" y="77" text-anchor="middle" font-size="17">UK plug</text><text class="t-head" x="650" y="177" text-anchor="middle" font-size="17">power bank</text><text class="t-s t-green" x="380" y="230" text-anchor="middle">change the adapter, not the laptop</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The laptop has standard ports; adapters connect whatever screen or power you have.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The laptop</td><td>Use cases and domain model</td></tr>
+      <tr><td>A USB-C port</td><td>An interface the core defines</td></tr>
+      <tr><td>Keyboard and monitor</td><td>Driving adapters: HTTP, queue, CLI, tests</td></tr>
+      <tr><td>Power from wall or power bank</td><td>Driven adapters: Postgres, Stripe, email</td></tr>
+      <tr><td>Swap the plug abroad</td><td>Swap a provider in one adapter</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">a core with ports, adapters around it</span></h2>
+  <p>Onion and clean architecture draw the same thing as rings with more layers. The essential rule in all three is one: <b>source dependencies point toward the core</b>. Don't add rings you don't need; two sides and a core is usually enough.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 340" role="img" aria-label="A hexagonal application. In the middle, the application core: use cases and the domain model, with no framework imports. On the left, driving adapters call the core through driving ports: an HTTP controller, a queue consumer, a CLI and the tests. On the right, the core calls driven ports, such as OrderRepository and PaymentPort, implemented by driven adapters: Postgres, Stripe, and an email service. All dependencies point inward."><g class="rough"><path class="d f-y" d="M380 40 L520 110 V230 L380 300 L240 230 V110 Z"/><rect class="d f-blue" x="20" y="40" width="150" height="50" rx="10"/><path class="d" d="M174 65 L236 170"/><path class="d" d="M226.0 163.3 L236 170 L235.0 158.0"/><rect class="d f-blue" x="20" y="106" width="150" height="50" rx="10"/><path class="d" d="M174 131 L236 170"/><path class="d" d="M224.1 168.7 L236 170 L229.6 159.8"/><rect class="d f-blue" x="20" y="172" width="150" height="50" rx="10"/><path class="d" d="M174 197 L236 170"/><path class="d" d="M228.2 179.1 L236 170 L224.0 169.5"/><rect class="d f-blue" x="20" y="238" width="150" height="50" rx="10"/><path class="d" d="M174 263 L236 170"/><path class="d" d="M234.3 181.9 L236 170 L225.7 176.1"/><rect class="d f-green" x="590" y="60" width="150" height="50" rx="10"/><path class="d" d="M586 85 L524 170"/><path class="d" d="M526.2 158.2 L524 170 L534.6 164.3"/><rect class="d f-green" x="590" y="140" width="150" height="50" rx="10"/><path class="d" d="M586 165 L524 170"/><path class="d" d="M534.4 163.9 L524 170 L535.2 174.3"/><rect class="d f-green" x="590" y="220" width="150" height="50" rx="10"/><path class="d" d="M586 245 L524 170"/><path class="d" d="M534.9 175.0 L524 170 L526.9 181.7"/></g><text class="t-head" x="380" y="150" text-anchor="middle">core</text><text class="t" x="380" y="186" text-anchor="middle">use cases + domain</text><text class="t" x="380" y="214" text-anchor="middle">no framework</text><text class="t-head" x="95" y="72" text-anchor="middle" font-size="16">HTTP</text><text class="t-head" x="95" y="138" text-anchor="middle" font-size="16">queue</text><text class="t-head" x="95" y="204" text-anchor="middle" font-size="16">CLI</text><text class="t-head" x="95" y="270" text-anchor="middle" font-size="16">tests</text><text class="t-head" x="665" y="92" text-anchor="middle" font-size="16">Postgres</text><text class="t-head" x="665" y="172" text-anchor="middle" font-size="16">Stripe</text><text class="t-head" x="665" y="252" text-anchor="middle" font-size="16">email</text><text class="t-s t-pen" x="95" y="320" text-anchor="middle">driving side</text><text class="t-s t-pen" x="665" y="320" text-anchor="middle">driven side</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Driving adapters call the core's use cases; the core calls driven ports that adapters implement. Arrows point inward.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Pull rules out of handlers</b><p>Each use case becomes a function or class in the core.</p></li>
+    <li><b>Define driving ports</b><p>The use cases' input and output types, independent of HTTP.</p></li>
+    <li><b>Define driven ports</b><p>Interfaces for what the core needs, in its own words.</p></li>
+    <li><b>Write adapters</b><p>HTTP handler → use case; Postgres and Stripe implement driven ports.</p></li>
+    <li><b>Wire at start-up</b><p>A composition root builds adapters and injects them.</p></li>
+    <li><b>Enforce the direction</b><p>Architecture tests: the core imports nothing from adapters or frameworks.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Hexagonal architecture</dt><dd>Cockburn's name for ports and adapters; the hexagon has no meaning beyond “many sides”.</dd></div>
+    <div><dt>Port</dt><dd>An interface at the core's border.</dd></div>
+    <div><dt>Driving (primary) adapter</dt><dd>Calls the core: HTTP, CLI, queue, tests.</dd></div>
+    <div><dt>Driven (secondary) adapter</dt><dd>Called by the core: database, payment, email.</dd></div>
+    <div><dt>Onion / clean architecture</dt><dd>Ring-shaped variants with the same inward rule.</dd></div>
+    <div><dt>Composition root</dt><dd>Where adapters are created and plugged in.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>layout.txt</span><span>one service, ports and adapters</span></div>
+<pre><code>src/
+  core/                      # no imports from express, prisma, stripe
+    orders/
+      place-order.ts         # use case (driving port: handle(cmd))
+      order.ts               # domain model
+      ports.ts               # OrderRepository, PaymentPort (driven ports)
+  adapters/
+    http/orders.routes.ts    # express → placeOrder.handle()
+    queue/orders.consumer.ts # same use case, from a queue
+    postgres/orders.repo.ts  # implements OrderRepository
+    stripe/payments.ts       # implements PaymentPort
+  main.ts                    # composition root: wires adapters into the core
+test/
+  place-order.test.ts        # core + in-memory fakes, no server, no database</code></pre>
+  </div>
+  <p class="aside">tools: plain modules and constructor injection; dependency-cruiser, ArchUnit, NetArchTest or Nx module boundaries to enforce inward dependencies; framework templates (NestJS, Spring) that can be bent to this layout.</p>
+  <section class="thennow verdict-grown" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="more relevant today than when it was written">matters more now</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Cockburn, 2005</small></h3><p>Cockburn described the hexagonal architecture in 2005 so applications could be driven equally by users, programs and tests, and run without their databases. Onion (Palermo, 2008) and clean architecture (Martin, 2012) followed with rings.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>It's now the default shape for services with real logic, and the reason fast core tests are possible. The lesson learned since: keep it to a core and adapters; the many-ringed versions often add mapping without benefit.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> Matters more now, in its simple form: a core, ports, adapters, and dependencies pointing in.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Core tested in milliseconds</b>, no server or database.</li><li><b>Many entry points</b>, one use case.</li><li><b>Frameworks and providers swappable</b>.</li><li><b>Clear place</b> for every kind of code.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More files and interfaces</b>.</li><li><b>Mapping</b> between adapters and core types.</li><li><b>Overkill</b> for thin CRUD services.</li><li><b>Ring obsession</b>: too many layers in clean-architecture variants.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Code-design ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>business rules inside framework handlers</b> to <b>a framework-free core with ports and adapters</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Clearer core, more files to navigate.</td></tr>
+      <tr data-before="3" data-after="4"><td>Domain clarity<small>reads like the business?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The core reads in business terms.</td></tr>
+      <tr data-before="3" data-after="4"><td>Correctness<small>rules can't be broken?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Rules in one place, not copied per entry point.</td></tr>
+      <tr data-before="2" data-after="4"><td>Changeability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Framework and provider changes stay in adapters.</td></tr>
+      <tr data-before="2" data-after="5"><td>Testability<small>test without the world?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Core tests without HTTP or databases.</td></tr>
+      <tr data-before="1" data-after="5"><td>Low coupling<small>parts change alone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The core depends on nothing outside.</td></tr>
+      <tr data-before="3" data-after="3"><td>Performance<small>fast enough?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral; a little mapping.</td></tr>
+      <tr data-before="4" data-after="2"><td>Low ceremony<small>little boilerplate?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Ports, adapters, mapping and wiring.</td></tr>
+      <tr data-before="3" data-after="4"><td>Team scalability<small>many teams at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Adapter and core work in parallel.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Hexagon for CRUD</h3><p>Ports and adapters around a service that just saves forms. <span class="fix">Fix →</span> use it where the core has real rules.</p></li>
+    <li><h3>Too many rings</h3><p>Entities, use cases, interface adapters, frameworks, each with its own models and mappers. <span class="fix">Fix →</span> core and adapters; add layers only for a reason.</p></li>
+    <li><h3>Leaky ports</h3><p>A port method takes an Express <code>Request</code> or returns a Prisma type. <span class="fix">Fix →</span> ports use the core's own types.</p></li>
+    <li><h3>No enforcement</h3><p>One shortcut import and the direction is gone. <span class="fix">Fix →</span> architecture tests in CI.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Services with real business rules that must be tested well.</li><li>One use case reached from several entry points (HTTP, queue, CLI).</li><li>Infrastructure likely to change.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Thin CRUD services and prototypes.</li><li>Scripts and small tools.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/dependency-inversion.html"><b>Dependency Inversion</b></a></li><li><a href="../notes/vertical-slices.html"><b>Vertical Slices</b></a></li><li><a href="../notes/functional-core.html"><b>Functional Core, Imperative Shell</b></a></li><li><a href="../../ddd/notes/anti-corruption-layer.html"><b>Anti-Corruption Layer</b></a> (Vol. 7)</li><li><a href="../../testing/notes/fakes.html"><b>Fakes</b></a> (Vol. 4)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What's the one essential rule of ports and adapters?</summary><p>Source dependencies point inward: the core imports nothing from adapters or frameworks.</p></details>
+    <details><summary>What's the difference between driving and driven adapters?</summary><p>Driving adapters call the core (HTTP, CLI, tests); driven adapters are called by it (database, payments).</p></details>
+    <details><summary>How do onion and clean architecture relate?</summary><p>They are ring-shaped variants of the same idea, with more named layers.</p></details>
+    <details><summary>When is it overkill?</summary><p>In thin CRUD services and prototypes with few rules.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Your team must add a Kafka consumer that places orders, but all the order logic lives in an Express handler. Copying it is the fastest option. What do you do?</span></summary><p>Extract the logic into a PlaceOrder use case in a core module with ports for its repository and payments, make the Express handler call it, then write the Kafka consumer as a second driving adapter calling the same use case. Add tests on the use case with fakes.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Take one route handler with business rules in it. Move the rules into a function in a core folder that takes plain inputs and ports, make the handler call it, and write a test of the function without HTTP or a database.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Change the <span class="hl">plug</span>, never the <span class="hl">laptop</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/12-ports-adapters.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Alistair Cockburn, “Hexagonal Architecture” (2005).</li><li>Alistair Cockburn &amp; Juan Manuel Garrido de Paz, <i>Hexagonal Architecture Explained</i> (2024).</li><li>Jeffrey Palermo, “The Onion Architecture” (2008).</li><li>Robert C. Martin, <i>Clean Architecture</i> (2017).</li></ul>
+  </div>
+  <p class="folio">12</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="transaction-script.html"><small>← previous note</small>11 · Transaction Script vs Domain Model</a>
+  <a href="vertical-slices.html"><small>Next note →</small>13 · Vertical Slices</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 8 · a student's bullet journal on inside the application</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>
