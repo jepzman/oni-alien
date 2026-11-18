@@ -1439,6 +1439,105 @@ def friend_became_boss():
     return p, "The Friend Who Became Your Boss", defs, "".join(b)
 
 
+# ================================================================ Act V plates (three flagships)
+def reading_the_omens():
+    p = "ro"
+    defs = (f'<linearGradient id="{p}-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0a0a1a"/><stop offset="1" stop-color="#1a0e14"/></linearGradient>'
+            f'<radialGradient id="{p}-mon" cx=".5" cy=".5" r=".6"><stop offset="0" stop-color="#cfe0ff" stop-opacity=".55"/><stop offset="1" stop-color="#cfe0ff" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#040306"/>']
+    # the window: a night sky with a comet, and a raven on the sill
+    b.append(f'<rect x="500" y="20" width="280" height="250" fill="url(#{p}-sky)"/><path d="M640 20 V270 M500 145 H780" stroke="#06060a" stroke-width="6"/>'
+             f'<path d="M560 70 L700 40" stroke="#ffe2b0" stroke-width="2" opacity=".6" filter="url(#{p}-b2)"/><circle cx="702" cy="40" r="5" fill="#fff4e0" filter="url(#{p}-glow)"/>'
+             '<g transform="translate(560 262)"><path d="M0 0 C-6 -20 10 -34 26 -30 C40 -26 46 -12 40 0 Z" fill="#020203"/><path d="M26 -30 L40 -36 L30 -26 Z" fill="#020203"/>'
+             '<circle cx="28" cy="-24" r="2" fill="#ffd21a"/><path d="M4 0 L-4 10 M14 0 L10 10" stroke="#020203" stroke-width="2"/></g>')
+    # the poster and the visitor badges
+    b.append('<g transform="rotate(-3 140 110)"><rect x="40" y="40" width="200" height="130" fill="#d8d0bc"/>' + text(140, 74, "LEADERSHIP OFF-SITE", 13, "#2a2418", FELL, "middle")
+             + text(140, 96, "March 2027 · Lisbon", 11, "#4a4030", SERIF, "middle") + "</g>"
+             '<g transform="rotate(-14 140 130)"><rect x="60" y="110" width="160" height="34" fill="none" stroke="#b01414" stroke-width="3"/>'
+             + text(140, 134, "POSTPONED", 20, "#b01414", BLACK, "middle") + "</g>")
+    for k, x in enumerate((300, 340, 380)):
+        b.append(f'<g transform="translate({x} {200 + k * 6}) rotate({k * 8 - 8})"><path d="M0 -40 L0 0" stroke="#3a5aa0" stroke-width="2"/><rect x="-16" y="0" width="32" height="40" rx="2" fill="#e8e8f0"/>'
+                 f'<rect x="-16" y="0" width="32" height="9" fill="#1a1a2a"/>' + text(0, 7, "VEXMOOR", 4.6, "#e8e8f0", FELL, "middle") + text(0, 26, "VISITOR", 5, "#3a3a4a", SERIF, "middle") + text(0, 34, "8 weeks", 4.6, "#a01010", SERIF, "middle") + "</g>")
+    # Tamsin at her desk, lit by the booking on her screen
+    b.append(f'<ellipse cx="380" cy="360" rx="220" ry="160" fill="url(#{p}-mon)" filter="url(#{p}-b12)"/>')
+    ft = (400, 250)
+    b.append(blouse(p, ft[0], by(ft[1], .6, .78), .78, cardigan="#14121a", top="#2a2a3a", rim="#cfe0ff", rim_side="left"))
+    b.append(face(p, 1, ft[0], ft[1], .6, skin=("#0e1018", "#4a5068", "#a8b0c8"), light="below", light_col="#cfe0ff", rim="#c4161c", rim_side="right",
+                  eye="human", glow=False, brows="flat", mouth="thin", hair="bob", hair_col="#0a0608", ears="none"))
+    b.append(table(400, "#0a0806"))
+    b.append(f'<path d="M560 400 L580 300 L760 296 L770 400 Z" fill="#0c0e14"/><rect x="590" y="310" width="164" height="80" fill="#dceaff" filter="url(#{p}-glow)"/>'
+             + text(672, 330, "ROOM BOOKING", 9, "#1a2a4a", FELL, "middle") + text(672, 350, "G1 (ground floor)", 9, "#1a2a4a", SERIF, "middle")
+             + text(672, 366, "1–5 June · all day", 9, "#1a2a4a", SERIF, "middle") + text(672, 382, "HR", 12, "#a01010", MONO, "middle", 'font-weight="700"'))
+    b.append(text(170, 470, "“No plans to make large-scale changes at this time.”", 12, "#c8b8d8", SERIF, "middle", 'font-style="italic" opacity=".65"'))
+    return p, "Reading the Omens", defs, "".join(b)
+
+
+def calendar_invite():
+    p = "ci"
+    defs = (f'<radialGradient id="{p}-tube" cx=".5" cy="0" r="1"><stop offset="0" stop-color="#eaf6f0" stop-opacity=".55"/><stop offset="1" stop-color="#eaf6f0" stop-opacity="0"/></radialGradient>'
+            f'<linearGradient id="{p}-wall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a1e20"/><stop offset="1" stop-color="#08090a"/></linearGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="url(#{p}-wall)"/>']
+    b.append('<rect x="340" y="8" width="120" height="6" fill="#eaf6f0" opacity=".9"/>' + f'<path d="M300 14 L500 14 L700 470 L100 470 Z" fill="url(#{p}-tube)" filter="url(#{p}-b12)"/>')
+    b.append('<rect x="40" y="40" width="130" height="34" fill="#0a0c0c" stroke="#2a3030"/>' + text(105, 62, "ROOM 4B · G", 13, "#9ab0a8", FELL, "middle", 'letter-spacing="2"'))
+    b.append('<circle cx="700" cy="70" r="34" fill="#0c0e0e" stroke="#3a4a44" stroke-width="2"/><path d="M700 70 L700 46 M700 70 L716 76" stroke="#cfe6dc" stroke-width="2.4"/>' + text(700, 124, "10:14", 13, "#cfe6dc", MONO, "middle"))
+    # Marcus
+    fm = (400, 190)
+    b.append(suit(p, 1, fm[0], by(fm[1], .7, .9), .9, tie="#5a3a2a", jacket="#1a1614", shirt="#8a8070", rim="#eaf6f0"))
+    b.append(face(p, 1, fm[0], fm[1], .7, skin=("#14100e", "#5a4a42", "#c8b0a0"), light="above", light_col="#eaf6f0", rim="#7a8a90",
+                  eye="human", glow=False, brows="worried", mouth="thin", hair="slick", hair_col="#4a3a30", ears="human", extras=("wrinkles",)))
+    # the table: water, tissues, the envelope, the agreement, the pen
+    b.append('<path d="M60 380 L740 380 L800 500 L0 500 Z" fill="#141412"/><path d="M60 380 H740" stroke="#4a4a40" stroke-width="1.2"/>')
+    b.append('<path d="M160 330 L184 330 L180 380 L164 380 Z" fill="#cfe6f0" opacity=".45"/><rect x="230" y="346" width="70" height="34" fill="#e8e8e0"/><path d="M250 346 C256 330 274 330 280 346" fill="#fff" opacity=".9"/>'
+             + text(265, 368, "TISSUES", 8, "#6a6a60", FELL, "middle"))
+    b.append('<g transform="rotate(-4 400 440)"><rect x="320" y="400" width="170" height="90" fill="#f0ece0"/>' + text(405, 420, "SETTLEMENT AGREEMENT", 9, "#2a2a2a", FELL, "middle")
+             + "".join(f'<path d="M332 {432 + k * 8} h{140 - (k * 17) % 40}" stroke="#8a8a80" stroke-width="1.4"/>' for k in range(5))
+             + '<path d="M360 482 H460" stroke="#2a2a2a"/>' + text(352, 480, "✕", 9, "#a01010", SERIF) + "</g>")
+    b.append('<g transform="rotate(-30 520 420)"><rect x="470" y="414" width="90" height="7" rx="3" fill="#1a1a2a"/><path d="M560 414 L572 417 L560 421 Z" fill="#c9a24a"/></g>')
+    b.append('<g transform="rotate(5 610 430)"><rect x="560" y="400" width="120" height="70" fill="#d8ccb0"/>' + text(620, 434, "PRIVATE &amp;", 9, "#3a2a1a", FELL, "middle") + text(620, 448, "CONFIDENTIAL", 9, "#3a2a1a", FELL, "middle") + "</g>")
+    # the two across the table: backs to us, in silhouette
+    for x in (130, 670):
+        b.append(f'<g transform="translate({x} 500)"><circle cx="0" cy="-150" r="30" fill="#030404"/><path d="M-70 0 L-62 -96 C-50 -118 50 -118 62 -96 L70 0 Z" fill="#030404"/>'
+                 f'<path d="M-30 -150 a30 30 0 0 1 60 0" stroke="#eaf6f0" stroke-width="1.6" fill="none" opacity=".55"/></g>')
+    b.append(text(130, 330, "HR", 12, "#7a8a90", HAND, "middle", 'opacity=".7"') + text(670, 330, "Rupert (reading)", 12, "#7a8a90", HAND, "middle", 'opacity=".7"'))
+    b.append(text(400, 32, "Quick catch-up · 15 min", 14, "#cfe6dc", SERIF, "middle", 'font-style="italic" opacity=".7"'))
+    return p, "The Day of the Calendar Invite", defs, "".join(b)
+
+
+def ghost_ship():
+    p = "gs"
+    defs = (f'<linearGradient id="{p}-sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0a2a36"/><stop offset="1" stop-color="#020a0e"/></linearGradient>'
+            f'<radialGradient id="{p}-scr" cx=".5" cy=".5" r=".6"><stop offset="0" stop-color="#bcd6ff" stop-opacity=".6"/><stop offset="1" stop-color="#bcd6ff" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#03050a"/>', '<circle cx="120" cy="80" r="30" fill="#d8dcc8" opacity=".7" filter="url(#gs-b2)"/>']
+    # the office floor, listing, sliding into the sea
+    b.append('<g transform="rotate(-7 400 300)"><rect x="60" y="250" width="720" height="16" fill="#1a1612"/>'
+             + "".join(f'<rect x="{x}" y="{200 if k % 2 else 210}" width="70" height="50" fill="#0c0a08"/><rect x="{x + 20}" y="{186 if k % 2 else 196}" width="30" height="14" fill="#0a0c10"/>' for k, x in enumerate((120, 260, 600)))
+             + '<rect x="660" y="120" width="110" height="130" fill="#0a0a0c" stroke="#2a2a30"/>' + text(715, 150, "B. CRANE", 9, "#7a7a8a", FELL, "middle")
+             + text(715, 190, "travelling", 11, "#c8a0ff", HAND, "middle") + text(715, 210, "(permanently)", 9, "#8a7a9a", HAND, "middle") + "</g>")
+    # the screen: Strategy 2028 Vision, to empty chairs
+    b.append(f'<ellipse cx="300" cy="140" rx="200" ry="110" fill="url(#{p}-scr)"/><g transform="rotate(-7 300 140)"><rect x="200" y="70" width="200" height="110" fill="#1a2a44"/>'
+             + text(300, 108, "STRATEGY", 15, "#e0ecff", BLACK, "middle") + text(300, 132, "2028 VISION", 15, "#e0ecff", BLACK, "middle") + text(300, 160, "slide 1 of 40", 9, "#9ab0d0", SERIF, "middle") + "</g>")
+    # Dorian at a ship's wheel, presenting to nobody
+    fd = (470, 210)
+    b.append(suit(p, 1, fd[0], by(fd[1], .52, .66), .66, tie="#5a070c", jacket="#0c0c11", shirt="#5a6070", rim="#bcd6ff"))
+    b.append(face(p, 1, fd[0], fd[1], .52, skin=("#0e1018", "#3c4458", "#8a96b0"), light="left", light_col="#bcd6ff", rim="#ff3a22",
+                  eye="red", glow=True, brows="raised", mouth="fangs", hair="slick", hair_col="#050407", ears="pointed"))
+    b.append('<g transform="translate(470 360)"><circle r="44" fill="none" stroke="#5a3a1a" stroke-width="7"/><circle r="10" fill="#5a3a1a"/>'
+             + "".join(f'<path d="M0 0 L{60 * __import__("math").cos(a * 0.7854):.1f} {60 * __import__("math").sin(a * 0.7854):.1f}" stroke="#5a3a1a" stroke-width="5" stroke-linecap="round"/>' for a in range(8)) + "</g>")
+    # the sea rising, and the lifeboat rowing away
+    b.append(f'<path d="M0 380 Q100 368 200 382 T400 378 T600 386 T800 374 L800 500 L0 500 Z" fill="url(#{p}-sea)"/>'
+             '<path d="M0 380 Q100 368 200 382 T400 378 T600 386 T800 374" stroke="#7ad8ff" stroke-width="1.4" fill="none" opacity=".4"/>')
+    for k, (x, y, r) in enumerate(((560, 420, 20), (640, 440, -14), (360, 452, 8))):
+        b.append(f'<g transform="rotate({r} {x} {y})"><rect x="{x - 24}" y="{y - 10}" width="48" height="14" fill="#1a1612"/><rect x="{x - 18}" y="{y - 30}" width="36" height="20" fill="#0c0a08"/></g>')
+    b.append('<g transform="translate(140 430)"><path d="M-70 0 Q0 26 70 0 L56 -14 L-56 -14 Z" fill="#3a2a1a"/><path d="M-56 -14 L56 -14" stroke="#c9a24a"/>'
+             + text(0, -2, "LIFEBOAT · OFFICERS ONLY", 6, "#e8d8b8", FELL, "middle")
+             + '<circle cx="-10" cy="-32" r="10" fill="#030304"/><path d="M-24 -14 L-20 -40 C-16 -46 0 -46 4 -40 L8 -14 Z" fill="#030304"/>'
+             + '<path d="M4 -30 L40 -6 M-24 -30 L-60 -6" stroke="#5a3a1a" stroke-width="3"/>'
+             + '<rect x="-14" y="-28" width="9" height="11" fill="#e8e8f0"/>' + text(-9.5, -21, "V", 5, "#1a1a2a", FELL, "middle") + "</g>")
+    b.append(text(140, 476, "Victor (to Vexmoor)", 11, "#9ab0c0", HAND, "middle", 'opacity=".7"'))
+    b.append(text(640, 492, "Attendees: 3 (one is collecting the projector)", 11, "#bcd6ff", SERIF, "middle", 'font-style="italic" opacity=".6"'))
+    return p, "The Ghost Ship", defs, "".join(b)
+
+
 PLATES = {
     "meeting-lich": meeting_lich, "gaslight-wraith": gaslight_wraith, "bulldozer-ogre": bulldozer_ogre,
     "passive-aggressive-poltergeist": passive_aggressive_poltergeist, "coasting-zombie": coasting_zombie,
@@ -1451,6 +1550,7 @@ PLATES = {
     "absent-lord": absent_lord, "weather-tyrant": weather_tyrant, "conflict-phantom": conflict_phantom,
     "credit-taking-crown": credit_taking_crown, "new-lord-arrives": new_lord_arrives, "ritual-circle-one-to-one": ritual_circle_one_to_one,
     "skip-level-seance": skip_level_seance, "puppet-king": puppet_king, "friend-became-boss": friend_became_boss,
+    "reading-the-omens": reading_the_omens, "calendar-invite": calendar_invite, "ghost-ship": ghost_ship,
     "all-seeing-eye": all_seeing_eye, "seagull-overlord": seagull_overlord, "escape-portal": escape_portal,
 }
 
