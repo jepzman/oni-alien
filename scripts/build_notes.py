@@ -1146,7 +1146,7 @@ PLANNED_PROJECT = [
 ]
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Going-deeper chapters for Vols. 7 and 8: aggregates, bounded contexts, ports &amp; adapters"), ("•", "Search across every journal")]),
-    ("Jan 2027", [("↓", "Deep dives, season 2: Replication &amp; Leader Election, Sharding &amp; Partitioning, Indexes &amp; Query Plans"), ("•", "One-page printable cheat sheet per collection"), ("•", "Cheat sheet: <b>Refactoring</b>, Fowler's code smells and the refactorings that fix them")]),
+    ("Jan 2027", [("↓", "Deep dives, season 2: Replication &amp; Leader Election, Sharding &amp; Partitioning, Indexes &amp; Query Plans"), ("•", "One-page printable cheat sheet per collection")]),
     ("Mar 2027", [("•", "Cheat sheets for Book 3: PMBOK 8 on one page, earned value, critical path"), ("•", "Vol. 9 · AI App Patterns")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations")]),
     ("Mid 2027", [("↓", "More deep dives: Sign-in &amp; Tokens, Observability &amp; SLOs, Rendering on the Web, Multitenancy"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
@@ -1493,6 +1493,10 @@ CARD_LINKS = {
     ("distributed", "service-discovery"): ["shell-network", "docker-kubernetes"],
     ("architect-1", "nfr-checklist"): ["nfr-checklists"], ("architect-1", "quality-attribute-scenarios"): ["nfr-checklists"],
     ("architect-5", "availability-maths"): ["nfr-checklists"], ("architect-5", "performance-budgets"): ["nfr-checklists"],
+    ("inside-app", "single-responsibility"): ["refactoring"], ("inside-app", "open-closed"): ["refactoring"],
+    ("inside-app", "transaction-script"): ["refactoring"], ("inside-app", "strategy-command"): ["refactoring"],
+    ("inside-app", "liskov-substitution"): ["refactoring"], ("ddd", "anemic-domain-model"): ["refactoring"],
+    ("ddd", "value-object"): ["refactoring"], ("testing", "characterization-tests"): ["refactoring"],
 }
 
 
@@ -2414,7 +2418,7 @@ def render_pmbok_map(loaded):
 
 
 # ---------------------------------------------------------------- cheat sheets (laminated reference cards)
-CHEATSHEETS = ["git_flow", "docker_k8s", "sql", "nfr", "network"]
+CHEATSHEETS = ["git_flow", "docker_k8s", "sql", "nfr", "network", "refactoring"]
 CS_FONTS = "IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400"
 CS_LOGO = ('<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="8" fill="#FFFFFF" fill-opacity=".1"/>'
            '<path d="M10 7v20" stroke="var(--b-main)" stroke-width="3" stroke-linecap="round" fill="none"/>'
