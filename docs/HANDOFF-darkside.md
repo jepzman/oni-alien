@@ -511,3 +511,21 @@ managers; Pip's speech bubble). All twelve Act I entries now have a plate and a 
   Halvorsen Systems (Sven Aldous, he/him; biscuits) is MetroVolt's billing vendor since 2016; won the 2029 re-tender,
   18% cheaper, with an export clause. Gavin emailed Dame Helena (“Unacceptable.”) on 16 Oct 2028; she replied “Ruth has it in hand.”
 - Next by the plan: VII (The New Plagues), VIII (The Inner Sanctum).
+
+## 24. Act VII · The New Plagues written and illustrated (18 Nov 2026)
+
+- `content/darkside/act-7.py` + `story-act-7.py`, format v2, all twelve entries illustrated (plate functions
+  `return_to_office_decree` … `pivot_storm`). Entries: Return-to-Office Decree, Green Dot of Doom, AI Replacement
+  Prophecy ★, Copilot Credit Grab, Cult of Family, All-Hands Mass ★, Engagement Survey Oracle, Hot-Desk Hunger Games,
+  Transformation Journey ★, Slack Channel Necropolis, Performative Busy-ness Dance, Pivot Storm ★.
+- Story (May 2029 – Mar 2030): Pip back at The Grid as Principal Analyst (70-minute commute); Asha stays at GridSight as
+  delivery lead. Rupert Thorne's **Ascend 2030** and memo (12 Jun 2029: “30% more output with 20% fewer people by 2031”).
+  **VoltMind** AI assistant launched 4 Jun 2029. Three office days from 3 Sep 2029 (Collaboration Tuesdays); floor 22
+  closed; Customer Insight to hot-desk floor 14 (200 people, 140 desks, DeskIt app; Femi Adeyemi, he/him, facilities).
+  New cast: Imogen Hale (she/her, Chief People Officer; “MetroVolt Family” banner, later “One MetroVolt Team”; Pulse
+  survey), Juno Ferrell (they/them, Head of Ways of Working, fourth agile coach; idea-to-work 11 weeks → 4), Rafi (Pip's
+  analyst; caught the heatwave forecast error; first “insight engineer”). Hugo (from Act II): mouse jiggler found in the
+  11 Oct fire drill; credited Asha's prompt library; exhausted by Jan 2030 (sets up Act VIII's burnout). Retail
+  restructure, 120 roles, 6 Nov 2029. Pivots: Customer First (Q3 2029), Cost Leadership (Q4), AI First (Q1 2030);
+  churn model shipped 21 Feb 2030.
+- Next by the plan: VIII (The Inner Sanctum), the last Act.
