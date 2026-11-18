@@ -103,7 +103,9 @@ now, 4 built in now, 3 rethought, 1 mostly retired (the museum).
 
 Decisions taken with defaults (the owner said “let's build volume 8” without answering the three questions):
 1. The GoF patterns stay at the four notes above; a volume of their own remains possible later.
-2. Fowler's *Refactoring* as a cheat sheet: not started; still a suggestion for the cheat sheet shelf.
+2. Fowler's *Refactoring* as a cheat sheet: **agreed for later** (owner, 18 Nov 2026), on the future log for Jan 2027.
+   Suggested cards: smells by family (bloaters, change preventers, couplers, dispensables), the smell → refactoring
+   map, the most-used refactorings with before/after code, and safe-refactoring habits (tests first, tiny steps).
 3. Skin: the green engineering pad described above; easy to change in `bujo.css` (`theme-app`).
 
 ## 5. How a code-design volume was added (the routine for Vol. 9 or later ones)
