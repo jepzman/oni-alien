@@ -529,3 +529,24 @@ managers; Pip's speech bubble). All twelve Act I entries now have a plate and a 
   restructure, 120 roles, 6 Nov 2029. Pivots: Customer First (Q3 2029), Cost Leadership (Q4), AI First (Q1 2030);
   churn model shipped 21 Feb 2030.
 - Next by the plan: VIII (The Inner Sanctum), the last Act.
+
+## 25. Act VIII · The Inner Sanctum written and illustrated; the series is complete (18 Nov 2026)
+
+- `content/darkside/act-8.py` + `story-act-8.py`, format v2, all twelve entries illustrated (plate functions
+  `slow_hex_of_burnout` … `life_after_dungeon`). Entries: Slow Hex of Burnout ★, Salt Circle, Mimic of Imposter Syndrome,
+  Phylactery of Paper, Reputation Is Your Hit Points, Word of Power: No, Dark Pact ★, HR's True Allegiance, Whistle of
+  Last Resort ★, Quiet Quitting vs Quiet Thriving, Exit Interview Trap, Life After the Dungeon ★.
+- The Act intro carries a note: health, law and whistleblowing protections vary; see a doctor / get proper advice.
+- Story (Mar 2030 – Feb 2031): Hugo can't leave his car on 6 Mar 2030; Pip sits with him; GP, four weeks off, phased
+  return. Pip's Salt Circle from 7 Apr. Asha Head of GridSight from 2 Jun (imposter feelings; her Friday notes).
+  Dorian's reputation rebuilt (apologises to Pip, Apr 2030). Pip declines the Ascend Data Office (11 Jun). **Dark Pact**:
+  Rupert asks Pip on 9 Sep to show £14m not £9m; Pip refuses, confirming email at 17:12; board paper shows £9m with a
+  labelled £11m upside. Pip removed from the steering group 2 Oct; goes to Karen (HR) 7 Oct; reinstated in November;
+  Rupert's contract ends in December. **Tomasz** (Field Ops) finds 40 impossible Ironvale inspection records (3 Nov),
+  gets advice, uses Speak Up, escalates to the Audit Committee chair on 27 Nov; two faults found (one oil leak); MetroVolt
+  self-reports to the regulator. Neil (Billing, he/him) moves to Field Ops after talking to the Chronicler. Rafi leaves
+  for Kestrel (last day 28 Nov), now a GridSight client. Marcus back as a contractor since Sep 2030. The Chronicler
+  (joined 2008) retires 31 Jan 2031 and hands Pip the notebook: “Rule 1: the org chart lies” … “Rule 96: the dungeon was
+  never the whole world.”
+- **All eight Acts (96 entries, 96 plates) are complete.** Possible next steps: the Extras (section 8), a printable
+  edition, or a series epilogue page.
