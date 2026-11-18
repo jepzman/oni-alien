@@ -492,3 +492,22 @@ managers; Pip's speech bubble). All twelve Act I entries now have a plate and a 
   Jules was promoted to Principal on 5 Nov 2027 with no raise (3% in April). Dr. Lionel Ashe was Head of Engineering
   in 2019, stepped back in 2021; a principal engineer band was created in 2024.
 - Acts I–V are complete and illustrated. Next by the plan: VI, VII, VIII.
+
+## 23. Act VI · The Outer Realms written and illustrated (18 Nov 2026)
+
+- `content/darkside/act-6.py` + `story-act-6.py`, format v2, all twelve entries illustrated (plate functions
+  `client_demon` … `banishing_client` in `scripts/plates.py`). Entries: Client Demon ★, Scope-Creep Swarm, Eleven-Headed
+  Hydra, Unpaid Invoice Wraith, Bake-Off Arena ★, Incumbent Dragon, Rigged RFP, Frenemy Pact, Overpromise Golem ★,
+  Labyrinth of Procurement, Escalation Summoning, Banishing a Client ★.
+- Story (Jul 2028 – Apr 2029): MetroVolt launches **GridSight**, a data-services arm (sponsor Ruth; commercial director
+  Felix Marr, he/him); Pip is seconded as delivery lead with Asha. Clients: Wexley Borough Council (Gavin Pike, he/him,
+  Head of Sustainability, the 22:00 caller; Nadia Sesay, she/her, Director of Place, named decider 3 Oct 2028);
+  Brackenfield Water (Hamish Grant, he/him, ops director; Moira Venn, she/her, accounts payable; invoice 0047, £84k,
+  paid 19 Dec after 97+ days; Felix's oversold “real-time AI” module, told in week one on 4 Oct); Northshire Combined
+  Authority (bake-off 9 Nov, won 30 Nov against Corvid Analytics, Zara Okafor, she/her, and Vexmoor; Bernard Quill,
+  he/him, procurement; signed 21 Feb 2029); Castellan Homes (Rex Dunmore, he/him; banished, notice 1 Feb, ended
+  31 Mar 2029). Ardmore County Council's tender (req. 4.7, Corvid platform) declined; Ardmore came back in April.
+  Northgate Energy (Theo Blake, he/him) partner on the regional flexibility bid (won, £1.2m) and rival for Wexley.
+  Halvorsen Systems (Sven Aldous, he/him; biscuits) is MetroVolt's billing vendor since 2016; won the 2029 re-tender,
+  18% cheaper, with an export clause. Gavin emailed Dame Helena (“Unacceptable.”) on 16 Oct 2028; she replied “Ruth has it in hand.”
+- Next by the plan: VII (The New Plagues), VIII (The Inner Sanctum).
