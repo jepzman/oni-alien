@@ -78,6 +78,7 @@ they need, protect yourself where you must, and recognise when it's time to leav
         # ------------------------------------------------------------------ 2
         dict(
             slug="absent-lord",
+            plate_caption="Two places at once: an empty office with 412 unread, and Gate 22, where Benedict is reading the subject lines.",
             ring="TRAVELLING ✠ CAN THIS WAIT ✠ WHY WASN'T I TOLD ✠", scrawl="decide, then inform",
             name="The Absent Lord", sigil="☽",
             epithet="Never there when you need them. Always there when it goes wrong.",
@@ -157,6 +158,7 @@ they need, protect yourself where you must, and recognise when it's time to leav
         # ------------------------------------------------------------------ 4
         dict(
             slug="weather-tyrant",
+            plate_caption="Gareth, Monday to Tuesday. Pastries on one side, thunder on the other. The team checks the forecast in the lift.",
             ring="WHAT MOOD IS HE IN ✠ NOT TODAY ✠ READ THE ROOM ✠", scrawl="check the forecast",
             name="The Weather Tyrant", sigil="☈",
             epithet="Sunshine on Monday. Thunder by Tuesday. No forecast.",
@@ -197,6 +199,7 @@ they need, protect yourself where you must, and recognise when it's time to leav
         # ------------------------------------------------------------------ 5
         dict(
             slug="conflict-phantom",
+            plate_caption="Marcus, kind to the last, drifting through the door the moment Pip arrives with a question. Neville sleeps on.",
             ring="LET'S NOT ROCK THE BOAT ✠ IT'LL SORT ITSELF OUT ✠ LATER ✠", scrawl="problems rot in the dark",
             name="The Conflict Phantom", sigil="⚲",
             epithet="Kind, warm, and gone the moment anything gets difficult.",
@@ -235,6 +238,7 @@ they need, protect yourself where you must, and recognise when it's time to leav
         # ------------------------------------------------------------------ 6
         dict(
             slug="credit-taking-crown",
+            plate_caption="The crown, the chart, the post (412 likes). And at the back, the person holding the laptop that made it.",
             ring="MY TEAM'S WORK ✠ I DELIVERED ✠ AS I PROPOSED ✠", scrawl="the vampire got promoted",
             name="The Credit-Taking Crown", sigil="♔",
             epithet="When the Credit Vampire is your boss.",
@@ -273,6 +277,7 @@ they need, protect yourself where you must, and recognise when it's time to leav
         # ------------------------------------------------------------------ 7
         dict(
             slug="new-lord-arrives",
+            plate_caption="Day one, 09:00. A doorway, a 47-slide operating model, the eager, the sceptical and the camera-off.",
             ring="NEW BROOM ✠ FIRST 90 DAYS ✠ HOW DID WE GET HERE ✠", scrawl="the first impression lasts a year",
             name="The New Lord Arrives", sigil="⚑",
             epithet="A new manager is a new kingdom. The first 90 days decide your place in it.",
@@ -311,6 +316,7 @@ they need, protect yourself where you must, and recognise when it's time to leav
         # ------------------------------------------------------------------ 8
         dict(
             slug="ritual-circle-one-to-one",
+            plate_caption="The 1:1, done properly: two chairs, a circle of candles, a shared doc. The cancelled invites watch from the wall.",
             ring="SAME TIME NEXT WEEK ✠ ANYTHING FROM YOU ✠ QUICK ONE TODAY ✠", scrawl="it's your meeting",
             name="The Ritual Circle of the 1:1", sigil="◎",
             epithet="Thirty minutes a week that most people waste on status updates.",
@@ -349,6 +355,7 @@ they need, protect yourself where you must, and recognise when it's time to leav
         # ------------------------------------------------------------------ 9
         dict(
             slug="skip-level-seance",
+            plate_caption="The open door policy, summoned with eleven grievances. The director appears. So, at the door, do two red eyes.",
             ring="DOES YOUR MANAGER KNOW ✠ JUST CURIOUS ✠ MY DOOR IS OPEN ✠", scrawl="summon carefully",
             name="The Skip-Level Séance", sigil="✧",
             epithet="Summoning your boss's boss. Powerful. Dangerous. Read the instructions.",
@@ -387,6 +394,7 @@ they need, protect yourself where you must, and recognise when it's time to leav
         # ------------------------------------------------------------------ 10
         dict(
             slug="puppet-king",
+            plate_caption="The Head of Grid Analytics, crowned and strung. Above him, a hand with a control bar and a cup of tea.",
             ring="I'LL TAKE IT UPSTAIRS ✠ NOT MY CALL ✠ LEAVE IT WITH ME ✠", scrawl="find the strings",
             name="The Puppet King", sigil="♙",
             epithet="Wears the crown. Can't sign anything.",
@@ -425,6 +433,7 @@ they need, protect yourself where you must, and recognise when it's time to leav
         # ------------------------------------------------------------------ 11
         dict(
             slug="friend-became-boss",
+            plate_caption="Friday, 08:30. Two coffees, a napkin of new rules, and a third chair for the job they both wanted.",
             ring="NOTHING HAS CHANGED ✠ EVERYTHING HAS CHANGED ✠ STILL MATES ✠", scrawl="the pub is different now",
             name="The Friend Who Became Your Boss", sigil="⚯",
             epithet="Yesterday you shared complaints about the boss. Today they are the boss.",

@@ -165,7 +165,7 @@ creating another meeting.</p>
 <div><b>The Hoarder</b><p>Collects meetings as proof of importance. Needs a better way to feel useful.</p></div>
 <div><b>The Necromancer</b><p>Revives cancelled meetings after every crisis. Needs a lighter alternative ready.</p></div>
 </div>
-{note("Do the maths out loud once. Twelve people, ninety minutes, weekly: 936 hours a year. At MetroVolt's rate for a field engineer, the Sync costs about €80,000. It has decided one thing.")}""",
+{note("Do the maths out loud once. Twelve people, ninety minutes, weekly: 936 hours a year. At MetroVolt's rate for a field engineer, the Sync costs about £80,000. It has decided one thing.")}""",
         difficulty=dict(
             normal=dict(who="The Drifter. One meeting that has lost its way.",
                         know=["It used to be useful.", "The organiser seems a bit bored too.", "Nobody objects when you suggest a shorter slot."],
@@ -303,7 +303,7 @@ hearing at all. On the fifth attempt Pip stopped trying.</p>
 taking notes. A data scientist who had joined from Customer Ops turned her camera off. Someone said “good energy”.</p>
 {beat("11:31")}
 <p>The workshop produced Brett's plan. Six people left with ideas they never said out loud. One of them (Pip's off-peak
-chart) would have saved Lumen €300,000 a year. It stayed in his laptop until October.</p>
+chart) would have saved Lumen £300,000 a year. It stayed in his laptop until October.</p>
 {note("Interrupting is a habit, not a character. Habits respond to friction. Add friction.")}""",
         origin=dict(
             title="How a keen salesman became the Bulldozer Ogre",

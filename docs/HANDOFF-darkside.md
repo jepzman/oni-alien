@@ -441,3 +441,38 @@ Sections: I A sighting (time-stamped beats: `<p class="beat"><span>…</span></p
   the press; the 2019 arrival of Dame Helena and Ottoline; the 2020 reorg leak; the 2021 restructure (separate targets);
   the 2023 Strategy consultancy scandal (approvals centralised); Benedict's 2024 open-door policy; the Annotator left
   MetroVolt in March 2023 after a resignation on a bad Tuesday. Keep later Acts consistent with these.
+
+## 19. Act I fully illustrated (18 Nov 2026)
+
+Owner asked to complete Act I's illustrations. Nine new plates in `scripts/plates.py` (shared toolkit; helper `by(face_y, face_s, body_s)`
+places a body under a head): meeting_before_the_meeting (Priya and Gareth by the floor-27 coffee machine; the board behind glass reads
+“APPROVED (pending meeting)”), blood_pacts (Jules by candlelight; a pinky promise tied in red thread; the Ally Garden ledger),
+ghost_decision (three translucent executives under FINAL_v7.pptx; Marcus's empty chair), rumour_mill_familiar (a cat-like familiar on the
+broken coffee machine; the rumour growing in four bubbles), cc_inquisition (hooded Gareth before fourteen CC'd witnesses; Pip on a spreadsheet
+cell), turf_wars (four towers, a no-man's-land of 11,400 red-lit meters), empire_builder (Gareth on a hoard of staff badges, a dragon's
+shadow), chosen_one (Jules in a spotlight with a halo; Pip in the dark), plausible_silence (the budget review at 14:22; four silent
+managers; Pip's speech bubble). All twelve Act I entries now have a plate and a `plate_caption`. Act III still has three plates.
+
+## 20. Act III fully illustrated; one currency (18 Nov 2026)
+
+- Nine new Act III plates in `scripts/plates.py` (absent_lord, weather_tyrant, conflict_phantom, credit_taking_crown,
+  new_lord_arrives, ritual_circle_one_to_one, skip_level_seance, puppet_king, friend_became_boss); all twelve Act III
+  entries now have a plate and a caption.
+- MetroVolt's currency is **£** everywhere (Act II used € and was converted).
+
+## 21. Act V · The Famine written (18 Nov 2026)
+
+- `content/darkside/act-5.py` + `story-act-5.py`, format v2 from the start. 12 entries: Reading the Omens ★, Hiring Freeze
+  Frost, Budget Bloodletting, Curse of “More with Less”, Reorg Ritual, Suits from Beyond, Day of the Calendar Invite ★,
+  Executioner's Burden, Survivor's Haunting, Quiet Culling, Go-Bag Scroll, Ghost Ship ★. Plates for the three flagships
+  (`reading_the_omens`, `calendar_invite`, `ghost_ship`); the other nine show their sigil.
+- The Act's intro carries a legal note: redundancy rights depend on country and contract; get proper advice.
+- Story (spring–summer 2027): Pip accepted Priya's offer in March and became analytics lead in Customer Ops on 1 April
+  (level 5; analysts Asha, she/her, and Tomasz, he/him). **Project Horizon** announced 6 May: 15% cost cut, ~600 roles
+  (584 left), new structure (Value Streams, Squads) live 1 September; led by Rupert Thorne with Vexmoor Consulting
+  (Oliver Thane, he/him, partner; Bea, she/her, analyst). Customer Ops analytics cut 5%. Tomasz's role cut; he was
+  redeployed to Field Ops in July. Marcus was made redundant (room 4B, 3 June; negotiated three more months' pay).
+  Morag left in October with redundancy pay after asking the direct question. Benedict left in April; Victor joined
+  Vexmoor in June; Dorian moved to Customer Ops as planning lead in September and now names his builders.
+  The Chronicler has kept a go-bag since 2008.
+- Next by the plan: Act IV (The Ascension: promotions and recognition), then VI, VII, VIII.
