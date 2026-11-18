@@ -412,6 +412,44 @@ JOURNALS = [
             (18, "anemic-domain-model", "Anemic Domain Model", "honest", "Data classes with all the logic elsewhere: when it's a smell, and when it's fine."),
         ],
     ),
+    # Vol. 8 · Inside the Application. Plan: docs/PLAN-code-design.md. Same ratings and then & now box as Vol. 7.
+    dict(
+        key="inside-app", vol=8, title="Inside the Application", short="inside the application",
+        theme="theme-app", subject="application design", term="Spring term · 2027", weekdays=(1, 4), start=date(2027, 3, 16),
+        kicker="worked out on an engineering pad, between code reviews",
+        lead="My notes on <span class=\"hl\">what goes on inside one application</span>: the SOLID principles read with today's eyes, the enterprise patterns hiding inside your ORM, ways to shape an app so it stays easy to change, and the classic object patterns that still earn their place. {n} patterns in {c} collections, rated on the same nine <b>code-design</b> qualities as Vol. 7. The sources are mostly from 1994 to 2005 (the Gang of Four, Fowler's <i>Patterns of Enterprise Application Architecture</i>, Robert C. Martin), so every note has a <b>then &amp; now</b> box with a verdict, and the last note is a museum of patterns you can retire. Examples use TypeScript.",
+        blurb="SOLID read today, the patterns inside your ORM, ports and adapters, vertical slices, and the classic patterns worth keeping, with then &amp; now verdicts.",
+        attrs=CODE_ATTRS, attrs_title="The nine code-design ratings", attrs_side="what a reviewer would ask in a pull request", ratings_h2="Code-design ratings",
+        first_law="A pattern is a name for a solution to a problem you have. If you can't name the problem, you don't need the pattern, however famous the book.",
+        then_now=True,
+        handmade=set(),
+        collections=[
+            ("solid", "SOLID, read today", "five principles, minus the misreadings"),
+            ("orm", "Inside your ORM", "enterprise patterns you use every day without naming them"),
+            ("shape", "Shaping the app", "where code goes, so it stays easy to change"),
+            ("classic", "Classic patterns", "the Gang of Four, what to keep, and what to retire"),
+        ],
+        catalogue=[
+            (1, "single-responsibility", "Single Responsibility", "solid", "Keep together what changes for the same people, and apart what changes for different ones."),
+            (2, "open-closed", "Open–Closed", "solid", "Add new cases by adding code, not by editing a growing switch."),
+            (3, "liskov-substitution", "Liskov Substitution", "solid", "A subtype must keep every promise its parent makes, or callers break."),
+            (4, "interface-segregation", "Interface Segregation", "solid", "Depend on small interfaces shaped by what you use, not on fat ones."),
+            (5, "dependency-inversion", "Dependency Inversion", "solid", "Business code defines the interfaces; databases and APIs plug into them."),
+            (6, "active-record-data-mapper", "Active Record vs Data Mapper", "orm", "Objects that save themselves, or a separate mapper that saves them: pick by complexity."),
+            (7, "unit-of-work", "Unit of Work & Identity Map", "orm", "Track what changed in one request, keep one copy of each row, and save it all at once."),
+            (8, "lazy-loading", "Lazy Loading", "orm", "Load related data only when it's touched, and know when that's a trap."),
+            (9, "offline-locks", "Offline Locks & ETags", "orm", "Stop one user's save silently overwriting another's, across minutes of editing."),
+            (10, "dto-remote-facade", "DTOs & Remote Facade", "orm", "Send one shaped message per use case, not your entities, and not thirty small calls."),
+            (11, "transaction-script", "Transaction Script vs Domain Model", "shape", "One procedure per use case, or objects that hold the rules: choose per area."),
+            (12, "ports-adapters", "Ports & Adapters", "shape", "Put the business core in the middle; HTTP, databases and APIs are adapters around it."),
+            (13, "vertical-slices", "Vertical Slices", "shape", "Organise code by feature, end to end, instead of by technical layer."),
+            (14, "functional-core", "Functional Core, Imperative Shell", "shape", "Make decisions in pure functions; do all the input and output around them."),
+            (15, "strategy-command", "Strategy & Command as Functions", "classic", "Swap behaviour and queue actions with functions and data, not class hierarchies."),
+            (16, "decorator-middleware", "Decorator & Middleware", "classic", "Wrap a thing in another with the same shape to add logging, retries or caching."),
+            (17, "adapter-facade", "Adapter & Facade", "classic", "Make a foreign interface fit yours, and hide a complicated one behind a simple door."),
+            (18, "pattern-museum", "The Pattern Museum", "classic", "Singleton, Service Locator, Visitor and friends: what replaced them, and why."),
+        ],
+    ),
     # ---- Series 2 · The Solution Architect's Notebook ----
     # Plan and handoff: docs/HANDOFF-solution-architect.md. Case study facts: docs/larder-casebook.md.
     dict(
@@ -1096,7 +1134,6 @@ JOURNALS = [
 
 # Planned journals and other work, shown on the landing page.
 PLANNED = [
-    (8, "Inside the Application", "SOLID, the enterprise patterns inside your ORM, ports and adapters, and the classic patterns that still earn their place, each with a then &amp; now verdict."),
     (9, "AI App Patterns", "Retrieval-augmented generation, agents and tools, evaluation, guardrails and cost-aware LLM apps."),
 ]
 # Planned volumes of Series 2, book 1 (see docs/HANDOFF-solution-architect.md).
@@ -1108,7 +1145,7 @@ PLANNED_PRODUCT = [
 PLANNED_PROJECT = [
 ]
 FUTURE_LOG = [
-    ("Dec 2026", [("•", "Vol. 8 · Inside the Application: SOLID, PoEAA and the patterns inside your ORM, with then &amp; now verdicts"), ("•", "Search across every journal")]),
+    ("Dec 2026", [("•", "Going-deeper chapters for Vols. 7 and 8: aggregates, bounded contexts, ports &amp; adapters"), ("•", "Search across every journal")]),
     ("Jan 2027", [("↓", "Deep dives, season 2: Replication &amp; Leader Election, Sharding &amp; Partitioning, Indexes &amp; Query Plans"), ("•", "One-page printable cheat sheet per collection")]),
     ("Mar 2027", [("•", "Cheat sheets for Book 3: PMBOK 8 on one page, earned value, critical path"), ("•", "Vol. 9 · AI App Patterns")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations")]),
@@ -1742,7 +1779,7 @@ def verdicts_block(j):
     rows = "\n".join(f'    <div><dt><em class="verdict-tag verdict-{k}">{label}</em> <small>× {got.count(k)}</small></dt><dd>{meaning[0].upper() + meaning[1:]}.</dd></div>'
                      for k, (label, meaning) in VERDICTS.items() if k in got)
     return (f'  <h2 id="then-now"><span class="num">⟳</span>Then &amp; now <span class="side">is a twenty-year-old idea still worth it?</span></h2>\n'
-            f'  <p>The classic books in this volume were written between 2002 and 2004. Every note ends its “how” section with what the book said, what changed since, and one of these verdicts:</p>\n'
+            f'  <p>Most ideas in this volume come from books written twenty or more years ago. Every note ends its “how” section with what the book said, what changed since, and one of these verdicts:</p>\n'
             f'  <dl class="vocab verdicts">\n{rows}\n  </dl>')
 
 
@@ -1896,6 +1933,7 @@ COVER_ART = {
     "distributed": ("server", "nodes"), "frontend": ("window", "grid"), "data": ("ledger", "rules"),
     "testing": ("flask", "cross"), "security": ("lock", "hatch"), "cloud": ("cloud", "iso"),
     "ddd": ("map", "contour"),
+    "inside-app": ("hexagon", "grid"),
 }
 COVER_PATTERNS = {
     "grid": '<pattern id="{id}" width="14" height="14" patternUnits="userSpaceOnUse"><path d="M14 0H0V14" fill="none" stroke-width="1"/></pattern>',

@@ -6,7 +6,7 @@ with two volumes on how to structure the code inside one service. AI App Pattern
 | Vol. | Journal key | Title | State |
 | --- | --- | --- | --- |
 | 7 | `ddd` | Domain-Driven Design | **written** (18 notes, branch `ccr-9390f8f0-wl14yb`) |
-| 8 | `inside-app` (proposed) | Inside the Application | planned (section 4) |
+| 8 | `inside-app` | Inside the Application | **written** (18 notes, same branch, section 4) |
 | 9 | — | AI App Patterns | planned, after Vol. 8 |
 
 ## 1. Why these volumes, and the honest question
@@ -71,11 +71,14 @@ Not yet done for Vol. 7 (candidates for a later pass, like the earlier volumes g
 (`content/ddd/deeper.py`; suggested: Aggregate, Bounded Context, Domain Events, Anti-Corruption Layer), and a deep dive
 “Designing Aggregates” for Series 3.
 
-## 4. Vol. 8 · Inside the Application (planned)
+## 4. Vol. 8 · Inside the Application (written)
 
 SOLID, the patterns inside your ORM, how to shape an application, and the classic object patterns that still earn
-their place. Same ratings (`CODE_ATTRS`) and the then & now box. Suggested skin: a workshop's squared engineering pad
-or a code-review printout; the owner to choose. Running example: the same online shop, now inside the Ordering service.
+their place. Same ratings (`CODE_ATTRS`) and the then & now box. Skin `theme-app`: a green engineering pad (5 mm grid,
+heavier every fifth line), rust accent, a ruler under titles, a code-review “✓ LGTM” stamp on the TL;DR, square
+section numbers. Cover: hexagon sticker (new `hexagon` icon in `scripts/doodle.py`) on brick-red grid cloth, mint band.
+Running example: the same online shop, now inside the Ordering service. Final verdicts: 6 still core, 4 matters more
+now, 4 built in now, 3 rethought, 1 mostly retired (the museum).
 
 | # | Note | Collection | Source | Expected verdict |
 | --- | --- | --- | --- | --- |
@@ -86,7 +89,7 @@ or a code-review printout; the owner to choose. Running example: the same online
 | 05 | Dependency Inversion | SOLID | Martin | matters more now (ports and adapters, testing) |
 | 06 | Active Record vs Data Mapper | Inside your ORM | Fowler, PoEAA | built in now (Rails, Laravel vs Hibernate, EF Core) |
 | 07 | Unit of Work & Identity Map | Inside your ORM | Fowler, PoEAA | built in now (DbContext, Session) |
-| 08 | Lazy Loading | Inside your ORM | Fowler, PoEAA | built in now, use with care (N+1, link to Vol. 3) |
+| 08 | Lazy Loading | Inside your ORM | Fowler, PoEAA | built in now, use sparingly (N+1, link to Vol. 3) |
 | 09 | Offline Locks & ETags | Inside your ORM | Fowler, PoEAA | still core (optimistic offline lock = ETag / If-Match) |
 | 10 | DTOs & Remote Facade | Inside your ORM | Fowler, PoEAA | rethought (API contracts, GraphQL, BFF) |
 | 11 | Transaction Script vs Domain Model | Shaping the app | Fowler, PoEAA | still core (the real choice behind “anemic”) |
@@ -96,17 +99,16 @@ or a code-review printout; the owner to choose. Running example: the same online
 | 15 | Strategy & Command as Functions | Classic patterns | GoF, 1994 | built in now (first-class functions, lambdas) |
 | 16 | Decorator & Middleware | Classic patterns | GoF | still core (HTTP middleware, interceptors) |
 | 17 | Adapter & Facade | Classic patterns | GoF | still core |
-| 18 | The Museum: patterns to retire | Classic patterns | GoF, PoEAA | mostly retired (Singleton, Visitor outside compilers, Page/Front Controller, Template View, Table Module, Row Data Gateway, server session state) |
+| 18 | The Pattern Museum | Classic patterns | GoF, PoEAA | mostly retired (Singleton, Visitor outside compilers, Page/Front Controller, Template View, Table Module, Row Data Gateway, server session state) |
 
-Open questions for the owner before writing Vol. 8:
-1. Keep the GoF patterns to the four notes above, or give them a volume of their own later?
-2. Fowler's *Refactoring* (code smells and refactorings) fits better as a **cheat sheet** than as notes. Add it to the
-   cheat sheet shelf?
-3. Skin for Vol. 8.
+Decisions taken with defaults (the owner said “let's build volume 8” without answering the three questions):
+1. The GoF patterns stay at the four notes above; a volume of their own remains possible later.
+2. Fowler's *Refactoring* as a cheat sheet: not started; still a suggestion for the cheat sheet shelf.
+3. Skin: the green engineering pad described above; easy to change in `bujo.css` (`theme-app`).
 
-## 5. How to add Vol. 8 (same routine as Vol. 7)
+## 5. How a code-design volume was added (the routine for Vol. 9 or later ones)
 
-1. Add the journal to `JOURNALS` after `ddd` with `attrs=CODE_ATTRS`, `then_now=True`, a new `theme`, and move its
+1. Add the journal to `JOURNALS` after the previous one with `attrs=CODE_ATTRS`, `then_now=True`, a new `theme`, and move its
    entry out of `PLANNED`.
 2. Content in `content/<key>/01_*.py` … `04_*.py`, each note with `then_now`, `quiz_sit` and `try_it`.
 3. Theme CSS next to `theme-ddd` (light, dark, print), `--cover-*` / `--band-*`, `.book--<key>`, `COVER_ART`.

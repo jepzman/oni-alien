@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Unit of Work &amp; Identity Map · Jef’s Notes</title>
+<meta name="description" content="Track what changed in one request, keep one copy of each row, and save it all at once.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=05fa3d0241">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-app">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 8 · inside the application</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="unit-of-work">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 06.04.27</span><span class="topic">collection · <b>inside your orm</b></span></div>
+  <p class="kicker">a.k.a. “the waiter's order pad”</p>
+  <h1><span class="hl">Unit of Work &amp; Identity Map</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>A <b>unit of work</b> keeps a list of every object <b>created, changed or deleted</b> during one business operation, and writes them all in <b>one transaction</b> at the end. An <b>identity map</b> makes sure each row is loaded <b>once</b> per operation, so two parts of the code never hold two diverging copies of the same customer. Your ORM session (<code>DbContext</code>, <code>EntityManager</code>, <code>Session</code>) is both. Keep it <b>short-lived</b>: one per request.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> object-relational behaviour</li><li><b>From:</b> Fowler, PoEAA (2002)</li><li><b>In your ORM as:</b> DbContext, EntityManager, Session</li><li><b>Lifetime:</b> one per request or command</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Saving each object by hand leads to <span class="hl-pink">half-saved changes</span> and <span class="hl-pink">duplicate copies</span> of the same row.</p>
+  <ul>
+    <li>Four saves in a row; the third fails, the first two stay.</li>
+    <li>The same customer loaded twice; one change overwrites the other.</li>
+    <li>Forgotten saves: an object changed but never written.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="Doodle of saving changes by hand. A request changes an order, two order lines and the customer&#x27;s credit. The code calls save four times. The third save fails, so the order is changed but the credit isn&#x27;t. Elsewhere in the same request, the customer was loaded twice into two different objects; one change overwrote the other."><g class="rough"><rect class="d f-paper" x="20" y="40" width="165" height="56" rx="10"/><rect class="d f-paper" x="205" y="40" width="165" height="56" rx="10"/><rect class="d f-pink d-red" x="390" y="40" width="165" height="56" rx="10"/><rect class="d f-paper" x="575" y="40" width="165" height="56" rx="10"/><rect class="d f-y" x="130" y="180" width="220" height="56" rx="10"/><rect class="d f-y" x="410" y="180" width="220" height="56" rx="10"/></g><text class="t-head" x="102.5" y="75" text-anchor="middle" font-size="15">save(order)</text><text class="t-head" x="287.5" y="75" text-anchor="middle" font-size="15">save(line 1)</text><text class="t-head t-red" x="472.5" y="75" text-anchor="middle" font-size="15">save(line 2)</text><text class="t-head" x="657.5" y="75" text-anchor="middle" font-size="15">save(credit)</text><text class="t-s t-red" x="380" y="140" text-anchor="middle">fails at the third: half the change is saved</text><text class="t-head" x="240" y="215" text-anchor="middle" font-size="15">customer (copy 1)</text><text class="t-head" x="520" y="215" text-anchor="middle" font-size="15">customer (copy 2)</text><text class="t-s t-red" x="380" y="262" text-anchor="middle">last write wins, silently</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Four separate saves, the third fails: half-saved. And two copies of one customer overwrite each other.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the waiter's order pad</span></h2>
+  <p>A good <b>waiter</b> writes every change on the pad (another drink, swap the side, cancel the soup) and sends the <b>whole page</b> to the kitchen at once. Each dish appears <b>once</b> on the pad, however many times the table mentions it.</p>
+  <ul>
+    <li>The pad's change list is the <b>unit of work</b>.</li>
+    <li>One line per dish is the <b>identity map</b>.</li>
+    <li>Sending the page is the <b>commit</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a waiter&#x27;s order pad. The waiter writes every change the table asks for: one more drink, swap the side, cancel a starter. At the end, the whole page goes to the kitchen at once. Each dish appears on the pad only once, however many times the table mentions it."><g class="rough"><g transform="translate(60 60) scale(1.8)"><g class="d"><rect class="f-paper" x="0" y="0" width="48" height="62" rx="3"/><path d="M10 12 h28 M10 22 h20 M10 32 h26 M10 42 h18 M10 52 h24"/></g></g></g><text class="t-s t-pen" x="450" y="60" text-anchor="middle">+1 lemonade · swap fries → salad</text><text class="t-s t-pen" x="450" y="110" text-anchor="middle">cancel the soup</text><text class="t-s t-green" x="450" y="170" text-anchor="middle">whole page to the kitchen, once</text><text class="t-s t-green" x="450" y="220" text-anchor="middle">each dish written once</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The waiter notes every change, then sends the whole page to the kitchen at once, one line per dish.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Writing each change on the pad</td><td>Change tracking of loaded objects</td></tr>
+      <tr><td>Each dish once on the pad</td><td>Identity map: one object per row</td></tr>
+      <tr><td>Sending the page at once</td><td><code>saveChanges()</code> / <code>flush()</code> in one transaction</td></tr>
+      <tr><td>A new pad for each table</td><td>A new session per request</td></tr>
+      <tr><td>A pad kept all night</td><td>A long-lived session: stale and bloated</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">track, de-duplicate, commit once</span></h2>
+  <p>Most of the time you <b>use</b> these patterns rather than write them. What matters is the <b>lifetime</b>: a session per request or per command, never shared between threads or kept for hours.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 320" role="img" aria-label="A unit of work inside an ORM session. The identity map holds one object per row loaded in this request, so loading customer 42 twice returns the same object. The unit of work tracks new, changed and deleted objects. Calling save changes writes all of them in one transaction, in the right order, or none of them."><g class="rough"><rect class="d f-y d-dash" x="20" y="30" width="330" height="200" rx="10"/><rect class="d f-blue d-dash" x="410" y="30" width="330" height="200" rx="10"/><rect class="d f-green" x="250" y="260" width="260" height="50" rx="10"/></g><text class="t-head" x="185" y="62" text-anchor="middle">identity map</text><text class="t" x="185" y="104" text-anchor="middle">Customer#42 → one object</text><text class="t" x="185" y="140" text-anchor="middle">Order#7 → one object</text><text class="t" x="185" y="186" text-anchor="middle">load twice = same object</text><text class="t-head" x="575" y="62" text-anchor="middle">unit of work</text><text class="t" x="575" y="104" text-anchor="middle">new: line 3</text><text class="t" x="575" y="140" text-anchor="middle">changed: order 7, credit</text><text class="t" x="575" y="176" text-anchor="middle">deleted: line 1</text><text class="t-head" x="380" y="292" text-anchor="middle" font-size="17">saveChanges(): one tx</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One object per row (identity map), all changes tracked, one transaction at the end (unit of work).</figcaption></figure>
+  <ol class="steps">
+    <li><b>One session per operation</b><p>Open a DbContext or EntityManager per request, command or job.</p></li>
+    <li><b>Load through it</b><p>So the identity map can return the same object for the same row.</p></li>
+    <li><b>Change objects, don't call save on each</b><p>The unit of work tracks what changed.</p></li>
+    <li><b>Commit once at the end</b><p><code>SaveChanges()</code> or <code>flush()</code> in one transaction.</p></li>
+    <li><b>Dispose it</b><p>Don't reuse a session across requests or threads.</p></li>
+    <li><b>Write events in the same commit</b><p>Outbox rows go into the same unit of work.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Unit of work</dt><dd>Tracks changes during a business transaction and writes them together.</dd></div>
+    <div><dt>Identity map</dt><dd>Ensures each row is loaded into one object per unit of work.</dd></div>
+    <div><dt>Change tracking</dt><dd>Detecting which loaded objects were modified.</dd></div>
+    <div><dt>Flush</dt><dd>Writing pending changes to the database.</dd></div>
+    <div><dt>Scoped lifetime</dt><dd>A dependency created per request in a DI container.</dd></div>
+    <div><dt>Detached entity</dt><dd>An object that's no longer tracked by a session.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>place-order.ts</span><span>one unit of work per command</span></div>
+<pre><code><span class="c">// MikroORM shown; EF Core's DbContext and JPA's EntityManager work the same way</span>
+<span class="k">export</span> <span class="k">async</span> <span class="k">function</span> handlePlaceOrder(cmd: PlaceOrderCommand, orm: MikroORM) {
+  <span class="k">const</span> em = orm.em.fork();                       <span class="c">// new unit of work + identity map</span>
+  <span class="k">const</span> order    = <span class="k">await</span> em.findOneOrFail(Order, cmd.orderId);
+  <span class="k">const</span> customer = <span class="k">await</span> em.findOneOrFail(Customer, order.customerId);
+  <span class="k">const</span> again    = <span class="k">await</span> em.findOneOrFail(Customer, order.customerId);
+  console.assert(customer === again);             <span class="c">// identity map: same object</span>
+
+  customer.reserveCredit(order.total());          <span class="c">// tracked</span>
+  order.place(<span class="k">new</span> Date());                        <span class="c">// tracked</span>
+  em.persist(<span class="k">new</span> OutboxMessage(order.events));    <span class="c">// new</span>
+  <span class="k">await</span> em.flush();                               <span class="c">// one transaction, all or nothing</span>
+}</code></pre>
+  </div>
+  <p class="aside">tools: EF Core <code>DbContext</code>, JPA/Hibernate <code>EntityManager</code> and <code>Session</code>, SQLAlchemy <code>Session</code>, MikroORM <code>EntityManager</code>; request-scoped lifetimes in DI containers.</p>
+  <section class="thennow verdict-built-in" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="your framework or language does it for you; know it to use the tool well">built in now</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Fowler, PoEAA 2002</small></h3><p>Fowler described both patterns in detail, because in 2002 many teams wrote their own data layer and had to implement change tracking, commit ordering and identity maps themselves.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>Every Data Mapper ORM has them built in (Hibernate's Session, EF Core's DbContext, SQLAlchemy's Session). Nobody writes them now; the skill is choosing the session's lifetime and knowing when it flushes.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> Built in now: know they exist, and keep the session short.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>All or nothing</b>: no half-saved operations.</li><li><b>One copy per row</b>: no diverging duplicates.</li><li><b>No forgotten saves</b>: changes are tracked.</li><li><b>Fewer round trips</b>: batched writes.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Hidden writes</b>: it's not obvious what flush will do.</li><li><b>Memory</b> grows with tracked objects.</li><li><b>Stale data</b> in long-lived sessions.</li><li><b>Not thread-safe</b>.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Code-design ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>saving each object by hand with separate loads</b> to <b>an ORM session used as a short-lived unit of work and identity map</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="4"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Change objects, commit once.</td></tr>
+      <tr data-before="3" data-after="3"><td>Domain clarity<small>reads like the business?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="5"><td>Correctness<small>rules can't be broken?</small></td><td class="dcell"></td><td class="score"></td><td class="why">All or nothing, one copy per row.</td></tr>
+      <tr data-before="3" data-after="4"><td>Changeability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New objects join the same commit without new save calls.</td></tr>
+      <tr data-before="3" data-after="3"><td>Testability<small>test without the world?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral; tests often use a real or in-memory session.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low coupling<small>parts change alone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Performance<small>fast enough?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Batched writes and cached reads within a request.</td></tr>
+      <tr data-before="3" data-after="4"><td>Low ceremony<small>little boilerplate?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No manual save bookkeeping.</td></tr>
+      <tr data-before="3" data-after="3"><td>Team scalability<small>many teams at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Long-lived sessions</h3><p>One DbContext for a whole desktop app or a batch of a million rows. <span class="fix">Fix →</span> one session per request or per batch chunk.</p></li>
+    <li><h3>Sharing across threads</h3><p>A singleton DbContext in a web server. <span class="fix">Fix →</span> scoped lifetime per request.</p></li>
+    <li><h3>Surprising flushes</h3><p>Loading a query triggers an automatic flush of half-made changes. <span class="fix">Fix →</span> make changes, then flush once, explicitly.</p></li>
+    <li><h3>Saving per entity anyway</h3><p><code>SaveChanges()</code> after every line. <span class="fix">Fix →</span> one commit at the end of the operation.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Any operation that changes several rows together.</li><li>Code that loads the same entity from several places in one request.</li><li>Choosing session lifetimes in a web app or job.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Bulk data loads (use the database's bulk tools, not tracked objects).</li><li>Read-only queries (turn tracking off for speed).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/active-record-data-mapper.html"><b>Active Record vs Data Mapper</b></a></li><li><a href="../notes/lazy-loading.html"><b>Lazy Loading</b></a></li><li><a href="../../ddd/notes/aggregate.html"><b>Aggregate</b></a> (Vol. 7)</li><li><a href="../../distributed/notes/transactional-outbox.html"><b>Transactional Outbox</b></a> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does a unit of work do?</summary><p>Tracks changes made during an operation and writes them all in one transaction.</p></details>
+    <details><summary>What does an identity map guarantee?</summary><p>Each row is loaded into a single object per unit of work, so there are no diverging copies.</p></details>
+    <details><summary>What's the right lifetime for an ORM session in a web app?</summary><p>One per request (scoped), never shared between requests or threads.</p></details>
+    <details><summary>Why turn off tracking for read-only queries?</summary><p>Tracking costs memory and time and isn't needed when nothing will be saved.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A nightly import of 2 million products slows to a crawl and runs out of memory after an hour. It uses one DbContext for the whole run. What do you change?</span></summary><p>Process in chunks with a fresh context per chunk (say 1,000 rows), turn off tracking for reads, and for pure inserts use the database's bulk copy instead of tracked entities.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>In your app, find where the ORM session is created and how long it lives. Log the number of tracked entities at the end of one request and of one background job. If either is in the thousands, shorten the lifetime or turn off tracking for its reads.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Write every change on <span class="hl">one pad</span>, and send <span class="hl">the whole page</span> at once.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/07-unit-of-work.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Martin Fowler, <i>Patterns of Enterprise Application Architecture</i> (2002), “Unit of Work”, “Identity Map”.</li><li>Microsoft, “DbContext Lifetime, Configuration, and Initialization” (EF Core docs).</li><li>SQLAlchemy documentation, “Session Basics”.</li><li>Vlad Mihalcea, <i>High-Performance Java Persistence</i> (2016).</li></ul>
+  </div>
+  <p class="folio">07</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="active-record-data-mapper.html"><small>← previous note</small>06 · Active Record vs Data Mapper</a>
+  <a href="lazy-loading.html"><small>Next note →</small>08 · Lazy Loading</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 8 · a student's bullet journal on inside the application</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>
