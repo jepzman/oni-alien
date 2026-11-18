@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Domain &amp; Application Services · Jef’s Notes</title>
+<meta name="description" content="Put rules that belong to no single object in a domain service, and use cases in an application service.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=c1c45c7052">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-ddd">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 7 · domain-driven design</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="domain-service">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 01.03.27</span><span class="topic">collection · <b>building blocks</b></span></div>
+  <p class="kicker">a.k.a. “the coordinator books the theatre; the surgeon operates”</p>
+  <h1><span class="hl">Domain &amp; Application Services</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Put a business rule that <b>belongs to no single object</b> (a transfer between two accounts, a price that depends on customer, basket and promotions) in a <b>domain service</b>: stateless, named in the domain's language, with no database or HTTP code. Put the <b>use case</b> (load, call the domain, save, publish) in an <b>application service</b>, which has no business rules of its own. Both stay <b>thin</b>; most logic belongs on entities and value objects.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> tactical building block</li><li><b>From:</b> Evans (2003), ch. 5; Fowler's service layer (2002)</li><li><b>Today often:</b> command handlers, use-case classes</li><li><b>Pairs with:</b> repository, aggregate</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Without a clear home for rules that span objects, and for use-case plumbing, both end up in a <span class="hl-pink">giant “service” class</span> that does everything.</p>
+  <ul>
+    <li>One OrderService mixes HTTP, transactions, email and pricing rules.</li>
+    <li>Or one entity reaches into another to apply a shared rule.</li>
+    <li>Business rules are tested only through HTTP.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="Doodle of logic in the wrong places. A transfer of loyalty points between two customers is written as a method on Customer that reaches into another Customer. A 900-line OrderService mixes HTTP parsing, transactions, email sending and pricing rules. Nobody can find where the discount rule lives, and it is tested only through HTTP."><g class="rough"><rect class="d f-pink d-red" x="160" y="30" width="440" height="170" rx="10"/></g><text class="t-head" x="380" y="64" text-anchor="middle">OrderService · 900 lines</text><text class="t" x="380" y="104" text-anchor="middle">parse request · open transaction</text><text class="t" x="380" y="136" text-anchor="middle">if (vip &amp;&amp; total &gt; 100) … · send email</text><text class="t" x="380" y="170" text-anchor="middle">save · log · map to JSON</text><text class="t-s t-red" x="380" y="246" text-anchor="middle">“where is the discount rule?”</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A 900-line OrderService mixing HTTP, transactions, email and pricing rules; nobody can find the discount rule.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the hospital</span></h2>
+  <p>In a hospital the <b>coordinator</b> books the theatre, gets forms signed and calls the team, but makes <b>no medical decisions</b>. The <b>surgeon</b> makes them. A move between two wards is decided by the <b>bed manager</b>, because neither ward can decide it alone.</p>
+  <ul>
+    <li>The coordinator is the <b>application service</b>.</li>
+    <li>The surgeon's knowledge lives in <b>entities and aggregates</b>.</li>
+    <li>The bed manager is a <b>domain service</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a hospital. The surgeon performs the operation using medical knowledge: that&#x27;s the domain. The ward coordinator books the theatre, gets consent forms signed, calls the surgeon and the anaesthetist, and arranges the bed afterwards, but makes no medical decisions: that&#x27;s the application service. A transfer between two wards is decided by a bed manager, not by either ward alone: a domain service."><g class="rough"><rect class="d f-paper" x="20" y="50" width="220" height="100" rx="10"/><rect class="d f-green" x="270" y="50" width="220" height="100" rx="10"/><rect class="d f-y" x="520" y="50" width="220" height="100" rx="10"/></g><text class="t-head" x="130" y="96" text-anchor="middle">coordinator</text><text class="t" x="130" y="120" text-anchor="middle" font-size="17">books, calls, arranges</text><text class="t-head" x="380" y="96" text-anchor="middle">surgeon</text><text class="t" x="380" y="120" text-anchor="middle" font-size="17">medical decisions</text><text class="t-head" x="630" y="96" text-anchor="middle">bed manager</text><text class="t" x="630" y="120" text-anchor="middle" font-size="17">between two wards</text><text class="t-s t-pen" x="130" y="190" text-anchor="middle">application service</text><text class="t-s t-pen" x="380" y="190" text-anchor="middle">entities / aggregates</text><text class="t-s t-pen" x="630" y="190" text-anchor="middle">domain service</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The coordinator organises (application); the surgeon decides (domain); the bed manager handles what no single ward owns.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Coordinator: books, calls, arranges</td><td>Application service: transaction, load, save, publish</td></tr>
+      <tr><td>Makes no medical decisions</td><td>Contains no business rules</td></tr>
+      <tr><td>The surgeon decides</td><td>Entities and aggregates hold most rules</td></tr>
+      <tr><td>Bed manager between wards</td><td>Domain service: a rule across several aggregates</td></tr>
+      <tr><td>Consent forms</td><td>Authorisation and input checks before the use case</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">two kinds of service, both thin</span></h2>
+  <p>Try the entity first. Only when a rule truly needs <b>several aggregates</b> or an outside policy (exchange rates, tax tables) does it become a domain service. If a domain service grows large, the model is probably missing a concept.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 330" role="img" aria-label="Layers for one use case, transferring loyalty points. A controller receives the HTTP request and calls the TransferPoints application service. The application service opens a transaction, loads both customers from the repository, calls the PointsTransfer domain service, which applies the rules across both customers, then saves both and publishes events. The domain service has no database or HTTP code; the application service has no business rules."><g class="rough"><rect class="d f-paper" x="14" y="40" width="153" height="90" rx="10"/><rect class="d f-blue" x="207" y="40" width="153" height="90" rx="10"/><path class="d" d="M171 85 L203 85"/><path class="d" d="M192.2 90.2 L203 85 L192.2 79.8"/><rect class="d f-y" x="400" y="40" width="153" height="90" rx="10"/><path class="d" d="M364 85 L396 85"/><path class="d" d="M385.2 90.2 L396 85 L385.2 79.8"/><rect class="d f-green" x="593" y="40" width="153" height="90" rx="10"/><path class="d" d="M557 85 L589 85"/><path class="d" d="M578.2 90.2 L589 85 L578.2 79.8"/><rect class="d f-y" x="160" y="250" width="440" height="56" rx="10"/></g><text class="t-head" x="90.5" y="81" text-anchor="middle" font-size="16">controller</text><text class="t" x="90.5" y="105" text-anchor="middle" font-size="13">HTTP → command</text><text class="t-head" x="283.5" y="81" text-anchor="middle" font-size="16">application svc</text><text class="t" x="283.5" y="105" text-anchor="middle" font-size="13">load · call · save</text><text class="t-head" x="476.5" y="81" text-anchor="middle" font-size="16">domain svc</text><text class="t" x="476.5" y="105" text-anchor="middle" font-size="13">the rule</text><text class="t-head" x="669.5" y="81" text-anchor="middle" font-size="16">aggregates</text><text class="t" x="669.5" y="105" text-anchor="middle" font-size="13">Customer A, B</text><text class="t-s t-pen" x="380" y="180" text-anchor="middle">application service: no business rules, no HTTP</text><text class="t-s t-pen" x="380" y="216" text-anchor="middle">domain service: no database, no HTTP, just rules</text><text class="t-head" x="380" y="285" text-anchor="middle" font-size="16">transfer(from, to, points, policy)</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Application service: load, call, save. Domain service: a rule across several objects. Neither does the other's job.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Put rules on objects first</b><p>If a rule is about one order, it's a method on Order.</p></li>
+    <li><b>Spot cross-object rules</b><p>Transfers, pricing across basket and customer, matching. Those become domain services.</p></li>
+    <li><b>Name them as domain actions</b><p><code>PointsTransfer</code>, <code>PricingPolicy</code>, not <code>CustomerHelper</code>.</p></li>
+    <li><b>Keep domain services pure</b><p>Stateless, no repositories, no HTTP: values in, decisions out.</p></li>
+    <li><b>One application service per use case</b><p><code>TransferPoints</code>: authorise, load, call the domain, save, publish.</p></li>
+    <li><b>Keep controllers dumb</b><p>Parse input into a command, call the use case, map the result.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Domain service</dt><dd>A stateless operation expressing a domain rule that doesn't belong to one entity.</dd></div>
+    <div><dt>Application service</dt><dd>Coordinates a use case: transaction, loading, calling the domain, saving.</dd></div>
+    <div><dt>Service layer</dt><dd>Fowler's term for the application layer's boundary of use cases.</dd></div>
+    <div><dt>Command handler</dt><dd>A modern shape of an application service: one class per command.</dd></div>
+    <div><dt>Use case</dt><dd>One thing a user or system wants to do, end to end.</dd></div>
+    <div><dt>God service</dt><dd>A huge service class that holds everything.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>transfer-points.ts</span><span>application service + domain service</span></div>
+<pre><code><span class="c">// domain: pure rule across two aggregates</span>
+<span class="k">export</span> <span class="k">class</span> PointsTransfer {
+  transfer(<span class="k">from</span>: Customer, to: Customer, points: Points, policy: LoyaltyPolicy) {
+    <span class="k">if</span> (<span class="k">from</span>.tier === <span class="s">"basic"</span> &amp;&amp; points.value &gt; policy.basicTransferLimit)
+      <span class="k">throw</span> <span class="k">new</span> Error(<span class="s">"Basic members can transfer at most "</span> + policy.basicTransferLimit);
+    <span class="k">from</span>.spendPoints(points);
+    to.receivePoints(points);
+  }
+}
+
+<span class="c">// application: one use case, no business rules</span>
+<span class="k">export</span> <span class="k">class</span> TransferPoints {
+  constructor(<span class="k">private</span> customers: CustomerRepository, <span class="k">private</span> tx: UnitOfWork,
+              <span class="k">private</span> rule = <span class="k">new</span> PointsTransfer(), <span class="k">private</span> policy: LoyaltyPolicy) {}
+  <span class="k">async</span> handle(cmd: { <span class="k">from</span>: CustomerId; to: CustomerId; points: number }) {
+    <span class="k">await</span> this.tx.run(<span class="k">async</span> () =&gt; {
+      <span class="k">const</span> [a, b] = <span class="k">await</span> Promise.all([this.customers.get(cmd.<span class="k">from</span>), this.customers.get(cmd.to)]);
+      this.rule.transfer(a, b, Points.<span class="k">of</span>(cmd.points), this.policy);
+      <span class="k">await</span> this.customers.saveAll([a, b]);
+    });
+  }
+}</code></pre>
+  </div>
+  <p class="aside">tools: command and handler libraries (MediatR, Axon, NestJS CQRS module), use-case or “interactor” classes in clean architecture, and architecture tests that keep HTTP and database imports out of the domain layer.</p>
+  <section class="thennow verdict-rethought" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="the idea holds, the way the book did it has changed">rethought</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Evans, 2003; Fowler, PoEAA 2002</small></h3><p>Evans separated domain services (stateless domain operations) from application services; Fowler's service layer defined the application's boundary. Both warned that services can drain the model of its behaviour.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>The split held, but the shape changed: one big service per entity gave way to one handler per command or use case, vertical slices and clean architecture “interactors”. Functional styles make domain services simply pure functions.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> Rethought: the two roles are still right; write them as small use-case handlers and pure functions, not big service classes.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Business rules have a clear home</b>.</li><li><b>Use cases are easy to find</b>: one class each.</li><li><b>Domain tests without infrastructure</b>.</li><li><b>Thin controllers</b> and thin services.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More classes</b> than one big service.</li><li><b>Judgement needed</b>: entity or domain service?</li><li><b>Domain services can become dumping grounds</b>.</li><li><b>Overkill</b> for CRUD.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Code-design ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>a large service class mixing plumbing and rules</b> to <b>thin application services and focused domain services</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="2" data-after="4"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Plumbing and rules are no longer mixed.</td></tr>
+      <tr data-before="2" data-after="4"><td>Domain clarity<small>reads like the business?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Services named after domain actions and use cases.</td></tr>
+      <tr data-before="3" data-after="4"><td>Correctness<small>rules can't be broken?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Cross-object rules are checked in one place.</td></tr>
+      <tr data-before="2" data-after="4"><td>Changeability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A rule changes in the domain; a flow in the use case.</td></tr>
+      <tr data-before="2" data-after="5"><td>Testability<small>test without the world?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Domain services are pure functions of their inputs.</td></tr>
+      <tr data-before="2" data-after="4"><td>Low coupling<small>parts change alone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The domain doesn't know about HTTP or databases.</td></tr>
+      <tr data-before="3" data-after="3"><td>Performance<small>fast enough?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low ceremony<small>little boilerplate?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More, smaller classes.</td></tr>
+      <tr data-before="3" data-after="4"><td>Team scalability<small>many teams at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Use cases can be owned and changed separately.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Everything is a service</h3><p>Entities are data bags; all logic sits in services. <span class="fix">Fix →</span> put rules on entities first; services only for what spans objects.</p></li>
+    <li><h3>Rules in the application service</h3><p><code>if (vip && total &gt; 100)</code> inside the use case. <span class="fix">Fix →</span> move the decision into the domain; the use case just calls it.</p></li>
+    <li><h3>Domain services with repositories</h3><p>The pricing rule loads customers from the database itself. <span class="fix">Fix →</span> pass in what it needs; loading is the application's job.</p></li>
+    <li><h3>Helper and Manager names</h3><p><code>OrderHelper</code>, <code>CustomerManager</code> hide what they do. <span class="fix">Fix →</span> name after the domain action.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Rules that involve several aggregates or an outside policy.</li><li>A codebase where use cases are hard to find.</li><li>You want business rules tested without infrastructure.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Simple CRUD: one handler that saves a form is enough.</li><li>A rule that clearly belongs on one entity.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/aggregate.html"><b>Aggregate</b></a></li><li><a href="../notes/repository.html"><b>Repository</b></a></li><li><a href="../notes/anemic-domain-model.html"><b>Anemic Domain Model</b></a></li><li><a href="../notes/entity.html"><b>Entity</b></a></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What's the difference between a domain service and an application service?</summary><p>A domain service holds a business rule that spans objects; an application service coordinates a use case (load, call, save) with no business rules.</p></details>
+    <details><summary>Should a domain service use repositories?</summary><p>Preferably not: the application service loads what's needed and passes it in.</p></details>
+    <details><summary>When should a rule be a domain service rather than an entity method?</summary><p>When it involves several aggregates or an outside policy, and doesn't naturally belong to one.</p></details>
+    <details><summary>What's a common modern shape for application services?</summary><p>One command handler or use-case class per operation.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A code review shows a new <code>DiscountService</code> that loads the customer and basket from the database, checks VIP status, calls the payment API and writes an audit log. What do you suggest?</span></summary><p>Split it: a pure domain service (or a method on the basket) that decides the discount from values passed in; an application service that loads the customer and basket, calls it, saves and publishes; and the payment call and audit log in infrastructure behind ports.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Take the biggest service class in your code. Highlight the lines that are business rules in one colour and plumbing (HTTP, transactions, mapping, logging) in another. Move one rule into an entity or a pure domain service and test it without a database.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>The coordinator <span class="hl">books the theatre</span>; the surgeon <span class="hl">operates</span>. Never the other way round.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/15-domain-service.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Eric Evans, <i>Domain-Driven Design</i> (2003), ch. 5 “Services”.</li><li>Martin Fowler, <i>Patterns of Enterprise Application Architecture</i> (2002), “Service Layer”.</li><li>Jimmy Bogard, “Vertical Slice Architecture” (2018).</li><li>Robert C. Martin, <i>Clean Architecture</i> (2017), ch. 20–22 (use cases).</li></ul>
+  </div>
+  <p class="folio">15</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="repository.html"><small>← previous note</small>14 · Repository</a>
+  <a href="specification.html"><small>Next note →</small>16 · Specification</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 7 · a student's bullet journal on domain-driven design</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

@@ -16,7 +16,8 @@ Read in this order:
 
 | Shelf | Journal key | Title | Notes |
 | --- | --- | --- | --- |
-| Series 1 (patterns) | `distributed`, `frontend`, `data`, `testing`, `security`, `cloud` | Vols. 1–6 | 93 |
+| Series 1 (patterns) | `distributed`, `frontend`, `data`, `testing`, `security`, `cloud` | Vols. 1–6 | 111 |
+| Series 1 (patterns) | `ddd` | Vol. 7 · Domain-Driven Design (with then &amp; now boxes) | 18 |
 | Series 2 · case file | `/larder/` (not a journal) | Meet Larder | history, cast, books, story timeline |
 | Series 2 · Book 1 (Ana) | `architect-1` | From Requirements to Architecture | 15 |
 | Series 2 · Book 1 (Ana) | `architect-2` | Decisions & Trade-offs | 15 (Mar → Sep 2026) |
@@ -43,7 +44,14 @@ Book 3, *The Project Manager's Notebook*, covers the whole PMBOK Guide (eighth e
 heavy dial, deep dives and the Rotterdam project file (`/rotterdam/`).
 
 Planned: nothing left in Books 1–2 (`PLANNED_2` and `PLANNED_PRODUCT` are empty), nothing in Book 3 (`PLANNED_PROJECT` is empty),
-Series 1 Vol. 7 AI App Patterns (`PLANNED`), Book 4 (Mo: client management, Korenwolf) in the future log.
+Series 1 Vol. 8 Inside the Application and Vol. 9 AI App Patterns (`PLANNED`), Book 4 (Mo: client management, Korenwolf) in the future log.
+
+**Series 1 Vol. 7 · Domain-Driven Design** (18 Nov 2026, branch `ccr-9390f8f0-wl14yb`): 18 notes in `content/ddd/`, skin `theme-ddd`,
+ratings `CODE_ATTRS`, and a new **then &amp; now** box on every note (`then_now`, verdicts in `VERDICTS`). The owner chose to
+continue Series 1 rather than start a new series, and moved AI App Patterns to Vol. 9. Plan for Vol. 8 (SOLID, PoEAA,
+ports and adapters, classic GoF), note by note with expected verdicts and three open questions: `docs/PLAN-code-design.md`.
+Also fixed: a related note with the same slug in another volume was silently not linked (`related_items`); three older
+links now work (Ana's Strangler Fig ↔ Vol. 1, Sanne's Risk Register → Ana's).
 
 **Series 3 · Deep dives** started on 14 Nov 2026: Season 1 is written (`/deep-dives/<slug>/`): Saga, Reliable Messaging, The Resilience Stack, Event Sourcing & CQRS
 Caching and Zero-Downtime Change, all deployed. Working branch `claude/design-patterns-deep-dive-ggw0on`. Read `docs/HANDOFF-deep-dives.md` for the plan and format.
