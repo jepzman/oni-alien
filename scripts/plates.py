@@ -2404,6 +2404,332 @@ def banishing_client():
     return p, "Banishing a Client", defs, "".join(b)
 
 
+# ================================================================ Act VII plates (all twelve)
+def return_to_office_decree():
+    p = "rto"
+    defs = (f'<linearGradient id="{p}-fl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0c0e14"/><stop offset="1" stop-color="#1a1c24"/></linearGradient>'
+            f'<radialGradient id="{p}-l" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffe2a0" stop-opacity=".5"/><stop offset="1" stop-color="#ffe2a0" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#040406"/>']
+    # the empty floor beyond: rows of dark desks, one booth with screens of faces
+    b.append(f'<rect x="380" y="120" width="420" height="300" fill="url(#{p}-fl)"/>')
+    for r in range(3):
+        for c in range(5):
+            x, y = 420 + c * 72 + r * 10, 210 + r * 60
+            b.append(f'<rect x="{x}" y="{y}" width="56" height="10" fill="#22242c"/><rect x="{x + 18}" y="{y - 24}" width="22" height="18" fill="#101218"/>')
+    b.append('<rect x="660" y="140" width="110" height="80" fill="#0e1018" stroke="#3a3c4a"/>' + "".join(f'<rect x="{668 + k * 26}" y="152" width="22" height="18" fill="#2a3a5a"/><circle cx="{679 + k * 26}" cy="159" r="4" fill="#9ab0d8"/>' for k in range(4))
+             + text(715, 204, "everyone else: at home", 9, "#9ab0d8", HAND, "middle"))
+    # the turnstile with the decree nailed to it
+    b.append('<rect x="250" y="300" width="130" height="170" fill="#16181e" stroke="#4a4c58"/><rect x="380" y="330" width="60" height="10" fill="#4a4c58"/>'
+             f'<rect x="300" y="310" width="40" height="26" rx="4" fill="#0a0c10"/><circle cx="320" cy="323" r="6" fill="#4aff7a" filter="url(#{p}-glow)"/>')
+    b.append(f'<g transform="rotate(-3 300 200)"><rect x="200" y="100" width="200" height="190" fill="#e8dcc0"/>'
+             + text(300, 128, "DECREE", 20, "#5a0a0a", BLACK, "middle") + text(300, 148, "“The way we work together”", 10, "#3a2a10", SERIF, "middle", 'font-style="italic"')
+             + text(300, 180, "Three days a week.", 12, "#2a1a10", SERIF, "middle") + text(300, 202, "Badges will be monitored.", 12, "#2a1a10", SERIF, "middle")
+             + text(300, 224, "Tuesdays are sacred.", 12, "#2a1a10", SERIF, "middle") + text(300, 262, "— floor 27", 12, "#5a0a0a", HAND, "middle")
+             + '<circle cx="212" cy="112" r="4" fill="#5a5a5a"/><circle cx="388" cy="112" r="4" fill="#5a5a5a"/></g>')
+    # Pip, badging in
+    fp = (130, 230)
+    b.append(f'<ellipse cx="130" cy="300" rx="160" ry="200" fill="url(#{p}-l)"/>')
+    b.append(suit(p, 1, fp[0], by(fp[1], .6, .78), .78, coat=True, jacket="#1a1c22", tie="#2a3a4a", shirt="#5a6070", rim="#ffe2a0", rim_side="right"))
+    b.append(face(p, 1, fp[0], fp[1], .6, skin=("#14100c", "#5a4a3c", "#c8a888"), light="right", light_col="#ffe8c0", rim="#ffe2a0", rim_side="right",
+                  eye="human", glow=False, brows="worried", mouth="thin", hair="slick", hair_col="#08060a", ears="human"))
+    b.append(text(130, 60, "07:02 · 70 minutes from home", 13, "#ffe2a0", MONO, "middle", 'opacity=".8"'))
+    return p, "The Return-to-Office Decree", defs, "".join(b)
+
+
+def green_dot_of_doom():
+    p = "gd"
+    defs = (f'<radialGradient id="{p}-g" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#4aff7a" stop-opacity=".9"/><stop offset=".4" stop-color="#2acc5a" stop-opacity=".5"/><stop offset="1" stop-color="#2acc5a" stop-opacity="0"/></radialGradient>'
+            f'<radialGradient id="{p}-w" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffd8a0" stop-opacity=".5"/><stop offset="1" stop-color="#ffd8a0" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#020403"/>']
+    # the great green dot, risen like a moon
+    b.append(f'<circle cx="400" cy="120" r="150" fill="url(#{p}-g)"/><circle cx="400" cy="120" r="46" fill="#4aff7a" filter="url(#{p}-glow)"/>' + text(400, 40, "ACTIVE", 14, "#c8ffd8", FELL, "middle", 'letter-spacing="6" opacity=".8"'))
+    # Hugo's empty desk: chair, monitor, the jiggler rocking the mouse
+    b.append('<rect x="60" y="380" width="320" height="12" fill="#2a2a30"/><rect x="140" y="270" width="150" height="100" fill="#0a0c10" stroke="#3a3c48"/><rect x="148" y="278" width="134" height="84" fill="#102018"/>'
+             f'<circle cx="270" cy="290" r="8" fill="#4aff7a" filter="url(#{p}-glow)"/>' + text(215, 330, "Hugo · Active", 10, "#9affb8", MONO, "middle") + '<rect x="205" y="370" width="20" height="10" fill="#1a1a20"/>')
+    b.append('<rect x="290" y="352" width="44" height="28" rx="4" fill="#5a5a60"/><ellipse cx="312" cy="348" rx="12" ry="7" fill="#c8c8d0"/>'
+             '<path d="M296 340 C300 334 304 334 308 340 M316 340 C320 334 324 334 328 340" stroke="#9affb8" fill="none" opacity=".6"/>' + text(312, 410, "(rocking, all night)", 11, "#9affb8", HAND, "middle", 'opacity=".7"'))
+    b.append('<path d="M110 470 L110 400 C110 380 160 380 160 400 L160 470" stroke="#1a1a20" stroke-width="10" fill="none"/>' + text(90, 470, "23:40", 13, "#9affb8", MONO, "start", 'opacity=".7"'))
+    b.append(blouse(p, 500, by(250, .5, .64), .64, cardigan="#2a1e18", top="#5a3a2a", rim="#ffd8a0", rim_side="right", necklace=False))
+    b.append(face(p, 1, 500, 250, .5, skin=("#120a06", "#4a3022", "#a87a58"), light="right", light_col="#ffe8c0", rim="#ffd8a0", rim_side="right",
+                  eye="human", glow=False, brows="flat", mouth="smile", hair="long", hair_col="#050303", ears="none", lip="#5a2a2a"))
+    # Asha's kitchen table, warm: grey dot, finished forecast
+    b.append(f'<ellipse cx="610" cy="390" rx="200" ry="120" fill="url(#{p}-w)"/><rect x="460" y="410" width="300" height="12" fill="#3a2a1a"/>'
+             '<path d="M540 410 L680 410 L670 330 L550 330 Z" fill="#1a1c22"/><rect x="556" y="336" width="108" height="68" fill="#e8ecf0"/>'
+             '<circle cx="652" cy="346" r="5" fill="#8a8a90"/>' + text(610, 366, "forecast_final.xlsx", 8.5, "#1a2a3a", MONO, "middle") + text(610, 390, "done ✓", 14, "#1a6a3a", HAND, "middle"))
+    b.append(text(610, 470, "Asha · Away (working)", 12, "#ffd8a0", HAND, "middle", 'opacity=".8"'))
+    return p, "The Green Dot of Doom", defs, "".join(b)
+
+
+def ai_replacement_prophecy():
+    p = "ai"
+    defs = (f'<radialGradient id="{p}-e" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#8af0ff" stop-opacity=".9"/><stop offset=".5" stop-color="#2a8aa8" stop-opacity=".4"/><stop offset="1" stop-color="#2a8aa8" stop-opacity="0"/></radialGradient>'
+            f'<linearGradient id="{p}-sr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#04121a"/><stop offset="1" stop-color="#020608"/></linearGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#020406"/>', f'<rect x="0" y="0" width="{W}" height="300" fill="url(#{p}-sr)"/>']
+    # server racks and the eye
+    for k in range(10):
+        b.append(f'<rect x="{20 + k * 78}" y="40" width="60" height="230" fill="#061018" stroke="#0e2a3a"/>' + "".join(f'<circle cx="{30 + k * 78 + (j % 4) * 12}" cy="{60 + (j // 4) * 30}" r="2" fill="{["#4affd8", "#2a8aa8", "#ff5a3a"][(j + k) % 3]}" opacity=".7"/>' for j in range(24)))
+    b.append(f'<ellipse cx="400" cy="150" rx="220" ry="110" fill="url(#{p}-e)"/><ellipse cx="400" cy="150" rx="130" ry="64" fill="#02080c" stroke="#8af0ff" stroke-width="2"/>'
+             f'<circle cx="400" cy="150" r="52" fill="#0a3a4a"/><circle cx="400" cy="150" r="30" fill="#8af0ff" filter="url(#{p}-glow)"/><circle cx="400" cy="150" r="14" fill="#020608"/>'
+             + text(400, 290, "VOLTMIND", 14, "#8af0ff", FELL, "middle", 'letter-spacing="8" opacity=".75"'))
+    b.append('<rect x="0" y="300" width="800" height="6" fill="#0e2a3a"/>')
+    # the analysts, from behind, screens showing the memo
+    for k, x in enumerate((90, 250, 550, 710)):
+        b.append(f'<rect x="{x - 56}" y="330" width="112" height="70" fill="#e8f0f4" opacity=".9"/>' + text(x, 352, "30% MORE OUTPUT", 8.6, "#0a2a3a", FELL, "middle")
+                 + text(x, 370, "20% FEWER PEOPLE", 8.6, "#9b221b", FELL, "middle", 'font-weight="700"') + text(x, 390, "— R. Thorne", 8, "#3a4a5a", HAND, "middle")
+                 + person(x, 520, 1.0, fill="#04080a", rim="#8af0ff", rim_op=.6, sitting=True))
+    # Pip in the middle, facing us, lit by the eye
+    fp = (400, 380)
+    b.append(suit(p, 1, fp[0], by(fp[1], .5, .64), .64, jacket="#0e1418", tie="#2a3a4a", shirt="#4a5a64", rim="#8af0ff", rim_side="left"))
+    b.append(face(p, 1, fp[0], fp[1], .5, skin=("#0a1014", "#3a4a54", "#9ab0bc"), light="above", light_col="#8af0ff", rim="#8af0ff", rim_side="right",
+                  eye="human", glow=False, brows="worried", mouth="thin", hair="slick", hair_col="#08060a", ears="human"))
+    b.append(text(600, 480, "the machine has no opinion", 13, "#8af0ff", HAND, "middle", 'opacity=".7"'))
+    return p, "The AI Replacement Prophecy", defs, "".join(b)
+
+
+def copilot_credit_grab():
+    p = "cg"
+    defs = f'<radialGradient id="{p}-pj" cx=".5" cy=".5" r=".6"><stop offset="0" stop-color="#e8f0ff" stop-opacity=".35"/><stop offset="1" stop-color="#e8f0ff" stop-opacity="0"/></radialGradient>'
+    b = [f'<rect width="{W}" height="{H}" fill="#040406"/>', f'<ellipse cx="470" cy="190" rx="330" ry="200" fill="url(#{p}-pj)"/>']
+    # the projected deck
+    b.append('<rect x="250" y="40" width="440" height="270" fill="#eef0f4"/><rect x="250" y="40" width="440" height="40" fill="#1a2a4a"/>'
+             + text(470, 66, "ASCEND 2030 · CUSTOMER DEEP-DIVE", 13, "#e8f0ff", FELL, "middle", 'letter-spacing="1.5"')
+             + text(470, 108, "Six weeks of deep analysis", 18, "#1a2a4a", SERIF, "middle", 'font-style="italic"') + text(470, 130, "presented by Hugo", 11, "#5a6a7a", SERIF, "middle"))
+    b.append('<g transform="translate(300 150)"><rect width="160" height="120" fill="#ffffff" stroke="#c8ccd4"/>' + text(80, 18, "slide 14 · complaints", 9, "#3a4a5a", MONO, "middle")
+             + text(80, 74, "−40%", 34, "#1a2a4a", BLACK, "middle") + '<ellipse cx="80" cy="62" rx="56" ry="30" fill="none" stroke="#c4161c" stroke-width="3"/>'
+             + text(140, 108, "4%!", 16, "#c4161c", HAND, "middle") + "</g>")
+    b.append('<g transform="translate(490 150)"><rect width="170" height="120" fill="#ffffff" stroke="#c8ccd4"/>' + "".join(f'<rect x="{20 + k * 26}" y="{100 - 12 * (k + 1)}" width="18" height="{12 * (k + 1)}" fill="#3a6aa8"/>' for k in range(5)) + "</g>")
+    # machine fingerprints (cyan whorls) on every slide
+    for x, y in ((290, 96), (430, 210), (640, 120), (560, 260), (360, 250)):
+        b.append(f'<g transform="translate({x} {y})" opacity=".55" fill="none" stroke="#2ad8ff" stroke-width="1.2">' + "".join(f'<ellipse rx="{4 + k * 3}" ry="{6 + k * 4}"/>' for k in range(4)) + "</g>")
+    # Hugo presenting
+    fh = (130, 230)
+    b.append(suit(p, 1, fh[0], by(fh[1], .6, .78), .78, jacket="#14141c", tie="#3a2a6a", shirt="#6a6a7a", rim="#e8f0ff", rim_side="right"))
+    b.append(face(p, 1, fh[0], fh[1], .6, skin=("#16100c", "#5a4a3c", "#c8a888"), light="right", light_col="#e8f0ff", rim="#9ab8ff", rim_side="right",
+                  eye="human", glow=False, brows="raised", mouth="smile", hair="patchy", hair_col="#3a2a1a", ears="human", extras=("glasses",)))
+    # Asha's prompt library, on the table, uncredited
+    b.append(table(420, "#0a0a0e"))
+    b.append('<g transform="rotate(-6 640 440)"><rect x="570" y="410" width="140" height="66" fill="#2a4a3a"/><rect x="576" y="416" width="128" height="54" fill="#3a5a4a"/>'
+             + text(640, 436, "PROMPT LIBRARY", 10, "#e8f0e0", FELL, "middle") + text(640, 458, "by Asha", 13, "#ffd890", HAND, "middle") + "</g>")
+    b.append(text(640, 400, "(not on any slide)", 11, "#ffd890", HAND, "middle", 'opacity=".75"'))
+    return p, "The Copilot Credit Grab", defs, "".join(b)
+
+
+def cult_of_family():
+    p = "cf"
+    defs = (f'<linearGradient id="{p}-bn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c41a3a"/><stop offset="1" stop-color="#7a0a1a"/></linearGradient>'
+            f'<radialGradient id="{p}-a" cx=".5" cy=".3" r=".8"><stop offset="0" stop-color="#ffd8b0" stop-opacity=".35"/><stop offset="1" stop-color="#ffd8b0" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#050304"/>', f'<rect width="{W}" height="{H}" fill="url(#{p}-a)"/>']
+    # atrium columns and the banner
+    for x in (60, 200, 600, 740):
+        b.append(f'<rect x="{x - 14}" y="0" width="28" height="420" fill="#141014" stroke="#3a2a30"/>')
+    b.append(f'<path d="M180 30 L620 30 L620 210 L400 240 L180 210 Z" fill="url(#{p}-bn)"/>' + text(400, 90, "WE ARE THE", 18, "#ffe8d8", FELL, "middle", 'letter-spacing="4"')
+             + text(400, 138, "METROVOLT", 40, "#ffffff", BLACK, "middle") + text(400, 180, "FAMILY", 34, "#ffe8d8", BLACK, "middle"))
+    for x, y in ((230, 70), (570, 70), (250, 190), (550, 190)):
+        b.append(f'<path d="M{x} {y + 6} C{x - 14} {y - 6} {x - 6} {y - 18} {x} {y - 8} C{x + 6} {y - 18} {x + 14} {y - 6} {x} {y + 6} Z" fill="#ffd8e0"/>')
+    # people from Retail, small, walking to meetings beneath it
+    for k, x in enumerate((260, 320, 380, 440, 500)):
+        b.append(person(x, 420, .55, fill="#0a0608", rim="#ffd8b0", rim_op=.5) + f'<rect x="{x + 10}" y="{378}" width="16" height="11" fill="#e8e4f0" opacity=".85" transform="rotate(-12 {x + 18} 383)"/>')
+    b.append(text(380, 330, "08:00 invites, 120 of them", 11, "#ffd8b0", HAND, "middle", 'opacity=".75"'))
+    b.append('<rect x="0" y="420" width="800" height="80" fill="#0c0808"/>')
+    # Imogen's desk: the folded note
+    b.append('<g transform="rotate(-8 640 450)"><rect x="560" y="425" width="170" height="60" fill="#f0ece0"/><path d="M560 455 L730 455" stroke="#c8c0b0"/>'
+             + text(645, 445, "RETAIL RESTRUCTURE", 9.5, "#2a1a10", FELL, "middle") + text(645, 474, "120 roles · 6 Nov", 12, "#9b221b", HAND, "middle") + "</g>")
+    b.append(mug(160, 440, "MetroVolt", "FAMILY", "#e8d8d0", "#9b221b"))
+    b.append(text(400, 486, "Families don't send calendar invites.", 14, "#ffd8b0", SERIF, "middle", 'font-style="italic" opacity=".7"'))
+    return p, "The Cult of Family", defs, "".join(b)
+
+
+def all_hands_mass():
+    p = "ah"
+    defs = (f'<radialGradient id="{p}-l" cx=".5" cy=".3" r=".7"><stop offset="0" stop-color="#ffe2a0" stop-opacity=".5"/><stop offset="1" stop-color="#ffe2a0" stop-opacity="0"/></radialGradient>'
+            f'<linearGradient id="{p}-sc" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#0a1a3a"/><stop offset="1" stop-color="#1a3a6a"/></linearGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#040304"/>', f'<rect width="{W}" height="{H}" fill="url(#{p}-l)"/>']
+    # gothic arches
+    for x in (40, 680):
+        b.append(f'<path d="M{x} 470 L{x} 160 C{x} 60 {x + 80} 30 {x + 80} 30 C{x + 80} 30 {x + 160} 60 {x + 160} 160 L{x + 160} 470" stroke="#2a2018" stroke-width="10" fill="none"/>')
+    # the screen of rising arrows, like stained glass
+    b.append(f'<path d="M260 230 L260 110 C260 50 400 20 400 20 C400 20 540 50 540 110 L540 230 Z" fill="url(#{p}-sc)" stroke="#c99a43" stroke-width="3"/>')
+    for k in range(5):
+        x = 290 + k * 50
+        b.append(f'<path d="M{x} {200 - k * 10} L{x + 30} {150 - k * 20} M{x + 30} {150 - k * 20} l-12 0 M{x + 30} {150 - k * 20} l0 12" stroke="#ffd27a" stroke-width="4" fill="none"/>')
+    b.append(text(400, 220, "OUR JOURNEY TO 2030", 11, "#ffe8c0", FELL, "middle", 'letter-spacing="3"'))
+    # Dame Helena at the lectern
+    fh = (400, 270)
+    b.append(blouse(p, fh[0], by(fh[1], .44, .56), .56, cardigan="#1a1424", top="#3a2a4a", rim="#ffe2a0", rim_side="right", necklace=True))
+    b.append(face(p, 1, fh[0], fh[1], .44, skin=("#1a1210", "#6a5048", "#d0b098"), light="above", light_col="#ffe8c0", rim="#ffe2a0",
+                  eye="human", glow=False, brows="flat", mouth="smile", hair="bob", hair_col="#7a7a84", ears="none", lip="#6a2a2a"))
+    b.append('<path d="M350 360 L450 360 L440 440 L360 440 Z" fill="#2a1a0e" stroke="#c99a43" stroke-opacity=".6"/>' + text(400, 400, "✠", 22, "#c99a43", SERIF, "middle"))
+    # the congregation
+    for r in range(2):
+        for k in range(9):
+            b.append(person(60 + k * 85 + r * 40, 540 + r * 30, 1.0, fill="#030203", rim="#ffe2a0", rim_op=.35, sitting=True))
+    # the sealed envelope and Tamsin in the wings
+    b.append('<g transform="rotate(6 640 330)"><rect x="590" y="300" width="110" height="64" fill="#e8dcc0"/><path d="M590 300 L645 336 L700 300" stroke="#8a7a5a" fill="none"/>'
+             '<circle cx="645" cy="336" r="9" fill="#9b221b"/>' + text(645, 380, "questions (pre-read)", 10, "#ffe2a0", HAND, "middle") + "</g>")
+    b.append(person(740, 420, .8, fill="#0a0808", rim="#c8a0ff", rim_op=.7) + text(740, 300, "Tamsin", 11, "#c8a0ff", HAND, "middle", 'opacity=".8"'))
+    b.append(text(150, 300, "“exciting times”", 13, "#ffe2a0", SERIF, "middle", 'font-style="italic" opacity=".7"') + text(150, 324, "“doubling down”", 13, "#ffe2a0", SERIF, "middle", 'font-style="italic" opacity=".7"')
+             + text(150, 348, "Retail: 0 mentions", 12, "#ff8a6a", HAND, "middle"))
+    return p, "The All-Hands Mass", defs, "".join(b)
+
+
+def engagement_survey_oracle():
+    p = "eo"
+    defs = f'<radialGradient id="{p}-o" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#c8a0ff" stop-opacity=".85"/><stop offset=".5" stop-color="#7a4aca" stop-opacity=".35"/><stop offset="1" stop-color="#7a4aca" stop-opacity="0"/></radialGradient>'
+    b = [f'<rect width="{W}" height="{H}" fill="#040308"/>']
+    # the oracle: a floating orb with an eye, hovering over a form
+    b.append(f'<circle cx="400" cy="140" r="130" fill="url(#{p}-o)"/><circle cx="400" cy="140" r="52" fill="#1a0e2a" stroke="#c8a0ff" stroke-width="2"/>'
+             f'<ellipse cx="400" cy="140" rx="34" ry="18" fill="#e8d8ff"/><circle cx="400" cy="140" r="12" fill="#5a2a9a"/><circle cx="400" cy="140" r="5" fill="#000"/>'
+             + text(400, 38, "PULSE · completely anonymous", 13, "#e8d8ff", FELL, "middle", 'letter-spacing="2"'))
+    b.append('<g transform="translate(290 220)"><rect width="220" height="170" fill="#f0ecf4"/>' + text(110, 22, "About you (optional*)", 11, "#2a1a3a", SERIF, "middle", 'font-weight="700"')
+             + "".join(text(16, 50 + k * 24, t, 10, "#3a2a4a", SERIF) + f'<rect x="96" y="{40 + k * 24}" width="108" height="14" fill="#ffffff" stroke="#b8a8c8"/>' + text(100, 51 + k * 24, v, 10, "#5a2a9a", HAND)
+                       for k, (t, v) in enumerate((("Team", "Cust. Insight"), ("Grade", "Principal"), ("Location", "floor 14"), ("Service", "8 years"))))
+             + text(110, 158, "*team size: 6", 10, "#9b221b", HAND, "middle") + "</g>")
+    # six small figures, each recognisable
+    for k, x in enumerate((90, 160, 230, 570, 640, 710)):
+        b.append(person(x, 470, .7, fill="#0a0612", rim="#c8a0ff", rim_op=.7) + text(x, 395, ("“priorities?”", "“two roles”", "“ASCEND!!!”", "“fine”", "“priorities”", "“priorities”")[k], 10, "#e8d8ff", HAND, "middle", 'opacity=".75"'))
+    # Ruth reading the comments
+    fr = (400, 420)
+    b.append(blouse(p, fr[0], by(fr[1], .42, .54), .54, cardigan="#1a1424", top="#3a2a4a", rim="#c8a0ff", rim_side="left"))
+    b.append(face(p, 1, fr[0], fr[1], .42, skin=("#1a1210", "#6a5048", "#d0b098"), light="above", light_col="#e8d8ff", rim="#c8a0ff",
+                  eye="human", glow=False, brows="worried", mouth="thin", hair="bob", hair_col="#5a3a20", ears="none"))
+    return p, "The Engagement Survey Oracle", defs, "".join(b)
+
+
+def hot_desk_hunger_games():
+    p = "hd"
+    defs = f'<radialGradient id="{p}-l" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffe2a0" stop-opacity=".4"/><stop offset="1" stop-color="#ffe2a0" stop-opacity="0"/></radialGradient>'
+    b = [f'<rect width="{W}" height="{H}" fill="#040404"/>', f'<ellipse cx="400" cy="260" rx="380" ry="230" fill="url(#{p}-l)"/>']
+    # the arena: desks in rows, jumpers draped, from above-ish
+    cols = ("#7a2a2a", "#2a4a7a", "#5a5a2a", "#4a2a5a", "#2a5a4a")
+    for r in range(3):
+        for c in range(6):
+            x, y = 70 + c * 110 + (r % 2) * 20, 70 + r * 90
+            b.append(f'<path d="M{x} {y} L{x + 90} {y} L{x + 100} {y + 40} L{x + 10} {y + 40} Z" fill="#1e1c18" stroke="#4a4030"/>')
+            if (r * 6 + c) % 3 != 1:
+                b.append(f'<path d="M{x + 20} {y + 6} C{x + 40} {y - 2} {x + 70} {y + 4} {x + 80} {y + 14} L{x + 74} {y + 34} C{x + 60} {y + 26} {x + 36} {y + 30} {x + 22} {y + 36} Z" fill="{cols[(r + c) % 5]}" opacity=".85"/>')
+    b.append(text(400, 30, "Floor 14 · 200 tributes · 140 desks", 15, "#ffe2a0", FELL, "middle", 'letter-spacing="2" opacity=".8"'))
+    # the booking app at midnight
+    b.append('<g transform="translate(70 330) rotate(-6)"><rect width="110" height="160" rx="12" fill="#0a0a0c"/><rect x="6" y="14" width="98" height="132" rx="4" fill="#e8ecf0"/>'
+             + text(55, 36, "DeskIt", 14, "#1a2a3a", BLACK, "middle") + text(55, 62, "Sun 00:00", 11, "#9b221b", MONO, "middle") + text(55, 92, "0 / 140", 18, "#9b221b", BLACK, "middle")
+             + text(55, 112, "available", 9, "#3a4a5a", MONO, "middle") + text(55, 134, "may the odds…", 9, "#5a6a7a", HAND, "middle") + "</g>")
+    # the sofa with the laptop on a cushion
+    b.append('<path d="M280 420 L520 420 L530 470 L270 470 Z" fill="#3a2a3a"/><rect x="270" y="390" width="260" height="34" rx="10" fill="#4a3a4a"/>'
+             '<rect x="360" y="400" width="60" height="16" rx="6" fill="#8a7a6a"/><path d="M366 400 L414 400 L410 370 L370 370 Z" fill="#1a1c22"/>' + text(400, 488, "Pip's office today", 11, "#ffe2a0", HAND, "middle", 'opacity=".8"'))
+    # the tote bag kit
+    b.append('<g transform="translate(640 380)"><path d="M-60 0 L60 0 L50 100 L-50 100 Z" fill="#c8b890"/><path d="M-30 0 C-30 -40 30 -40 30 0" stroke="#8a7a5a" stroke-width="5" fill="none"/>'
+             + text(0, 34, "THE KIT", 12, "#3a2a10", FELL, "middle") + text(0, 56, "charger · mouse", 9.5, "#3a2a10", HAND, "middle")
+             + text(0, 72, "headset · good pen", 9.5, "#3a2a10", HAND, "middle") + text(0, 88, "photo of dog", 9.5, "#3a2a10", HAND, "middle") + "</g>")
+    return p, "The Hot-Desk Hunger Games", defs, "".join(b)
+
+
+def transformation_journey():
+    p = "tj"
+    defs = (f'<linearGradient id="{p}-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#05060c"/><stop offset="1" stop-color="#1a1a2a"/></linearGradient>'
+            f'<radialGradient id="{p}-ln" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffcf7a" stop-opacity=".8"/><stop offset="1" stop-color="#ffcf7a" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="url(#{p}-sky)"/>']
+    # the road receding to a far horizon
+    b.append('<path d="M330 500 L470 500 L410 190 L390 190 Z" fill="#2a2620"/><path d="M400 500 L400 190" stroke="#c9b890" stroke-width="2" stroke-dasharray="10 12" opacity=".5"/>'
+             '<path d="M0 190 L800 190 L800 500 L0 500 Z" fill="#0a0a0c" opacity=".5"/>' + text(400, 176, "ASCEND 2030", 12, "#c9b890", FELL, "middle", 'letter-spacing="3" opacity=".7"'))
+    # three ghosts walking ahead
+    for k, (x, y, s, lab) in enumerate(((396, 250, .32, "SAFe · 2022"), (420, 300, .44, "AGILE · 2018"), (378, 350, .56, "LEAN · 2014"))):
+        b.append(f'<g opacity="{.25 + k * .1}">' + person(x, y + 90 * s, s * 1.6, fill="#cfe0ff", rim="#ffffff", rim_op=.6) + "</g>"
+                 + text(x + (70 if k != 1 else -70) * s * 2, y + 20, lab, 10, "#cfe0ff", HAND, "middle", 'opacity=".8"'))
+    # the scattered sticky notes and old boards
+    for x, y, r, c in ((110, 430, -10, "#ffd23a"), (160, 460, 8, "#ff8aaa"), (640, 440, -6, "#8ad0ff"), (700, 470, 12, "#ffd23a"), (90, 380, 4, "#8aff9a")):
+        b.append(f'<rect x="{x}" y="{y}" width="34" height="34" fill="{c}" opacity=".7" transform="rotate({r} {x + 17} {y + 17})"/>')
+    b.append('<g transform="rotate(-4 150 300)"><rect x="70" y="250" width="160" height="100" fill="#1a1814" stroke="#4a4030"/>' + text(150, 272, "KAIZEN BOARD", 10, "#c9b890", FELL, "middle")
+             + text(150, 300, "last updated", 10, "#c9b890", HAND, "middle") + text(150, 322, "March 2015", 14, "#ff8a6a", HAND, "middle") + "</g>")
+    # Juno, in front, with a lantern and a map
+    fj = (600, 300)
+    b.append(f'<circle cx="680" cy="330" r="80" fill="url(#{p}-ln)"/>')
+    b.append(blouse(p, fj[0], by(fj[1], .5, .66), .66, cardigan="#1a2a2a", top="#2a4a4a", rim="#ffcf7a", rim_side="right", necklace=False))
+    b.append(face(p, 1, fj[0], fj[1], .5, skin=("#120c08", "#4a3a2c", "#b08a68"), light="right", light_col="#ffd8a0", rim="#ffcf7a", rim_side="right",
+                  eye="human", glow=False, brows="flat", mouth="smile", hair="bob", hair_col="#1a1010", ears="human", extras=("glasses",)))
+    b.append(f'<g transform="translate(680 330)"><path d="M0 -36 V-22" stroke="#2a1a0a" stroke-width="2"/><path d="M-12 -22 L12 -22 L15 14 L-15 14 Z" fill="#ffd27a" opacity=".6"/>'
+             f'<ellipse cx="0" cy="-2" rx="5" ry="9" fill="#fff4c0" filter="url(#{p}-glow)"/></g>')
+    b.append('<g transform="rotate(8 560 440)"><rect x="500" y="410" width="120" height="70" fill="#e8dcc0"/><path d="M510 460 C530 430 560 470 590 430" stroke="#9b221b" stroke-width="2" fill="none"/>'
+             + text(560, 426, "11 weeks → 4", 11, "#2a1a10", HAND, "middle") + "</g>")
+    b.append(text(600, 160, "Juno, the fourth guide", 12, "#ffcf7a", HAND, "middle", 'opacity=".8"'))
+    return p, "The Transformation Journey", defs, "".join(b)
+
+
+def slack_channel_necropolis():
+    p = "sn"
+    defs = (f'<linearGradient id="{p}-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#06040c"/><stop offset="1" stop-color="#12101c"/></linearGradient>'
+            f'<radialGradient id="{p}-m" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#e8e0ff" stop-opacity=".6"/><stop offset="1" stop-color="#e8e0ff" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="url(#{p}-sky)"/>', f'<circle cx="660" cy="80" r="90" fill="url(#{p}-m)"/><circle cx="660" cy="80" r="30" fill="#e8e0ff" opacity=".85"/>']
+    b.append('<path d="M0 300 C200 280 600 290 800 300 L800 500 L0 500 Z" fill="#0a0812"/>')
+    names = ("#proj-lumen-old-DO-NOT-USE", "#random-2", "#cake-floor-22", "#ascend2030-announcements-official-v2", "#tmp-forecast", "#horizon-war-room",
+             "#sync-sync", "#insight-squad-general", "#q3-offsite-2027", "#hugo-test", "#general", "#all-metrovolt")
+    alive = {7, 10}
+    for k, n in enumerate(names):
+        r, c = divmod(k, 4)
+        x, y = 100 + c * 190 + (r % 2) * 40, 330 + r * 56
+        s = .7 + r * .15
+        lit = k in alive
+        b.append(f'<g transform="translate({x} {y}) scale({s})"><path d="M-50 40 L-50 -20 C-50 -50 50 -50 50 -20 L50 40 Z" fill="{"#2a3a4a" if lit else "#1a1820"}" stroke="{"#8af0ff" if lit else "#3a3448"}"/>'
+                 + text(0, -10, "#", 22, "#8af0ff" if lit else "#5a5468", BLACK, "middle") + text(0, 14, n[:16] + ("…" if len(n) > 16 else ""), 7.4, "#c8c0d8" if lit else "#7a7488", MONO, "middle")
+                 + (f'<circle cx="40" cy="-34" r="11" fill="#e01e5a"/>' + text(40, -30, "99+", 7, "#fff", MONO, "middle") if not lit else f'<circle cx="0" cy="-60" r="8" fill="#8af0ff" filter="url(#{p}-glow)"/>')
+                 + "</g>")
+    b.append(text(220, 80, "412 channels", 26, "#e8e0ff", BLACK, "middle") + text(220, 112, "12 still breathing", 16, "#8af0ff", HAND, "middle"))
+    b.append(person(740, 490, .7, fill="#0a0812", rim="#e01e5a", rim_op=.7) + text(700, 260, "Hugo (member of all of them)", 11, "#ff8aaa", HAND, "middle", 'opacity=".8"'))
+    return p, "The Slack Channel Necropolis", defs, "".join(b)
+
+
+def performative_busyness():
+    p = "pb"
+    defs = (f'<radialGradient id="{p}-s" cx=".5" cy=".3" r=".7"><stop offset="0" stop-color="#ff8a4a" stop-opacity=".5"/><stop offset="1" stop-color="#ff8a4a" stop-opacity="0"/></radialGradient>'
+            f'<radialGradient id="{p}-q" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffe2a0" stop-opacity=".45"/><stop offset="1" stop-color="#ffe2a0" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#040303"/>', f'<ellipse cx="300" cy="230" rx="300" ry="240" fill="url(#{p}-s)"/>']
+    # swirling calendar blocks
+    import math
+    for k in range(18):
+        a = k * 0.62
+        r = 120 + (k % 4) * 30
+        x, y = 300 + r * math.cos(a), 230 + r * .7 * math.sin(a)
+        b.append(f'<g transform="translate({x:.0f} {y:.0f}) rotate({k * 23})"><rect x="-26" y="-9" width="52" height="18" rx="3" fill="{["#3a6aa8", "#7a3aa8", "#a83a5a", "#3a8a6a"][k % 4]}" opacity=".85"/>'
+                 + text(0, 4, ("sync", "catch-up", "pre-meet", "align", "quick call", "stand-up")[k % 6], 7.6, "#ffffff", SERIF, "middle") + "</g>")
+    # Hugo dancing: three ghost poses
+    for k, (x, o) in enumerate(((240, .25), (300, .45), (360, 1))):
+        b.append(f'<g opacity="{o}">' + person(x, 420, 1.0 + k * .05, fill="#0c0806", rim="#ff8a4a", rim_op=.9) + "</g>")
+    b.append(f'<path d="M330 300 L280 240 M390 300 L440 250" stroke="#0c0806" stroke-width="16" stroke-linecap="round"/><path d="M330 300 L280 240 M390 300 L440 250" stroke="#ff8a4a" stroke-width="1.4" fill="none" opacity=".7"/>')
+    b.append(text(300, 40, "54 meetings · 06:12 emails · “crazy week”", 14, "#ffb08a", MONO, "middle", 'opacity=".85"'))
+    b.append('<circle cx="120" cy="120" r="34" fill="#0e0a08" stroke="#ff8a4a"/><path d="M120 120 L120 96 M120 120 L106 126" stroke="#ff8a4a" stroke-width="2.4"/>' + text(120, 176, "06:12", 14, "#ff8a4a", MONO, "middle"))
+    # the quiet corner: Asha's laptop, shipped, coat on chair
+    b.append(f'<ellipse cx="660" cy="390" rx="150" ry="100" fill="url(#{p}-q)"/><rect x="560" y="420" width="200" height="10" fill="#3a2a1a"/>'
+             '<path d="M610 420 L710 420 L702 360 L618 360 Z" fill="#1a1c22"/><rect x="624" y="366" width="72" height="48" fill="#e8ecf0"/>' + text(660, 388, "SHIPPED", 10, "#1a6a3a", FELL, "middle")
+             + text(660, 404, "✓ 16:30", 10, "#1a6a3a", MONO, "middle"))
+    b.append('<path d="M740 420 L740 330 C740 316 770 316 770 330 L770 420" stroke="#2a2018" stroke-width="6" fill="none"/><path d="M742 334 C726 350 728 390 744 404 L766 404 C778 390 778 350 766 334 Z" fill="#5a3a2a" opacity=".85"/>')
+    b.append(text(660, 470, "Asha, gone home (three days early)", 12, "#ffe2a0", HAND, "middle", 'opacity=".8"'))
+    return p, "The Performative Busy-ness Dance", defs, "".join(b)
+
+
+def pivot_storm():
+    p = "ps"
+    defs = (f'<linearGradient id="{p}-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0a0e18"/><stop offset="1" stop-color="#1a2030"/></linearGradient>'
+            f'<radialGradient id="{p}-dry" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffd27a" stop-opacity=".7"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="url(#{p}-sky)"/>', rain(p, 0, 800, 0, 500, .35, "#9ab0d8")]
+    b.append(f'<path d="M120 60 L200 40 L260 80" stroke="#cfe0ff" stroke-width="2" fill="none" opacity=".5" filter="url(#{p}-glow)"/>')
+    # the roof and three weathervanes, pointing different ways
+    b.append('<path d="M40 260 L400 150 L760 260 Z" fill="#14161e" stroke="#3a4050"/>')
+    for k, (x, y, rot, lab) in enumerate(((200, 205, -30, "CUSTOMER FIRST"), (400, 150, 60, "COST LEADERSHIP"), (600, 205, 160, "AI FIRST"))):
+        b.append(f'<path d="M{x} {y} V{y - 80}" stroke="#8a7a5a" stroke-width="3"/><g transform="translate({x} {y - 80}) rotate({rot})"><path d="M-46 0 L40 0 M40 0 l-14 -8 M40 0 l-14 8 M-46 0 l-10 -10 M-46 0 l-10 10" stroke="#c9a24a" stroke-width="3" fill="none"/></g>'
+                 + text(x, y - 104, lab, 10, "#e8d8a0", FELL, "middle", 'letter-spacing="1.5"') + text(x, y - 118, ("Q3 2029", "Q4 2029", "Q1 2030")[k], 9, "#9ab0d8", MONO, "middle"))
+    # the eaves, and under them the dry, glowing churn model
+    b.append('<path d="M40 260 L760 260 L760 274 L40 274 Z" fill="#2a2420"/>')
+    b.append(f'<ellipse cx="400" cy="320" rx="110" ry="44" fill="url(#{p}-dry)"/><rect x="350" y="296" width="100" height="44" fill="#e8dcc0"/>' + text(400, 316, "CHURN MODEL", 10, "#2a1a10", FELL, "middle")
+             + text(400, 332, "finished ✓", 11, "#1a6a3a", HAND, "middle"))
+    # the team in the rain with soaked roadmaps
+    for k, (x, lab) in enumerate(((140, "roadmap 1"), (260, "roadmap 2"), (560, "roadmap 3"), (680, ""))):
+        b.append(person(x, 500, .95, fill="#0a0c12", rim="#9ab0d8", rim_op=.8))
+        if lab:
+            b.append(f'<g transform="rotate({(-1) ** k * 12} {x + 30} 400)"><rect x="{x + 6}" y="380" width="56" height="40" fill="#b8b0a0" opacity=".7"/><path d="M{x + 10} 396 C{x + 30} 410 {x + 40} 384 {x + 58} 402" stroke="#5a6a8a" fill="none"/>'
+                     + text(x + 34, 392, lab, 7.5, "#3a3a4a", HAND, "middle") + "</g>")
+    b.append(text(680, 360, "Rafi: “any point?”", 12, "#cfe0ff", HAND, "middle", 'opacity=".8"'))
+    b.append(text(400, 486, "Storms can't move finished things.", 14, "#ffd890", SERIF, "middle", 'font-style="italic" opacity=".75"'))
+    return p, "The Pivot Storm", defs, "".join(b)
+
+
 PLATES = {
     "meeting-lich": meeting_lich, "gaslight-wraith": gaslight_wraith, "bulldozer-ogre": bulldozer_ogre,
     "passive-aggressive-poltergeist": passive_aggressive_poltergeist, "coasting-zombie": coasting_zombie,
@@ -2424,6 +2750,10 @@ PLATES = {
     "unpaid-invoice-wraith": unpaid_invoice_wraith, "bake-off-arena": bake_off_arena, "incumbent-dragon": incumbent_dragon,
     "rigged-rfp": rigged_rfp, "frenemy-pact": frenemy_pact, "overpromise-golem": overpromise_golem,
     "procurement-labyrinth": procurement_labyrinth, "escalation-summoning": escalation_summoning, "banishing-client": banishing_client,
+    "return-to-office-decree": return_to_office_decree, "green-dot-of-doom": green_dot_of_doom, "ai-replacement-prophecy": ai_replacement_prophecy,
+    "copilot-credit-grab": copilot_credit_grab, "cult-of-family": cult_of_family, "all-hands-mass": all_hands_mass,
+    "engagement-survey-oracle": engagement_survey_oracle, "hot-desk-hunger-games": hot_desk_hunger_games, "transformation-journey": transformation_journey,
+    "slack-channel-necropolis": slack_channel_necropolis, "performative-busyness": performative_busyness, "pivot-storm": pivot_storm,
     "hiring-freeze-frost": hiring_freeze_frost, "budget-bloodletting": budget_bloodletting, "more-with-less": more_with_less,
     "reorg-ritual": reorg_ritual, "suits-from-beyond": suits_from_beyond, "executioners-burden": executioners_burden,
     "survivors-haunting": survivors_haunting, "quiet-culling": quiet_culling, "go-bag-scroll": go_bag_scroll,
