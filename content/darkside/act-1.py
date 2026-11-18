@@ -79,6 +79,7 @@ you know something is happening.</p>""",
         # ------------------------------------------------------------------ 2
         dict(
             slug="meeting-before-the-meeting",
+            plate_caption="Monday, 16:58, by the coffee machine on 27. Tuesday's board is already decided. The board just doesn't know it yet.",
             ring="PRE-WIRED ✠ NO SURPRISES ✠ WALK ME THROUGH IT FIRST ✠", scrawl="the meeting is a formality",
             name="The Meeting Before the Meeting", sigil="⚿",
             epithet="By the time the meeting starts, the decision has already been made.",
@@ -117,6 +118,7 @@ you know something is happening.</p>""",
         # ------------------------------------------------------------------ 3
         dict(
             slug="blood-pacts",
+            plate_caption="Thursday lunch. A pinky promise, a red thread and a ledger of favours. Jules has been doing this for two years.",
             ring="I OWE YOU ONE ✠ HAPPY TO HELP ✠ LET'S STAY CLOSE ✠", scrawl="dig the well before you're thirsty",
             name="Blood Pacts", sigil="⚭",
             epithet="Alliances are made in peacetime. In war, it's too late.",
@@ -155,6 +157,7 @@ you know something is happening.</p>""",
         # ------------------------------------------------------------------ 4
         dict(
             slug="ghost-decision",
+            plate_caption="The off-site. Three executives, a deck called FINAL_v7 and an empty chair where Marcus would have sat.",
             ring="IT WAS DECIDED ✠ BY WHOM ✠ NOBODY KNOWS ✠ IT IS DONE ✠", scrawl="who was in the room?",
             name="The Ghost Decision", sigil="☁",
             epithet="Made in a room you weren't in. By people who won't say.",
@@ -193,6 +196,7 @@ you know something is happening.</p>""",
         # ------------------------------------------------------------------ 5
         dict(
             slug="rumour-mill-familiar",
+            plate_caption="The floor 9 kitchen. Seven words at 09:10. A department closure by lunch. The coffee machine was just broken.",
             ring="DID YOU HEAR ✠ DON'T SAY I TOLD YOU ✠ APPARENTLY ✠", scrawl="the walls have Teams",
             name="The Rumour Mill Familiar", sigil="☊",
             epithet="Small, fast, everywhere. Feeds on half a sentence.",
@@ -231,6 +235,7 @@ you know something is happening.</p>""",
         # ------------------------------------------------------------------ 6
         dict(
             slug="cc-inquisition",
+            plate_caption="Fourteen witnesses, one inquisitor, one spreadsheet column. The verdict arrived on Friday at 16:58: “Can we take this offline?”",
             ring="LOOPING IN ✠ ADDING MY MANAGER ✠ FOR VISIBILITY ✠ REPLY ALL ✠", scrawl="the CC line is a weapon",
             name="The CC Inquisition", sigil="✉",
             epithet="Every name on the CC line is a witness. Or a threat.",
@@ -269,6 +274,7 @@ you know something is happening.</p>""",
         # ------------------------------------------------------------------ 7
         dict(
             slug="turf-wars",
+            plate_caption="Four towers, four flags, one no-man's-land. 11,400 meters glowing red in the gap, and Pip with a lantern.",
             ring="THAT'S OUR AREA ✠ NOT YOUR REMIT ✠ WHO OWNS THIS ✠", scrawl="both towers are on fire",
             name="The Turf Wars of the Two Towers", sigil="♜",
             epithet="Two departments. One problem. Neither will touch it, both will own it.",
@@ -307,6 +313,7 @@ you know something is happening.</p>""",
         # ------------------------------------------------------------------ 8
         dict(
             slug="empire-builder",
+            plate_caption="Network Assets, 2026. 112 people, one centre of excellence, a hoard of staff badges and a shadow with wings.",
             ring="MORE HEADCOUNT ✠ BIGGER REMIT ✠ REPORT TO ME ✠", scrawl="headcount is not output",
             name="The Empire Builder", sigil="♚",
             epithet="Collects headcount like dragon gold. Sleeps on it.",
@@ -384,6 +391,7 @@ you know something is happening.</p>""",
         # ------------------------------------------------------------------ 10
         dict(
             slug="chosen-one",
+            plate_caption="The spotlight, the halo, the coffee. And Pip, just outside the light, wondering how you get in.",
             ring="THEY'RE ONE TO WATCH ✠ HIGH POTENTIAL ✠ OBVIOUSLY ✠", scrawl="it's not about you (mostly)",
             name="The Chosen One", sigil="✶",
             epithet="Every court has a favourite. It is rarely you.",
@@ -466,6 +474,7 @@ you know something is happening.</p>""",
         # ------------------------------------------------------------------ 12
         dict(
             slug="plausible-silence",
+            plate_caption="The budget review, 14:22. Four people studying their pens. One person speaking. Guess who pays.",
             ring="NO COMMENT ✠ I'LL THINK ABOUT IT ✠ GOOD QUESTION ✠", scrawl="silence is a full sentence",
             name="The Art of Plausible Silence", sigil="☉",
             epithet="Sometimes the most powerful thing you can say is nothing. For now.",

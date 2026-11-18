@@ -441,3 +441,14 @@ Sections: I A sighting (time-stamped beats: `<p class="beat"><span>…</span></p
   the press; the 2019 arrival of Dame Helena and Ottoline; the 2020 reorg leak; the 2021 restructure (separate targets);
   the 2023 Strategy consultancy scandal (approvals centralised); Benedict's 2024 open-door policy; the Annotator left
   MetroVolt in March 2023 after a resignation on a bad Tuesday. Keep later Acts consistent with these.
+
+## 19. Act I fully illustrated (18 Nov 2026)
+
+Owner asked to complete Act I's illustrations. Nine new plates in `scripts/plates.py` (shared toolkit; helper `by(face_y, face_s, body_s)`
+places a body under a head): meeting_before_the_meeting (Priya and Gareth by the floor-27 coffee machine; the board behind glass reads
+“APPROVED (pending meeting)”), blood_pacts (Jules by candlelight; a pinky promise tied in red thread; the Ally Garden ledger),
+ghost_decision (three translucent executives under FINAL_v7.pptx; Marcus's empty chair), rumour_mill_familiar (a cat-like familiar on the
+broken coffee machine; the rumour growing in four bubbles), cc_inquisition (hooded Gareth before fourteen CC'd witnesses; Pip on a spreadsheet
+cell), turf_wars (four towers, a no-man's-land of 11,400 red-lit meters), empire_builder (Gareth on a hoard of staff badges, a dragon's
+shadow), chosen_one (Jules in a spotlight with a halo; Pip in the dark), plausible_silence (the budget review at 14:22; four silent
+managers; Pip's speech bubble). All twelve Act I entries now have a plate and a `plate_caption`. Act III still has three plates.

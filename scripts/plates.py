@@ -898,12 +898,312 @@ def escape_portal():
     return p, "The Escape Portal", defs, "".join(b)
 
 
+# ================================================================ Act I plates, the remaining nine
+def by(fy, fs, bs):
+    """Body y so that the neck meets the chin: face_y + 85*face_s - 43*body_s."""
+    return fy + 85 * fs - 43 * bs
+
+
+def meeting_before_the_meeting():
+    p = "mb1"
+    defs = (f'<radialGradient id="{p}-mach" cx=".5" cy=".5" r=".6"><stop offset="0" stop-color="#ffcf8a" stop-opacity=".7"/><stop offset="1" stop-color="#ffcf8a" stop-opacity="0"/></radialGradient>'
+            f'<linearGradient id="{p}-glass" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0c1420"/><stop offset="1" stop-color="#05080e"/></linearGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#040304"/>']
+    # behind the glass: the boardroom, empty, already decided
+    b.append(f'<rect x="420" y="30" width="360" height="300" fill="url(#{p}-glass)"/><path d="M420 30 V330 M600 30 V330" stroke="#1a2a3a" stroke-width="3"/>'
+             '<rect x="470" y="60" width="260" height="110" fill="#1a2436"/>'
+             + text(600, 92, "NETWORK INVESTMENT BOARD", 12, "#9ab0d0", FELL, "middle", 'letter-spacing="1.5"')
+             + text(600, 116, "Tue 10:00 · item 4", 12, "#9ab0d0", SERIF, "middle")
+             + text(600, 146, "APPROVED (pending meeting)", 15, "#7affa0", MONO, "middle", f'filter="url(#{p}-glow)"')
+             + '<path d="M440 260 L760 260 L780 320 L420 320 Z" fill="#0a0e14"/>'
+             + "".join(f'<rect x="{x}" y="226" width="20" height="34" fill="#06080c"/><rect x="{x - 2}" y="262" width="24" height="8" fill="#c9cfdc" opacity=".55"/>' for x in (470, 530, 590, 650, 710))
+             + '<g stroke="#9ab8d0" stroke-width="1" opacity=".15"><path d="M440 40 l90 120 M480 40 l110 150 M640 50 l100 130"/></g>')
+    # the coffee machine: where decisions are actually made
+    b.append(f'<ellipse cx="300" cy="260" rx="220" ry="190" fill="url(#{p}-mach)" filter="url(#{p}-b12)"/>'
+             '<rect x="250" y="150" width="100" height="250" rx="6" fill="#1a1612"/><rect x="262" y="166" width="76" height="46" rx="3" fill="#ffcf8a" opacity=".9"/>'
+             + text(300, 184, "FLOOR 27", 8, "#3a2410", MONO, "middle") + text(300, 196, "DECISIONS", 8, "#3a2410", MONO, "middle") + text(300, 207, "DISPENSED HERE", 7, "#3a2410", MONO, "middle")
+             + '<rect x="280" y="290" width="40" height="30" fill="#0a0806"/><path d="M290 320 L310 320 L308 344 L292 344 Z" fill="#e8e0d0"/>')
+    # Priya and Gareth, leaning in, lit by the machine
+    fl, fs = (170, 185), .62
+    b.append(blouse(p, fl[0], by(fl[1], fs, .78), .78, cardigan="#1a1418", top="#3a2a34", rim="#ffcf8a", rim_side="right"))
+    b.append(face(p, 1, fl[0], fl[1], fs, skin=("#1a1210", "#6a5048", "#c8a890"), light="right", light_col="#ffd8a8", rim="#7a8ab0", rim_side="left",
+                  eye="human", glow=False, brows="flat", mouth="thin", hair="bob", hair_col="#0a0608", ears="none", tilt=6, lip="#7a3a3a"))
+    fr = (430, 190)
+    b.append(suit(p, 1, fr[0], by(fr[1], .62, .8), .8, tie="#2a3a5a", jacket="#0c0c10", shirt="#6a6a70", rim="#ffcf8a", rim_side="left"))
+    b.append(face(p, 2, fr[0], fr[1], .62, skin=("#14120e", "#5a4a3c", "#b8a08a"), light="left", light_col="#ffd8a8", rim="#7a8ab0", rim_side="right",
+                  eye="human", glow=False, brows="angry", mouth="thin", hair="slick", hair_col="#2a2622", ears="human", tilt=-6))
+    b.append(text(140, 60, "Monday · 16:58", 16, "#c9a26a", FELL, "middle", 'letter-spacing="2" opacity=".7"'))
+    b.append(text(300, 470, "“Show me first. I'd have said yes.”", 14, "#ffd8a8", HAND, "middle", 'opacity=".65"'))
+    return p, "The Meeting Before the Meeting", defs, "".join(b)
+
+
+def blood_pacts():
+    p = "bp"
+    defs = f'<radialGradient id="{p}-cand" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffcf7a" stop-opacity=".75"/><stop offset="1" stop-color="#ffcf7a" stop-opacity="0"/></radialGradient>'
+    b = [f'<rect width="{W}" height="{H}" fill="#050302"/>']
+    b.append(f'<ellipse cx="400" cy="300" rx="320" ry="220" fill="url(#{p}-cand)" filter="url(#{p}-b12)"/>')
+    # Jules across the canteen table, warm, in candlelight
+    fj = (520, 150)
+    b.append(suit(p, 1, fj[0], by(fj[1], .66, .82), .82, tie="#3a5a3a", jacket="#1a1612", shirt="#8a8070", rim="#ffcf7a", rim_side="left"))
+    b.append(face(p, 1, fj[0], fj[1], .66, skin=("#1a120c", "#6a5040", "#d0b090"), light="below", light_col="#ffd8a0", rim="#c86a3a", rim_side="right",
+                  eye="human", glow=False, brows="raised", mouth="smile", hair="slick", hair_col="#3a2414", ears="human", lip="#8a4a3a"))
+    # the table
+    b.append('<path d="M60 330 L740 330 L800 500 L0 500 Z" fill="#1a120a"/><path d="M60 330 L740 330" stroke="#6a4a2a" stroke-width="1.4"/>')
+    # a pinky promise across the table, bound with red thread
+    b.append('<path d="M120 480 C190 450 260 430 330 420" stroke="#0e0c10" stroke-width="44" stroke-linecap="round" fill="none"/>'
+             '<path d="M680 480 C610 450 540 430 470 420" stroke="#14100c" stroke-width="44" stroke-linecap="round" fill="none"/>'
+             '<rect x="300" y="384" width="74" height="58" rx="22" fill="#b89878"/><rect x="426" y="384" width="74" height="58" rx="22" fill="#c8a88a"/>'
+             '<g stroke="#7a5a44" stroke-width="1.6" fill="none"><path d="M316 396 q6 6 0 12 M332 394 q6 6 0 12 M348 396 q6 6 0 12"/><path d="M484 396 q-6 6 0 12 M468 394 q-6 6 0 12 M452 396 q-6 6 0 12"/></g>'
+             '<path d="M368 404 C392 384 410 384 414 398 C416 410 404 414 396 406" stroke="#b89878" stroke-width="12" stroke-linecap="round" fill="none"/>'
+             '<path d="M432 404 C408 384 390 384 386 398 C384 410 396 414 404 406" stroke="#c8a88a" stroke-width="12" stroke-linecap="round" fill="none"/>'
+             '<path d="M368 404 C392 384 410 384 414 398" stroke="#f0d8bc" stroke-width="2" fill="none" opacity=".6"/>'
+             f'<path d="M380 398 C392 410 408 410 420 398 C430 388 420 380 400 386 C380 380 370 388 380 398 Z M400 404 C390 424 372 438 350 452 M400 404 C410 424 428 438 450 452" stroke="#c4161c" stroke-width="2.6" fill="none" filter="url(#{p}-glow)"/>')
+    # props: the Ally Garden ledger, a sticky note, two coffees, a candle
+    b.append('<g transform="rotate(-6 140 360)"><rect x="70" y="330" width="150" height="100" fill="#d8ccb0"/><path d="M145 330 V430" stroke="#8a7a5a"/>'
+             + text(108, 350, "ALLY GARDEN", 9, "#3a2a10", FELL, "middle") + text(108, 366, "Priya · data", 8, "#3a2a10", HAND, "middle")
+             + text(108, 380, "Tamsin · macro", 8, "#3a2a10", HAND, "middle") + text(108, 394, "Sam · site visit", 8, "#3a2a10", HAND, "middle")
+             + text(183, 350, "WATER", 9, "#3a2a10", FELL, "middle") + text(183, 366, "monthly", 8, "#3a2a10", HAND, "middle") + "</g>")
+    b.append('<g transform="rotate(5 640 360)"><rect x="610" y="340" width="64" height="56" fill="#f0e070"/>'
+             + text(642, 362, "I OWE", 10, "#3a2a00", HAND, "middle", 'font-weight="700"') + text(642, 378, "YOU ONE", 10, "#3a2a00", HAND, "middle", 'font-weight="700"') + "</g>")
+    b.append(f'<rect x="392" y="290" width="16" height="44" fill="#e8dcc0"/><ellipse cx="400" cy="282" rx="6" ry="13" fill="#ffd27a" filter="url(#{p}-glow)"/>')
+    b.append(mug(240, 290, "THURSDAY", "LUNCH", "#d8d0c0", "#5a3a20") + mug(520, 290, "HAPPY TO", "HELP", "#d8d0c0", "#5a3a20"))
+    b.append(text(400, 492, "“I helped people. Then they remembered.”", 13, "#ffd8a0", HAND, "middle", 'opacity=".6"'))
+    return p, "Blood Pacts", defs, "".join(b)
+
+
+def ghost_decision():
+    p = "gd"
+    defs = (f'<linearGradient id="{p}-scr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a6aa0"/><stop offset="1" stop-color="#0a1a2a"/></linearGradient>'
+            f'<linearGradient id="{p}-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9ef4ff" stop-opacity=".35"/><stop offset="1" stop-color="#9ef4ff" stop-opacity="0"/></linearGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#020406"/>']
+    # the off-site room: a screen with the deck
+    b.append(f'<rect x="230" y="20" width="340" height="150" fill="url(#{p}-scr)"/>' + text(400, 70, "FINAL_v7.pptx", 22, "#e0f0ff", MONO, "middle", f'filter="url(#{p}-glow)"')
+             + text(400, 104, "Transition: Grid Analytics → Strategy", 13, "#c0d8f0", SERIF, "middle") + text(400, 134, "(v1–v6 not shared)", 11, "#8aa8c8", SERIF, "middle", 'font-style="italic"'))
+    # three ghostly executives at the table, translucent
+    for k, (x, y, s) in enumerate(((230, 250, .5), (400, 236, .54), (570, 250, .5))):
+        b.append(f'<g opacity=".55">' + suit(p, k + 1, x, by(y, s, .6), .6, tie="#2a4a5a", jacket="#0a1418", shirt="#3a5a6a", rim="#9ef4ff")
+                 + face(p, k + 1, x, y, s, skin=("#0a1418", "#3a5a64", "#8ab0ba"), light="above", light_col="#cff6ff", rim="#9ef4ff",
+                        eye="cyan", glow=True, brows="flat", mouth="thin", hair="slick" if k != 1 else "bald", hair_col="#0a1418", ears="human", extras=("translucent",)) + "</g>")
+        b.append(f'<rect x="{x - 60}" y="{y + 50}" width="120" height="120" fill="url(#{p}-fade)" filter="url(#{p}-b6)"/>')
+    # the table, wine, name cards
+    b.append('<path d="M100 380 L700 380 L760 500 L40 500 Z" fill="#0a0c10"/><path d="M100 380 L700 380" stroke="#3a5a6a" stroke-width="1"/>')
+    for x, n in ((230, "VP"), (400, "DIRECTOR"), (570, "VP")):
+        b.append(f'<path d="M{x - 30} 404 L{x + 30} 404 L{x + 26} 392 L{x - 26} 392 Z" fill="#c9cfdc" opacity=".7"/>' + text(x, 402, n, 7, "#1a1a22", FELL, "middle")
+                 + f'<path d="M{x + 44} 360 L{x + 54} 360 L{x + 50} 378 L{x + 48} 378 Z" fill="#9ef4ff" opacity=".35"/><path d="M{x + 49} 378 V392" stroke="#9ef4ff" opacity=".35"/>')
+    # the empty chair (Marcus's)
+    b.append('<rect x="700" y="330" width="44" height="90" fill="#06080a" stroke="#1a2a30"/>' + text(722, 316, "Marcus", 10, "#5a7a8a", HAND, "middle", 'opacity=".7"'))
+    # foreground: the phone with the invite
+    b.append(f'<g transform="rotate(-8 140 420)"><rect x="90" y="360" width="110" height="130" rx="10" fill="#0a0a0a"/><rect x="96" y="368" width="98" height="114" rx="6" fill="#dceaff" filter="url(#{p}-glow)"/>'
+             + text(145, 392, "Calendar", 9, "#1a2a4a", SERIF, "middle", 'font-weight="700"') + text(145, 412, "Transition:", 8, "#1a2a4a", SERIF, "middle")
+             + text(145, 424, "Grid Analytics", 8, "#1a2a4a", SERIF, "middle") + text(145, 436, "to Strategy", 8, "#1a2a4a", SERIF, "middle")
+             + text(145, 458, "Mon 08:31", 8, "#a01010", MONO, "middle") + "</g>")
+    b.append(text(560, 488, "“It came out of the off-site.”", 13, "#9ef4ff", HAND, "middle", 'opacity=".55"'))
+    return p, "The Ghost Decision", defs, "".join(b)
+
+
+def rumour_mill_familiar():
+    p = "rm"
+    defs = (f'<radialGradient id="{p}-fur" cx=".4" cy=".3" r=".8"><stop offset="0" stop-color="#4a3a4a"/><stop offset="1" stop-color="#08060a"/></radialGradient>'
+            f'<radialGradient id="{p}-lamp" cx=".5" cy="0" r="1"><stop offset="0" stop-color="#f0e0b0" stop-opacity=".35"/><stop offset="1" stop-color="#f0e0b0" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#040304"/>', f'<path d="M300 0 L500 0 L640 420 L160 420 Z" fill="url(#{p}-lamp)" filter="url(#{p}-b12)"/>']
+    # the kitchen: counter, kettle, the broken coffee machine
+    b.append('<rect x="0" y="360" width="800" height="140" fill="#0e0a08"/><path d="M0 360 H800" stroke="#4a3a2a" stroke-width="1.4"/>'
+             '<rect x="330" y="220" width="140" height="140" rx="6" fill="#1a1612"/><rect x="346" y="236" width="108" height="40" rx="3" fill="#2a1a10"/>'
+             + text(400, 262, "OUT OF ORDER", 11, "#ff5a3a", MONO, "middle", f'filter="url(#{p}-glow)"')
+             + '<rect x="380" y="300" width="40" height="30" fill="#0a0806"/>')
+    # the familiar, perched on the machine
+    b.append(f'<g transform="translate(400 212)">'
+             f'<path d="M-40 6 C-46 -30 -20 -54 0 -54 C20 -54 46 -30 40 6 Z" fill="url(#{p}-fur)"/>'
+             '<path d="M-30 -40 L-46 -86 L-14 -52 Z M30 -40 L46 -86 L14 -52 Z" fill="#0a080c"/>'
+             '<path d="M-30 -44 L-40 -76 M30 -44 L40 -76" stroke="#6a4a5a" stroke-width="1.4"/>'
+             '<path d="M40 0 C70 -6 80 -40 62 -56 C56 -62 48 -58 52 -50" stroke="#0a080c" stroke-width="7" fill="none" stroke-linecap="round"/>'
+             f'<g filter="url(#{p}-glow)"><ellipse cx="-14" cy="-28" rx="8" ry="10" fill="#ffd21a"/><ellipse cx="14" cy="-28" rx="8" ry="10" fill="#ffd21a"/></g>'
+             '<ellipse cx="-14" cy="-28" rx="2" ry="8" fill="#000"/><ellipse cx="14" cy="-28" rx="2" ry="8" fill="#000"/>'
+             '<path d="M-10 -10 Q0 -2 10 -10" stroke="#ffd21a" stroke-width="1.2" fill="none" opacity=".7"/>'
+             '<path d="M-6 -8 l2 5 2 -4 2 4 2 -5" stroke="#e8e0d0" stroke-width="1" fill="none"/>'
+             '<path d="M-40 6 C-46 -30 -20 -54 0 -54" stroke="#c8a0ff" stroke-width="1.2" fill="none" opacity=".4"/></g>')
+    # the rumour, growing as it travels
+    bubbles = [(250, 150, 11, "Marcus looked stressed", .95), (560, 110, 13, "Marcus is devastated", .9), (190, 70, 15, "Grid Planning is closing", .85),
+               (600, 30, 17, "WE'RE ALL REDUNDANT", .8)]
+    for k, (x, y, sz, t, op) in enumerate(bubbles):
+        w = len(t) * sz * .55 + 30
+        b.append(f'<g opacity="{op}"><rect x="{x - w / 2}" y="{y - sz - 8}" width="{w}" height="{sz + 20}" rx="14" fill="#e8e2d4"/>'
+                 + text(x, y + 4, t, sz, "#2a1a1a", SERIF if k < 3 else BLACK, "middle", 'font-style="italic"' if k < 3 else "") + "</g>")
+    b.append('<g stroke="#e8e2d4" stroke-width="1.4" fill="none" opacity=".4" stroke-dasharray="4 4"><path d="M380 180 C340 170 300 168 270 162 M290 140 C380 120 470 110 520 112 M500 100 C400 90 300 84 260 78 M260 60 C380 40 480 36 540 34"/></g>')
+    # whispering colleagues in silhouette
+    for x, sc in ((90, 1), (160, .9), (650, 1), (720, .9)):
+        b.append(f'<g transform="translate({x} 470) scale({sc})"><circle cx="0" cy="-120" r="22" fill="#020203"/><path d="M-36 0 L-32 -84 C-26 -100 26 -100 32 -84 L36 0 Z" fill="#020203"/>'
+                 f'<path d="M-22 -120 a22 22 0 0 1 32 -18" stroke="#f0e0b0" stroke-width="1.2" fill="none" opacity=".4"/></g>')
+    b.append(text(400, 470, "Wednesday · 09:10 to 15:00", 13, "#c9b090", FELL, "middle", 'letter-spacing="2" opacity=".6"'))
+    return p, "The Rumour Mill Familiar", defs, "".join(b)
+
+
+def cc_inquisition():
+    p = "cc"
+    defs = (f'<radialGradient id="{p}-spot" cx=".5" cy="0" r="1"><stop offset="0" stop-color="#fff0d0" stop-opacity=".55"/><stop offset="1" stop-color="#fff0d0" stop-opacity="0"/></radialGradient>'
+            f'<linearGradient id="{p}-robe" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a0a08"/><stop offset="1" stop-color="#050101"/></linearGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#040202"/>']
+    # the tribunal bench and fourteen witnesses (the CC line)
+    b.append('<path d="M60 250 L740 250 L740 300 L60 300 Z" fill="#1a0c08"/><path d="M60 250 H740" stroke="#7a3a1a" stroke-width="1.6"/>')
+    for k in range(14):
+        x = 80 + k * 49 + (24 if k > 6 else 0) - (0 if k > 6 else 0)
+        if 330 < x < 470:
+            continue
+        b.append(f'<g transform="translate({x} 250)"><circle cx="0" cy="-34" r="14" fill="#0a0606"/><path d="M-20 0 L-16 -18 C-12 -24 12 -24 16 -18 L20 0 Z" fill="#0a0606"/>'
+                 f'<rect x="-9" y="-58" width="18" height="12" rx="2" fill="#e8e2d4" opacity=".85"/><path d="M-9 -58 L0 -51 L9 -58" stroke="#8a7a6a" fill="none"/>'
+                 f'<circle cx="-4" cy="-35" r="1.6" fill="#ff3a22"/><circle cx="4" cy="-35" r="1.6" fill="#ff3a22"/></g>')
+    # the Inquisitor: Gareth, hooded, centre
+    b.append(f'<path d="M400 60 C340 64 322 120 318 190 C316 240 300 280 290 300 L510 300 C500 280 484 240 482 190 C478 120 460 64 400 60 Z" fill="url(#{p}-robe)"/>')
+    b.append(face(p, 1, 400, 160, .5, skin=("#140c0a", "#4a3a34", "#9a8478"), light="below", light_col="#ffd8b0", rim="#ff3a22",
+                  eye="red", glow=True, brows="angry", mouth="thin", hair="bald", ears="none"))
+    b.append(f'<path d="M400 76 C350 80 334 122 340 176 C350 140 370 116 400 112 C430 116 450 140 460 176 C466 122 450 80 400 76 Z" fill="#0a0302"/>'
+             f'<path d="M400 60 C460 64 478 120 482 190" stroke="#ff3a22" stroke-width="1.6" fill="none" opacity=".5"/>')
+    # the projected email header
+    b.append('<rect x="150" y="320" width="500" height="70" fill="#0c0a08" stroke="#5a3a1a"/>'
+             + text(170, 342, "Subject: RE: RE: RE: RE: RE: Asset data question", 11, "#e8d8b8", MONO)
+             + text(170, 360, "CC: Marcus Bell; Lord Varnish; FAC-ALL; Floor Warden (+10)", 11, "#ff8a6a", MONO)
+             + text(170, 378, "“Looping in leadership for visibility…”", 11, "#c9b8a0", MONO))
+    # Pip, small, in the spotlight, on a spreadsheet cell
+    b.append(f'<path d="M340 0 L460 0 L520 500 L280 500 Z" fill="url(#{p}-spot)" opacity=".5" filter="url(#{p}-b12)"/>'
+             f'<ellipse cx="400" cy="486" rx="90" ry="16" fill="#fff0d0" opacity=".35" filter="url(#{p}-b6)"/>'
+             '<g transform="translate(400 476)"><rect x="-60" y="0" width="120" height="22" fill="#e8e8e0" stroke="#5a5a50"/>'
+             + text(0, 15, "in_service_date", 11, "#1a1a1a", MONO, "middle")
+             + '<circle cx="0" cy="-62" r="15" fill="#2a2420"/><path d="M-22 0 L-18 -42 C-14 -52 14 -52 18 -42 L22 0 Z" fill="#2a2420"/>'
+             '<path d="M-15 -62 a15 15 0 0 1 30 0 M-18 -42 C-14 -52 14 -52 18 -42" stroke="#fff0d0" stroke-width="2" fill="none" opacity=".85"/>'
+             '<path d="M-22 0 L-18 -42 M22 0 L18 -42" stroke="#fff0d0" stroke-width="1.2" opacity=".5"/></g>')
+    b.append(text(400, 314, "Witnesses: 14 · Issues: 1 spreadsheet column", 12, "#c9b8a0", FELL, "middle", 'letter-spacing="1" opacity=".6"'))
+    return p, "The CC Inquisition", defs, "".join(b)
+
+
+def turf_wars():
+    p = "tw"
+    defs = (f'<linearGradient id="{p}-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#14080a"/><stop offset=".6" stop-color="#2a0e0a"/><stop offset="1" stop-color="#060304"/></linearGradient>'
+            f'<radialGradient id="{p}-lant" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffcf7a" stop-opacity=".7"/><stop offset="1" stop-color="#ffcf7a" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="url(#{p}-sky)"/>', glowlight(p, 400, 300, 380, 120, "#ff3a10", .15)]
+    b.append('<circle cx="400" cy="80" r="36" fill="#e8d0b0" opacity=".8" filter="url(#tw-b2)"/>')
+    # four towers, each with a banner
+    towers = [(70, 110, 140, "CUSTOMER OPS", "#3a5aa0"), (190, 160, 110, "LUMEN", "#7a5aa0"), (610, 160, 110, "GRID PLANNING", "#3a8a5a"), (730, 110, 140, "NETWORK ASSETS", "#a05a3a")]
+    for x, top, w, name, col in towers:
+        b.append(f'<g><rect x="{x - w / 2}" y="{top}" width="{w}" height="{420 - top}" fill="#050304"/>'
+                 + "".join(f'<rect x="{x - w / 2 + 8 + c * 22}" y="{top + 16 + r * 26}" width="10" height="14" fill="#ffcf7a" opacity="{.15 + ((r * 7 + c * 3) % 5) * .12}"/>'
+                           for r in range((420 - top - 30) // 26) for c in range(int((w - 16) // 22)))
+                 + f'<path d="M{x} {top} V{top - 50}" stroke="#2a2020" stroke-width="2"/><path d="M{x} {top - 50} L{x + 46} {top - 42} L{x} {top - 30} Z" fill="{col}"/>'
+                 + text(x + 18, top - 38, name, 6, "#fff", FELL, "middle") + "</g>")
+    # no-man's-land: silent meters like grave markers, barbed wire, a red LED on each
+    b.append('<path d="M0 420 L800 420 L800 500 L0 500 Z" fill="#0a0604"/>')
+    b.append('<path d="M240 432 q10 -8 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0" stroke="#4a3a30" stroke-width="1.4" fill="none"/>'
+             '<g stroke="#4a3a30" stroke-width="1.4">' + "".join(f'<path d="M{x} 426 l4 6 M{x + 4} 426 l-4 6"/>' for x in range(250, 560, 20)) + "</g>")
+    for k in range(16):
+        x, y = 260 + (k * 37) % 290, 440 + (k * 13) % 50
+        b.append(f'<g transform="translate({x} {y})"><rect x="-6" y="-16" width="12" height="16" fill="#2a2420"/><circle cx="0" cy="-10" r="2" fill="#ff2a14" filter="url(#{p}-glow)"/></g>')
+    # Pip with a lantern, alone in the gap
+    b.append(f'<circle cx="420" cy="380" r="60" fill="url(#{p}-lant)"/>'
+             '<g transform="translate(400 420)"><circle cx="0" cy="-74" r="11" fill="#060304"/><path d="M-14 0 L-12 -56 C-8 -64 8 -64 12 -56 L14 0 Z" fill="#060304"/>'
+             '<path d="M12 -50 L24 -38" stroke="#060304" stroke-width="4"/><rect x="18" y="-38" width="12" height="16" fill="#ffd27a"/></g>')
+    b.append(text(400, 160, "11,400 meters · 63 days · owner: none", 14, "#ffcf7a", FELL, "middle", 'letter-spacing="2" opacity=".8"'))
+    return p, "The Turf Wars of the Two Towers", defs, "".join(b)
+
+
+def empire_builder():
+    p = "eb"
+    defs = (f'<radialGradient id="{p}-gold" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffd27a" stop-opacity=".6"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient>'
+            f'<radialGradient id="{p}-coin" cx=".35" cy=".35" r=".7"><stop offset="0" stop-color="#fff2b0"/><stop offset=".5" stop-color="#d8a020"/><stop offset="1" stop-color="#5a3a00"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#050302"/>']
+    # the wall: “Our Expanding Footprint”, his colour spreading across the map
+    b.append('<rect x="40" y="30" width="300" height="200" fill="#0e0c0a" stroke="#3a2a1a"/>' + text(190, 54, "OUR EXPANDING FOOTPRINT", 11, "#d8a020", FELL, "middle", 'letter-spacing="1.5"')
+             + '<path d="M60 210 C80 150 120 120 160 140 C200 100 260 90 320 120 L320 210 Z" fill="#a05a1a" opacity=".55"/>'
+             + '<path d="M60 210 C70 180 100 170 120 180" fill="none" stroke="#3a5aa0" stroke-width="2" opacity=".6"/>'
+             + text(110, 196, "2024: 40", 9, "#e8d8b8", SERIF) + text(250, 160, "2026: 112", 13, "#ffe2a0", SERIF, "middle", 'font-weight="700"'))
+    # the dragon's shadow behind him, thrown on a wall lit by the hoard
+    b.append(glowlight(p, 540, 160, 260, 170, "#c87a2a", .45))
+    b.append(f'<path d="M520 260 C470 180 400 140 360 60 C420 90 450 100 470 130 C470 90 490 60 520 40 C530 90 540 120 560 140 C590 100 640 80 700 70 C660 120 640 160 600 230 Z" fill="#000" opacity=".85" filter="url(#{p}-b6)"/>'
+             '<path d="M560 150 L590 120 L586 150 Z" fill="#000" opacity=".8"/>')
+    b.append(f'<ellipse cx="540" cy="400" rx="260" ry="120" fill="url(#{p}-gold)" filter="url(#{p}-b12)"/>')
+    # Gareth
+    fg = (540, 170)
+    b.append(suit(p, 1, fg[0], by(fg[1], .66, .9), .9, tie="#8a6a10", jacket="#14100c", shirt="#7a7060", rim="#ffd27a", rim_side="left"))
+    b.append(face(p, 1, fg[0], fg[1], .66, skin=("#1a120c", "#6a5040", "#c8a888"), light="below", light_col="#ffe2a0", rim="#ff6a2a", rim_side="right",
+                  eye="yellow", glow=True, brows="flat", mouth="smile", hair="slick", hair_col="#6a6058", ears="human"))
+    # the hoard: a pile of staff badges like gold coins
+    b.append(table(400, "#0c0806"))
+    for k in range(38):
+        x = 360 + (k * 29) % 360 + (k % 3) * 4
+        y = 470 - (k % 5) * 12 - (abs(540 - x) < 120) * ((k * 7) % 30)
+        b.append(f'<g transform="translate({x} {y}) rotate({(k * 37) % 50 - 25})"><rect x="-11" y="-14" width="22" height="28" rx="2" fill="url(#{p}-coin)"/><rect x="-11" y="-14" width="22" height="6" fill="#7a0d0d" opacity=".8"/></g>')
+    b.append(hand(p, 660, 380, .8, rim="#ffd27a", light="#ffe2a0", claws=True, pose="claw"))
+    b.append('<rect x="80" y="380" width="150" height="40" fill="#1a1410" stroke="#d8a020"/>' + text(155, 396, "CENTRE OF EXCELLENCE", 8, "#d8a020", FELL, "middle")
+             + text(155, 410, "for Asset Intelligence", 8, "#c9b090", SERIF, "middle", 'font-style="italic"'))
+    b.append(text(155, 450, "excellent at: (TBC)", 11, "#c9b090", HAND, "middle", 'opacity=".65"'))
+    return p, "The Empire Builder", defs, "".join(b)
+
+
+def chosen_one():
+    p = "co"
+    defs = f'<linearGradient id="{p}-beam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff4d8" stop-opacity=".75"/><stop offset="1" stop-color="#fff4d8" stop-opacity=".08"/></linearGradient>'
+    b = [f'<rect width="{W}" height="{H}" fill="#030304"/>']
+    # the programme board
+    b.append('<rect x="560" y="40" width="200" height="90" fill="#0c0c10" stroke="#3a3a4a"/>' + text(660, 68, "HIGH POTENTIAL", 12, "#d8c090", FELL, "middle", 'letter-spacing="1.5"')
+             + text(660, 86, "PROGRAMME", 12, "#d8c090", FELL, "middle", 'letter-spacing="1.5"') + text(660, 112, "places: 1 · applications: none", 10, "#9a8a70", SERIF, "middle", 'font-style="italic"'))
+    # the spotlight on Jules
+    b.append(f'<path d="M270 0 L350 0 L440 500 L180 500 Z" fill="url(#{p}-beam)" filter="url(#{p}-b6)"/>')
+    fj = (310, 190)
+    b.append(blouse(p, fj[0], by(fj[1], .68, .86), .86, cardigan="#3a3022", top="#6a5a42", rim="#fff4d8", necklace=False))
+    b.append(face(p, 1, fj[0], fj[1], .68, skin=("#2a2018", "#8a7060", "#e8d0b8"), light="above", light_col="#fff4d8", rim="#ffd27a", rim_side="left",
+                  eye="human", glow=False, brows="raised", mouth="smile", hair="slick", hair_col="#3a2414", ears="human", lip="#8a4a3a"))
+    b.append(f'<g filter="url(#{p}-glow)" opacity=".8"><ellipse cx="310" cy="88" rx="56" ry="10" fill="none" stroke="#ffe2a0" stroke-width="2.4"/></g>')
+    # Pip, beside the beam, in the dark
+    fp = (520, 220)
+    b.append(suit(p, 1, fp[0], by(fp[1], .64, .82), .82, tie="#2a2a3a", jacket="#08080c", shirt="#3a3a44", rim="#5a5a6a", rim_side="left"))
+    b.append(face(p, 2, fp[0], fp[1], .64, skin=("#08080c", "#24242c", "#4a4a56"), light="left", light_col="#c8c0a8", rim="#5a5a6a", rim_side="left",
+                  eye="human", glow=False, brows="worried", mouth="thin", hair="slick", hair_col="#050505", ears="human"))
+    # the coffee Jules offers across the line of light
+    b.append('<g transform="translate(408 330)"><path d="M0 0 L30 0 L27 40 L3 40 Z" fill="#e8e0d0"/><rect x="-2" y="-6" width="34" height="7" rx="2" fill="#3a3028"/>'
+             '<path d="M10 -10 C6 -20 16 -22 12 -32" stroke="#fff" stroke-width="1" fill="none" opacity=".3"/></g>')
+    b.append(hand(p, 380, 390, .7, flip=True, rim="#fff4d8", light="#fff4d8", claws=False, pose="claw"))
+    b.append(text(160, 470, "“ask Jules”", 18, "#ffe2a0", HAND, "middle", 'opacity=".75"') + text(600, 470, "(nobody ever said “ask Pip”)", 12, "#8a8a9a", HAND, "middle", 'opacity=".6"'))
+    return p, "The Chosen One", defs, "".join(b)
+
+
+def plausible_silence():
+    p = "ps"
+    defs = f'<radialGradient id="{p}-pend" cx=".5" cy="0" r="1"><stop offset="0" stop-color="#f0e8d0" stop-opacity=".5"/><stop offset="1" stop-color="#f0e8d0" stop-opacity="0"/></radialGradient>'
+    b = [f'<rect width="{W}" height="{H}" fill="#040304"/>']
+    b.append('<rect x="250" y="20" width="300" height="90" fill="#0e0e12" stroke="#2a2a34"/>' + text(400, 52, "EFFICIENCY OPPORTUNITIES", 14, "#c8c0a8", FELL, "middle", 'letter-spacing="1.5"')
+             + text(400, 80, "(volunteers?)", 13, "#9a9080", SERIF, "middle", 'font-style="italic"'))
+    b.append(text(700, 60, "14:22", 22, "#ff3a22", MONO, "middle", f'filter="url(#{p}-glow)"'))
+    b.append(f'<path d="M330 110 L470 110 L640 470 L160 470 Z" fill="url(#{p}-pend)" filter="url(#{p}-b12)"/>')
+    # Lord Varnish asks the room
+    fv = (400, 190)
+    b.append(suit(p, 1, fv[0], by(fv[1], .56, .72), .72, tie="#a07a10", jacket="#0c0a10", shirt="#5a5868", rim="#ffd27a"))
+    b.append(face(p, 1, fv[0], fv[1], .56, skin=("#1a1010", "#6a5450", "#c8b0a0"), light="above", light_col="#f0e8d0", rim="#ff3a22",
+                  eye="yellow", glow=True, brows="raised", mouth="thin", hair="slick", hair_col="#0a0806", ears="human"))
+    # the table and the silent managers: eyes down, mouths shut
+    b.append('<path d="M120 330 L680 330 L760 500 L40 500 Z" fill="#0c0a08"/><path d="M120 330 H680" stroke="#4a3a2a" stroke-width="1.2"/>')
+    for k, (x, y, sc) in enumerate(((150, 330, 1), (250, 320, .9), (550, 320, .9), (650, 330, 1))):
+        b.append(f'<g transform="translate({x} {y}) scale({sc})"><circle cx="0" cy="-60" r="24" fill="#030203"/><path d="M-34 0 L-30 -34 C-24 -44 24 -44 30 -34 L34 0 Z" fill="#030203"/>'
+                 f'<path d="M-12 -62 q6 4 12 0 M2 -62 q6 4 12 0" stroke="#5a5a62" stroke-width="1.4" fill="none"/>'
+                 f'<path d="M-24 -60 a24 24 0 0 1 36 -20" stroke="#f0e8d0" stroke-width="1.2" fill="none" opacity=".4"/></g>')
+    b.append(text(150, 352, "studying pen", 9, "#8a8070", HAND, "middle", 'opacity=".7"') + text(250, 340, "laptop", 9, "#8a8070", HAND, "middle", 'opacity=".7"')
+             + text(550, 340, "ceiling (CFO)", 9, "#8a8070", HAND, "middle", 'opacity=".7"') + text(650, 352, "window", 9, "#8a8070", HAND, "middle", 'opacity=".7"'))
+    # Pip, foreground, the only one speaking
+    b.append('<g transform="translate(400 500)"><circle cx="0" cy="-92" r="30" fill="#060406"/><path d="M-60 0 L-54 -50 C-46 -64 46 -64 54 -50 L60 0 Z" fill="#060406"/>'
+             '<path d="M-30 -92 a30 30 0 0 1 44 -24" stroke="#f0e8d0" stroke-width="1.6" fill="none" opacity=".6"/></g>')
+    b.append('<g opacity=".95"><rect x="430" y="370" width="300" height="46" rx="18" fill="#f0e8d0"/><path d="M440 412 L420 432 L462 414 Z" fill="#f0e8d0"/>'
+             + text(580, 399, "“Grid Planning could probably—”", 14, "#2a1a1a", SERIF, "middle", 'font-style="italic"') + "</g>")
+    b.append('<g transform="rotate(-4 640 300)"><rect x="590" y="270" width="96" height="40" fill="#e8e0c8"/>' + text(638, 288, "CFO notes:", 8, "#3a2a1a", HAND, "middle")
+             + text(638, 302, "Grid Planning −12%", 9, "#a01010", HAND, "middle", 'font-weight="700"') + "</g>")
+    return p, "The Art of Plausible Silence", defs, "".join(b)
+
+
 PLATES = {
     "meeting-lich": meeting_lich, "gaslight-wraith": gaslight_wraith, "bulldozer-ogre": bulldozer_ogre,
     "passive-aggressive-poltergeist": passive_aggressive_poltergeist, "coasting-zombie": coasting_zombie,
     "doppelganger": doppelganger, "martyr-banshee": martyr_banshee, "know-it-all-basilisk": know_it_all_basilisk,
     "doom-prophet": doom_prophet, "toxic-positivity-siren": toxic_positivity_siren, "boundary-goblin": boundary_goblin,
     "hidden-thrones": hidden_thrones, "ring-kissing-ritual": ring_kissing_ritual, "sacrificial-lamb": sacrificial_lamb,
+    "meeting-before-the-meeting": meeting_before_the_meeting, "blood-pacts": blood_pacts, "ghost-decision": ghost_decision,
+    "rumour-mill-familiar": rumour_mill_familiar, "cc-inquisition": cc_inquisition, "turf-wars": turf_wars,
+    "empire-builder": empire_builder, "chosen-one": chosen_one, "plausible-silence": plausible_silence,
     "all-seeing-eye": all_seeing_eye, "seagull-overlord": seagull_overlord, "escape-portal": escape_portal,
 }
 
