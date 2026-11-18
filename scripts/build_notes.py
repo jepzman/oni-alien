@@ -136,6 +136,28 @@ CLOUD_ATTRS = [
     ("Developer experience", "pleasant to ship with?", "Self-service, fast feedback, little toil."),
 ]
 
+# Shared by the code-design volumes: Vol. 7 (Domain-Driven Design) and Vol. 8 (Inside the Application, planned).
+CODE_ATTRS = [
+    ("Simplicity", "easy to follow?", "A new teammate can read the code and predict what it does."),
+    ("Domain clarity", "reads like the business?", "The code uses the words the business uses, and its rules are easy to find."),
+    ("Correctness", "rules can't be broken?", "Invalid states and broken business rules are hard or impossible to create."),
+    ("Changeability", "safe to change?", "A new rule or feature touches a few places, not twenty."),
+    ("Testability", "test without the world?", "Business rules can be tested without a database, a network or a framework."),
+    ("Low coupling", "parts change alone?", "One module or team can change without breaking the others."),
+    ("Performance", "fast enough?", "Queries, memory and latency stay reasonable. High = no extra cost."),
+    ("Low ceremony", "little boilerplate?", "Few extra classes, layers and mappings to write. High = light."),
+    ("Team scalability", "many teams at once?", "Several teams can work on the system without stepping on each other."),
+]
+
+# “Then & now” verdicts (code-design volumes): how a classic idea from the 2000s holds up today.
+VERDICTS = {
+    "core": ("still core", "as useful as when it was written"),
+    "grown": ("matters more now", "more relevant today than when it was written"),
+    "built-in": ("built in now", "your framework or language does it for you; know it to use the tool well"),
+    "rethought": ("rethought", "the idea holds, the way the book did it has changed"),
+    "retired": ("mostly retired", "rarely worth doing the original way today"),
+}
+
 # ---------------------------------------------------------------- journals
 JOURNALS = [
     dict(
@@ -350,6 +372,82 @@ JOURNALS = [
             (16, "progressive-delivery", "Progressive Delivery", "shipping", "Roll a change out ring by ring, with automatic checks deciding each next step."),
             (17, "service-catalogue", "Service Catalogue", "running", "One place that says what each service is, who owns it, and how to run it."),
             (18, "chaos-engineering", "Chaos Engineering", "resilience", "Run planned experiments that break things on purpose, to learn before an incident does."),
+        ],
+    ),
+    # Vol. 7 · Domain-Driven Design. Plan: docs/PLAN-code-design.md. Every note carries a “then & now” box (then_now).
+    dict(
+        key="ddd", vol=7, title="Domain-Driven Design", short="domain-driven design",
+        theme="theme-ddd", subject="domain-driven design", term="Spring term · 2027", weekdays=(0, 3), start=date(2027, 1, 11),
+        kicker="surveyed, mapped and argued over with the people who know",
+        lead="My field notes on <span class=\"hl\">domain-driven design</span>: how to find the part of the business that matters, draw borders around models, connect the teams on either side, and write code that speaks the business's language and keeps its rules. {n} patterns in {c} collections, with the same eight sections as the other volumes, rated on nine <b>code-design</b> qualities like domain clarity, correctness and low coupling. Most of the ideas come from Eric Evans's 2003 book, so every note adds a <b>then &amp; now</b> box: what the book said, what changed in twenty years, and a verdict. Examples use TypeScript, but the ideas work in any language.",
+        blurb="Language, subdomains and bounded contexts, context maps, the tactical building blocks, and a then &amp; now verdict on each.",
+        attrs=CODE_ATTRS, attrs_title="The nine code-design ratings", attrs_side="what a reviewer of the model would ask", ratings_h2="Code-design ratings",
+        first_law="Model the part of the business that makes you different with care, and buy or borrow the rest. A model is only right inside its own border.",
+        then_now=True,
+        handmade=set(),
+        collections=[
+            ("strategic", "Finding the domain", "what matters, what it's called, and where it ends"),
+            ("relations", "Between contexts", "how models and the teams behind them connect"),
+            ("tactical", "Building blocks", "the shapes inside one model"),
+            ("honest", "Keeping it honest", "modern habits that keep a model sharp"),
+        ],
+        catalogue=[
+            (1, "ubiquitous-language", "Ubiquitous Language", "strategic", "One vocabulary shared by experts and code, inside one context, and used everywhere."),
+            (2, "subdomains", "Core, Supporting & Generic Subdomains", "strategic", "Sort the business into what makes you different, what supports it, and what everyone has."),
+            (3, "bounded-context", "Bounded Context", "strategic", "Draw a border around one model, so each word means exactly one thing inside it."),
+            (4, "event-storming", "Event Storming", "strategic", "Map a business process with orange sticky notes and the people who run it, in one room."),
+            (5, "context-map", "Context Map", "relations", "Draw every context and how each pair relates, including who depends on whom."),
+            (6, "customer-supplier", "Customer–Supplier & Conformist", "relations", "Decide whether a downstream team gets a say in its upstream's model, or simply takes it."),
+            (7, "shared-kernel", "Shared Kernel & Partnership", "relations", "Share a small piece of model between two teams that agree to change it together."),
+            (8, "anti-corruption-layer", "Anti-Corruption Layer", "relations", "Translate another model at your border, so its words and quirks don't leak into yours."),
+            (9, "open-host-service", "Open Host Service & Published Language", "relations", "Offer one documented, versioned interface and format to every consumer."),
+            (10, "value-object", "Value Object", "tactical", "A small immutable type defined by its value, like Money or EmailAddress, that checks itself."),
+            (11, "entity", "Entity", "tactical", "Something with an identity that lasts while its details change, like a customer or an order."),
+            (12, "aggregate", "Aggregate", "tactical", "A cluster of objects changed together through one root, which guards their rules."),
+            (13, "domain-events", "Domain Events", "tactical", "Record that something the business cares about happened, in the past tense, for others to react to."),
+            (14, "repository", "Repository", "tactical", "Load and save whole aggregates through a collection-like interface, hiding the database."),
+            (15, "domain-service", "Domain & Application Services", "tactical", "Put rules that belong to no single object in a domain service, and use cases in an application service."),
+            (16, "specification", "Specification", "honest", "Name a business rule as an object you can combine, test and reuse for checks and queries."),
+            (17, "illegal-states", "Make Illegal States Unrepresentable", "honest", "Use types so a wrong combination of data can't even be built."),
+            (18, "anemic-domain-model", "Anemic Domain Model", "honest", "Data classes with all the logic elsewhere: when it's a smell, and when it's fine."),
+        ],
+    ),
+    # Vol. 8 · Inside the Application. Plan: docs/PLAN-code-design.md. Same ratings and then & now box as Vol. 7.
+    dict(
+        key="inside-app", vol=8, title="Inside the Application", short="inside the application",
+        theme="theme-app", subject="application design", term="Spring term · 2027", weekdays=(1, 4), start=date(2027, 3, 16),
+        kicker="worked out on an engineering pad, between code reviews",
+        lead="My notes on <span class=\"hl\">what goes on inside one application</span>: the SOLID principles read with today's eyes, the enterprise patterns hiding inside your ORM, ways to shape an app so it stays easy to change, and the classic object patterns that still earn their place. {n} patterns in {c} collections, rated on the same nine <b>code-design</b> qualities as Vol. 7. The sources are mostly from 1994 to 2005 (the Gang of Four, Fowler's <i>Patterns of Enterprise Application Architecture</i>, Robert C. Martin), so every note has a <b>then &amp; now</b> box with a verdict, and the last note is a museum of patterns you can retire. Examples use TypeScript.",
+        blurb="SOLID read today, the patterns inside your ORM, ports and adapters, vertical slices, and the classic patterns worth keeping, with then &amp; now verdicts.",
+        attrs=CODE_ATTRS, attrs_title="The nine code-design ratings", attrs_side="what a reviewer would ask in a pull request", ratings_h2="Code-design ratings",
+        first_law="A pattern is a name for a solution to a problem you have. If you can't name the problem, you don't need the pattern, however famous the book.",
+        then_now=True,
+        handmade=set(),
+        collections=[
+            ("solid", "SOLID, read today", "five principles, minus the misreadings"),
+            ("orm", "Inside your ORM", "enterprise patterns you use every day without naming them"),
+            ("shape", "Shaping the app", "where code goes, so it stays easy to change"),
+            ("classic", "Classic patterns", "the Gang of Four, what to keep, and what to retire"),
+        ],
+        catalogue=[
+            (1, "single-responsibility", "Single Responsibility", "solid", "Keep together what changes for the same people, and apart what changes for different ones."),
+            (2, "open-closed", "Open–Closed", "solid", "Add new cases by adding code, not by editing a growing switch."),
+            (3, "liskov-substitution", "Liskov Substitution", "solid", "A subtype must keep every promise its parent makes, or callers break."),
+            (4, "interface-segregation", "Interface Segregation", "solid", "Depend on small interfaces shaped by what you use, not on fat ones."),
+            (5, "dependency-inversion", "Dependency Inversion", "solid", "Business code defines the interfaces; databases and APIs plug into them."),
+            (6, "active-record-data-mapper", "Active Record vs Data Mapper", "orm", "Objects that save themselves, or a separate mapper that saves them: pick by complexity."),
+            (7, "unit-of-work", "Unit of Work & Identity Map", "orm", "Track what changed in one request, keep one copy of each row, and save it all at once."),
+            (8, "lazy-loading", "Lazy Loading", "orm", "Load related data only when it's touched, and know when that's a trap."),
+            (9, "offline-locks", "Offline Locks & ETags", "orm", "Stop one user's save silently overwriting another's, across minutes of editing."),
+            (10, "dto-remote-facade", "DTOs & Remote Facade", "orm", "Send one shaped message per use case, not your entities, and not thirty small calls."),
+            (11, "transaction-script", "Transaction Script vs Domain Model", "shape", "One procedure per use case, or objects that hold the rules: choose per area."),
+            (12, "ports-adapters", "Ports & Adapters", "shape", "Put the business core in the middle; HTTP, databases and APIs are adapters around it."),
+            (13, "vertical-slices", "Vertical Slices", "shape", "Organise code by feature, end to end, instead of by technical layer."),
+            (14, "functional-core", "Functional Core, Imperative Shell", "shape", "Make decisions in pure functions; do all the input and output around them."),
+            (15, "strategy-command", "Strategy & Command as Functions", "classic", "Swap behaviour and queue actions with functions and data, not class hierarchies."),
+            (16, "decorator-middleware", "Decorator & Middleware", "classic", "Wrap a thing in another with the same shape to add logging, retries or caching."),
+            (17, "adapter-facade", "Adapter & Facade", "classic", "Make a foreign interface fit yours, and hide a complicated one behind a simple door."),
+            (18, "pattern-museum", "The Pattern Museum", "classic", "Singleton, Service Locator, Visitor and friends: what replaced them, and why."),
         ],
     ),
     # ---- Series 2 · The Solution Architect's Notebook ----
@@ -1036,7 +1134,7 @@ JOURNALS = [
 
 # Planned journals and other work, shown on the landing page.
 PLANNED = [
-    (7, "AI App Patterns", "Retrieval-augmented generation, agents and tools, evaluation, guardrails and cost-aware LLM apps."),
+    (9, "AI App Patterns", "Retrieval-augmented generation, agents and tools, evaluation, guardrails and cost-aware LLM apps."),
 ]
 # Planned volumes of Series 2, book 1 (see docs/HANDOFF-solution-architect.md).
 PLANNED_2 = [
@@ -1047,9 +1145,9 @@ PLANNED_PRODUCT = [
 PLANNED_PROJECT = [
 ]
 FUTURE_LOG = [
-    ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
-    ("Jan 2027", [("↓", "Deep dives, season 2: Replication &amp; Leader Election, Sharding &amp; Partitioning, Indexes &amp; Query Plans"), ("•", "One-page printable cheat sheet per collection")]),
-    ("Mar 2027", [("•", "Cheat sheets for Book 3: PMBOK 8 on one page, earned value, critical path")]),
+    ("Dec 2026", [("•", "Going-deeper chapters for Vols. 7 and 8: aggregates, bounded contexts, ports &amp; adapters"), ("•", "Search across every journal")]),
+    ("Jan 2027", [("↓", "Deep dives, season 2: Replication &amp; Leader Election, Sharding &amp; Partitioning, Indexes &amp; Query Plans"), ("•", "One-page printable cheat sheet per collection"), ("•", "Cheat sheet: <b>Refactoring</b>, Fowler's code smells and the refactorings that fix them")]),
+    ("Mar 2027", [("•", "Cheat sheets for Book 3: PMBOK 8 on one page, earned value, critical path"), ("•", "Vol. 9 · AI App Patterns")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations")]),
     ("Mid 2027", [("↓", "More deep dives: Sign-in &amp; Tokens, Observability &amp; SLOs, Rendering on the Web, Multitenancy"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
     ("Someday", [("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
@@ -1475,7 +1573,7 @@ def related_items(j, slug, items):
     for r in items:
         r = re.sub(r"</?a\b[^>]*>", "", r)
         hit = resolve_related(j, r)
-        if hit and hit[1] != slug:
+        if hit and (hit[0]["key"], hit[1]) != (j["key"], slug):   # same slug in another volume is a real link
             href = note_href(j, *hit)
             r = re.sub(r"<b>(.*?)</b>", lambda m: f'<a href="{href}"><b>{m.group(1)}</b></a>', r, count=1)
         elif not hit:
@@ -1516,6 +1614,24 @@ def revised_stamp(n):
     if not r:
         return ""
     return f'  <p class="revised"><span class="tag">revised</span> {r[0]} · {r[1]}</p>'
+
+
+def then_now_block(n):
+    """`then_now=dict(src="Evans, 2003", then="…", now="…", verdict="core", take="…")`: what the original book said,
+    what changed since, and a verdict stamp (VERDICTS)."""
+    t = n.get("then_now")
+    if not t:
+        return ""
+    label, meaning = VERDICTS[t["verdict"]]
+    return f'''  <section class="thennow verdict-{t["verdict"]}" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="{esc(meaning)}">{label}</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>{t["src"]}</small></h3><p>{t["then"]}</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>{t["now"]}</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> {t["take"]}</p>
+  </section>'''
 
 
 def render_note(j, n, back=()):
@@ -1574,6 +1690,7 @@ def render_note(j, n, back=()):
   </div>''',
         f'  <p class="aside">{n["tools"]}</p>' if n.get("tools") else "",
         deep_dive_block(n),
+        then_now_block(n),
         h2(4, "tradeoffs", "Light, standard, heavy", "how much of this do you need?") if n.get("dial") else h2(4, "tradeoffs", "Gains vs losses", "nothing is free"),
         dial_block(n) if n.get("dial") else f'''  <div class="tchart">
     <div class="gain">
@@ -1637,6 +1754,9 @@ def index_list(j, anchors=False):
                 continue
             href = f"#{slug}" if anchors else f"notes/{slug}.html"
             deep = ' <em class="deep-tag">+ goes deeper</em>' if slug in j.get("deep_dives", ()) else ""
+            v = j.get("verdicts", {}).get(slug)
+            if v:
+                deep += f' <em class="verdict-tag verdict-{v}">{VERDICTS[v][0]}</em>'
             items.append(f'<li><a href="{href}"><span class="toc-n">{num:02d}</span><span class="toc-t">{esc(title)}{deep}'
                          f'<small>{esc(summary)}</small></span><span class="toc-p">p. {num:02d}</span></a></li>')
         out.append(f'  <h3 class="toc-coll">{name} <span>{esc(blurb)}</span></h3>\n  <ol class="toc">{"".join(items)}</ol>')
@@ -1649,6 +1769,18 @@ def attrs_block(j):
 {dl}
   </dl>
   <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained with the pattern</span><span><i class="dot lost"></i> lost with the pattern</span></div>'''
+
+
+def verdicts_block(j):
+    """The key to the then & now stamps, with how many notes got each one."""
+    if not j.get("then_now"):
+        return ""
+    got = list(j.get("verdicts", {}).values())
+    rows = "\n".join(f'    <div><dt><em class="verdict-tag verdict-{k}">{label}</em> <small>× {got.count(k)}</small></dt><dd>{meaning[0].upper() + meaning[1:]}.</dd></div>'
+                     for k, (label, meaning) in VERDICTS.items() if k in got)
+    return (f'  <h2 id="then-now"><span class="num">⟳</span>Then &amp; now <span class="side">is a twenty-year-old idea still worth it?</span></h2>\n'
+            f'  <p>Most ideas in this volume come from books written twenty or more years ago. Every note ends its “how” section with what the book said, what changed since, and one of these verdicts:</p>\n'
+            f'  <dl class="vocab verdicts">\n{rows}\n  </dl>')
 
 
 def story_box(j):
@@ -1689,7 +1821,7 @@ def render_index(j):
         f'''  <ol class="how-to">
     <li><b>{j.get("problem_h2", "The problem")}</b>: {"a scene from the case study where it goes wrong" if j.get("book") else "what breaks without the pattern"}, with a doodle.</li>
     <li><b>Real-life analogy</b>: an everyday version, plus a “{j.get("map_caption", "translate to code").lower()}” table.</li>
-    <li><b>How it solves it</b>: diagrams, steps, vocabulary and a {"template" if j.get("book") else "code"} card{". Key notes add a <b>going deeper</b> chapter here" if j.get("deep_dives") else ""}.</li>
+    <li><b>How it solves it</b>: diagrams, steps, vocabulary and a {"template" if j.get("book") else "code"} card{". Key notes add a <b>going deeper</b> chapter here" if j.get("deep_dives") else ""}{". Then a <b>then &amp; now</b> box: what the original book said, what changed, and a verdict" if j.get("then_now") else ""}.</li>
     <li>{"<b>Light, standard, heavy</b>: how much of it a small, a typical and a heavy project needs." if j.get("pmbok") else "<b>Gains vs losses</b>: the trade-off spread."}</li>
     <li><b>Ratings</b>: nine qualities, before → after.</li>
     <li><b>Common pitfalls</b>: each with its fix.</li>
@@ -1699,6 +1831,7 @@ def render_index(j):
         f'  <h2 id="ratings-key"><span class="num">★</span>{j["attrs_title"]} <span class="side">{j["attrs_side"]}</span></h2>',
         '  <p>Every note scores the pattern from 1 (poor) to 5 (great) on the same nine things, comparing an app <b>without</b> the pattern to the same app <b>with</b> it.</p>',
         attrs_block(j),
+        verdicts_block(j),
         '''  <div class="remember">
     <span class="tag">first law</span>
     <p>FIRSTLAW</p>
@@ -1799,6 +1932,8 @@ PMBOK_ITEM = '''    <li class="book book--pmbok">
 COVER_ART = {
     "distributed": ("server", "nodes"), "frontend": ("window", "grid"), "data": ("ledger", "rules"),
     "testing": ("flask", "cross"), "security": ("lock", "hatch"), "cloud": ("cloud", "iso"),
+    "ddd": ("map", "contour"),
+    "inside-app": ("hexagon", "grid"),
 }
 COVER_PATTERNS = {
     "grid": '<pattern id="{id}" width="14" height="14" patternUnits="userSpaceOnUse"><path d="M14 0H0V14" fill="none" stroke-width="1"/></pattern>',
@@ -1806,6 +1941,7 @@ COVER_PATTERNS = {
     "cross": '<pattern id="{id}" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M9 5V13M5 9H13" stroke-width="1.4"/></pattern>',
     "hatch": '<pattern id="{id}" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M0 10L10 0M-2 2L2 -2M8 12L12 8" stroke-width="1.2"/></pattern>',
     "iso": '<pattern id="{id}" width="24" height="14" patternUnits="userSpaceOnUse"><path d="M0 7L12 0L24 7L12 14Z" fill="none" stroke-width="1"/></pattern>',
+    "contour": '<pattern id="{id}" width="60" height="40" patternUnits="userSpaceOnUse"><path d="M0 20 q15 -12 30 0 t30 0 M0 32 q15 -10 30 0 t30 0 M0 8 q15 -10 30 0 t30 0" fill="none" stroke-width="1"/></pattern>',
 }
 
 
@@ -2440,8 +2576,9 @@ def main():
     CHEAT_TITLES.update((cs.SLUG, cs.TITLE) for cs in sheets)
     loaded = {j["key"]: load_content(j["key"]) for j in JOURNALS}
     index_titles(loaded)
-    for j in JOURNALS:   # a note with a going-deeper chapter is tagged on the index
+    for j in JOURNALS:   # a note with a going-deeper chapter is tagged on the index, and so is its then & now verdict
         j["deep_dives"] = set(j.get("deep_dives", ())) | {s for s, n in loaded[j["key"]].items() if n.get("deep_dive")}
+        j["verdicts"] = {s: n["then_now"]["verdict"] for s, n in loaded[j["key"]].items() if n.get("then_now")}
     find_seen_at_larder(loaded)
     back = {}
     for j in JOURNALS:

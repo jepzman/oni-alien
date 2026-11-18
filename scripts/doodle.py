@@ -306,3 +306,10 @@ ICONS.update({
     "container": '<rect class="F" x="2" y="10" width="66" height="40" rx="2"/><path d="M12 10 v40 M22 10 v40 M32 10 v40 M42 10 v40 M52 10 v40 M62 10 v40"/>',
     "coins": '<ellipse class="F" cx="24" cy="46" rx="20" ry="8"/><ellipse class="F" cx="24" cy="36" rx="20" ry="8"/><ellipse class="F" cx="36" cy="22" rx="20" ry="8"/>',
 })
+
+# Icons added for the code-design volumes (same ~60×60 convention).
+ICONS.update({
+    "hexagon": '<path class="F" d="M30 2 L56 17 V45 L30 60 L4 45 V17 Z"/><circle class="F" cx="30" cy="31" r="10"/><path d="M30 2 V21 M56 45 L39 36 M4 45 L21 36"/>',
+    "wrench": '<path class="F" d="M44 4 a14 14 0 0 0 -12 20 L6 50 a5 5 0 0 0 8 8 L40 32 a14 14 0 0 0 18 -16 l-8 8 l-8 -2 l-2 -8 z"/>',
+    "plug2": '<rect class="F" x="14" y="20" width="32" height="26" rx="4"/><path d="M22 20 v-14 M38 20 v-14 M30 46 v14"/>',
+})

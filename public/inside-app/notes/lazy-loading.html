@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lazy Loading · Jef’s Notes</title>
+<meta name="description" content="Load related data only when it&#x27;s touched, and know when that&#x27;s a trap.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=05fa3d0241">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-app">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 8 · inside the application</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="lazy-loading">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 09.04.27</span><span class="topic">collection · <b>inside your orm</b></span></div>
+  <p class="kicker">a.k.a. “the minibar, and why not to feed a meeting from it”</p>
+  <h1><span class="hl">Lazy Loading</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p><b>Lazy loading</b> fetches related data only when code first touches it (<code>order.customer</code>), through a proxy. It feels free, which is the problem: in a list it causes the <b>N+1 query</b> problem, and after the session closes it <b>throws</b>. Today the advice is to <b>decide per use case</b>: projections for lists, explicit <b>eager includes</b> for details, and lazy only on rare paths. Many teams turn it <b>off by default</b>.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> object-relational behaviour</li><li><b>From:</b> Fowler, PoEAA (2002)</li><li><b>Famous failure:</b> the N+1 query problem</li><li><b>Pairs with:</b> batch loading (Vol. 3), DTOs</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Lazy loading hides database calls behind property access, so the code <span class="hl-pink">looks cheap and isn't</span>.</p>
+  <ul>
+    <li>A list of 50 orders runs 51 queries.</li>
+    <li>A template touches a relation after the session closed, and crashes.</li>
+    <li>Performance depends on which fields a view happens to read.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="Doodle of the N plus one problem caused by lazy loading. A page lists fifty orders and shows each customer&#x27;s name. The ORM loads the fifty orders in one query, then, as the template touches order.customer.name, runs one more query per order: fifty-one queries. In another place, the customer is touched after the session closed and the app throws a lazy-initialisation error."><g class="rough"><rect class="d f-green" x="20" y="40" width="200" height="70" rx="10"/><rect class="d f-pink d-red" x="270" y="40" width="80" height="70" rx="10"/><rect class="d f-pink d-red" x="362" y="40" width="80" height="70" rx="10"/><rect class="d f-pink d-red" x="454" y="40" width="80" height="70" rx="10"/><rect class="d f-pink d-red" x="546" y="40" width="80" height="70" rx="10"/><rect class="d f-pink d-red" x="638" y="40" width="80" height="70" rx="10"/><rect class="d f-pink d-red" x="160" y="180" width="440" height="56" rx="10"/></g><text class="t-head" x="120" y="71" text-anchor="middle">1 query</text><text class="t" x="120" y="95" text-anchor="middle" font-size="17">50 orders</text><text class="t-head t-red" x="310" y="71" text-anchor="middle">+1</text><text class="t" x="310" y="95" text-anchor="middle" font-size="17">customer</text><text class="t-head t-red" x="402" y="71" text-anchor="middle">+1</text><text class="t" x="402" y="95" text-anchor="middle" font-size="17">customer</text><text class="t-head t-red" x="494" y="71" text-anchor="middle">+1</text><text class="t" x="494" y="95" text-anchor="middle" font-size="17">customer</text><text class="t-head t-red" x="586" y="71" text-anchor="middle">+1</text><text class="t" x="586" y="95" text-anchor="middle" font-size="17">customer</text><text class="t-head t-red" x="678" y="71" text-anchor="middle">+1</text><text class="t" x="678" y="95" text-anchor="middle" font-size="17">customer</text><text class="t-s t-red" x="500" y="140" text-anchor="middle">… × 50</text><text class="t-head t-red" x="380" y="215" text-anchor="middle" font-size="17">LazyInitializationException</text><text class="t-s t-red" x="380" y="262" text-anchor="middle">touched after the session closed</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>50 orders, then one hidden query per order for its customer: 51 queries. Or an error after the session closes.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the minibar and the catering order</span></h2>
+  <p>A hotel <b>minibar</b> is lazy: everything is there, and you take one item when you want it. Great for a midnight snack; terrible for feeding a <b>meeting of fifty</b>, one trip each. For the meeting, you <b>order catering</b>: everything at once.</p>
+  <ul>
+    <li>The minibar is <b>lazy loading</b>.</li>
+    <li>Fifty trips is <b>N+1</b>.</li>
+    <li>Catering is <b>eager loading</b> or a <b>projection</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a hotel minibar versus a room-service menu. The minibar is lazy: items are there, and you pay when you take one, which is great for a snack but terrible if you need fifty sandwiches for a meeting. For a meeting you order everything at once from catering."><g class="rough"><rect class="d f-y" x="20" y="40" width="340" height="120" rx="10"/><rect class="d f-green" x="400" y="40" width="340" height="120" rx="10"/></g><text class="t-head" x="190" y="74" text-anchor="middle">minibar</text><text class="t" x="190" y="112" text-anchor="middle">one item when you want it</text><text class="t-head" x="570" y="74" text-anchor="middle">catering order</text><text class="t" x="570" y="112" text-anchor="middle">fifty sandwiches, one trip</text><text class="t-s t-pen" x="190" y="200" text-anchor="middle">lazy loading</text><text class="t-s t-pen" x="570" y="200" text-anchor="middle">eager loading / projection</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Fine to grab one snack from the minibar; for fifty sandwiches, order catering in one go.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>One snack from the minibar</td><td>Touching <code>order.customer</code> once: one extra query</td></tr>
+      <tr><td>Fifty trips to the minibar</td><td>N+1 queries in a list</td></tr>
+      <tr><td>Minibar locked after checkout</td><td>Lazy loading after the session closed: an exception</td></tr>
+      <tr><td>Catering for the meeting</td><td>Eager loading or a projection query</td></tr>
+      <tr><td>Deciding before the meeting</td><td>Choosing the loading strategy per use case</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">decide per use case</span></h2>
+  <p>A <b>projection</b> (selecting just the fields the screen needs into a DTO) is often better than loading entities at all for read screens. Keep entity loading for use cases that <b>change</b> things.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 320" role="img" aria-label="Loading data deliberately per use case. Lazy loading is turned off by default. The order list page uses a projection query that joins customer names and returns exactly the fields the page shows, in one query. The order detail use case explicitly includes the lines and the customer. Lazy proxies remain only where an association is rarely needed. A test counts queries."><g class="rough"><rect class="d f-green" x="20" y="40" width="220" height="90" rx="10"/><rect class="d f-blue" x="270" y="40" width="220" height="90" rx="10"/><rect class="d f-y" x="520" y="40" width="220" height="90" rx="10"/><rect class="d f-paper" x="180" y="220" width="400" height="60" rx="10"/></g><text class="t-head" x="130" y="81" text-anchor="middle" font-size="17">list page</text><text class="t" x="130" y="105" text-anchor="middle" font-size="13">projection: 1 query</text><text class="t-head" x="380" y="81" text-anchor="middle" font-size="17">detail page</text><text class="t" x="380" y="105" text-anchor="middle" font-size="13">include lines</text><text class="t-head" x="630" y="81" text-anchor="middle" font-size="17">rare path</text><text class="t" x="630" y="105" text-anchor="middle" font-size="13">lazy is fine</text><text class="t-s t-pen" x="380" y="180" text-anchor="middle">lazy loading off by default</text><text class="t-head" x="380" y="257" text-anchor="middle" font-size="16">test: “list page runs ≤ 2 queries”</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Decide per use case: a projection for lists, explicit includes for details, lazy only for the rare path.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Turn lazy loading off by default</b><p>Or at least know where it's on.</p></li>
+    <li><b>List pages: project</b><p>Select only the needed fields with joins into a DTO, in one query.</p></li>
+    <li><b>Detail and write use cases: include</b><p>Eager-load the aggregate's parts explicitly.</p></li>
+    <li><b>Lazy only on rare paths</b><p>Associations needed in one case out of a hundred.</p></li>
+    <li><b>Keep the session open only inside the use case</b><p>Not during view rendering (avoid open-session-in-view).</p></li>
+    <li><b>Count queries in tests</b><p>Fail a test when a page exceeds its query budget.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Lazy loading</dt><dd>Loading related data on first access, through a proxy.</dd></div>
+    <div><dt>Eager loading</dt><dd>Loading related data up front with the main query (<code>Include</code>, <code>JOIN FETCH</code>).</dd></div>
+    <div><dt>N+1 problem</dt><dd>One query for a list plus one per item.</dd></div>
+    <div><dt>Proxy</dt><dd>A stand-in object that loads the real data when touched.</dd></div>
+    <div><dt>Projection</dt><dd>A query that selects specific fields into a shape for one screen.</dd></div>
+    <div><dt>Open session in view</dt><dd>Keeping the ORM session open while rendering, which hides lazy queries.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>orders-list.ts</span><span>a projection instead of lazy entities</span></div>
+<pre><code><span class="c">// lazy: looks innocent, runs 1 + 50 queries</span>
+<span class="k">const</span> orders = <span class="k">await</span> em.find(Order, { status: <span class="s">"placed"</span> }, { limit: 50 });
+orders.map((o) =&gt; ({ id: o.id, customer: o.customer.name }));   <span class="c">// each .customer = a query</span>
+
+<span class="c">// projection: exactly what the page shows, one query</span>
+<span class="k">const</span> rows = <span class="k">await</span> db.selectFrom(<span class="s">"orders as o"</span>)
+  .innerJoin(<span class="s">"customers as c"</span>, <span class="s">"c.id"</span>, <span class="s">"o.customer_id"</span>)
+  .select([<span class="s">"o.id"</span>, <span class="s">"o.placed_at"</span>, <span class="s">"c.name as customer"</span>, <span class="s">"o.total_cents"</span>])
+  .where(<span class="s">"o.status"</span>, <span class="s">"="</span>, <span class="s">"placed"</span>).orderBy(<span class="s">"o.placed_at"</span>, <span class="s">"desc"</span>).limit(50)
+  .execute();
+
+<span class="c">// detail use case: load the aggregate explicitly</span>
+<span class="k">const</span> order = <span class="k">await</span> em.findOneOrFail(Order, id, { populate: [<span class="s">"lines"</span>, <span class="s">"customer"</span>] });</code></pre>
+  </div>
+  <p class="aside">tools: ORM include/populate options (<code>Include</code> in EF Core, <code>JOIN FETCH</code> and entity graphs in JPA, <code>populate</code> in MikroORM), query builders for projections, DataLoader for GraphQL, query counters in tests (e.g. Hibernate statistics, Bullet for Rails).</p>
+  <section class="thennow verdict-built-in" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="your framework or language does it for you; know it to use the tool well">built in now</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Fowler, PoEAA 2002</small></h3><p>Fowler described four ways to implement lazy load (lazy initialisation, virtual proxy, value holder, ghost) for teams writing their own data layers, with a warning about “ripple loading”, his name for N+1.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>ORMs build lazy proxies in. Experience turned the warning into the main lesson: many teams disable lazy loading by default (EF Core has it off unless enabled), and projections, DataLoader and query budgets are standard.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> Built in now, and best used sparingly: load deliberately per use case.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Predictable queries</b> per use case.</li><li><b>No N+1</b> surprises.</li><li><b>No closed-session errors</b>.</li><li><b>Faster list pages</b> with projections.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More explicit code</b> for loading.</li><li><b>Over-fetching</b> if includes are too broad.</li><li><b>Several shapes</b> of the same data.</li><li><b>Lazy convenience lost</b> for prototypes.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Code-design ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>lazy loading by default everywhere</b> to <b>explicit loading per use case, with projections for lists</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Lazy is simpler to write; explicit is clearer to read.</td></tr>
+      <tr data-before="3" data-after="3"><td>Domain clarity<small>reads like the business?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Correctness<small>rules can't be broken?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No crashes from closed sessions.</td></tr>
+      <tr data-before="3" data-after="3"><td>Changeability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Testability<small>test without the world?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Query budgets can be tested.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low coupling<small>parts change alone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="5"><td>Performance<small>fast enough?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The point: one query instead of fifty-one.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low ceremony<small>little boilerplate?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Includes and projections to write.</td></tr>
+      <tr data-before="3" data-after="3"><td>Team scalability<small>many teams at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Lazy loading in loops</h3><p>A template or mapper touching a relation per row. <span class="fix">Fix →</span> projection or eager include for lists.</p></li>
+    <li><h3>Open session in view</h3><p>Lazy loads keep working during rendering, invisibly. <span class="fix">Fix →</span> close the session at the end of the use case.</p></li>
+    <li><h3>Include everything</h3><p>Every query eager-loads ten relations “to be safe”. <span class="fix">Fix →</span> include what the use case needs, no more.</p></li>
+    <li><h3>No measurement</h3><p>N+1 found by customers, not tests. <span class="fix">Fix →</span> count queries in tests and log slow pages.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Deciding loading strategies in an ORM-based app.</li><li>Slow list pages or GraphQL resolvers.</li><li>Lazy-initialisation errors in production.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Prototypes where speed of writing beats speed of running.</li><li>Rarely-used associations on single objects (lazy is fine there).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/unit-of-work.html"><b>Unit of Work &amp; Identity Map</b></a></li><li><a href="../notes/dto-remote-facade.html"><b>DTOs &amp; Remote Facade</b></a></li><li><a href="../../data/notes/n-plus-one.html"><b>Batch Loading</b></a> (Vol. 3)</li><li><a href="../../distributed/notes/cqrs.html"><b>CQRS</b></a> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What is lazy loading?</summary><p>Loading related data only when it is first accessed, through a proxy.</p></details>
+    <details><summary>What's the N+1 problem?</summary><p>One query loads N items, then one more query runs per item for a related object.</p></details>
+    <details><summary>What's usually best for list pages?</summary><p>A projection query that selects just the shown fields, with joins, into a DTO.</p></details>
+    <details><summary>Why avoid open-session-in-view?</summary><p>It lets lazy queries run invisibly during rendering, hiding N+1 problems.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A GraphQL query for 100 orders with their customers and products takes 4 seconds; logs show 301 SQL queries. What do you do?</span></summary><p>Batch the related loads per request with DataLoader (or the ORM's batch fetching), so customers and products load in one query each, and add a test that fails if the query count for this request exceeds a small budget.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Turn on SQL logging, open your app's busiest list page, and count the queries. If it's more than three, rewrite it as one projection query and compare the timings.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Grab <span class="hl">one snack</span> from the minibar; order <span class="hl">catering</span> for the meeting.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/08-lazy-loading.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Martin Fowler, <i>Patterns of Enterprise Application Architecture</i> (2002), “Lazy Load”.</li><li>Microsoft, “Loading Related Data” (EF Core docs).</li><li>Vlad Mihalcea, “The Open Session In View Anti-Pattern” (2016).</li><li>GraphQL DataLoader (github.com/graphql/dataloader).</li></ul>
+  </div>
+  <p class="folio">08</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="unit-of-work.html"><small>← previous note</small>07 · Unit of Work &amp; Identity Map</a>
+  <a href="offline-locks.html"><small>Next note →</small>09 · Offline Locks &amp; ETags</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 8 · a student's bullet journal on inside the application</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

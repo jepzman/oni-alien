@@ -137,7 +137,7 @@ The future log already names these. The plan is to write them as one batch per v
 | 5 Security | Passkeys · Signed Webhooks · Rate-Limited Login |
 | 6 Cloud | Chaos Engineering · Service Catalogues · Progressive Delivery |
 
-**Vol. 7 · AI App Patterns** (already on the shelf as planned): retrieval-augmented generation, agents and tools,
+**Vol. 9 · AI App Patterns** (was Vol. 7; on 18 Nov 2026 the owner put Domain-Driven Design first as Vol. 7 and Inside the Application as Vol. 8, see `docs/PLAN-code-design.md`): retrieval-augmented generation, agents and tools,
 evaluation, guardrails, cost-aware LLM apps. It is written in the updated shape from the start. Its collection list
 is a separate proposal when its turn comes.
 
@@ -187,7 +187,7 @@ Series 1 has the patterns, Ana where a model fits in the system, Grace whether i
 | 6 | The same for Book 2, starting with `product-4` (Measuring & Learning) | one PR per two volumes |
 | 7 | S1–S3, S5 and the extra notes on the other five pattern volumes | one PR per volume |
 | 8 | The depth passes (S4, B5) and the Series 2 timeline page | one PR each |
-| 9 | Series 1 Vol. 7, then Vol. 7 of Books 1 and 2, after Book 3 is complete | one PR each |
+| 9 | Series 1 Vols. 7–9 (DDD done, then Inside the Application, then AI App Patterns), then Vol. 7 of Books 1 and 2, after Book 3 is complete | one PR each |
 
 Steps 3–8 fit between Book 3's volumes; the order between them can change.
 
@@ -227,7 +227,7 @@ The owner approved the plan on 2026-11-15 (“do your recommendation”). The wo
 | S3 going deeper | **done, 24 chapters (4 per volume), 40 figures** (owner, 16 Nov: “continue going deeper for other volumes”). Data: Indexing, Optimistic Locking, Change Data Capture, Multitenancy. Distributed: API Gateway, Service Discovery, Sharding. Frontend: State Machines, SSR & Hydration, Micro-Frontends. Testing: Test Doubles, Contract Testing, Flaky Test Quarantine. Security: OAuth 2.0 with PKCE, Threat Modelling, Supply-Chain Hygiene. Cloud: Infrastructure as Code, SLOs & Error Budgets, Incident Response & Postmortems. Fourth chapters (16 Nov): Sidecar & Service Mesh, Optimistic UI, Property-Based Testing, Envelope Encryption, Autoscaling |
 | S4 depth pass, S5 freshness pass | not started |
 | 5.1 extra notes | **done, 18 notes, 54 figures** (16 Nov), numbered after the existing notes so URLs and PDF names stay the same: Data 16–18 (Upserts, Bitemporal Data, Vector Indexes), Distributed 19–21 (Strangler Fig, Backpressure, Consistent Hashing), Frontend 16–18 (Debounce &amp; Throttle, Web Workers, Offline-First Sync), Testing 16–18 (Fuzzing, Visual Regression Tests, Fault Injection Tests: replaces “Chaos Experiments”, which would have repeated Vol. 6), Security 16–18 (Passkeys, Signed Webhooks, Rate-Limited Login), Cloud 16–18 (Progressive Delivery, Service Catalogue, Chaos Engineering). New notes carry their situational question in a `quiz_sit` field |
-| Vol. 7 | not started |
+| Vols. 7–8 | **done: Domain-Driven Design and Inside the Application**, 18 notes each with then &amp; now boxes (18 Nov, `docs/PLAN-code-design.md`); AI App Patterns moved to Vol. 9 |
 
 How it is built: additions live in `content/<key>/revisions.py` (quiz_add, try_it, revised) and `content/<key>/deeper.py`
 (deep_dive), merged into the notes by `load_content`; the original note files are unchanged. Several files may add to one note.
@@ -238,4 +238,4 @@ on the live site; deep-dive covers restyled as a printed textbook; long words in
 Cover artwork: the owner chose option C (16 Nov): a paper sticker with one emblem and the volume's paper pressed into the
 cloth, on the six pattern covers (`COVER_ART` in `build_notes.py`).
 
-Next for Series 1: the freshness pass (S5), the depth pass (S4), then Vol. 7.
+Next for Series 1: the freshness pass (S5), the depth pass (S4), then Vol. 9 (AI App Patterns).

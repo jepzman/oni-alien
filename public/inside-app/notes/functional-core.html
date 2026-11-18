@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Functional Core, Imperative Shell · Jef’s Notes</title>
+<meta name="description" content="Make decisions in pure functions; do all the input and output around them.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=05fa3d0241">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-app">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 8 · inside the application</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="functional-core">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 30.04.27</span><span class="topic">collection · <b>shaping the app</b></span></div>
+  <p class="kicker">a.k.a. “decide on paper, then pour the concrete”</p>
+  <h1><span class="hl">Functional Core, Imperative Shell</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Split code into a <b>pure core</b> that makes <b>decisions</b> from plain values (no database, network, clock or randomness) and a thin <b>imperative shell</b> that <b>gathers</b> inputs, calls the core, and <b>performs</b> the effects it returns. The core gets values in and returns a decision; it's <b>trivial to test</b> without mocks. The shell has few branches and is covered by a handful of integration tests.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> application structure</li><li><b>Named by:</b> Gary Bernhardt (2012)</li><li><b>Related:</b> impureim sandwich, ports and adapters</li><li><b>Pairs with:</b> make illegal states unrepresentable (Vol. 7)</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">When decisions are <span class="hl-pink">interleaved with input and output</span>, every test needs a pile of mocks in the right order.</p>
+  <ul>
+    <li>Load, decide, call an API, decide, call another, decide, save.</li>
+    <li>Tests need five mocks and break when the call order changes.</li>
+    <li>Nobody can see the business decision for the plumbing.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of logic tangled with input and output. A function loads the basket from the database, computes discounts, calls the tax API, computes totals, checks stock with another API, decides on a delivery slot and writes to the database, all interleaved. Its test needs five mocks set up in the right order, and it breaks whenever the call order changes."><g class="rough"><rect class="d f-paper" x="14" y="60" width="96" height="56" rx="10"/><rect class="d f-y" x="120" y="60" width="96" height="56" rx="10"/><rect class="d f-paper" x="226" y="60" width="96" height="56" rx="10"/><rect class="d f-y" x="332" y="60" width="96" height="56" rx="10"/><rect class="d f-paper" x="438" y="60" width="96" height="56" rx="10"/><rect class="d f-y" x="544" y="60" width="96" height="56" rx="10"/><rect class="d f-paper" x="650" y="60" width="96" height="56" rx="10"/></g><text class="t-head" x="62" y="95" text-anchor="middle" font-size="15">load</text><text class="t-head" x="168" y="95" text-anchor="middle" font-size="15">decide</text><text class="t-head" x="274" y="95" text-anchor="middle" font-size="15">tax API</text><text class="t-head" x="380" y="95" text-anchor="middle" font-size="15">decide</text><text class="t-head" x="486" y="95" text-anchor="middle" font-size="15">stock API</text><text class="t-head" x="592" y="95" text-anchor="middle" font-size="15">decide</text><text class="t-head" x="698" y="95" text-anchor="middle" font-size="15">save</text><text class="t-s t-red" x="380" y="170" text-anchor="middle">decisions sandwiched between side effects</text><text class="t-s t-red" x="380" y="214" text-anchor="middle">test = 5 mocks in the right order</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Load, decide, call an API, decide, call another, decide, save, all mixed: five mocks per test.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the architect and the builder</span></h2>
+  <p>An <b>architect</b> draws plans from measurements: no concrete, no cranes. Plans can be checked, copied and changed <b>for free</b>. The <b>builder</b> takes the plans and does the heavy, risky work on site. Mistakes are cheap on paper and expensive in concrete.</p>
+  <ul>
+    <li>The architect is the <b>functional core</b>.</li>
+    <li>The builder is the <b>imperative shell</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of an architect and a builder. The architect draws plans at a desk using measurements: no concrete, no cranes, and the plans can be checked, copied and changed for free. The builder takes the plans and does the heavy, risky work on site. Mistakes are cheap to fix on paper, expensive in concrete."><g class="rough"><rect class="d f-green" x="20" y="50" width="340" height="110" rx="10"/><rect class="d f-y" x="400" y="50" width="340" height="110" rx="10"/><path class="d" d="M364 105 L396 105"/><path class="d" d="M385.2 110.2 L396 105 L385.2 99.8"/></g><text class="t-head" x="190" y="84" text-anchor="middle">architect: plans</text><text class="t" x="190" y="122" text-anchor="middle">pure: checkable on paper</text><text class="t-head" x="570" y="84" text-anchor="middle">builder: concrete</text><text class="t" x="570" y="122" text-anchor="middle">effects: the risky part</text><text class="t-s t-pen" x="380" y="210" text-anchor="middle">decide on paper, then build</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The architect decides on paper (cheap to check); the builder pours concrete (the risky part).</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Measurements handed to the architect</td><td>Values gathered by the shell</td></tr>
+      <tr><td>Drawing the plans</td><td>A pure function computing a decision</td></tr>
+      <tr><td>Checking plans on paper</td><td>Unit tests with plain values, no mocks</td></tr>
+      <tr><td>The builder on site</td><td>The shell performing effects: save, call, publish</td></tr>
+      <tr><td>Few decisions on site</td><td>A thin shell with few branches</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">gather, decide, perform</span></h2>
+  <p>Mark Seemann calls the shape an <b>impureim sandwich</b>: impure, pure, impure. It's ports and adapters at the scale of a single function. When the core needs more data midway, return a decision that says “need X” and let the shell loop, or gather more up front.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 320" role="img" aria-label="Functional core, imperative shell for checkout. The shell gathers everything first: basket, customer, tax rates and stock levels. It passes plain data to a pure function, priceCheckout, which returns a decision: totals, chosen slot and a list of effects to perform. The shell then performs the effects: save, reserve stock, publish an event. The pure core is tested with plain values and no mocks."><g class="rough"><rect class="d f-paper" x="20" y="60" width="207" height="100" rx="10"/><rect class="d f-green" x="277" y="60" width="207" height="100" rx="10"/><path class="d" d="M231 110 L273 110"/><path class="d" d="M262.2 115.2 L273 110 L262.2 104.8"/><rect class="d f-paper" x="533" y="60" width="207" height="100" rx="10"/><path class="d" d="M487 110 L529 110"/><path class="d" d="M518.2 115.2 L529 110 L518.2 104.8"/></g><text class="t-head" x="123.5" y="106" text-anchor="middle" font-size="17">gather</text><text class="t" x="123.5" y="130" text-anchor="middle" font-size="13">basket · rates · stock</text><text class="t-head" x="380.5" y="106" text-anchor="middle" font-size="17">decide (pure)</text><text class="t" x="380.5" y="130" text-anchor="middle" font-size="13">priceCheckout()</text><text class="t-head" x="636.5" y="106" text-anchor="middle" font-size="17">perform</text><text class="t" x="636.5" y="130" text-anchor="middle" font-size="13">save · reserve · publish</text><text class="t-s t-green" x="380" y="210" text-anchor="middle">core: values in, decision out, no I/O</text><text class="t-s t-green" x="380" y="250" text-anchor="middle">tests: plain data, no mocks</text><text class="t-s t-pen" x="380" y="290" text-anchor="middle">shell: thin, few branches, tested end to end</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Shell: gather → pure core decides → shell performs. The core gets values in and returns a decision.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Find the decision</b><p>In a tangled function, what's the business decision being made?</p></li>
+    <li><b>Gather inputs first</b><p>Load everything the decision needs, including the current time.</p></li>
+    <li><b>Write the pure function</b><p>Plain values in, a decision or list of effects out; no I/O, no <code>Date.now()</code>.</p></li>
+    <li><b>Perform effects after</b><p>Save, call APIs and publish based on the returned decision.</p></li>
+    <li><b>Test the core with examples</b><p>Tables of inputs and expected decisions; property-based tests fit well.</p></li>
+    <li><b>Keep the shell dumb</b><p>If the shell grows branches, move decisions into the core.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Pure function</dt><dd>Same inputs, same output, no side effects.</dd></div>
+    <div><dt>Side effect</dt><dd>Anything observable outside the function: I/O, mutation, time, randomness.</dd></div>
+    <div><dt>Functional core</dt><dd>The pure part that makes decisions.</dd></div>
+    <div><dt>Imperative shell</dt><dd>The thin part that does I/O around the core.</dd></div>
+    <div><dt>Impureim sandwich</dt><dd>Impure gather, pure decide, impure perform.</dd></div>
+    <div><dt>Decision object</dt><dd>A returned value describing what should happen.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>checkout.ts</span><span>pure decision, effects in the shell</span></div>
+<pre><code><span class="c">// core: pure, no I/O, no clock</span>
+<span class="k">export</span> <span class="k">type</span> CheckoutDecision =
+  | { ok: <span class="k">true</span>; total: Money; slot: Slot; reserve: Line[] }
+  | { ok: <span class="k">false</span>; reason: <span class="s">"out-of-stock"</span> | <span class="s">"no-slot"</span>; missing?: ProductId[] };
+
+<span class="k">export</span> <span class="k">function</span> decideCheckout(basket: Basket, rates: TaxRates, stock: StockLevels,
+                               slots: Slot[], now: Date): CheckoutDecision {
+  <span class="k">const</span> missing = basket.lines.filter((l) =&gt; (stock.get(l.productId) ?? 0) &lt; l.qty).map((l) =&gt; l.productId);
+  <span class="k">if</span> (missing.length) <span class="k">return</span> { ok: <span class="k">false</span>, reason: <span class="s">"out-of-stock"</span>, missing };
+  <span class="k">const</span> slot = slots.find((s) =&gt; s.start &gt; addHours(now, 2));
+  <span class="k">if</span> (!slot) <span class="k">return</span> { ok: <span class="k">false</span>, reason: <span class="s">"no-slot"</span> };
+  <span class="k">return</span> { ok: <span class="k">true</span>, total: priceWithTax(basket, rates), slot, reserve: basket.lines };
+}
+
+<span class="c">// shell: gather -&gt; decide -&gt; perform</span>
+<span class="k">const</span> d = decideCheckout(<span class="k">await</span> baskets.get(id), <span class="k">await</span> tax.rates(), <span class="k">await</span> stock.levels(ids), <span class="k">await</span> slots.free(), <span class="k">new</span> Date());
+<span class="k">if</span> (d.ok) { <span class="k">await</span> stockApi.reserve(d.reserve); <span class="k">await</span> orders.save(Order.place(id, d.total, d.slot)); }</code></pre>
+  </div>
+  <p class="aside">tools: plain functions and types; property-based testing (fast-check, Hypothesis) for the core; functional libraries (Effect, fp-ts, Arrow) if your team wants effects modelled explicitly, though they aren't needed.</p>
+  <section class="thennow verdict-grown" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="more relevant today than when it was written">matters more now</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Bernhardt, 2012 (not in the 2002–2005 books)</small></h3><p>The enterprise books of 2002–2005 had no such split: logic lived in objects or scripts that called repositories and services freely, tested with mocks.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>Gary Bernhardt's “Boundaries” talk (2012) named it, functional programming made it mainstream, and Mark Seemann's “impureim sandwich” gave it a recipe. It's the small-scale version of ports and adapters, and the easiest way to cut mock-heavy tests.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> A newer idea that matters more and more; use it wherever decisions hide among I/O.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Decisions tested without mocks</b>.</li><li><b>Clear business logic</b>, separate from plumbing.</li><li><b>Deterministic</b>: time and randomness passed in.</li><li><b>Easy to reuse</b> the core elsewhere.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Gathering up front</b> may load more than needed.</li><li><b>Awkward</b> when decisions need data in several rounds.</li><li><b>Decision types</b> to define.</li><li><b>Unfamiliar</b> to object-oriented habits.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Code-design ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>decisions interleaved with I/O</b> to <b>a pure core between a gathering and a performing shell</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="2" data-after="4"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Decision and plumbing are separate and short.</td></tr>
+      <tr data-before="3" data-after="4"><td>Domain clarity<small>reads like the business?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The core reads as the business decision.</td></tr>
+      <tr data-before="3" data-after="4"><td>Correctness<small>rules can't be broken?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Pure decisions are easy to test exhaustively.</td></tr>
+      <tr data-before="3" data-after="4"><td>Changeability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Rules change in the core; plumbing in the shell.</td></tr>
+      <tr data-before="2" data-after="5"><td>Testability<small>test without the world?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Values in, values out, no mocks.</td></tr>
+      <tr data-before="2" data-after="4"><td>Low coupling<small>parts change alone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The core depends on nothing.</td></tr>
+      <tr data-before="3" data-after="3"><td>Performance<small>fast enough?</small></td><td class="dcell"></td><td class="score"></td><td class="why">May over-fetch inputs; usually negligible.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low ceremony<small>little boilerplate?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Decision types vs mock setup: roughly even.</td></tr>
+      <tr data-before="3" data-after="3"><td>Team scalability<small>many teams at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Hidden effects in the core</h3><p>The “pure” function calls <code>Date.now()</code> or a logger. <span class="fix">Fix →</span> pass time in; return log entries if needed.</p></li>
+    <li><h3>A fat shell</h3><p>The shell grows if-statements about business cases. <span class="fix">Fix →</span> move decisions into the core; the shell just follows them.</p></li>
+    <li><h3>Mocking the core</h3><p>Tests of the shell mock the pure function. <span class="fix">Fix →</span> test the core with values; test the shell end to end, lightly.</p></li>
+    <li><h3>Forcing it everywhere</h3><p>Contortions for a simple CRUD save. <span class="fix">Fix →</span> use it where decisions are rich enough to deserve tests.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Functions that make business decisions and also do I/O.</li><li>Tests full of mocks and call-order assertions.</li><li>Logic that depends on time or randomness.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Pure plumbing with no decisions (just a save).</li><li>Decisions that truly need many rounds of I/O (use a state machine or workflow).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/ports-adapters.html"><b>Ports &amp; Adapters</b></a></li><li><a href="../notes/transaction-script.html"><b>Transaction Script vs Domain Model</b></a></li><li><a href="../../ddd/notes/illegal-states.html"><b>Make Illegal States Unrepresentable</b></a> (Vol. 7)</li><li><a href="../../testing/notes/deterministic-tests.html"><b>Controlled Time &amp; Randomness</b></a> (Vol. 4)</li><li><a href="../../testing/notes/property-based.html"><b>Property-Based Testing</b></a> (Vol. 4)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What goes in the functional core?</summary><p>Pure decision-making: plain values in, a decision out, no I/O, clock or randomness.</p></details>
+    <details><summary>What does the shell do?</summary><p>Gathers inputs, calls the core, and performs the effects it decides.</p></details>
+    <details><summary>How do you handle the current time?</summary><p>The shell reads it and passes it in as a value.</p></details>
+    <details><summary>Why does this reduce mocking?</summary><p>The core has no dependencies, so tests pass values and check results.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A test for the delivery-fee rule needs mocks for the database, the clock, the maps API and the feature-flag client, and fails whenever someone reorders calls. How do you restructure it?</span></summary><p>Gather the basket, address distance, current time and flag value in the shell, pass them as values to a pure <code>deliveryFee(…)</code> function, and test that function with a table of examples. Keep one integration test for the shell.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Pick a function in your code that both reads from somewhere and decides something. Split it into gather, a pure decide function, and perform. Write five example tests for the pure part with no mocks.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Decide <span class="hl">on paper</span>; pour <span class="hl">concrete</span> only after.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/14-functional-core.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Gary Bernhardt, “Boundaries” (talk, 2012) and “Functional Core, Imperative Shell” (Destroy All Software).</li><li>Mark Seemann, “Impureim sandwich” (blog, 2020).</li><li>Scott Wlaschin, <i>Domain Modeling Made Functional</i> (2018), ch. 12.</li><li>Eric Normand, <i>Grokking Simplicity</i> (2021).</li></ul>
+  </div>
+  <p class="folio">14</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="vertical-slices.html"><small>← previous note</small>13 · Vertical Slices</a>
+  <a href="strategy-command.html"><small>Next note →</small>15 · Strategy &amp; Command as Functions</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 8 · a student's bullet journal on inside the application</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>
