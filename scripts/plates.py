@@ -1195,6 +1195,250 @@ def plausible_silence():
     return p, "The Art of Plausible Silence", defs, "".join(b)
 
 
+# ================================================================ Act III plates, the remaining nine
+def absent_lord():
+    p = "al"
+    defs = (f'<linearGradient id="{p}-gate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a2a3a"/><stop offset="1" stop-color="#05080c"/></linearGradient>'
+            f'<radialGradient id="{p}-ph" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#cfe0ff" stop-opacity=".7"/><stop offset="1" stop-color="#cfe0ff" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#030304"/>']
+    # left: his office at The Grid, abandoned
+    b.append('<rect x="20" y="260" width="300" height="20" fill="#14100c"/><rect x="40" y="280" width="12" height="160" fill="#0c0806"/><rect x="290" y="280" width="12" height="160" fill="#0c0806"/>'
+             '<path d="M110 260 L110 170 C110 150 210 150 210 170 L210 260 Z" fill="#0a0808"/>'
+             '<g stroke="#b8b8b0" stroke-width=".7" fill="none" opacity=".45"><path d="M110 170 L150 210 M110 196 C130 196 140 186 144 170 M110 220 C140 216 160 196 168 170 M210 170 L176 206"/></g>')
+    for k in range(9):
+        b.append(f'<rect x="{230 + (k % 3) * 4}" y="{246 - k * 7}" width="70" height="7" fill="#e8e4d8" opacity="{.5 + (k % 2) * .2}" transform="rotate({(k * 7) % 9 - 4} 260 {246 - k * 7})"/>')
+    b.append(text(265, 168, "412 unread", 11, "#ff5a3a", MONO, "middle", f'filter="url(#{p}-glow)"'))
+    b.append('<rect x="40" y="40" width="240" height="100" fill="#0c0a10" stroke="#2a2a34"/>' + text(160, 60, "CALENDAR · Oct → Feb", 10, "#9a9aa8", FELL, "middle")
+             + "".join(f'<rect x="{50 + c * 32}" y="{70 + r * 14}" width="28" height="11" fill="#5a2a7a" opacity="{.6 + (r + c) % 3 * .12}"/>' for r in range(4) for c in range(7))
+             + text(160, 132, "travelling", 9, "#c8a0ff", HAND, "middle"))
+    # right: the airport gate, and Benedict, half there
+    b.append(f'<rect x="400" y="0" width="400" height="500" fill="url(#{p}-gate)"/><rect x="420" y="30" width="200" height="56" fill="#0a0a08" stroke="#2a2a20"/>'
+             + text(520, 52, "GATE 22 · BOARDING", 12, "#ffd060", MONO, "middle", f'filter="url(#{p}-glow)"') + text(520, 74, "ZURICH · DELAYED", 11, "#ff8a3a", MONO, "middle"))
+    b.append(f'<g opacity=".7">{suit(p, 1, 620, by(190, .62, .8), .8, coat=True, tie="#3a2a5a", jacket="#0c0c14", shirt="#5a6070", rim="#9ab8ff")}'
+             + face(p, 1, 620, 190, .62, skin=("#0c0e18", "#3a4458", "#8090b0"), light="below", light_col="#cfe0ff", rim="#9ab8ff",
+                    eye="human", glow=False, brows="flat", mouth="thin", hair="slick", hair_col="#6a6a72", ears="human") + "</g>")
+    b.append(f'<circle cx="590" cy="340" r="60" fill="url(#{p}-ph)"/><rect x="574" y="318" width="32" height="50" rx="5" fill="#dceaff" filter="url(#{p}-glow)"/>'
+             + text(590, 340, "DECIDE", 6, "#1a2a4a", MONO, "middle") + text(590, 350, "BY THU?", 6, "#1a2a4a", MONO, "middle"))
+    b.append(f'<rect x="400" y="0" width="4" height="500" fill="#000"/>')
+    b.append(text(600, 470, "In the building: 9 days of 120", 13, "#9ab8ff", FELL, "middle", 'letter-spacing="1" opacity=".7"'))
+    return p, "The Absent Lord", defs, "".join(b)
+
+
+def weather_tyrant():
+    p = "wt"
+    defs = (f'<linearGradient id="{p}-split" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#3a2a10"/><stop offset=".48" stop-color="#2a1a0a"/><stop offset=".52" stop-color="#0a0e18"/><stop offset="1" stop-color="#04060c"/></linearGradient>'
+            f'<radialGradient id="{p}-sun" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffd27a" stop-opacity=".9"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="url(#{p}-split)"/>']
+    b.append(f'<circle cx="170" cy="100" r="110" fill="url(#{p}-sun)"/><circle cx="170" cy="100" r="32" fill="#ffe2a0"/>')
+    b.append(f'<g fill="#1a2030"><ellipse cx="600" cy="80" rx="140" ry="50"/><ellipse cx="520" cy="96" rx="80" ry="40"/><ellipse cx="690" cy="100" rx="90" ry="40"/></g>'
+             f'<path d="M600 120 L580 170 L600 172 L572 230" stroke="#e8f0ff" stroke-width="3" fill="none" filter="url(#{p}-glow)"/>'
+             + rain(p, 440, 800, 130, 480, .35, "#9ab0d8"))
+    # Gareth, split down the middle
+    b.append(suit(p, 1, 400, by(190, .74, .95), .95, tie="#3a3a5a", jacket="#0e0e14", shirt="#6a6a70", rim="#9ab0d8"))
+    b.append(face(p, 1, 400, 190, .74, skin=("#14100c", "#5a4a3c", "#d0b090"), light="left", light_col="#ffe2a0", rim="#9ab0d8", rim_side="right",
+                  eye="yellow", glow=True, brows="angry", mouth="thin", hair="slick", hair_col="#4a4440", ears="human"))
+    # left: pastries; right: a junior under an umbrella
+    b.append('<path d="M120 430 L280 430" stroke="#5a4a2a" stroke-width="2"/>' + "".join(f'<ellipse cx="{x}" cy="420" rx="18" ry="10" fill="#c8843a"/><path d="M{x - 10} 418 c6 -6 14 -6 20 0" stroke="#f0d090" fill="none"/>' for x in (150, 195, 240)))
+    b.append(text(195, 455, "Monday ☀️  “pastries, anyone?”", 13, "#ffe2a0", HAND, "middle", 'opacity=".8"'))
+    b.append('<g transform="translate(650 470)"><path d="M-40 -90 Q0 -130 40 -90 Z" fill="#2a3a5a"/><path d="M0 -90 V-40" stroke="#1a1a1a" stroke-width="2"/>'
+             '<circle cx="0" cy="-56" r="10" fill="#040406"/><path d="M-14 0 L-10 -44 C-6 -50 6 -50 10 -44 L14 0 Z" fill="#040406"/></g>')
+    b.append(text(620, 488, "Tuesday ⛈️  “unacceptable”", 13, "#9ab0d8", HAND, "middle", 'opacity=".8"'))
+    b.append('<rect x="20" y="20" width="130" height="34" rx="8" fill="#14141a" stroke="#3a3a4a"/>' + text(85, 42, "#☀️ / ⛈️  (12)", 11, "#c8c8d8", SERIF, "middle"))
+    return p, "The Weather Tyrant", defs, "".join(b)
+
+
+def conflict_phantom():
+    p = "cph"
+    defs = (f'<linearGradient id="{p}-fade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".5" stop-color="#000" stop-opacity=".2"/><stop offset="1" stop-color="#000" stop-opacity="1"/></linearGradient>'
+            f'<radialGradient id="{p}-warm" cx=".4" cy=".4" r=".6"><stop offset="0" stop-color="#ffcf9a" stop-opacity=".45"/><stop offset="1" stop-color="#ffcf9a" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#050405"/>', f'<rect width="{W}" height="{H}" fill="url(#{p}-warm)"/>']
+    # the door he's drifting through
+    b.append('<rect x="560" y="80" width="150" height="400" fill="#0a0a0c" stroke="#2a2a30" stroke-width="4"/><rect x="560" y="80" width="150" height="400" fill="#cfe0ff" opacity=".08"/>'
+             + text(635, 66, "MEETING ROOM 9C · “quick chat?”", 10, "#8a8a9a", FELL, "middle"))
+    # Marcus: kind face, body dissolving into fog towards the door
+    b.append(f'<g>{suit(p, 1, 470, by(180, .7, .9), .9, tie="#5a3a2a", jacket="#1a1614", shirt="#8a8070", rim="#ffcf9a", rim_side="left")}'
+             + face(p, 1, 470, 180, .7, skin=("#1a120e", "#6a5044", "#d8b8a0"), light="left", light_col="#ffd8b0", rim="#9ab0d8", rim_side="right",
+                    eye="human", glow=False, brows="worried", mouth="smile", hair="slick", hair_col="#3a2a20", ears="human", lip="#8a4a3a") + "</g>")
+    b.append(f'<rect x="380" y="0" width="420" height="500" fill="url(#{p}-fade)"/>')
+    b.append(f'<g fill="#cfd8e8" opacity=".25" filter="url(#{p}-b6)"><ellipse cx="560" cy="300" rx="60" ry="120"/><ellipse cx="620" cy="260" rx="40" ry="90"/></g>')
+    # Pip, approaching with a question
+    b.append('<g transform="translate(200 470)"><circle cx="0" cy="-150" r="22" fill="#08070a"/><path d="M-34 0 L-30 -110 C-24 -126 24 -126 30 -110 L34 0 Z" fill="#08070a"/>'
+             '<path d="M-22 -150 a22 22 0 0 1 36 -16" stroke="#ffcf9a" stroke-width="1.4" fill="none" opacity=".6"/>'
+             '<g transform="rotate(-8 40 -110)"><rect x="24" y="-140" width="70" height="56" fill="#f0e070"/></g></g>'
+             + text(258, 352, "honest", 9, "#3a2a00", HAND, "middle", 'transform="rotate(-8 258 352)"') + text(258, 366, "feedback?", 9, "#3a2a00", HAND, "middle", 'transform="rotate(-8 258 366)"'))
+    b.append(mug(300, 420, "YOU'RE DOING", "GREAT!", "#d8d0c0", "#3a5a3a"))
+    # Neville asleep in the background
+    b.append('<g opacity=".7"><rect x="40" y="250" width="110" height="70" fill="#0c0c0e"/><circle cx="95" cy="232" r="14" fill="#0a0a0c"/>' + text(95, 296, "in progress", 9, "#7aff9a", MONO, "middle") + "</g>")
+    b.append(text(95, 210, "z z", 12, "#7a7a8a", HAND, "middle", 'opacity=".6"'))
+    b.append(text(400, 488, "“You're doing great!” (changes the subject to football)", 12, "#ffd8b0", SERIF, "middle", 'font-style="italic" opacity=".65"'))
+    return p, "The Conflict Phantom", defs, "".join(b)
+
+
+def credit_taking_crown():
+    p = "ctc"
+    defs = (f'<radialGradient id="{p}-stage" cx=".5" cy=".3" r=".6"><stop offset="0" stop-color="#ffe2a0" stop-opacity=".5"/><stop offset="1" stop-color="#ffe2a0" stop-opacity="0"/></radialGradient>'
+            f'<linearGradient id="{p}-gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff0b0"/><stop offset=".5" stop-color="#d8a020"/><stop offset="1" stop-color="#6a4a00"/></linearGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#040304"/>', f'<rect width="{W}" height="{H}" fill="url(#{p}-stage)"/>']
+    # the post behind him
+    b.append('<rect x="520" y="40" width="250" height="150" rx="8" fill="#0e1420" stroke="#2a3a5a"/>' + text(540, 66, "Victor Kraal · Head of Grid Analytics", 10, "#c8d8f0", SERIF)
+             + text(540, 92, "The power of data-driven leadership.", 11, "#e8f0ff", SERIF, "start", 'font-weight="700"')
+             + text(540, 112, "My team delivered a step-change…", 10, "#a8b8d0", SERIF) + text(540, 170, "👍 412   💬 38   ↗ 17", 13, "#7ab0ff", SERIF))
+    # Victor, crowned, lifting the chart
+    fv = (360, 200)
+    b.append(suit(p, 1, fv[0], by(fv[1], .7, .9), .9, tie="#a07a10", jacket="#0c0c12", shirt="#6a6a78", rim="#ffe2a0"))
+    b.append(face(p, 1, fv[0], fv[1], .7, skin=("#14100e", "#5a4c48", "#c8b0a0"), light="above", light_col="#ffe8b8", rim="#ff3a22",
+                  eye="red", glow=True, brows="raised", mouth="smile", hair="slick", hair_col="#06060a", ears="human"))
+    b.append(f'<path d="M318 112 L326 82 L342 104 L360 72 L378 104 L394 82 L402 112 Z" fill="url(#{p}-gold)" stroke="#5a3a00" stroke-width="1"/>'
+             f'<circle cx="360" cy="96" r="4" fill="#c4161c" filter="url(#{p}-glow)"/>')
+    b.append('<g transform="rotate(-6 200 230)"><rect x="120" y="170" width="160" height="110" fill="#e8e8e0" stroke="#3a3a3a"/>'
+             '<polyline points="134,262 160,250 184,254 208,228 232,232 256,204 270,200" stroke="#1a3a7a" stroke-width="3" fill="none"/>'
+             + text(200, 188, "Q1 FORECAST (±1.5%)", 9, "#1a1a1a", FELL, "middle") + text(200, 276, "model: P.", 7, "#8a8a8a", HAND, "middle") + "</g>")
+    b.append(hand(p, 250, 300, .8, flip=True, rim="#ffe2a0", light="#ffe8b8", claws=False, pose="open"))
+    # Pip, behind, holding the laptop that made it
+    b.append('<g transform="translate(640 470)"><circle cx="0" cy="-130" r="20" fill="#08070a"/><path d="M-30 0 L-26 -96 C-20 -110 20 -110 26 -96 L30 0 Z" fill="#08070a"/>'
+             '<rect x="-34" y="-82" width="68" height="44" fill="#1a2030"/><rect x="-30" y="-78" width="60" height="36" fill="#9ab8ff" opacity=".6"/></g>')
+    b.append(text(640, 492, "(Pip's mum liked it)", 11, "#8a9ab0", HAND, "middle", 'opacity=".7"'))
+    b.append(text(220, 470, "“…using an approach I introduced.”", 14, "#ffe2a0", SERIF, "middle", 'font-style="italic" opacity=".7"'))
+    return p, "The Credit-Taking Crown", defs, "".join(b)
+
+
+def new_lord_arrives():
+    p = "nl"
+    defs = f'<linearGradient id="{p}-door" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff4d8"/><stop offset="1" stop-color="#e8c890"/></linearGradient>'
+    b = [f'<rect width="{W}" height="{H}" fill="#040406"/>']
+    # the doorway, light spilling in
+    b.append(f'<rect x="300" y="40" width="200" height="420" fill="url(#{p}-door)"/><path d="M300 460 L500 460 L700 500 L100 500 Z" fill="#fff4d8" opacity=".25" filter="url(#{p}-b6)"/>')
+    # Victor in the doorway, carrying the operating model
+    fv = (400, 170)
+    b.append(suit(p, 1, fv[0], by(fv[1], .64, .82), .82, tie="#2a3a5a", jacket="#0b0b10", shirt="#5a6478", rim="#fff4d8"))
+    b.append(face(p, 1, fv[0], fv[1], .64, skin=("#0e1018", "#3c4458", "#7a86a0"), light="below", light_col="#fff4d8", rim="#fff4d8",
+                  eye="human", glow=False, brows="worried", mouth="thin", hair="slick", hair_col="#06060a", ears="human"))
+    b.append('<g transform="rotate(-4 400 360)"><rect x="330" y="320" width="140" height="90" fill="#1a2a4a"/><rect x="330" y="320" width="140" height="18" fill="#c8a040"/>'
+             + text(400, 333, "OPERATING MODEL", 9, "#1a1a1a", FELL, "middle") + text(400, 360, "v1 · 47 slides", 12, "#e8f0ff", SERIF, "middle")
+             + text(400, 382, "GAOM · DART · THE SPINE", 9, "#9ab8ff", MONO, "middle") + "</g>")
+    # the three camps
+    for k, (x, label, pose) in enumerate(((120, "the eager", "up"), (220, "the eager", "up"), (590, "the sceptical", "arms"), (690, "the sceptical", "arms"))):
+        arm = '<path d="M14 -70 L22 -110" stroke="#06060a" stroke-width="6" stroke-linecap="round"/>' if pose == "up" else '<path d="M-22 -60 L22 -60" stroke="#121218" stroke-width="10" stroke-linecap="round"/>'
+        b.append(f'<g transform="translate({x} 470)"><circle cx="0" cy="-102" r="16" fill="#16161e"/><path d="M-26 0 L-22 -74 C-16 -86 16 -86 22 -74 L26 0 Z" fill="#16161e"/>{arm.replace("#06060a", "#16161e")}'
+                 f'<path d="M-16 -102 a16 16 0 0 1 32 0 M-22 -74 C-16 -86 16 -86 22 -74" stroke="#fff4d8" stroke-width="1.6" fill="none" opacity=".8"/></g>')
+    b.append(text(170, 340, "the eager", 12, "#c8b890", HAND, "middle", 'opacity=".7"') + text(640, 340, "the sceptical", 12, "#c8b890", HAND, "middle", 'opacity=".7"'))
+    b.append('<rect x="40" y="60" width="120" height="80" fill="#0c0c10" stroke="#2a2a34"/>' + text(100, 96, "camera off", 10, "#6a6a7a", SERIF, "middle", 'font-style="italic"')
+             + text(100, 114, "(the invisible)", 9, "#6a6a7a", HAND, "middle") + '<path d="M70 120 l60 -40 M70 80 l60 40" stroke="#3a3a4a"/>')
+    b.append(text(660, 80, "Day 1 · 09:00", 16, "#c8b890", FELL, "middle", 'letter-spacing="2" opacity=".7"'))
+    return p, "The New Lord Arrives", defs, "".join(b)
+
+
+def ritual_circle_one_to_one():
+    p = "rc"
+    defs = f'<radialGradient id="{p}-doc" cx=".5" cy=".5" r=".6"><stop offset="0" stop-color="#cfe6ff" stop-opacity=".6"/><stop offset="1" stop-color="#cfe6ff" stop-opacity="0"/></radialGradient>'
+    b = [f'<rect width="{W}" height="{H}" fill="#040305"/>']
+    # cancelled invites on the wall
+    for k, (x, y, r) in enumerate(((60, 50, -8), (160, 90, 6), (620, 60, 5), (700, 120, -6), (90, 170, 4))):
+        b.append(f'<g transform="rotate({r} {x + 40} {y + 20})" opacity=".55"><rect x="{x}" y="{y}" width="90" height="40" fill="#d8d4c8"/>' + text(x + 45, y + 16, "1:1 · Thu 15:00", 8, "#2a2a2a", SERIF, "middle")
+                 + text(x + 45, y + 32, "CANCELLED", 11, "#a01010", FELL, "middle", 'font-weight="700"') + "</g>")
+    # the summoning circle on the floor
+    b.append('<ellipse cx="400" cy="410" rx="300" ry="70" fill="none" stroke="#c4161c" stroke-width="2.4" opacity=".75"/><ellipse cx="400" cy="410" rx="270" ry="58" fill="none" stroke="#c4161c" stroke-width="1" opacity=".6"/>'
+             '<path d="M140 410 L660 410 M400 352 L400 468 M210 368 L590 452 M590 368 L210 452" stroke="#c4161c" stroke-width=".8" opacity=".4"/>')
+    for x, y in ((120, 410), (680, 410), (240, 360), (560, 360), (240, 460), (560, 460)):
+        b.append(f'<rect x="{x - 4}" y="{y - 22}" width="8" height="22" fill="#e0d4b0"/><ellipse cx="{x}" cy="{y - 26}" rx="3.4" ry="7" fill="#ffd27a" filter="url(#{p}-glow)"/>')
+    # two chairs facing, two silhouettes
+    for x, flip in ((260, 1), (540, -1)):
+        b.append(f'<g transform="translate({x} 420) scale({flip} 1)"><path d="M-30 0 L-30 -60 L-40 -130 L-14 -130 L-6 -60 L30 -60 L30 0" stroke="#1a1418" stroke-width="6" fill="none"/>'
+                 f'<circle cx="2" cy="-150" r="20" fill="#1a141c"/><path d="M-26 -60 L-20 -120 C-14 -132 18 -132 24 -120 L28 -60 Z" fill="#1a141c"/>'
+                 f'<path d="M-18 -150 a20 20 0 0 1 40 0 M-20 -120 C-14 -132 18 -132 24 -120 L28 -60" stroke="#ffcf7a" stroke-width="1.8" fill="none" opacity=".85"/></g>')
+    b.append(text(260, 470, "Pip", 13, "#c9b090", HAND, "middle", 'opacity=".7"') + text(540, 470, "Victor", 13, "#c9b090", HAND, "middle", 'opacity=".7"'))
+    # the shared doc, floating between them
+    b.append(f'<ellipse cx="400" cy="200" rx="160" ry="120" fill="url(#{p}-doc)"/><g transform="translate(320 120)"><rect width="160" height="170" rx="4" fill="#e8f0ff" filter="url(#{p}-glow)"/>'
+             + text(80, 22, "1:1 · Thu 23 Jan", 10, "#1a2a4a", SERIF, "middle", 'font-weight="700"')
+             + text(10, 46, "STATUS (read, don't discuss) ✔", 8, "#4a5a7a", MONO) + text(10, 66, "DECISIONS: scenario A/B", 8, "#1a2a4a", MONO)
+             + text(10, 84, "BLOCKERS: substation data", 8, "#1a2a4a", MONO) + text(10, 102, "FEEDBACK: the board pack?", 8, "#1a2a4a", MONO)
+             + text(10, 120, "FOR ME: level 5", 8, "#a01010", MONO) + text(10, 150, "ended at 14 min ✨", 9, "#3a7a3a", HAND) + "</g>")
+    return p, "The Ritual Circle of the 1:1", defs, "".join(b)
+
+
+def skip_level_seance():
+    p = "sl3"
+    defs = (f'<radialGradient id="{p}-smoke" cx=".5" cy=".6" r=".6"><stop offset="0" stop-color="#bcd6ff" stop-opacity=".45"/><stop offset="1" stop-color="#bcd6ff" stop-opacity="0"/></radialGradient>'
+            f'<radialGradient id="{p}-cand" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffcf7a" stop-opacity=".6"/><stop offset="1" stop-color="#ffcf7a" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#030304"/>', f'<ellipse cx="400" cy="380" rx="300" ry="140" fill="url(#{p}-cand)"/>']
+    # the summoned director, in smoke
+    b.append(f'<ellipse cx="400" cy="200" rx="180" ry="170" fill="url(#{p}-smoke)" filter="url(#{p}-b6)"/>')
+    b.append(f'<g opacity=".7">{face(p, 1, 400, 170, .66, skin=("#0c1018", "#4a5a74", "#a8bcd8"), light="above", light_col="#e0ecff", rim="#bcd6ff", eye="cyan", glow=True, brows="raised", mouth="thin", hair="slick", hair_col="#6a6a72", ears="human", extras=("translucent",))}</g>')
+    b.append(f'<path d="M340 250 C330 300 360 330 400 340 C440 330 470 300 460 250" fill="#bcd6ff" opacity=".2" filter="url(#{p}-b6)"/>')
+    b.append(text(400, 40, "“Have you raised these with Victor?”", 15, "#bcd6ff", SERIF, "middle", 'font-style="italic" opacity=".8"'))
+    # the séance table: a board of letters, a list of eleven grievances
+    b.append('<ellipse cx="400" cy="420" rx="260" ry="50" fill="#140c08"/><ellipse cx="400" cy="414" rx="250" ry="44" fill="#1e140c"/>'
+             '<rect x="330" y="394" width="140" height="40" rx="6" fill="#c8b08a"/>' + text(400, 410, "OPEN DOOR", 10, "#3a2010", FELL, "middle", 'letter-spacing="2"')
+             + text(400, 426, "POLICY", 10, "#3a2010", FELL, "middle", 'letter-spacing="2"'))
+    b.append('<g transform="rotate(8 560 410)"><rect x="520" y="380" width="80" height="60" fill="#e8e0c8"/>' + text(560, 394, "PROBLEMS", 7, "#3a2a1a", FELL, "middle")
+             + "".join(text(528, 404 + k * 3.4, f"{k + 1}. …", 3, "#5a4a3a") for k in range(11)) + "</g>")
+    for x in (180, 620):
+        b.append(f'<rect x="{x - 4}" y="378" width="8" height="26" fill="#e0d4b0"/><ellipse cx="{x}" cy="374" rx="3.4" ry="8" fill="#ffd27a" filter="url(#{p}-glow)"/>')
+    # Pip's hands on the table
+    b.append(hand(p, 330, 470, .7, flip=True, rim="#ffcf7a", light="#ffd8a0", claws=False, pose="open") + hand(p, 470, 470, .7, rim="#ffcf7a", light="#ffd8a0", claws=False, pose="open"))
+    # Victor, watching through the door crack
+    b.append('<rect x="700" y="60" width="90" height="400" fill="#0a0a0c"/><rect x="700" y="60" width="10" height="400" fill="#cfe0ff" opacity=".2"/>'
+             f'<g filter="url(#{p}-glow)"><circle cx="716" cy="200" r="3" fill="#ff2a20"/><circle cx="730" cy="200" r="3" fill="#ff2a20"/></g>' + text(740, 480, "Victor knew by 17:30", 10, "#8a8a9a", HAND, "middle", 'opacity=".7"'))
+    return p, "The Skip-Level Séance", defs, "".join(b)
+
+
+def puppet_king():
+    p = "pk"
+    defs = (f'<linearGradient id="{p}-gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff0b0"/><stop offset=".5" stop-color="#d8a020"/><stop offset="1" stop-color="#6a4a00"/></linearGradient>'
+            f'<radialGradient id="{p}-spot" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#e8d8ff" stop-opacity=".35"/><stop offset="1" stop-color="#e8d8ff" stop-opacity="0"/></radialGradient>')
+    b = [f'<rect width="{W}" height="{H}" fill="#040306"/>', f'<rect width="{W}" height="{H}" fill="url(#{p}-spot)"/>']
+    # the hand above, holding the control bar, and a teacup
+    b.append('<path d="M240 40 L560 40" stroke="#6a4a2a" stroke-width="10" stroke-linecap="round"/><path d="M400 20 L400 60" stroke="#6a4a2a" stroke-width="8"/>'
+             '<path d="M380 0 C384 14 416 14 420 0" fill="#c8b0a0"/>'
+             '<g transform="translate(600 40)"><path d="M-14 0 L14 0 L10 16 L-10 16 Z" fill="#e8e0d0"/><path d="M14 4 C22 4 22 12 14 12" stroke="#e8e0d0" stroke-width="2" fill="none"/><ellipse cx="0" cy="22" rx="20" ry="4" fill="#e8e0d0"/></g>'
+             + text(640, 80, "(Ottoline)", 11, "#c8b8d8", HAND, "middle", 'opacity=".7"'))
+    # the strings
+    b.append('<g stroke="#e8e0f0" stroke-width=".9" opacity=".7"><path d="M250 40 L300 300 M330 40 L360 130 M470 40 L440 130 M550 40 L500 300 M400 60 L400 70"/></g>')
+    # Victor, crowned, on a small throne, limbs on strings
+    b.append('<path d="M310 470 L310 280 C310 240 490 240 490 280 L490 470 Z" fill="#1a0e10"/>')
+    fv = (400, 180)
+    b.append(suit(p, 1, fv[0], by(fv[1], .62, .78), .78, tie="#2a3a5a", jacket="#0b0b10", shirt="#5a6478", rim="#e8d8ff"))
+    b.append(face(p, 1, fv[0], fv[1], .62, skin=("#0e1018", "#3c4458", "#7a86a0"), light="above", light_col="#e8d8ff", rim="#c4161c",
+                  eye="human", glow=False, brows="worried", mouth="thin", hair="slick", hair_col="#06060a", ears="human"))
+    b.append(f'<path d="M370 104 L376 84 L388 98 L400 78 L412 98 L424 84 L430 104 Z" fill="url(#{p}-gold)"/>')
+    b.append(hand(p, 300, 320, .7, flip=True, rim="#e8d8ff", light="#e8d8ff", claws=False, pose="open") + hand(p, 500, 320, .7, rim="#e8d8ff", light="#e8d8ff", claws=False, pose="open"))
+    b.append('<g transform="rotate(-6 150 300)"><rect x="80" y="270" width="150" height="56" fill="#e8e0c8"/>' + text(155, 292, "LEAVE IT WITH ME", 11, "#3a2a1a", FELL, "middle")
+             + text(155, 314, "(× 4)", 11, "#7a1010", HAND, "middle") + "</g>")
+    b.append(f'<g transform="rotate(10 640 340)"><rect x="580" y="300" width="130" height="70" fill="none" stroke="#c4161c" stroke-width="3"/>'
+             + text(645, 326, "APPROVAL LIMIT", 10, "#c4161c", FELL, "middle") + text(645, 352, "£5,000", 20, "#c4161c", BLACK, "middle") + "</g>")
+    b.append(text(400, 492, "Head of Grid Analytics. Can approve: biscuits.", 13, "#c8b8d8", SERIF, "middle", 'font-style="italic" opacity=".65"'))
+    return p, "The Puppet King", defs, "".join(b)
+
+
+def friend_became_boss():
+    p = "fb"
+    defs = f'<radialGradient id="{p}-cafe" cx=".5" cy=".4" r=".7"><stop offset="0" stop-color="#ffcf9a" stop-opacity=".45"/><stop offset="1" stop-color="#ffcf9a" stop-opacity="0"/></radialGradient>'
+    b = [f'<rect width="{W}" height="{H}" fill="#050403"/>', f'<rect width="{W}" height="{H}" fill="url(#{p}-cafe)"/>']
+    b.append(text(400, 46, "Friday 10 January · 08:30", 15, "#c9a87a", FELL, "middle", 'letter-spacing="2" opacity=".7"'))
+    # Jules (left) with the new lanyard; Pip (right)
+    fj, fp = (230, 200), (570, 205)
+    b.append(blouse(p, fj[0], by(fj[1], .62, .8), .8, cardigan="#3a2a1a", top="#6a5a42", rim="#ffcf9a", rim_side="right", necklace=False))
+    b.append(face(p, 1, fj[0], fj[1], .62, skin=("#1a120c", "#6a5040", "#d0b090"), light="right", light_col="#ffd8a8", rim="#ffcf9a", rim_side="left",
+                  eye="human", glow=False, brows="worried", mouth="smile", hair="slick", hair_col="#3a2414", ears="human", lip="#8a4a3a"))
+    b.append('<path d="M206 250 L230 300 L254 250" stroke="#c4161c" stroke-width="3" fill="none"/><rect x="216" y="298" width="30" height="20" rx="2" fill="#e8e0c8"/>'
+             + text(231, 311, "TEAM LEAD", 4.6, "#7a1010", FELL, "middle"))
+    b.append(suit(p, 2, fp[0], by(fp[1], .62, .8), .8, tie="#2a3a4a", jacket="#121014", shirt="#7a7068", rim="#ffcf9a", rim_side="left"))
+    b.append(face(p, 2, fp[0], fp[1], .62, skin=("#14100c", "#5a4a3c", "#c8a888"), light="left", light_col="#ffd8a8", rim="#ffcf9a", rim_side="right",
+                  eye="human", glow=False, brows="flat", mouth="thin", hair="slick", hair_col="#08060a", ears="human"))
+    # the empty third chair: the job they both wanted
+    b.append('<g opacity=".5"><path d="M370 470 L370 360 L360 270 L440 270 L430 360 L430 470" stroke="#3a2a20" stroke-width="5" fill="none"/>'
+             '<ellipse cx="400" cy="300" rx="34" ry="44" fill="#cfd8e8" opacity=".25" filter="url(#fb-b6)"/></g>'
+             + text(400, 256, "the job you both wanted", 11, "#a8b8c8", HAND, "middle", 'opacity=".7"'))
+    # the table: two coffees and the napkin of rules
+    b.append('<path d="M120 400 L680 400 L720 500 L80 500 Z" fill="#1a120c"/><path d="M120 400 H680" stroke="#5a3a24"/>')
+    b.append(mug(260, 360, "TEAM", "LEAD", "#d8d0c0", "#5a1a1a") + mug(500, 360, "I ♥ PIE", "CHARTS (NOT)", "#d8d0c0", "#2a3a5a"))
+    b.append('<g transform="rotate(-3 400 440)"><rect x="330" y="410" width="140" height="70" fill="#f0ece0"/>'
+             + text(400, 426, "THE NEW RULES", 8, "#3a2a1a", FELL, "middle") + text(338, 442, "work at work", 8, "#3a2a1a", HAND)
+             + text(338, 456, "no pub moaning", 8, "#3a2a1a", HAND) + text(338, 470, "check in: 3 months", 8, "#3a2a1a", HAND) + "</g>")
+    b.append(text(400, 494, "“I wanted it, I'm a bit gutted, and I'm glad it's you.”", 12, "#ffd8a8", SERIF, "middle", 'font-style="italic" opacity=".65"'))
+    return p, "The Friend Who Became Your Boss", defs, "".join(b)
+
+
 PLATES = {
     "meeting-lich": meeting_lich, "gaslight-wraith": gaslight_wraith, "bulldozer-ogre": bulldozer_ogre,
     "passive-aggressive-poltergeist": passive_aggressive_poltergeist, "coasting-zombie": coasting_zombie,
@@ -1204,6 +1448,9 @@ PLATES = {
     "meeting-before-the-meeting": meeting_before_the_meeting, "blood-pacts": blood_pacts, "ghost-decision": ghost_decision,
     "rumour-mill-familiar": rumour_mill_familiar, "cc-inquisition": cc_inquisition, "turf-wars": turf_wars,
     "empire-builder": empire_builder, "chosen-one": chosen_one, "plausible-silence": plausible_silence,
+    "absent-lord": absent_lord, "weather-tyrant": weather_tyrant, "conflict-phantom": conflict_phantom,
+    "credit-taking-crown": credit_taking_crown, "new-lord-arrives": new_lord_arrives, "ritual-circle-one-to-one": ritual_circle_one_to_one,
+    "skip-level-seance": skip_level_seance, "puppet-king": puppet_king, "friend-became-boss": friend_became_boss,
     "all-seeing-eye": all_seeing_eye, "seagull-overlord": seagull_overlord, "escape-portal": escape_portal,
 }
 

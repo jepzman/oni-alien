@@ -425,7 +425,7 @@ both, right up until the good people leave.</p>
     "credit-taking-crown": dict(
         sighting=f"""{beat("Tuesday 7 January · the cold snap")}
 <p>A cold snap hit the city. Pip's Q1 load model had predicted the peak to within 1.5%. Network Ops bought power at the
-right time and saved an estimated €600,000.</p>
+right time and saved an estimated £600,000.</p>
 {beat("Thursday 16 January · the board")}
 <p>Victor's update to the board said: <i>“My team delivered a step-change in forecast accuracy, using an approach I
 introduced.”</i> The approach was Pip's. It was in a document with Pip's name on it, dated November, before Victor joined.</p>
