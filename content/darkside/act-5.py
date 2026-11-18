@@ -81,6 +81,7 @@ what you're owed, talk to a lawyer, your union or an official advice service.</p
         ),
         dict(
             slug="hiring-freeze-frost",
+            plate_caption="Thursday, 21:00. The data engineer's desk, approved in January, frozen in February, still in its block of ice. Asha and Pip work either side of it.",
             ring="TEMPORARY PAUSE ✠ UNTIL FURTHER NOTICE ✠ BACKFILL DENIED ✠", scrawl="temporary since 2020",
             name="The Hiring Freeze Frost", sigil="❄",
             epithet="“A temporary pause.” Three years later, the chair is still empty.",
@@ -118,6 +119,7 @@ what you're owed, talk to a lawyer, your union or an official advice service.</p
         ),
         dict(
             slug="budget-bloodletting",
+            plate_caption="The Customer Ops review. A template with a column that bleeds, a consultant with a pen held like a scalpel, and one glowing page: £310k buys £1.1m.",
             ring="ZERO-BASED ✠ JUSTIFY EVERY POUND ✠ WHAT CAN YOU GIVE UP ✠", scrawl="bring numbers, not feelings",
             name="The Budget Bloodletting", sigil="⚗",
             epithet="Every team is asked to bleed a little. Those who bleed first bleed most.",
@@ -155,6 +157,7 @@ what you're owed, talk to a lawyer, your union or an official advice service.</p
         ),
         dict(
             slug="more-with-less",
+            plate_caption="22:04. The lightbulb slide, with a skull someone drew on it. Towers of work. Asha, lit by her laptop, doing five people's hours.",
             ring="DO MORE WITH LESS ✠ WORK SMARTER ✠ SAME TARGETS ✠", scrawl="less is less",
             name="The Curse of “More with Less”", sigil="⚖",
             epithet="Fewer people. Same targets. A slide that says “smarter”.",
@@ -192,6 +195,7 @@ what you're owed, talk to a lawyer, your union or an official advice service.</p
         ),
         dict(
             slug="reorg-ritual",
+            plate_caption="Reorg #8. New boxes summoned into the air on strings, the old names crossed out in the Chronicler's notebook, and one orphan falling through the gap.",
             ring="NEW STRUCTURE ✠ VALUE STREAMS ✠ SAME PEOPLE NEW BOXES ✠", scrawl="seventh reorg, same work",
             name="The Reorg Ritual", sigil="⟲",
             epithet="The boxes move. The names change. The work stays exactly where it was.",
@@ -229,6 +233,7 @@ what you're owed, talk to a lawyer, your union or an official advice service.</p
         ),
         dict(
             slug="suits-from-beyond",
+            plate_caption="Three figures in a doorway of light. Excellent shoes, lanyards, a clipboard with a Value-add (Y/N) column, and a benchmark with your bar in red.",
             ring="SPANS AND LAYERS ✠ A DAY IN THE LIFE ✠ BENCHMARKS SUGGEST ✠", scrawl="they leave in September",
             name="The Suits from Beyond", sigil="♠",
             epithet="They arrive with lanyards and leave with your org chart.",
@@ -306,6 +311,7 @@ what you're owed, talk to a lawyer, your union or an official advice service.</p
         ),
         dict(
             slug="executioners-burden",
+            plate_caption="Tuesday, 09:31. The HR script crossed out. A note: school fees? find out TODAY. Pip, saying it straight.",
             ring="I'M SO SORRY ✠ IT'S NOT PERSONAL ✠ ROLE AT RISK ✠", scrawl="say it in the first minute",
             name="The Executioner's Burden", sigil="⚔",
             epithet="When you're the one who has to tell them.",
@@ -345,6 +351,7 @@ what you're owed, talk to a lawyer, your union or an official advice service.</p
         ),
         dict(
             slug="survivors-haunting",
+            plate_caption="Floor 9 after Horizon. Pale shapes at the empty desks, a football scarf nobody moves, and Asha looking at a chair.",
             ring="AT LEAST I STILL HAVE A JOB ✠ WHY NOT ME ✠ WHO'S NEXT ✠", scrawl="the empty desks talk",
             name="Survivor's Haunting", sigil="☗",
             epithet="You kept your job. Somehow it doesn't feel like winning.",
@@ -382,6 +389,7 @@ what you're owed, talk to a lawyer, your union or an official advice service.</p
         ),
         dict(
             slug="quiet-culling",
+            plate_caption="Morag at her desk as the fog comes in from both sides. Her work floats away; a framed thank-you from 2009 sits next to a performance plan.",
             ring="NEW DIRECTION ✠ WE'LL FIND YOU SOMETHING ✠ STEP BACK ✠", scrawl="the meetings stopped coming",
             name="The Quiet Culling", sigil="☾",
             epithet="Nobody fires you. Your work just… drifts away.",
@@ -421,6 +429,7 @@ what you're owed, talk to a lawyer, your union or an official advice service.</p
         ),
         dict(
             slug="go-bag-scroll",
+            plate_caption="The Chronicler's drawer. A CV, a book of Friday lines, six months in a pink pig, five names outside MetroVolt. Packed since 2008.",
             ring="CV UPDATED ✠ SIX MONTHS SAVED ✠ NETWORK WARM ✠", scrawl="pack it in the good times",
             name="The Go-Bag Scroll", sigil="⚿",
             epithet="Pack it in the good times. Unpack it never, if you're lucky.",

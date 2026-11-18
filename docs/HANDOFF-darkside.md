@@ -476,3 +476,19 @@ managers; Pip's speech bubble). All twelve Act I entries now have a plate and a 
   Vexmoor in June; Dorian moved to Customer Ops as planning lead in September and now names his builders.
   The Chronicler has kept a go-bag since 2008.
 - Next by the plan: Act IV (The Ascension: promotions and recognition), then VI, VII, VIII.
+
+## 22. Act V fully illustrated; Act IV · The Ascension written (18 Nov 2026)
+
+- Act V: nine more plates (all twelve Act V entries now have a plate and a caption).
+- `content/darkside/act-4.py` + `story-act-4.py`, format v2, **all twelve entries illustrated** from the start
+  (plate functions `promotion_prophecy` … `peter_principle` in `scripts/plates.py`). Entries: Promotion Prophecy ★,
+  Invisible Work Curse, Book of Deeds, Calibration Council ★, Raise Duel, Rival for the Throne, Title Without the Gold,
+  Poisoned Chalice, Passed Over: The Resurrection ★, Sponsor's Mark, Your First Minions, Peter Principle Curse ★.
+- Story (Oct 2027 – Jun 2028): the Head of Customer Insight role is foretold in Ottoline's tea-leaves. Pip is acting
+  head from 1 Nov 2027 (terms agreed in writing). Calibration in room 27A on 14 Dec; Priya (Director of Customer from
+  Oct 2027) sponsors him there. Raise duel with Karen (HR) on 10 Feb 2028: £7,500 acting allowance, backdated, plus a
+  July review. Dorian and Pip both apply ("Deal."). **Ruth Calloway** (she/her, ex-Northgate Energy) gets the role:
+  announced 6 Mar, starts 13 Mar. Pip becomes the first Principal Analyst, Customer Insight, in June 2028.
+  Jules was promoted to Principal on 5 Nov 2027 with no raise (3% in April). Dr. Lionel Ashe was Head of Engineering
+  in 2019, stepped back in 2021; a principal engineer band was created in 2024.
+- Acts I–V are complete and illustrated. Next by the plan: VI, VII, VIII.
