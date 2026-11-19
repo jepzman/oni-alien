@@ -2004,6 +2004,15 @@ SPINE_TITLES = {
     "pmbok": "PMBOK Map", "project-1": "Lay of the Land", "project-2": "Start, Steer, Close", "project-3": "What, By When", "project-4": "Money and People", "project-5": "People Outside", "project-6": "Making It Yours",
     "People Outside, and Surprises": "People &amp; Surprises",
     "Docker &amp; Kubernetes": "Docker &amp; K8s",   # cheat sheets are looked up by their full title
+    # the darkside Acts drop their article on the spine, so even the longest fits
+    "The Court of Whispers": "Court of Whispers",
+    "The Bestiary": "Bestiary",
+    "The Throne Room": "Throne Room",
+    "The Ascension": "Ascension",
+    "The Famine": "Famine",
+    "The Outer Realms": "Outer Realms",
+    "The New Plagues": "New Plagues",
+    "The Inner Sanctum": "Inner Sanctum",
 }
 
 
@@ -2051,6 +2060,14 @@ def darkside_items(acts):
     return "\n".join(out)
 
 
+def darkside_shelf(acts):
+    """Series 4 stored spine-out like the notebooks: eight black grimoires with gold blackletter and a red ribbon.
+    Reuses spine_shelf(), then swaps the volume numbers for the Acts' Roman numerals."""
+    html = spine_shelf(darkside_items(acts), "darkside", "The eight Acts")
+    numerals = iter(grimoire.ROMAN[no] for no in sorted(acts))
+    return re.sub(r'<span class="spine-vol">\d+</span>', lambda m: f'<span class="spine-vol">{next(numerals)}</span>', html)
+
+
 def render_landing(sheets=(), dives=(), darkside=None):
     series1 = [j for j in shelf() if j.get("series", 1) == 1]
     series2 = [j for j in shelf() if j.get("series", 1) == 2]
@@ -2095,7 +2112,8 @@ def render_landing(sheets=(), dives=(), darkside=None):
         *([
             '  <h2 id="darkside"><span class="num">☾</span>The Darkside of the Corporation <span class="side">a survival grimoire</span></h2>',
             '  <p class="hook">Office politics, difficult people, bad managers and layoffs, written up as a bestiary. Funny on the outside, real advice on the inside.</p>',
-            f'  <ul class="shelf shelf-series">\n{darkside_items(darkside)}\n  </ul>',
+            f'  <p>A survival grimoire for <b>MetroVolt Electric</b>, in {NUMBER_WORDS[len(darkside)]} Acts and {sum(len(a["entries"]) for a in darkside.values())} entries, each with a painted plate, its origin story, counter-spells, a mirror and a rehearsal. Tap a spine to pull an Act off the shelf, or <a href="darkside/index.html">open the whole grimoire</a>.</p>',
+            darkside_shelf(darkside),
         ] if darkside else []),
         '  <h2 id="future"><span class="num">→</span>Future log <span class="side">plans, not promises</span></h2>',
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
