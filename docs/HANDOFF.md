@@ -55,7 +55,7 @@ vertical slices, functional core, four classic GoF notes and a museum of retired
 Also fixed: a related note with the same slug in another volume was silently not linked (`related_items`); three older
 links now work (Ana's Strangler Fig ↔ Vol. 1, Sanne's Risk Register → Ana's).
 
-**Series 3 · Deep dives** started on 14 Nov 2026: Season 1 is written (`/deep-dives/<slug>/`), and Season 2 has begun with Sign-in, Tokens & Sessions and Replication, Failover & Leader Election. Season 1: Saga, Reliable Messaging, The Resilience Stack, Event Sourcing & CQRS
+**Series 3 · Deep dives** started on 14 Nov 2026: Season 1 is written (`/deep-dives/<slug>/`), and Season 2 has begun with Sign-in, Tokens & Sessions, Replication, Failover & Leader Election, Sharding & Partitioning and Indexes & Query Plans. Season 1: Saga, Reliable Messaging, The Resilience Stack, Event Sourcing & CQRS
 Caching and Zero-Downtime Change, all deployed. Working branch `claude/design-patterns-deep-dive-ggw0on`. Read `docs/HANDOFF-deep-dives.md` for the plan and format.
 
 ## 1b. In progress: improving the earlier books (2026-11-16)
@@ -134,7 +134,7 @@ cloth, `COVER_ART`). 18 extra notes (3 per volume, `content/<key>/05_extra.py`) 
   the file tool and run them; don't delete scratch folders.
 - Before deploying, **fetch and merge `main`**: other sessions merge to it too. The generated `public/` files conflict by
   the hundred; resolve the source conflict (`scripts/build_notes.py`), rebuild, `git add -A`.
-- A deploy renders only the PDFs that changed (fingerprints in `.pdf-cache/manifest.json`, kept in the Actions cache), so most deploys take a few minutes. A stylesheet change, a change to `scripts/build-pdf.mjs`, a Playwright upgrade or an evicted cache means a full rebuild (about 15 minutes). Force one with “Run workflow” → “Render every PDF again”. The run does not appear in the Actions list for the
+- A deploy renders only the PDFs that changed (fingerprints in `.pdf-cache/manifest.json`, kept in the Actions cache), so most deploys take a few minutes. A stylesheet change, a change to `scripts/build-pdf.mjs`, a Playwright upgrade or an evicted cache means a full rebuild (about 15 minutes). Force one with “Run workflow” → “Render every PDF again”. To render only chosen PDFs, edit `pdf-build.json` at the root: `rebuild` lists journal keys (or single PDF paths) that are always rendered; `only_listed: true` renders nothing else and copies every other PDF from the cache, even if its page changed (those stay marked out of date, and the run log lists them as “kept, out of date”). Set `only_listed` back to `false` to catch up. Check with `npm run pdf -- --dry-run`. The run does not appear in the Actions list for the
   first seconds after a merge.
 - Doodle text: use `Doodle.row()` for rows of boxes; with 5 boxes keep labels under 12 characters, with 4 under 15.
 - **Doodle font sizes are fixed by the stylesheet** (`.t` 19px, `.t-head` 21px, `.t-s` 21px): the `size=` argument has

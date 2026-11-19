@@ -48,7 +48,7 @@ The landing page (`/`) shows two shelves (Series 1: design patterns; Series 2: p
 
 Long, chaptered pages that start where a note stops (`/deep-dives/<slug>/`): the real mechanism, failure drills,
 testing, operations and tools, in the “annotated textbook” skin with a skim mode and a phone chapter dock.
-Written so far: **Saga**, **Reliable Messaging**, **The Resilience Stack**, **Event Sourcing & CQRS**, **Caching**, **Zero-Downtime Change**, **Sign-in, Tokens & Sessions** and **Replication, Failover & Leader Election** (10 chapters each, about a 30-minute read). Content `content/deep-dives/<slug>.py`, renderer `scripts/dive.py`, styles and
+Written so far: **Saga**, **Reliable Messaging**, **The Resilience Stack**, **Event Sourcing & CQRS**, **Caching**, **Zero-Downtime Change**, **Sign-in, Tokens & Sessions**, **Replication, Failover & Leader Election**, **Sharding & Partitioning** and **Indexes & Query Plans** (10 chapters each, about a 30-minute read). Content `content/deep-dives/<slug>.py`, renderer `scripts/dive.py`, styles and
 script `public/assets/dive.css` / `dive.js`. Plan and format: `docs/HANDOFF-deep-dives.md`.
 
 ## Revisions to finished notes
@@ -91,7 +91,7 @@ Start with `docs/HANDOFF.md`: current state, next steps, how to build, verify an
 - `content/<journal>/*.py`: note content as data, including the doodles
 - `scripts/build_notes.py`: journal configs (`JOURNALS`, `PLANNED`, `FUTURE_LOG`) and the page templates
 - `scripts/doodle.py`: the hand-drawn SVG helpers (including `table()` for database tables), icon library and code highlighter (JS/TS, Python and SQL keywords)
-- `scripts/build-pdf.mjs`: builds `public/<journal>/pdf/` (one PDF per note + the whole journal) with Playwright. Only PDFs whose page changed are rendered; the rest come from `.pdf-cache/` (`npm run pdf -- --all` renders everything)
+- `scripts/build-pdf.mjs`: builds `public/<journal>/pdf/` (one PDF per note + the whole journal) with Playwright. Only PDFs whose page changed are rendered; the rest come from `.pdf-cache/` (`npm run pdf -- --all` renders everything). `pdf-build.json` chooses by hand: `rebuild` lists journals or PDFs to always render, and `only_listed: true` renders nothing else (`npm run pdf -- --dry-run` shows the plan)
 
 ## Editing
 
