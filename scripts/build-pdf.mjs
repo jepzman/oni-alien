@@ -1,6 +1,16 @@
 // Builds the ready-made PDFs (public/<key>/pdf/) using the site's own print stylesheet.
-// Usage: npm run pdf            render only the PDFs whose page changed since the last build
-//        npm run pdf -- --all   render every PDF
+// Usage: npm run pdf               render only the PDFs whose page changed since the last build
+//        npm run pdf -- --all      render every PDF
+//        npm run pdf -- --dry-run  list what would be rendered, kept and copied; render nothing
+//
+// Choosing PDFs by hand: pdf-build.json at the repository root (see the comment inside it).
+//   "rebuild": ["deep-dives/caching", "data", "data/pdf/05-indexing.pdf"]
+//       always render these, even if unchanged. An entry is a journal key (every PDF of that journal or
+//       deep dive), or the path of one PDF or one page, as listed in public/journals.json.
+//   "only_listed": true
+//       render nothing else: every other PDF is copied from the cache even if its page changed (it stays
+//       marked as out of date, so the next build without only_listed renders it). A PDF that has never
+//       been rendered is always rendered, because the deploy needs every file.
 //
 // Incremental builds: each PDF has a fingerprint (a hash of its page's HTML and the local CSS/JS/images it loads; a
 // whole-journal PDF also hashes every note it collects). Rendered PDFs and their fingerprints are kept in
@@ -24,6 +34,11 @@ const root = fileURLToPath(new URL('../public/', import.meta.url));
 const cacheDir = fileURLToPath(new URL('../.pdf-cache/', import.meta.url));
 const manifestPath = join(cacheDir, 'manifest.json');
 const force = process.argv.includes('--all') || process.env.PDF_FORCE === '1';
+const dryRun = process.argv.includes('--dry-run');
+const configPath = fileURLToPath(new URL('../pdf-build.json', import.meta.url));
+const config = existsSync(configPath) ? JSON.parse(await readFile(configPath, 'utf8')) : {};
+const rebuild = (config.rebuild || []).map((e) => e.replace(/^\/+|\/+$/g, ''));
+const onlyListed = config.only_listed === true;
 const only = (process.env.PDF_JOURNALS || '').split(',').map((s) => s.trim()).filter(Boolean);
 const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.pdf': 'application/pdf',
                 '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json' };
@@ -68,22 +83,37 @@ const journals = JSON.parse(await readFile(join(root, 'journals.json'), 'utf8'))
   .filter((j) => !only.length || only.includes(j.key));
 const jobs = [];
 for (const j of journals) {
-  for (const n of j.notes) jobs.push({ url: n.page, out: n.pdf, expect: 0, pages: [n.page] });
+  for (const n of j.notes) jobs.push({ key: j.key, url: n.page, out: n.pdf, expect: 0, pages: [n.page] });
   // the whole-journal page collects every note in the browser, so its PDF changes when any note does
-  jobs.push({ url: j.all, out: j.pdf, expect: j.notes.length, pages: [j.all, ...j.notes.map((n) => n.page)] });
+  jobs.push({ key: j.key, url: j.all, out: j.pdf, expect: j.notes.length, pages: [j.all, ...j.notes.map((n) => n.page)] });
 }
 
 const manifest = existsSync(manifestPath) ? JSON.parse(await readFile(manifestPath, 'utf8')) : {};
 for (const job of jobs) job.fp = await fingerprint(job.pages);
-const todo = jobs.filter((job) => force || manifest[job.out] !== job.fp || !existsSync(join(cacheDir, job.out)));
+const listed = (job) => rebuild.some((e) => e === job.key || e === job.out || e === job.url);
+for (const e of rebuild) {
+  if (!jobs.some((job) => e === job.key || e === job.out || e === job.url)) console.warn(`pdf-build.json: "${e}" matches no PDF`);
+}
+const cached = (job) => existsSync(join(cacheDir, job.out));
+const todo = jobs.filter((job) => force || listed(job) || !cached(job) || (!onlyListed && manifest[job.out] !== job.fp));
 const reuse = jobs.filter((job) => !todo.includes(job));
+const kept = reuse.filter((job) => manifest[job.out] !== job.fp);   // changed, but only_listed kept the old PDF
+
+console.log(`PDFs: ${todo.length} to render (${todo.filter(listed).length} listed in pdf-build.json, `
+  + `${todo.filter((j) => !listed(j) && !cached(j)).length} never rendered), ${reuse.length - kept.length} unchanged, `
+  + `${kept.length} changed but kept${onlyListed ? ' (only_listed)' : ''}${force ? ' · forced: everything' : ''}`);
+for (const job of kept.slice(0, 20)) console.log(`  kept, out of date: ${job.out}`);
+if (kept.length > 20) console.log(`  … and ${kept.length - 20} more`);
+if (dryRun) {
+  for (const job of todo) console.log(`  would render: ${job.out}`);
+  process.exit(0);
+}
 
 // ---------------------------------------------------------------- copy what's unchanged
 for (const job of reuse) {
   await mkdir(dirname(join(root, job.out)), { recursive: true });
   await copyFile(join(cacheDir, job.out), join(root, job.out));
 }
-console.log(`PDFs: ${reuse.length} unchanged (from the cache), ${todo.length} to render${force ? ' (forced)' : ''}`);
 
 // ---------------------------------------------------------------- render what changed
 if (todo.length) {

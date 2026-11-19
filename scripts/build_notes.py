@@ -1146,7 +1146,7 @@ PLANNED_PROJECT = [
 ]
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Going-deeper chapters for Vols. 7 and 8: aggregates, bounded contexts, ports &amp; adapters"), ("•", "Search across every journal")]),
-    ("Jan 2027", [("↓", "More deep dives: Sharding &amp; Partitioning, Indexes &amp; Query Plans"), ("•", "One-page printable cheat sheet per collection")]),
+    ("Jan 2027", [("•", "One-page printable cheat sheet per collection")]),
     ("Mar 2027", [("•", "Cheat sheets for Book 3: PMBOK 8 on one page, earned value, critical path"), ("•", "Vol. 9 · AI App Patterns")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations")]),
     ("Mid 2027", [("↓", "More deep dives: Observability &amp; SLOs, Rendering on the Web, Multitenancy"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
@@ -2138,7 +2138,7 @@ def render_landing(sheets=(), dives=(), darkside=None):
 
 # ---------------------------------------------------------------- deep dives (series 3)
 # One long chaptered page per topic: content/deep-dives/<name>.py, rendered by scripts/dive.py.
-DIVES = ["saga", "reliable_messaging", "resilience_stack", "event_sourcing_cqrs", "caching", "zero_downtime_change", "sign_in", "replication_failover"]
+DIVES = ["saga", "reliable_messaging", "resilience_stack", "event_sourcing_cqrs", "caching", "zero_downtime_change", "sign_in", "replication_failover", "sharding_partitioning", "indexes_query_plans"]
 DEEPER = {}   # (journal key, note slug) -> (dive slug, title); filled by load_dive
 
 
