@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sign-in, Tokens &amp; Sessions · Deep dive · Jef’s Notes</title>
+<meta name="description" content="A deep dive on sign-in, tokens and sessions: the four layers of a session, session ids and JWTs, six failure drills, revocation, lifetimes and key rotation, credential stuffing and recovery, operations and testing.">
+<meta name="theme-color" content="#E4E1D9">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,700;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/dive.css?v=2b16c30ec1">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/dive.js?v=03c39c00d2" defer></script>
+</head>
+<body class="dive">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah" d="M0 0 L10 4 L0 8z"/></marker><marker id="ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah-r" d="M0 0 L10 4 L0 8z"/></marker></defs></svg>
+<a class="skip-link" href="#main">Skip to the text</a>
+<header class="site" id="top">
+  <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>deep dive 07</small></a>
+  <a class="site-link" href="../../index.html#deep-dives">Shelf</a>
+</header>
+<div class="strip" data-strip>
+  <div class="strip-in">
+    <nav aria-label="Chapters"><a href="#recap" data-ch="0"><b>1</b> Recap</a><a href="#sessions" data-ch="1"><b>2</b> Four layers</a><a href="#stateful" data-ch="2"><b>3</b> Ids or tokens</a><a href="#drills" data-ch="3"><b>4</b> Failure drills</a><a href="#revocation" data-ch="4"><b>5</b> Revocation</a><a href="#numbers" data-ch="5"><b>6</b> Numbers</a><a href="#frontdoor" data-ch="6"><b>7</b> Front door</a><a href="#running" data-ch="7"><b>8</b> Running it</a><a href="#testing" data-ch="8"><b>9</b> Testing</a><a href="#tools" data-ch="9"><b>10</b> Tools &amp; lab</a></nav>
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+  </div>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+</div>
+
+<main id="main" class="wrap"><article class="page"><div class="col">
+<p class="eyebrow">Deep dive 07 · builds on Vol. 5, notes 03, 04, 07 and 11</p>
+<h1><span>Sign-in, Tokens &amp; Sessions</span></h1>
+<p class="sub">Four credentials with four clocks: how long a customer is really signed in, what “sign out” ends, and how to take access back.</p>
+<ul class="facts"><li><b>Full read</b> about 29 min</li><li><b>Skim</b> about 15 min: yellow boxes, tables and drill rules</li><li><b>Example</b> customer 7, a laptop and a phone, signed in to the mug shop</li></ul>
+<nav class="toc" aria-label="Contents">
+  <h2 class="toc-h">In this deep dive</h2>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Four notes in sixty seconds</span><span class="m">2 min</span></a></li><li><a href="#sessions" data-ch="1"><span class="n">2</span><span class="t">Four layers, four clocks</span><span class="m">2 min</span></a></li><li><a href="#stateful" data-ch="2"><span class="n">3</span><span class="t">Session ids or tokens</span><span class="m">2 min</span></a></li><li><a href="#drills" data-ch="3"><span class="n">4</span><span class="t">Failure drills</span><span class="m">5 min</span></a></li><li><a href="#revocation" data-ch="4"><span class="n">5</span><span class="t">Taking access back: the hard problem</span><span class="m">3 min</span></a></li><li><a href="#numbers" data-ch="5"><span class="n">6</span><span class="t">Lifetimes, worked out</span><span class="m">2 min</span></a></li><li><a href="#frontdoor" data-ch="6"><span class="n">7</span><span class="t">The front door: login and recovery</span><span class="m">3 min</span></a></li><li><a href="#running" data-ch="7"><span class="n">8</span><span class="t">Running it</span><span class="m">2 min</span></a></li><li><a href="#testing" data-ch="8"><span class="n">9</span><span class="t">Testing it</span><span class="m">2 min</span></a></li><li><a href="#tools" data-ch="9"><span class="n">10</span><span class="t">Build or buy, a lab and the checklist</span><span class="m">4 min</span></a></li></ol>
+  <p class="toc-src">Read first: <a href="../../security/notes/oauth-pkce.html">OAuth 2.0 with PKCE</a><a href="../../security/notes/short-lived-tokens.html">Short-Lived Tokens</a><a href="../../security/notes/password-hashing.html">Password Hashing</a><a href="../../security/notes/csrf-protection.html">CSRF Protection</a></p>
+</nav>
+<section id="recap" data-title="Recap">
+<p class="ch">chapter 1 <span>· 2 min</span></p>
+<h2>Four notes in sixty seconds</h2>
+<div class="gist"><p><b>Gist</b> OAuth with PKCE starts a session, short-lived tokens keep it going, password hashing protects what the provider stores, and CSRF protection guards the cookie. Together they form one system, and the hard questions are about the whole: how long a customer is signed in, what sign-out ends, and how access is taken back.</p></div>
+
+<p>The security volume has four notes that are really one system. Customer 7 signs in to the mug shop on a laptop. The password is typed at the identity provider, never at the shop. The shop's backend receives tokens and gives the browser a cookie. The Orders API checks a token on every call.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Note</th><th scope="col">In one line</th><th scope="col">Its part of the system</th></tr></thead><tbody><tr><td>OAuth 2.0 with PKCE</td><td>sign in at the provider; the app swaps a one-time code and a secret for tokens</td><td>how a session starts</td></tr><tr><td>Short-Lived Tokens</td><td>access tokens that live minutes, refresh tokens that rotate on every use</td><td>how a session continues</td></tr><tr><td>Password Hashing</td><td>store slow, salted hashes, or better, no passwords at all</td><td>what the provider keeps</td></tr><tr><td>CSRF Protection</td><td>a cookie is sent whichever site asks; check the request really came from your page</td><td>what a cookie session must defend</td></tr></tbody></table></div><figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 230" role="img" aria-label="The pieces of one sign-in. Customer 7&#x27;s browser signs in once at the identity provider. The browser holds only a session cookie for the shop backend. The shop backend swaps the one-time code for tokens at the provider and keeps the refresh token. It calls the Orders API with a ten-minute access token, which the API checks on every call.">
+  <rect class="bx-y" x="420" y="14" width="200" height="50" rx="8"/><text class="lbl" x="520" y="45" text-anchor="middle">identity provider</text>
+  <rect class="bx" x="10" y="130" width="120" height="56" rx="8"/><text class="lbl" x="70" y="156" text-anchor="middle">browser</text><text class="soft" x="70" y="176" text-anchor="middle">customer 7</text>
+  <rect class="bx-g" x="250" y="130" width="160" height="56" rx="8"/><text class="lbl" x="330" y="163" text-anchor="middle">shop backend</text>
+  <rect class="bx" x="600" y="130" width="150" height="56" rx="8"/><text class="lbl" x="675" y="163" text-anchor="middle">Orders API</text>
+  <path class="ln-d" d="M70 128 Q120 40 416 40" marker-end="url(#a)"/><text class="soft" x="200" y="34" text-anchor="middle">signs in here, once</text>
+  <path class="ln" d="M130 158 H248" marker-end="url(#a)"/><text class="soft" x="190" y="148" text-anchor="middle">session cookie</text>
+  <path class="ln" d="M370 128 L470 66" marker-end="url(#a)"/><text class="soft" x="432" y="108">swap code for tokens</text>
+  <path class="ln" d="M410 158 H598" marker-end="url(#a)"/><text class="soft" x="504" y="148" text-anchor="middle">access token, 10 min</text>
+  <text class="soft" x="330" y="212" text-anchor="middle">the refresh token stays here</text>
+  <text class="soft" x="675" y="212" text-anchor="middle">checks every token</text>
+</svg></div><figcaption>Three parties, four kinds of credential. The browser never holds a token.</figcaption></figure><aside class="mn">The OAuth note's own going-deeper chapter covers where tokens live and how an API checks one. This dive starts from there.</aside>
+<p class="full">Each note is correct on its own. Put them together and the questions change. How long is customer 7 actually signed in, and by which of the four credentials? What does “sign out” end, and what keeps working for another ten minutes? When the shop removes someone's admin rights, when does the system notice? The answers are design decisions, and most teams make them by accident. This deep dive makes them on purpose.</p>
+
+
+<a class="next" href="#sessions"><small>next · chapter 2</small>Four layers, four clocks →</a>
+</section>
+<section id="sessions" data-title="Four layers">
+<p class="ch">chapter 2 <span>· 2 min</span></p>
+<h2>Four layers, four clocks</h2>
+<div class="gist"><p><b>Gist</b> A signed-in customer is held up by a provider session, the shop's own session, a refresh token and an access token, each with its own lifetime. Sessions need idle and absolute expiry. Risky actions such as changing the email address ask for a recent sign-in instead of shortening every session.</p></div>
+
+<p>Ask a team “how long does a session last?” and you will get four different answers, all correct. A signed-in customer is held up by four separate credentials, each with its own clock.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 210" role="img" aria-label="One day of customer 7&#x27;s session as four rows. The provider session lasts days. The shop session cookie ends after 30 idle days. The refresh token rotates: r1 to r4 in the morning while browsing, r5 to r7 in the evening at checkout, and nothing in between while the customer is away. Each refresh produces a new ten-minute access token.">
+  <text x="140" y="44" text-anchor="end">provider session</text><rect class="bx-g" x="150" y="26" width="590" height="26" rx="4"/><text class="soft" x="445" y="45" text-anchor="middle">signed in at the provider: days</text>
+  <text x="140" y="84" text-anchor="end">shop session</text><rect class="bx-y" x="150" y="66" width="590" height="26" rx="4"/><text class="soft" x="445" y="85" text-anchor="middle">cookie: ends after 30 idle days</text>
+  <text x="140" y="124" text-anchor="end">refresh token</text>
+  <rect class="bx" x="190" y="106" width="34" height="26" rx="3"/><text class="soft" x="207" y="125" text-anchor="middle">r1</text>
+  <rect class="bx" x="230" y="106" width="34" height="26" rx="3"/><text class="soft" x="247" y="125" text-anchor="middle">r2</text>
+  <rect class="bx" x="270" y="106" width="34" height="26" rx="3"/><text class="soft" x="287" y="125" text-anchor="middle">r3</text>
+  <rect class="bx" x="310" y="106" width="34" height="26" rx="3"/><text class="soft" x="327" y="125" text-anchor="middle">r4</text>
+  <rect class="bx" x="540" y="106" width="34" height="26" rx="3"/><text class="soft" x="557" y="125" text-anchor="middle">r5</text>
+  <rect class="bx" x="580" y="106" width="34" height="26" rx="3"/><text class="soft" x="597" y="125" text-anchor="middle">r6</text>
+  <rect class="bx" x="620" y="106" width="34" height="26" rx="3"/><text class="soft" x="637" y="125" text-anchor="middle">r7</text>
+  <text x="140" y="164" text-anchor="end">access token</text>
+  <rect class="bx-r" x="190" y="146" width="34" height="26" rx="3"/><rect class="bx-r" x="230" y="146" width="34" height="26" rx="3"/>
+  <rect class="bx-r" x="270" y="146" width="34" height="26" rx="3"/><rect class="bx-r" x="310" y="146" width="34" height="26" rx="3"/>
+  <rect class="bx-r" x="540" y="146" width="34" height="26" rx="3"/><rect class="bx-r" x="580" y="146" width="34" height="26" rx="3"/>
+  <rect class="bx-r" x="620" y="146" width="34" height="26" rx="3"/>
+  <path class="ln-d" d="M352 140 H532"/><text class="soft" x="442" y="132" text-anchor="middle">away: nothing to refresh</text>
+  <text class="soft" x="267" y="198" text-anchor="middle">morning: browsing</text><text class="soft" x="597" y="198" text-anchor="middle">evening: checkout</text>
+</svg></div><figcaption>Four layers, four clocks. Signing out has to deal with each one.</figcaption></figure><div class="tbl"><table><thead><tr><th scope="col">Layer</th><th scope="col">Lives in</th><th scope="col">Typical life</th><th scope="col">Ends when</th></tr></thead><tbody><tr><td><b>Provider session</b></td><td>a cookie on the identity provider's own domain</td><td>days</td><td>the customer signs out at the provider, or it expires</td></tr><tr><td><b>Shop session</b></td><td>a cookie on the shop's domain, and a row in the shop's session store</td><td>30 idle days, 90 days at most</td><td>sign-out deletes the row, or it expires</td></tr><tr><td><b>Refresh token</b></td><td>the shop backend, or the phone's keychain</td><td>replaced on every use; 14 idle days</td><td>it is used, revoked or expires</td></tr><tr class=hot><td><b>Access token</b></td><td>the backend's memory; sent to the APIs</td><td>10 minutes</td><td>it expires. Usually nothing can end it earlier</td></tr></tbody></table></div><aside class="mn">The ID token is missing on purpose. It says who signed in, once. It is not a session and it is not for calling APIs.</aside>
+<h3>What one request does</h3>
+<ol>
+  <li>The browser sends the shop cookie. The backend looks up the session row: does it exist, has it expired?</li>
+  <li>The row points at the stored tokens. If the access token has more than a minute left, use it.</li>
+  <li>If not, send the refresh token to the provider. Store the new access token and the new refresh token; the old refresh token is now dead.</li>
+  <li>Call the Orders API with the access token. The API checks the signature, issuer, audience and expiry.</li>
+</ol>
+<div class="full">
+<p>Two kinds of expiry appear in the table, and a design needs both. <b>Idle</b> expiry ends a session nobody is using: 30 days without a visit. <b>Absolute</b> expiry ends every session eventually, however busy: 90 days, then sign in again. Idle without absolute gives a stolen session eternal life as long as the thief keeps it busy.</p>
+<h3>Recent sign-in for risky actions</h3>
+<p>A 30-day session is right for browsing mugs and wrong for changing the email address on the account. The usual answer is not a shorter session. It is asking again for the few actions that matter: change email, change password, add a payment card, see stored addresses. The session records <b>when</b> the customer last proved who they are, and those actions require that to be within ten minutes. If it is older, the shop sends the customer to the provider with a request to sign in again (in OpenID Connect, <code>max_age</code> or <code>prompt=login</code>) and checks the time in the new ID token.</p>
+<p>That way a stolen laptop with an open session can buy mugs, which is annoying, but cannot take over the account, which is a disaster.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>A stolen laptop has an open 30-day session. What stops the thief from taking over the account?</summary><p>Changing the email or password requires a sign-in within the last ten minutes, which the thief cannot do without the password or passkey.</p></details><details><summary>Why have absolute expiry when idle expiry already ends unused sessions?</summary><p>A session that is used regularly, for example by a thief, would otherwise never end.</p></details></div>
+<a class="next" href="#stateful"><small>next · chapter 3</small>Session ids or tokens →</a>
+</section>
+<section id="stateful" data-title="Ids or tokens">
+<p class="ch">chapter 3 <span>· 2 min</span></p>
+<h2>Session ids or tokens</h2>
+<div class="gist"><p><b>Gist</b> A session id must be looked up but can be ended at once. A signed token needs no lookup and cannot be ended early. Most systems use both: an opaque cookie between browser and backend, short signed access tokens between services, and an opaque refresh token kept on the server.</p></div>
+
+<p>There are two ways to remember that someone signed in, and the argument between them has gone on for years. Both are right in different places.</p>
+<div class="tbl"><table><thead><tr><th scope="col"></th><th scope="col">A session id (stateful)</th><th scope="col">A self-contained token (JWT)</th></tr></thead><tbody><tr><td>What the client holds</td><td>a random id that means nothing by itself</td><td>signed data: who, which roles, until when</td></tr><tr><td>Checking it</td><td>look the id up in a store</td><td>check the signature; no lookup</td></tr><tr><td>Ending it early</td><td>delete the row; works on the next request</td><td>hard. It stays valid until it expires</td></tr><tr><td>Size</td><td>about 30 bytes</td><td>often 1 KB or more, on every request</td></tr><tr><td>Who can read it</td><td>nobody: it is a random number</td><td>anyone. It is encoded, not encrypted</td></tr><tr><td>Fits</td><td>a browser talking to its own backend</td><td>one service calling another; APIs called by many clients</td></tr></tbody></table></div><aside class="mn">“Stateless sessions” is a slogan. The day you need a sign-out button, you have state again.</aside>
+<h3>The shape most systems end up with</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Link</th><th scope="col">Credential</th><th scope="col">Why</th></tr></thead><tbody><tr><td>browser → shop backend</td><td>an opaque session cookie</td><td>short, unreadable, ends the moment the row is deleted</td></tr><tr><td>shop backend → APIs</td><td>a 10-minute JWT access token</td><td>APIs check it without a call to anyone; short life limits the damage</td></tr><tr><td>shop backend → provider</td><td>an opaque refresh token, stored server side</td><td>used rarely, checked by lookup, so it can be revoked</td></tr></tbody></table></div><div class="card"><div class="card-head"><span>set-cookie.http</span><span>the shop&#x27;s session cookie</span></div><pre><code>Set-Cookie: __Host-sid=k7Qe3w...; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=2592000</code></pre></div><div class="full">
+<p>Each attribute does one job. <code>Secure</code>: only over HTTPS. <code>HttpOnly</code>: no script in the page can read it, so a cross-site scripting bug cannot steal it. <code>SameSite=Lax</code>: not sent with forms posted from other sites, which removes most CSRF attacks. The <code>__Host-</code> prefix makes the browser refuse the cookie unless it is <code>Secure</code>, has <code>Path=/</code> and no <code>Domain</code>, so a careless subdomain cannot overwrite it.</p>
+<h3>What goes inside an access token</h3>
+<p>Little. The user id, the audience, the expiry, the scopes. Every claim is a promise that cannot be withdrawn until the token expires (drill 4), and anyone holding the token can decode it. No email address, no name, no address: if a token ends up in a log, it should not also be a data leak.</p>
+<p>The checks an API makes are listed in the OAuth note's going-deeper chapter. Two are worth repeating because they are skipped so often. Check the <b>audience</b>: a token issued for the Loyalty API must not be accepted by the Orders API, or one weak service can lend its tokens to all the others. And fix the <b>algorithm</b> in configuration: never let the token's own header choose it.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why is a JWT a poor choice for the browser's session cookie?</summary><p>It is large, readable by anyone who holds it, and stays valid until it expires, so sign-out cannot end it. A random id does none of that.</p></details><details><summary>The Orders API accepts any valid token from the provider. What is missing?</summary><p>The audience check. A token issued for another service, perhaps a weaker one, would be accepted.</p></details></div>
+<a class="next" href="#drills"><small>next · chapter 4</small>Failure drills →</a>
+</section>
+<section id="drills" data-title="Failure drills">
+<p class="ch">chapter 4 <span>· 5 min</span></p>
+<h2>Failure drills</h2>
+<div class="gist"><p><b>Gist</b> Six ways sessions go wrong: a stolen refresh token, two tabs that look like a theft, a sign-out that leaves the provider session open, a removed admin whose token still says admin, a session id chosen by the attacker, and one server with a fast clock.</p></div>
+<aside class="mn">Cover the bottom half of each card. What happens next?</aside>
+<ul class="drill-index" aria-label="The six drills">
+  <li><a href="#drill-1">1 · stolen refresh token</a></li><li><a href="#drill-2">2 · two tabs</a></li><li><a href="#drill-3">3 · sign-out</a></li>
+  <li><a href="#drill-4">4 · former admin</a></li><li><a href="#drill-5">5 · fixation</a></li><li><a href="#drill-6">6 · fast clock</a></li>
+</ul>
+<div class="drill" id="drill-1"><header><span>Drill 1</span><h3>The refresh token is copied off the phone</h3></header><dl><dt>Timeline</dt><dd>Malware on customer 7's phone copies the refresh token <code>r5</code>. From another machine the attacker uses it and receives a fresh pair, <code>r6</code> and an access token. A minute later the real app, still holding <code>r5</code>, tries to refresh.</dd><dt class="full">Without rotation</dt><dd class="full">Nothing happens at all. A refresh token that is never replaced works for the attacker for 14 days, renewing itself each time, and nobody can tell the two users apart.</dd><dt>What saves you</dt><dd>Rotation with reuse detection. <code>r5</code> was already used, so its second appearance means two parties hold it. The provider cannot tell which is real, so it revokes the whole family: <code>r6</code> stops working too. Both are signed out. The customer signs in again with a password or passkey; the attacker cannot.</dd></dl><p class="rule">Rule: rotate refresh tokens on every use, and treat a reused one as theft: revoke everything that descends from it.</p></div><div class="drill" id="drill-2"><header><span>Drill 2</span><h3>Two tabs refresh at the same moment</h3></header><dl><dt>Timeline</dt><dd>Customer 7 has the shop open in two browser tabs that each hold tokens (a design the shop later dropped). Both access tokens expire at 10:00. Both tabs refresh within 40 ms using the same <code>r3</code>.</dd><dt class="full">What you see</dt><dd class="full">The second request looks exactly like drill 1. The family is revoked and a paying customer is signed out for no reason. Support hears “your site keeps logging me out”, mostly from the most active customers.</dd><dt>What saves you</dt><dd>Make refreshing happen in one place: the backend holds the tokens and refreshes under a lock per session, so concurrent requests wait for one refresh. Where clients must refresh themselves, give reuse a short grace period: within a few seconds, a repeat from the same client gets the same new pair back instead of a revocation.</dd></dl><p class="rule">Rule: real clients race with themselves. Serialise the refresh, or forgive an immediate repeat.</p></div><div class="drill" id="drill-3"><header><span>Drill 3</span><h3>Signed out, and signed straight back in</h3></header><dl><dt>Timeline</dt><dd>On a library computer customer 7 clicks “Sign out”. The shop deletes its cookie. The next person clicks “Sign in”, is sent to the provider, and is let straight through: the provider session is still alive. They are now customer 7.</dd><dt class="full">What else is still alive</dt><dd class="full">The refresh token, if the shop only cleared its cookie and kept the tokens. And the last access token, for up to ten minutes, wherever it was copied.</dd><dt>What saves you</dt><dd>Sign-out ends every layer you can reach: delete the session row, revoke the refresh token at the provider, then send the browser to the provider's sign-out endpoint so its session ends too (in OpenID Connect, RP-initiated logout). The access token's remaining minutes are the price of not checking it; chapter 5 shows how to shorten that window when it matters.</dd></dl><p class="rule">Rule: sign-out must end the provider session and the refresh token, not just your own cookie.</p></div><div class="drill" id="drill-4"><header><span>Drill 4</span><h3>The admin who is no longer an admin</h3></header><dl><dt>Timeline</dt><dd>At 10:00 a staff member's admin role is removed because they are leaving. Their access token, issued at 9:58, contains <code>"role": "admin"</code> and expires at 10:08. At 10:05 they export the customer list.</dd><dt class="full">What you see</dt><dd class="full">The audit log shows an admin export after the role was removed. Every system did what it was told: the token was valid, and it said admin. With the 24-hour tokens some teams use, the window is a day.</dd><dt>What saves you</dt><dd>Treat claims in a token as a promise that lasts until expiry, and choose what you put in that promise. Keep privileged tokens short. For the few dangerous actions (exports, refunds, role changes), check the permission at the source at the moment of the action, not from the token. And push removals through one of the revocation mechanisms in chapter 5.</dd></dl><p class="rule">Rule: whatever a token says stays true until it expires. Check dangerous permissions live.</p></div><div class="drill" id="drill-5"><header><span>Drill 5</span><h3>The session id the attacker chose</h3></header><dl><dt>Timeline</dt><dd>The shop gives every visitor a session cookie before sign-in, to hold the basket. An attacker visits, gets <code>sid=abc</code>, and plants that cookie in the victim's browser through a vulnerable subdomain. The victim signs in. The shop marks <code>abc</code> as signed in.</dd><dt class="full">What you see</dt><dd class="full">The attacker, holding <code>abc</code>, is now signed in as the victim. No password was stolen and no token was copied.</dd><dt>What saves you</dt><dd>Issue a new session id at sign-in and at every change of privilege, and copy the basket across. The old id stays an anonymous basket. The <code>__Host-</code> cookie prefix from chapter 3 also stops a subdomain from setting the cookie in the first place.</dd></dl><p class="rule">Rule: a session id never survives sign-in. Always issue a new one.</p></div><div class="drill" id="drill-6"><header><span>Drill 6</span><h3>One server's clock is three minutes fast</h3></header><dl><dt>Timeline</dt><dd>One of six API servers lost its time sync after a host move. Its clock is three minutes ahead. Every access token it sees in the last three minutes of its life is already expired.</dd><dt class="full">What you see</dt><dd class="full">About one request in six gets a 401 near the end of a token's life, the client refreshes, and sometimes the refresh lands in drill 2. The reports say “random logouts”. Nobody can reproduce them on a laptop.</dd><dt>What saves you</dt><dd>Keep clocks synced and alert when one drifts by more than a second or two. Allow a small leeway, 30 to 60 seconds, when checking <code>exp</code> and <code>nbf</code>. Refresh tokens a minute before they expire, not after a 401.</dd></dl><p class="rule">Rule: token checks depend on clocks. Sync them, watch them, and allow a minute of leeway.</p></div><div class="full">
+<h3>What the six drills add up to</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Decision</th><th scope="col">Drill</th></tr></thead><tbody><tr><td>refresh tokens rotate; reuse revokes the family</td><td>1</td></tr><tr><td>refreshing happens in one place, or tolerates an immediate repeat</td><td>2</td></tr><tr><td>sign-out reaches the provider and revokes the refresh token</td><td>3</td></tr><tr><td>tokens carry few privileges; dangerous actions check live</td><td>4</td></tr><tr><td>a new session id at every sign-in</td><td>5</td></tr><tr><td>synced clocks and a small leeway</td><td>6</td></tr></tbody></table></div>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Customers who keep many tabs open are being signed out several times a day. Which drill, and which fix?</summary><p>Drill 2: concurrent refreshes look like reuse. Refresh in one place under a lock, or allow a short grace period for immediate repeats.</p></details><details><summary>After sign-out on a shared computer, the next person signs in as the previous customer without a password. What did sign-out miss?</summary><p>The provider session. Sign-out must also send the browser to the provider's sign-out endpoint.</p></details></div>
+<a class="next" href="#revocation"><small>next · chapter 5</small>Taking access back: the hard problem →</a>
+</section>
+<section id="revocation" data-title="Revocation">
+<p class="ch">chapter 5 <span>· 3 min</span></p>
+<h2>Taking access back: the hard problem</h2>
+<div class="gist"><p><b>Gist</b> A token nobody checks cannot be taken back, so revocation means buying back some checking. Revoking refresh tokens stops renewals; a user version in every token, checked with a short cache, ends all older tokens within seconds; dangerous actions check permissions live. Choose the mechanism per event.</p></div>
+
+<p>Short-lived tokens were adopted to avoid a hard problem: checking, on every request, whether a credential is still good. A token nobody checks again cannot be taken back. Revocation is buying back some of that checking, and it is worth deciding how much you need for each kind of event.</p>
+<h3>Six events that should end access</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Event</th><th scope="col">How fast must it work?</th></tr></thead><tbody><tr><td>customer signs out on this device</td><td>now, on this device</td></tr><tr><td>“sign out of all devices”</td><td>within a minute</td></tr><tr><td>password changed or reset</td><td>within a minute, everywhere except the device that changed it</td></tr><tr><td>phone reported stolen</td><td>now</td></tr><tr><td>admin role removed, employee leaves</td><td>now for dangerous actions; minutes for the rest</td></tr><tr><td>a token appears in a log or a public repository</td><td>now</td></tr></tbody></table></div>
+<h3>Six mechanisms, cheapest first</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Mechanism</th><th scope="col">How</th><th scope="col">Cost</th><th scope="col">Delay</th></tr></thead><tbody><tr><td><b>Wait</b></td><td>do nothing; the access token expires</td><td>none</td><td>up to its lifetime: 10 minutes</td></tr><tr><td><b>Revoke the refresh token</b></td><td>delete it at the provider</td><td>none extra</td><td>no new access tokens; the current one lives on</td></tr><tr><td><b>Delete the session row</b></td><td>the shop backend stops using the session</td><td>a lookup the backend already does</td><td>immediate for the web app</td></tr><tr class=hot><td><b>User version</b></td><td>tokens carry <code>sv: 7</code>; the user record holds 7; bump it to 8 to end every older token</td><td>one cached lookup per request, per user</td><td>as long as the cache: say 30 seconds</td></tr><tr><td><b>Deny list</b></td><td>list revoked token ids (<code>jti</code>); entries expire when the tokens would</td><td>one lookup per request</td><td>seconds</td></tr><tr><td><b>Introspection</b></td><td>ask the provider about every token</td><td>a network call per request; the provider becomes critical</td><td>none</td></tr></tbody></table></div><aside class="mn">The user-version row is the workhorse: one number per user, and every token older than it is dead.</aside><div class="card"><div class="card-head"><span>require-current-user.ts</span><span>end every older token by bumping one number</span></div><pre><code><span class="k">export</span> <span class="k">async</span> <span class="k">function</span> requireCurrentUser(token: Claims) {
+  <span class="c">// cached for 30 s: a revocation takes effect within half a minute</span>
+  <span class="k">const</span> current = <span class="k">await</span> cache.get(<span class="s">`user-version:${token.sub}`</span>, 30, () =&gt;
+    db.value(<span class="s">"SELECT session_version FROM users WHERE id = $1"</span>, [token.sub]));
+
+  <span class="k">if</span> (token.sv &lt; current) <span class="k">throw</span> <span class="k">new</span> Unauthorized(<span class="s">"Session ended, please sign in again"</span>);
+}
+
+<span class="c">// "sign out everywhere", password change, role removal:</span>
+<span class="c">// UPDATE users SET session_version = session_version + 1 WHERE id = $1;</span></code></pre></div><div class="full">
+<h3>Choosing per event</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Event</th><th scope="col">Use</th></tr></thead><tbody><tr><td>sign out on this device</td><td>delete the session row, revoke its refresh token, end the provider session (drill 3)</td></tr><tr><td>sign out of all devices, password change</td><td>bump the user version; revoke every refresh token of the user</td></tr><tr><td>phone stolen</td><td>revoke that device's refresh token family; bump the user version if in doubt</td></tr><tr><td>admin role removed</td><td>bump the user version, and check dangerous actions live anyway (drill 4)</td></tr><tr><td>token leaked in a log</td><td>deny-list its id until it would expire; find out why tokens reach logs</td></tr><tr><td>signing key leaked</td><td>rotate the key. Every token signed with it dies, which signs everyone out. Accept it</td></tr></tbody></table></div><p>Most of the shop needs nothing beyond the first two mechanisms and the user version. Introspection on every request is rarely worth it; if a service needs that much certainty, it can call introspection for the few calls that matter.</p>
+<h3>When the provider can tell you</h3>
+<p>Identity providers can also push events to the applications that rely on them. OpenID Connect back-channel logout sends a signed message to the shop when a session ends at the provider, so the shop can delete its own row. Newer standards for sharing security signals between services (CAEP, part of the OpenID Shared Signals framework) carry events such as “credentials changed” or “session revoked”. They do not remove the need for short lifetimes, because a message can be lost. They shorten the window on a good day.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why is a user version cheaper than a deny list of tokens?</summary><p>It is one number per user, cached, and one bump ends every older token. A deny list needs an entry for each token and a lookup of each one.</p></details><details><summary>A signing key has leaked. What is the only complete fix, and its cost?</summary><p>Rotate the key at once. Every token signed with it stops working, so every user signs in again.</p></details></div>
+<a class="next" href="#numbers"><small>next · chapter 6</small>Lifetimes, worked out →</a>
+</section>
+<section id="numbers" data-title="Numbers">
+<p class="ch">chapter 6 <span>· 2 min</span></p>
+<h2>Lifetimes, worked out</h2>
+<div class="gist"><p><b>Gist</b> Each lifetime follows from what it protects: ten-minute access tokens bound how long a revoked user keeps going, fourteen idle days keep returning shoppers signed in, and a recent sign-in guards risky actions. Shorter access tokens multiply refresh traffic. Rotate signing keys in steps so both keys are published for a while.</p></div>
+
+<p>Lifetimes are usually copied from a tutorial. Here they are worked out for the shop, each from what it protects.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Setting</th><th scope="col">Reasoning</th><th scope="col">Value</th></tr></thead><tbody><tr><td><b>Access token</b></td><td>the longest a revoked user may keep calling an API without a live check</td><td>10 min</td></tr><tr><td><b>Refresh token</b>, idle</td><td>a shopper who comes back after a fortnight should not have to sign in</td><td>14 days</td></tr><tr><td><b>Refresh token</b>, absolute</td><td>every device proves itself again eventually</td><td>90 days</td></tr><tr><td><b>Shop session</b>, idle and absolute</td><td>the same as the refresh token it uses</td><td>30 / 90 days</td></tr><tr><td><b>Recent sign-in</b> for risky actions</td><td>long enough to finish changing an email address</td><td>10 min</td></tr><tr><td><b>Clock leeway</b></td><td>covers small drift, not a broken clock (drill 6)</td><td>60 s</td></tr><tr><td><b>Refresh before expiry</b></td><td>no request ever meets an expired token</td><td>1 min early</td></tr><tr><td><b>Refresh grace</b></td><td>an immediate repeat from the same client is not theft (drill 2)</td><td>10 s</td></tr><tr><td><b>User-version cache</b></td><td>how late “sign out everywhere” may take effect</td><td>30 s</td></tr></tbody></table></div><aside class="mn">Write the reasoning next to each number in the config. Next year somebody will want to change it.</aside>
+<h3>What the refresh traffic costs</h3>
+<p>At the evening peak 20,000 customers are active. Each refreshes once per access-token lifetime, every ten minutes: 20,000 ÷ 600 s ≈ <b>33 refreshes a second</b>. Shortening access tokens to two minutes would make it 167 a second, five times the load on the provider, to close a window that the user version already closes in 30 seconds. Shorter is not automatically safer; it is a cost you should be able to name.</p>
+<div class="full">
+<h3>Rotating the signing key</h3>
+<p>APIs check access tokens against the provider's public keys, published as a JSON Web Key Set and cached. Each token names its key with <code>kid</code>. A key change done in one step signs everyone out: new tokens are signed with a key the APIs have not fetched yet, and old tokens stop verifying the moment the old key disappears.</p>
+<div class="tbl"><table><thead><tr><th scope="col">When</th><th scope="col">Step</th></tr></thead><tbody><tr><td>day 0</td><td>publish the new key in the key set, next to the old one. Keep signing with the old key</td></tr><tr><td>day 1</td><td>start signing with the new key. Every API has fetched the set by now</td></tr><tr><td>day 1 + 10 min + cache time</td><td>the last token signed with the old key has expired</td></tr><tr><td>day 2</td><td>remove the old key from the set</td></tr></tbody></table></div><p>APIs cache the key set for a few hours and fetch it again when they meet an unknown <code>kid</code>, with a limit on how often, so a stream of tokens with made-up key ids cannot turn into a stream of fetches.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Halving the access-token lifetime from 10 to 5 minutes: what does it cost, and what does it buy if user versions are already in place?</summary><p>It doubles refresh traffic to the provider. It buys little: the user version already ends revoked tokens within 30 seconds.</p></details><details><summary>Why publish the new signing key a day before using it?</summary><p>APIs cache the key set. They must have the new key before any token signed with it arrives.</p></details></div>
+<a class="next" href="#frontdoor"><small>next · chapter 7</small>The front door: login and recovery →</a>
+</section>
+<section id="frontdoor" data-title="Front door">
+<p class="ch">chapter 7 <span>· 3 min</span></p>
+<h2>The front door: login and recovery</h2>
+<div class="gist"><p><b>Gist</b> Stolen passwords from other sites are tried against every login page, so limit attempts per account, per address and on the overall failure rate, refuse leaked passwords, and offer passkeys. The slow hash needs a cap of its own. Account recovery is part of sign-in and must be as strong.</p></div>
+
+<p>Everything so far starts after sign-in. The sign-in itself, and the paths around it, are where accounts are actually taken. If the shop runs its own passwords instead of using a provider, this chapter is its job; if not, it is a list of things to check that the provider does.</p>
+<h3>Credential stuffing</h3>
+<p>Billions of email and password pairs from other sites' leaks are for sale. Attackers try them against every login page, slowly and from many addresses. The password-hashing note protects stolen hashes; it does nothing against a correct password that was stolen somewhere else.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Defence</th><th scope="col">Stops</th></tr></thead><tbody><tr><td>limit attempts per account, with growing delays</td><td>many guesses at one customer</td></tr><tr><td>limit attempts per address and per network</td><td>one machine trying many accounts</td></tr><tr><td>watch the overall failure rate</td><td>the slow, spread-out attack the first two miss: an alert when failures jump from 5 % to 40 %</td></tr><tr><td>refuse passwords that appear in known leaks</td><td>the reused password at the door; checked by sending a short hash prefix, never the password</td></tr><tr><td>a second factor, or passkeys</td><td>a correct password on its own</td></tr></tbody></table></div><aside class="mn">Passkeys end this chapter's first half: there is nothing to stuff. Offer them, and make them the default where you can.</aside>
+<h3>The hash on the login path</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Quantity</th><th scope="col">Value</th></tr></thead><tbody><tr><td>Argon2id settings</td><td>64 MB of memory, 3 passes: about 50 ms per hash</td></tr><tr><td>Logins at the evening peak</td><td>40 a second</td></tr><tr><td>CPU busy hashing</td><td>40 × 0.05 s = 2 cores</td></tr><tr><td>Memory while hashing</td><td>40 × 0.05 × 64 MB ≈ 130 MB in flight</td></tr><tr><td>An attacker sending 2,000 a second</td><td>100 cores. Cap concurrent hashes and refuse early</td></tr></tbody></table></div><div class="full">
+<p>The slow hash that protects a leaked table is also an easy way to overload the login service. Put the rate limits in front of the hash, and a bulkhead around it: a fixed number of hashes at once, and a fast “try again” beyond that.</p>
+<div class="card"><div class="card-head"><span>verify-password.ts</span><span>check, and upgrade old hashes on the way</span></div><pre><code><span class="k">export</span> <span class="k">async</span> <span class="k">function</span> checkPassword(user: User | <span class="k">null</span>, password: string) {
+  <span class="c">// unknown email: hash anyway, so the answer takes the same time</span>
+  <span class="k">const</span> stored = user?.passwordHash ?? DUMMY_HASH;
+  <span class="k">const</span> ok = <span class="k">await</span> argon2.verify(stored, password);
+  <span class="k">if</span> (!user || !ok) <span class="k">return</span> <span class="k">false</span>;
+
+  <span class="k">if</span> (argon2.needsRehash(stored, CURRENT_SETTINGS)) {        <span class="c">// settings raised since this hash was made</span>
+    <span class="k">await</span> users.setPasswordHash(user.id, <span class="k">await</span> argon2.hash(password, CURRENT_SETTINGS));
+  }
+  <span class="k">return</span> <span class="k">true</span>;
+}</code></pre></div><p>Two habits are in those lines. An unknown email address takes the same time and gets the same message as a wrong password, so the login form cannot be used to find out who has an account. And old hashes are upgraded the next time their owner signs in, which is the only moment the shop ever has the password in hand.</p>
+<h3>Recovery is the real front door</h3>
+<p>An account is only as strong as the easiest way to get back into it. A reset email that anyone can trigger, with a link that never expires, is a password that the attacker gets to choose.</p>
+<ul>
+  <li><b>Reset links</b> work once, expire in 30 minutes, and are stored as a hash, like a password.</li>
+  <li><b>A completed reset</b> ends every other session (bump the user version) and sends a notice to the customer.</li>
+  <li><b>Changing the email address</b> needs a recent sign-in and a confirmation at the old address, or the first thing an attacker does is move the account out of reach.</li>
+  <li><b>Support staff</b> who can reset accounts by phone are part of the sign-in system. Their process needs the same thought as the code.</li>
+</ul>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why hash a dummy value when the email address is unknown?</summary><p>So the answer takes the same time as a wrong password, and the form cannot be used to discover which emails have accounts.</p></details><details><summary>A reset link is valid for 7 days and can be used repeatedly. Name two problems.</summary><p>Anyone who sees the email later, or finds it in a forwarded thread, can take the account; and it remains usable after the customer has reset their password.</p></details></div>
+<a class="next" href="#running"><small>next · chapter 8</small>Running it →</a>
+</section>
+<section id="running" data-title="Running it">
+<p class="ch">chapter 8 <span>· 2 min</span></p>
+<h2>Running it</h2>
+<div class="gist"><p><b>Gist</b> Graph sign-in success, refresh failures and token rejections, each split by reason, so a key problem, a fast clock and a refresh race look different. Keep an audit log of every security event. Redact credentials from logs and keep tokens out of URLs.</p></div>
+
+<p>Sign-in fails in two ways that look alike from outside. Customers cannot get in, or customers keep falling out. The graphs need to tell those apart.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Metric</th><th scope="col">Healthy</th><th scope="col">It means trouble when</th></tr></thead><tbody><tr><td><b>Sign-in success rate</b></td><td>steady, most attempts succeed</td><td>it falls: an outage, or a stuffing attack raising the failures</td></tr><tr><td><b>Refresh failures</b>, by reason</td><td>a few expired, almost no reuse</td><td>reuse jumps: drill 2 after a front-end change, or real theft</td></tr><tr><td><b>Token rejections at the APIs</b>, by reason: expired, signature, audience, not yet valid</td><td>almost all “expired”</td><td>“signature” rises: key rotation went wrong. “Not yet valid”: a fast clock</td></tr><tr><td><b>Sessions per customer</b></td><td>a few devices</td><td>one account with hundreds: a shared or stolen account</td></tr><tr><td><b>Resets and email changes</b></td><td>a steady trickle</td><td>a spike: someone is taking accounts through recovery</td></tr></tbody></table></div><aside class="mn">Splitting rejections by reason is the single most useful graph here. One number for “401s” hides every cause.</aside>
+<h3>Audit log</h3>
+<p>Record sign-in, sign-out, refresh-token reuse, password and email changes, second-factor changes, role changes and every revocation. Each entry says who, from which device and network, when, and why. This is the log the security team will read on its worst day.</p>
+<div class="full">
+<h3>Never log a credential</h3>
+<p>Tokens leak into logs more than anywhere else: an <code>Authorization</code> header in a request dump, a token in a URL, a session cookie in an error report. Redact those fields in the logging library, not in each service, and test that the redaction works. Keep tokens out of URLs altogether, since a URL ends up in browser history, proxy logs and the <code>Referer</code> header sent to other sites.</p>
+<h3>Runbook: “customers are being logged out at random”</h3>
+<ol>
+  <li><b>Look at the rejection reasons.</b> “Signature” points at keys. “Not yet valid” or early “expired” points at a clock. Reuse in the refresh failures points at drill 2.</li>
+  <li><b>Did keys change?</b> An old key removed before its tokens expired, or an API that cached the key set and never fetched the new one.</li>
+  <li><b>Did cookies change?</b> A new cookie name, domain or <code>SameSite</code> setting in the last release can drop sessions for some browsers.</li>
+  <li><b>Did servers change?</b> Two versions of the backend behind one load balancer, each with a different cookie secret, sign each other's customers out.</li>
+</ol>
+<h3>Runbook: “a token has leaked”</h3>
+<ol>
+  <li><b>An access token:</b> deny-list its id until it would expire, or bump the user's version. Find how it reached the place it leaked.</li>
+  <li><b>A refresh token:</b> revoke its family. The customer signs in again.</li>
+  <li><b>Many tokens, or a signing key:</b> rotate the key at once and accept that everyone signs in again. Then tell the customers what happened.</li>
+</ol>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Token rejections with reason “signature” jump after a deploy. Likely cause?</summary><p>A signing-key change: tokens signed with a key the APIs have not fetched, or the old key removed too early.</p></details><details><summary>Why should log redaction live in the logging library and not in each service?</summary><p>One missed service is enough to leak tokens, and a shared library is tested once and applies everywhere.</p></details></div>
+<a class="next" href="#testing"><small>next · chapter 9</small>Testing it →</a>
+</section>
+<section id="testing" data-title="Testing">
+<p class="ch">chapter 9 <span>· 2 min</span></p>
+<h2>Testing it</h2>
+<div class="gist"><p><b>Gist</b> Write the drills as short tests: expiry with leeway, wrong audience, unknown key, refresh reuse with and without the grace period, sign-out, a new session id at sign-in, password change ending other devices, CSRF. Check the real cookie flags in a browser, and keep the provider's settings under review.</p></div>
+
+<p>Sign-in code is usually tested on the happy path: sign in, see the page. The failures above are all about tokens and sessions in the wrong state, and each can be written as a short test.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Test</th><th scope="col">Expect</th></tr></thead><tbody><tr><td>an access token one second past expiry, beyond the leeway</td><td>401</td></tr><tr><td>a token for another audience (the Loyalty API's)</td><td>401</td></tr><tr><td>a token with <code>alg: none</code>, or signed with a key that is not in the set</td><td>401</td></tr><tr><td>a token signed with the previous key, during rotation</td><td>accepted until it expires</td></tr><tr class=hot><td>the same refresh token used twice, a minute apart</td><td>the second fails, and the family is revoked</td></tr><tr><td>the same refresh token used twice within the grace period</td><td>both get the same new pair</td></tr><tr><td>sign out, then use the old session cookie and refresh token</td><td>both rejected</td></tr><tr><td>sign in with an existing anonymous session</td><td>a new session id; the basket is still there</td></tr><tr class=hot><td>password change on the laptop</td><td>the phone's next request after 30 s is rejected</td></tr><tr><td>a POST from another origin with the session cookie and no CSRF token</td><td>403</td></tr><tr><td>sign-in with an unknown email and with a wrong password</td><td>the same message, in about the same time</td></tr></tbody></table></div><aside class="mn">Most of these are three lines with a test helper that mints tokens. Write the helper first.</aside><div class="card"><div class="card-head"><span>refresh.test.ts</span><span>drill 1, as a test</span></div><pre><code>test(<span class="s">"a reused refresh token revokes the whole family"</span>, <span class="k">async</span> () =&gt; {
+  <span class="k">const</span> { refresh: r1 } = <span class="k">await</span> signIn(<span class="s">"customer-7"</span>);
+  <span class="k">const</span> { refresh: r2 } = <span class="k">await</span> refreshWith(r1);       <span class="c">// normal rotation</span>
+
+  <span class="k">await</span> clock.advance(<span class="s">"1m"</span>);
+  <span class="k">await</span> expect(refreshWith(r1)).rejects.toThrow(<span class="s">"reuse"</span>);   <span class="c">// r1 again: theft</span>
+  <span class="k">await</span> expect(refreshWith(r2)).rejects.toThrow(<span class="s">"revoked"</span>); <span class="c">// and r2 is dead too</span>
+});</code></pre></div><div class="full">
+<h3>Check the cookie, not just the code</h3>
+<p>A unit test can pass while the real response sends the cookie without <code>HttpOnly</code>, because a proxy or framework setting changed it. Add one end-to-end check that signs in through a real browser and reads the cookie's flags as the browser stored them. The same test can try a cross-site form post against the real stack and expect it to fail.</p>
+<h3>Test the provider's settings too</h3>
+<p>Much of this system is configuration at the identity provider: lifetimes, rotation, reuse detection, allowed redirect addresses. Export that configuration, keep it in the repository, and review changes to it like code. A refresh lifetime changed from 14 days to 14 months in a console, by one person on a Friday, is a security change with no pull request.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>All unit tests pass, but the session cookie arrives without HttpOnly. How?</summary><p>Something between the code and the browser changed it: a proxy or framework setting. Only a test through a real browser sees the cookie as stored.</p></details><details><summary>Why export the identity provider's settings into the repository?</summary><p>Lifetimes and rotation rules are security decisions. Kept as files, changes to them are reviewed like code.</p></details></div>
+<a class="next" href="#tools"><small>next · chapter 10</small>Build or buy, a lab and the checklist →</a>
+</section>
+<section id="tools" data-title="Tools &amp; lab">
+<p class="ch">chapter 10 <span>· 4 min</span></p>
+<h2>Build or buy, a lab and the checklist</h2>
+<div class="gist"><p><b>Gist</b> Buy the provider and the client library; keep your session, CSRF defences, revocation checks and permissions, because only your code can do them. The lab adds “sign out of all devices” and admin removal within a minute, and the checklist turns the deep dive into review questions.</p></div>
+
+<h3>What to build and what to buy</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Part</th><th scope="col">Usually</th><th scope="col">Why</th></tr></thead><tbody><tr><td>Sign-in, passwords, passkeys, second factor, recovery</td><td>an identity provider: Auth0, Okta, Microsoft Entra ID, AWS Cognito, Keycloak, Zitadel</td><td>the hardest part to get right, and the most attacked</td></tr><tr><td>The OAuth flow in your app</td><td>a certified OpenID Connect client library</td><td>state, verifier, nonce and token checks are easy to get subtly wrong</td></tr><tr><td>Token checks at APIs</td><td>a maintained JWT library, configured strictly</td><td>never parse tokens by hand</td></tr><tr><td>Your session, CSRF, cookie settings</td><td>yours</td><td>the provider does not see your cookies</td></tr><tr><td>Revocation inside your APIs</td><td>yours</td><td>only your APIs can check a user version</td></tr><tr><td>Who may do what</td><td>yours</td><td>the provider knows who someone is, not what they may do in your shop</td></tr></tbody></table></div><aside class="mn">Buying the provider moves the front door out of your code. It does not move the house.</aside>
+<h3>Lab</h3>
+<p>The shop adds two features. Customers get a “Sign out of all devices” button in their account settings. Staff get an admin area, and when a staff member's admin role is removed, it must stop working within one minute, and exports must stop at once.</p>
+<ol class="keep">
+  <li>What happens, layer by layer, when “Sign out of all devices” is pressed on the laptop?</li>
+  <li>What does the phone app see, and when?</li>
+  <li>How do you meet “within one minute” for the admin role without checking the provider on every request?</li>
+  <li>How do you meet “at once” for exports?</li>
+  <li>A staff member is in the middle of a 40-minute export when the role is removed. What should happen?</li>
+</ol>
+<div class="check quiz"><h3>model answer</h3>
+<details><summary>1 · The button</summary><p>The shop bumps customer 7's user version, revokes every refresh token the provider holds for that user, deletes the session rows for the other devices, and keeps the laptop's own session, re-issuing its tokens with the new version. Optionally it ends the provider sessions too, so no device can sign straight back in (drill 3).</p></details>
+<details><summary>2 · The phone</summary><p>Its current access token carries the old version. Within 30 seconds, when the cache expires, the APIs reject it. The app tries to refresh, the refresh token is revoked, and it shows the sign-in screen. Worst case: about 30 seconds, not ten minutes.</p></details>
+<details><summary>3 · Within a minute</summary><p>Removing the role bumps the staff member's user version. Every API already checks the version with a 30-second cache, so their tokens die within half a minute. New tokens are issued without the role.</p></details>
+<details><summary>4 · Exports at once</summary><p>The export endpoint does not trust the token's role. It asks the permission store, live, at the moment the export starts. One extra lookup on a rare, dangerous action is cheap.</p></details>
+<details><summary>5 · The long export</summary><p>The job checks the permission again between batches and stops when it fails, recording who started it, when it stopped and why. A long job that only checked at the start is the long-lived token problem in another shape.</p></details>
+</div>
+<h3>The review checklist</h3>
+<div class="checklist"><div class="cl"><h3>Sessions</h3><ul><li>Every layer is listed with its lifetime: provider, shop, refresh, access</li><li>Sessions have idle and absolute expiry</li><li>Risky actions require a recent sign-in</li><li>A new session id at every sign-in and privilege change</li></ul></div><div class="cl"><h3>Cookies and the browser</h3><ul><li>Session cookie is __Host-, Secure, HttpOnly, SameSite=Lax or Strict</li><li>The browser holds no tokens; the backend holds them</li><li>State-changing requests check a CSRF token or the Origin</li><li>No state changes on GET</li></ul></div><div class="cl"><h3>Tokens</h3><ul><li>Access tokens live minutes and carry few claims, none personal</li><li>APIs check signature, issuer, audience, expiry, with the algorithm fixed</li><li>Refresh tokens rotate; reuse revokes the family; immediate repeats are forgiven</li><li>Signing keys rotate in steps, with both keys published for a while</li><li>Clocks are synced and checks allow a small leeway</li></ul></div><div class="cl"><h3>Ending access</h3><ul><li>Sign-out deletes the session, revokes the refresh token and ends the provider session</li><li>A user version lets one update end every older token</li><li>Dangerous actions check permissions live</li><li>Password reset and email change end other sessions and notify the customer</li></ul></div><div class="cl"><h3>The front door</h3><ul><li>Rate limits per account, per address and on the overall failure rate</li><li>Leaked passwords are refused; passkeys are offered</li><li>Unknown accounts get the same answer in the same time</li><li>Reset links are single-use, short-lived and stored hashed</li></ul></div><div class="cl"><h3>Tests and operations</h3><ul><li>Tests cover expiry, audience, reuse, sign-out, fixation and CSRF</li><li>A real-browser test reads the cookie flags</li><li>Token rejections are graphed by reason</li><li>Credentials are redacted from logs, and tokens never appear in URLs</li><li>Provider settings are kept and reviewed in the repository</li></ul></div></div>
+
+<a class="next" href="#top"><small>the end</small>Back to the top ↑</a>
+</section>
+<p class="sources"><b>Sources.</b> RFC 6749 (OAuth 2.0), RFC 7636 (PKCE) and the OAuth 2.1 draft. RFC 9700, “Best Current Practice for OAuth 2.0 Security” (2025). The IETF draft “OAuth 2.0 for Browser-Based Applications”. OpenID Connect Core, RP-Initiated Logout and Back-Channel Logout. OWASP Cheat Sheets on Session Management, Authentication, Credential Stuffing Prevention and Forgot Password. NIST SP 800-63B, Digital Identity Guidelines: Authentication.</p>
+</div></article>
+<footer class="foot"><span>Jef’s Notes · deep dive 07 · Sign-in, Tokens &amp; Sessions</span></footer>
+</main>
+
+<div class="dock" data-dock>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+  <div class="dock-in">
+    <a class="dock-arrow" data-prev href="#top" aria-label="Previous chapter">‹</a>
+    <button class="dock-mid" type="button" data-open aria-haspopup="dialog" aria-expanded="false">
+      <small data-count>1 / 10</small><span data-current>Recap</span><i aria-hidden="true">☰</i>
+    </button>
+    <a class="dock-arrow" data-next href="#sessions" aria-label="Next chapter">›</a>
+  </div>
+</div>
+<div class="sheet-back" data-close hidden></div>
+<div class="sheet" data-sheet role="dialog" aria-modal="true" aria-label="Chapters" hidden>
+  <div class="sheet-head"><b>Chapters</b><button type="button" data-close aria-label="Close">×</button></div>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Four notes in sixty seconds</span><span class="m">2 min</span></a></li><li><a href="#sessions" data-ch="1"><span class="n">2</span><span class="t">Four layers, four clocks</span><span class="m">2 min</span></a></li><li><a href="#stateful" data-ch="2"><span class="n">3</span><span class="t">Session ids or tokens</span><span class="m">2 min</span></a></li><li><a href="#drills" data-ch="3"><span class="n">4</span><span class="t">Failure drills</span><span class="m">5 min</span></a></li><li><a href="#revocation" data-ch="4"><span class="n">5</span><span class="t">Taking access back: the hard problem</span><span class="m">3 min</span></a></li><li><a href="#numbers" data-ch="5"><span class="n">6</span><span class="t">Lifetimes, worked out</span><span class="m">2 min</span></a></li><li><a href="#frontdoor" data-ch="6"><span class="n">7</span><span class="t">The front door: login and recovery</span><span class="m">3 min</span></a></li><li><a href="#running" data-ch="7"><span class="n">8</span><span class="t">Running it</span><span class="m">2 min</span></a></li><li><a href="#testing" data-ch="8"><span class="n">9</span><span class="t">Testing it</span><span class="m">2 min</span></a></li><li><a href="#tools" data-ch="9"><span class="n">10</span><span class="t">Build or buy, a lab and the checklist</span><span class="m">4 min</span></a></li></ol>
+  <div class="sheet-foot">
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+    <a href="#top" data-close>Top of page ↑</a>
+  </div>
+</div>
+</body>
+</html>

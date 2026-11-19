@@ -1,8 +1,12 @@
 # Plan: Series 3 · Deep Dives
 
-Status **2026-11-14**: **Season 1 is written and live: six deep dives**, each ten chapters and about a
+Status **2026-11-19**: **Season 1 is written and live: six deep dives**, each ten chapters and about a
 30-minute read: 01 Saga, 02 Reliable Messaging, 03 The Resilience Stack, 04 Event Sourcing & CQRS, 05 Caching,
-06 Zero-Downtime Change. Next, if the owner wants more: the Season 2 candidates in section 2 (also in the future log).
+06 Zero-Downtime Change. **Season 2 has begun** with 07 Sign-in, Tokens & Sessions (`/deep-dives/sign-in-tokens-sessions/`,
+the first for the security volume) and 08 Replication, Failover & Leader Election (`/deep-dives/replication-failover/`).
+Remaining candidates (section 2, and in the future log): Sharding & Partitioning, Indexes & Query Plans,
+Observability & SLOs, Rendering on the Web, Multitenancy; also suggested on 19 Nov: A Test Suite You Trust
+(flaky tests, deterministic tests, parallel and selective runs) for the testing volume.
 
 The landing page was reworked in the same release: the author's note is on top and covers all four formats,
 each section has a one-line hook, and the practitioner books and cheat sheets are stored spine-out
