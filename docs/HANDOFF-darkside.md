@@ -550,3 +550,13 @@ managers; Pip's speech bubble). All twelve Act I entries now have a plate and a 
   never the whole world.”
 - **All eight Acts (96 entries, 96 plates) are complete.** Possible next steps: the Extras (section 8), a printable
   edition, or a series epilogue page.
+
+## 26. Landing-page spine shelf, and a pending CSS move (19 Nov 2026)
+
+- The Darkside section on the landing page is a spine shelf (`darkside_shelf()` in `scripts/build_notes.py`, which
+  reuses `spine_shelf()` and swaps in Roman numerals). Spine titles drop “The” via `SPINE_TITLES`.
+- **Pending, do with the next change to `public/assets/bujo.css`:** move the `.spine.book--darkside` / `.pulled.book--darkside`
+  rules (the block headed “the darkside on the shelf”) out of `bujo.css` into a stylesheet only the landing page loads.
+  Why: `scripts/build-pdf.mjs` fingerprints each PDF by its page *and* the CSS it loads, so any `bujo.css` edit makes
+  the deploy re-render every PDF (about 16 minutes; the step's limit is 30). Doing the move alongside another `bujo.css`
+  change costs one PDF rebuild instead of two. The user asked for it to be done then, not on its own.
