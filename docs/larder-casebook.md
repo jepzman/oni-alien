@@ -3,7 +3,7 @@
 The running case study for **The Solution Architect's Notebook**. Every note's “situation”, template card
 and example uses these facts. Add to this file whenever a note invents something new, and never contradict
 it. Book 1 (architect, Ana) and book 2 (product, Grace) run in parallel from October 2025; book 3 (project, Sanne) from
-January 2026; book 4 (client, Mo) from March 2026. The public version is the case file page, `public/larder/index.html`,
+January 2026; book 4 (client, Mo) from March 2026; book 5 (IT operations, Eli) from 30 March 2026. The public version is the case file page, `public/larder/index.html`,
 built from `content/larder/casefile.py`.
 
 ## The company
@@ -45,7 +45,7 @@ built from `content/larder/casefile.py`.
 | Ben | Tech lead, orders team | |
 | Cho | Engineer, payments | |
 | Dee | Tech lead, mobile apps | |
-| Eli | Platform and operations engineer | |
+| Eli | Platform and operations engineer (he/him; narrator of book 5) | that Larder keeps running, and doesn't need him at 3 a.m. |
 | Jasper | Co-founder and first CTO (left August 2025) | appears only in old code, old chats and old decisions |
 | Sanne | Delivery manager (joins January 2026; narrator of book 3) | the Rotterdam launch: dates, risks, dependencies |
 | Mo | Key account manager, Larder for Business (joins March 2026; narrator of book 4) | Korenwolf, the first business client |

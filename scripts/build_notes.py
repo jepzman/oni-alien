@@ -1149,6 +1149,7 @@ FUTURE_LOG = [
     ("Jan 2027", [("•", "One-page printable cheat sheet per collection")]),
     ("Mar 2027", [("•", "Cheat sheets for Book 3: PMBOK 8 on one page, earned value, critical path"), ("•", "Vol. 9 · AI App Patterns")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations")]),
+    ("Jun 2027", [("★", "Book 5 · <b>The IT Operations Notebook</b> (Eli): on-call, incidents, safe change, SLOs, disaster recovery and building a reliability team")]),
     ("Mid 2027", [("↓", "More deep dives: Observability &amp; SLOs, Multitenancy"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
     ("Someday", [("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
