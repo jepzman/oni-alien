@@ -1,6 +1,7 @@
-# Plan: Statement of Work (Series 5) · the vendor architect's notebook
+# Plan: On the Client's Floor (Series 5) · the vendor architect's notebook
 
-Status as of **2026-11-25: plan only, nothing built.** Waiting for the owner's decisions (section 11).
+Status as of **2026-11-25: plan approved; a sample note is up for review (section 12). Writing has not started.**
+Owner's decisions are in section 11.
 
 The idea (owner, 25 Nov): a new series where the architect and team are a **vendor**, working for **MetroVolt**: a
 difficult electricity distribution company with plenty of difficult people, legacy applications, office politics, a
@@ -14,7 +15,7 @@ Read first, for facts and format:
 
 ## 1. What the series is
 
-*Statement of Work: Notes from the Vendor Side.* A practitioner's notebook in the Series 2 tradition (one story, one
+*On the Client's Floor: Notes from the Vendor Side.* A practitioner's notebook in the Series 2 tradition (one story, one
 narrator, a technique per note, a template to copy and a try it), but written **from the other side of the contract**.
 Ana at Larder was the client's own architect. Here the architect is the outsider: she is paid by the hour, has a visitor
 badge, has to bid for the work before she can do it, and can be replaced by a cheaper firm at the next renewal.
@@ -23,7 +24,7 @@ It teaches what no architecture course covers: reading a tender, estimating in f
 you, statements of work and change control, finding your way into a 30-year-old legacy estate, multi-vendor blame,
 honest status reports, client politics you can see but not touch, and keeping a team sane on a fixed-price deal.
 
-| | Series 2 (Larder) | Series 4 (Darkside) | **Series 5 (Statement of Work)** |
+| | Series 2 (Larder) | Series 4 (Darkside) | **Series 5 (On the Client's Floor)** |
 | --- | --- | --- | --- |
 | Narrator | the client's own staff | a MetroVolt insider (the Chronicler) | **a vendor's lead architect** |
 | Company | a young start-up | MetroVolt (satire) | **MetroVolt (realistic), seen from outside** |
@@ -31,7 +32,7 @@ honest status reports, client politics you can see but not touch, and keeping a 
 | Voice | calm study notes | gothic, deflated by footnotes | **calm and practical, with dry humour and visible stress** |
 | A note is | one technique | one creature or curse | **one problem a vendor team meets, and how to handle it** |
 
-**The two MetroVolt series share one world.** Darkside shows MetroVolt from the inside as satire. Statement of Work
+**The two MetroVolt series share one world.** Darkside shows MetroVolt from the inside as satire. On the Client's Floor
 shows the same company from outside, played straight. The same people appear (Lord Varnish, Ottoline Grey, Gareth
 Pound, Priya Nair, Pip, Vexmoor Consulting, Halvorsen Systems), the same events happen on the same dates, and notes
 link both ways (section 8).
@@ -57,8 +58,8 @@ wants the whole thing). They sign just before MetroVolt's **Project Horizon** re
 Vexmoor as advisers) moves Lodestar under the transformation office. From then on the losing bidder is advising the client
 on the winner's project. They dig into MAVIS and find it worse than anyone said, re-price honestly, survive a watermelon
 status report, a steering committee ambush, a multi-vendor blame war over the 02:10 file, a go-live, the loss of their
-sponsor and one team member's burnout. At the end they bid for phase 2 against Vexmoor. **The owner chooses whether
-they win** (section 11).
+sponsor and one team member's burnout. At the end they bid for phase 2 against Vexmoor. **The series ends open, on a cliffhanger** (section 11): the
+phase 2 decision is not given.
 
 **Each volume adds one way of seeing.** Vol. 1: the deal. Vol. 2: the contract. Vol. 3: the legacy. Vol. 4: the delivery.
 Vol. 5: the people. Vol. 6: the cost to the team, and the ending.
@@ -84,7 +85,7 @@ Vol. 5: the people. Vol. 6: the cost to the team, and the ending.
 | 23 Sep 2028 | Wave 1 cutover night | GridSight launched (Act VI) |
 | Oct 2028 → Jan 2029 | Hypercare; sponsor change; wave 2 planning; burnout | |
 | Mar 2029 | Phase 2 (waves 2–4) bid against Vexmoor | Halvorsen billing re-tender (Act VI) |
-| Jun 2029 | The ending: phase 2 decision, handover, the last day on floor 19 | |
+| Jun 2029 | The ending: handover, the last day on floor 19, and the phase 2 envelope unopened | |
 
 ## 4. Cast
 
@@ -227,14 +228,33 @@ the Vendor Side Taught Me · 15. The Last Day on Floor 19
 - Landing page: a fifth shelf (`PLANNED_VENDOR`), a future-log line, a `book--vendor-*` cover.
 - Same verify routine as `docs/HANDOFF.md` §4.
 
-## 11. Decisions for the owner
+## 11. Owner's decisions (25 Nov 2026)
 
-1. **Title:** *Statement of Work: Notes from the Vendor Side* (proposed), or *The Vendor's Notebook*, or *On the
-   Client's Floor*?
-2. **Tone:** practical Series 2 notes with dry humour and a visible stress line (proposed), or closer to Darkside's
-   satire?
-3. **Same MetroVolt as Darkside** (proposed: one world, linked both ways), or a separate MetroVolt with no shared cast?
-4. **Size:** 6 volumes × 15 notes (90, like the other books), or 4 × 12 for a faster run?
-5. **Vendor name and narrator:** Wrenfield Digital and Ines Duarte, or other names?
-6. **The ending:** does Wrenfield win phase 2, lose it to Vexmoor, or walk away?
-7. **Start where:** Vol. 1 (the bid, proposed), or Vol. 3 (the legacy) for the technical meat first?
+1. **Title:** *On the Client's Floor* (subtitle: Notes from the Vendor Side).
+2. **Tone:** practical Series 2 notes with dry humour and a visible stress line.
+3. **World:** the same MetroVolt as Darkside, with the cast and dates shared.
+4. **Size:** six volumes × 15 notes.
+5. **Ending:** open, or a cliffhanger. Proposal: the last note ends on Friday 15 June 2029. Wrenfield's phase 2 bid
+   and Vexmoor's are both in; Ines is packing up floor 19 when Elaine calls her back for “a quick word, in room 27A”.
+   Room 27A is where Darkside's calibration happened. The note ends before she opens the door. Loose threads left open:
+   Hana's return, Bert's retirement, and whether Pip moves to the client side.
+6. **Narrator and vendor:** Ines Duarte and Wrenfield Digital (not objected to; keep unless the owner says otherwise).
+7. **Start:** Vol. 1 (the bid), **but not yet**. First, a sample note for look and feel (section 12).
+
+## 12. Sample note for review (25 Nov 2026)
+
+- Page: `public/samples/on-the-clients-floor/index.html` (hand-made, `noindex`, not linked from the shelf; `build_notes.py`
+  doesn't touch it). Skin: `public/assets/vendor.css` (`theme-vendor`), loaded on top of `notebook.css` and `bujo.css`.
+- Note: Vol. 1 #6, **What Are We Assuming?** (assumptions, dependencies and exclusions), Thu 11 March 2027.
+- Shows every new part: the visitor pass, the timesheet strip (booked vs worked, “billable: 0.0”), both sides of the
+  table, the redlined contract clause with a stamp, account health (amber is “Lodestar now”), the pressure gauge,
+  vendor ratings (`VENDOR_ATTRS`, drawn by `notebook.js`), Seen in the Grimoire, and the 23:00 note. Titles are
+  questions, as in Books 3 and 5.
+- Facts it adds (record them in the casebook when Vol. 1 starts): bid day 37 of 42; the clarification meeting on
+  11 Mar 2027 on floor 19; Vivian's three-line draft; 41 assumptions (8 in the bid, 33 in appendix C);
+  **A1-07** (≤ 5 % of records fail the address check, £9,500 per 1 % above it), tested in December 2027
+  (31 %, sets up CR-007); D-03 Halvorsen spec by 30 Jul 2027; X-02 the 02:10 batch excluded; SOW §3.2 “absorb”
+  struck after three legal calls (draft v0.3, 9 Jun 2027); Ines meets Pip in the lift (“ask for a sample”).
+- Checked: desktop light and dark, 375 px phone width (no horizontal scroll).
+- Waiting for the owner's review. When the look is approved, move the skin into `bujo.css` (or keep `vendor.css`
+  and add it per journal), add the new fields to the renderer (section 10) and start Vol. 1.
