@@ -124,6 +124,23 @@ PMBOK_DOMAINS = [("governance", "Governance"), ("scope", "Scope"), ("schedule", 
 PMBOK_FOCUS = ["initiating", "planning", "executing", "monitoring", "closing"]
 PMI_NOTE = ("Independent study notes, written in my own words. Not affiliated with or endorsed by the Project Management "
             "Institute. PMBOK is a registered mark of the Project Management Institute, Inc.")
+OPS_ATTRS = [
+    ("User impact", "customers notice less?", "Fewer customers, pickers and couriers hurt when something breaks."),
+    ("Reliability", "breaks less often?", "Things fail less, and fail smaller."),
+    ("Recovery speed", "back up faster?", "Time from \u201cit's broken\u201d to \u201cit works again\u201d."),
+    ("Change safety", "changes land quietly?", "Changes rarely cause incidents, and can be undone."),
+    ("Visibility", "we can see it?", "Anyone on call can see what runs, what's wrong and what changed."),
+    ("Toil reduction", "less repeat handwork?", "Repetitive manual work goes down instead of up."),
+    ("Cost awareness", "worth what it costs?", "Money and people's time are spent where they matter."),
+    ("Sustainable on-call", "people sleep?", "The load is shared and bearable; nobody is the only one who knows."),
+    ("Low overhead", "light to run?", "Time and ceremony the practice takes. High = light."),
+]
+# ITIL 4: the three practice groups (tabs) and the six value chain activities (the row under the tabs).
+ITIL_GROUPS = [("general", "General management"), ("service", "Service management"), ("technical", "Technical management")]
+ITIL_CHAIN = [("plan", "plan"), ("improve", "improve"), ("engage", "engage"), ("design", "design &amp; transition"),
+              ("build", "obtain / build"), ("deliver", "deliver &amp; support")]
+ITIL_NOTE = ("Independent study notes, written in my own words. Not affiliated with or endorsed by PeopleCert or AXELOS. "
+             "ITIL\u00ae is a registered trademark of PeopleCert.")
 CLOUD_ATTRS = [
     ("Simplicity", "easy to run &amp; explain?", "Few moving parts; the on-call person can understand it at 3 a.m."),
     ("Delivery speed", "fast from commit to prod?", "Short lead time and frequent, small releases."),
@@ -1130,6 +1147,237 @@ JOURNALS = [
             (15, "what-was-it-all-for", "What Was It All For?", "growing", "The six principles revisited: the day each one changed a decision."),
         ],
     ),
+    dict(
+        key="ops-1", vol=1, title="Keeping the Lights On", short="keeping the lights on",
+        series=2, book="The IT Operations Notebook", narrator="Eli", brand="IT operations notebook", book_no=5,
+        title_block=True, sheet_doodles="ops",
+        theme="theme-ops", fonts="IBM+Plex+Mono:wght@500;700", subject="IT operations",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="In operations",
+        term="Spring term · 2030", weekdays=(1, 3), start=date(2030, 3, 5),
+        kicker="the IT operations notebook · book 5 · vol. 1",
+        story="<b>Late March 2026.</b> Rotterdam opens on <b>27 April</b>, on a 4G router, because the store's internet line won't arrive until May. In the week of 23 March, Sanne's plan showed Eli, Larder's only platform engineer, at <b>160 %</b>: platform work, the Dispatch RFC, a week on call, the internet line and an alert fix. Ana took his on-call week. Eli realised the problem wasn't the week: everything about running Larder lives in his head. This volume follows him from <b>30 March to June 2026</b>: finding out what Larder runs, who is woken up when it breaks, how the stores ask for help, and how to get it all written down.",
+        lead="Volume 1 of <span class=\"hl\">The IT Operations Notebook</span>: the ground floor of IT operations, in plain words, following the <b>ITIL 4</b> practices with the habits of <b>site reliability engineering</b>. {n} notes in {c} collections: knowing what you run, watching it, answering the stores, and getting it out of one person's head. Each note is a <b>question someone running IT must answer</b>, with an ITIL tag under the title, a <b>maturity ladder</b> from “by hand” to “automatic”, and a <b>try it</b> for your own systems. Every note follows <b>Eli</b> at <b>Larder</b>, in the same months as Ana's, Grace's and Sanne's notebooks.",
+        blurb="The service value system, a catalogue of what you run, dependencies, assets, joiners and leavers, on-call, monitoring, alerts, runbooks, the service desk, store networks, knowledge and toil.",
+        attrs=OPS_ATTRS, attrs_title="The nine operations ratings", attrs_side="what a good operations practice is judged on", ratings_h2="Operations ratings",
+        first_law="If it only works because one person remembers how, it isn't running: it's being held up. Write it down, share the pager, then automate.",
+        disclaimer=ITIL_NOTE, ops=True,
+        handmade=set(),
+        collections=[
+            ("inventory", "What we run", "know what you run, what it hangs on, and who it's for"),
+            ("watching", "Watching it", "who is woken, by what, and what they do next"),
+            ("stores", "Answering the stores", "one door for help, standard requests, networks and kit"),
+            ("memory", "Out of one head", "write it down, and count the handwork"),
+        ],
+        catalogue=[
+            (1, "what-is-it-operations", "What Is IT Operations For?", "inventory", "Operations exists to keep the services customers pay for working; the value is in the outcome, not the servers."),
+            (2, "what-we-run", "What Do We Run, and Who Owns It?", "inventory", "A service catalogue: every service in plain words, with an owner, its users and how much it matters."),
+            (3, "dependency-map", "What Is Connected to What?", "inventory", "Map what each service depends on, so an incident starts with a picture, not an argument."),
+            (4, "it-assets", "What Do We Own, and Where Is It?", "inventory", "One list of devices, accounts, licences and renewals, with who has each one."),
+            (5, "joiners-leavers", "Forty New People on Monday", "inventory", "Joiners, movers and leavers: accounts and devices from one checklist, on day one, and gone on the last day."),
+            (6, "on-call-rota", "Who Gets Woken Up?", "watching", "A shared on-call rota with a handover, a backup and rest afterwards, so no one person is the pager."),
+            (7, "monitoring", "How Do We Know It's Broken?", "watching", "Watch what customers feel first (orders, errors, speed), then the machines behind it."),
+            (8, "alert-hygiene", "Which Alerts Deserve a Human?", "watching", "Page only for things that hurt customers now and need a person; everything else waits for daylight."),
+            (9, "runbooks", "What Do I Do at 3 a.m.?", "watching", "Short, tested steps for each alert, written for a tired person who has never seen it before."),
+            (10, "service-desk", "Where Do People Report Problems?", "stores", "One door for every store and office problem, instead of one engineer's phone."),
+            (11, "service-requests", "Can I Have a New Handheld?", "stores", "Standard requests with a form, an owner and a promised time, so they stop being favours."),
+            (12, "store-network", "Is It the Network?", "stores", "Know each store's Wi-Fi, line and 4G backup, test the failover, and measure it before blaming it."),
+            (13, "store-it-kit", "How Does a New Store Get Its IT?", "stores", "A store IT kit: the line ordered in week one, devices enrolled centrally, and a checklist the next city reuses."),
+            (14, "knowledge", "Where Is That Written Down?", "memory", "Write down the why as well as the how, next to the thing it describes, and prune what's stale."),
+            (15, "toil", "Why Am I Always Busy?", "memory", "Measure the repetitive manual work, cap it, and remove the worst piece each month."),
+        ],
+    ),
+    dict(
+        key="ops-2", vol=2, title="When Things Break", short="when things break",
+        series=2, book="The IT Operations Notebook", narrator="Eli", brand="IT operations notebook", book_no=5,
+        title_block=True, sheet_doodles="ops",
+        theme="theme-ops", fonts="IBM+Plex+Mono:wght@500;700", subject="IT operations",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="In operations",
+        term="Summer term · 2030", weekdays=(1, 3), start=date(2030, 5, 7),
+        kicker="the IT operations notebook · book 5 · vol. 2",
+        story="<b>June 2026.</b> Larder now has a catalogue, a shared on-call rota, fourteen alerts that mean something and eight runbooks. Rotterdam is open and the stores report problems in one place. What Larder still doesn't have is a way to handle an incident together: who leads, who tells the stores, when it is big, and what happens afterwards. This volume follows Eli from <b>June to December 2026</b>: a Friday payment failure nobody could size, a vendor that only answers in office hours, the network rule change of <b>29 October</b>, and the Christmas failover of <b>18 December</b>.",
+        lead="Volume 2 of <span class=\"hl\">The IT Operations Notebook</span>: incident and problem management, from the ITIL 4 practices and the SRE habit of blameless learning. {n} notes in {c} collections: responding together, learning afterwards, and the hard cases. Each note is a <b>question someone running IT must answer</b>; incident notes open with the <b>pager log</b>, the alert as it arrived. Every note follows <b>Eli</b> at <b>Larder</b> from June to December 2026.",
+        blurb="Severity levels, incident roles, communication, escalation, vendors at peak, tiers and swarming, blameless reviews, problems, known errors, action items, incident numbers, changes, clients and major incidents.",
+        attrs=OPS_ATTRS, attrs_title="The nine operations ratings", attrs_side="what a good operations practice is judged on", ratings_h2="Operations ratings",
+        first_law="An incident is over when the service works again; it is finished when the thing that caused it can't do it again. Restore first, learn second, blame never.",
+        disclaimer=ITIL_NOTE, ops=True,
+        handmade=set(),
+        collections=[
+            ("response", "Responding", "size it, lead it, tell people, and get the right person"),
+            ("learning", "Learning", "review without blame, find the cause, and finish the actions"),
+            ("hard", "The hard ones", "changes, clients, major incidents and the ones that nearly happened"),
+        ],
+        catalogue=[
+            (1, "severity-levels", "How Bad Is It?", "response", "Severity levels defined by customer harm, agreed in advance, so nobody argues about size during the incident."),
+            (2, "incident-roles", "Who Is in Charge?", "response", "One incident lead, one fixer group, one person on communication and one scribe, named in the first five minutes."),
+            (3, "incident-communication", "Who Needs to Know?", "response", "Short, regular updates in fixed places for support, stores, leaders and customers, including a status page."),
+            (4, "escalation", "Who's Next If Nobody Answers?", "response", "Escalation policies: who is paged next, after how long, and how to pull in a specialist."),
+            (5, "vendor-escalation", "The Vendor Is Down at Peak", "response", "Know each vendor's support hours, contacts and status page before you need them, and plan for their outage."),
+            (6, "tiers-swarming", "Who Fixes What?", "response", "Support tiers for the common, swarming for the new: when to hand a problem on and when to pull people in."),
+            (7, "post-incident-review", "What Can We Learn from It?", "learning", "A blameless review: the timeline, what made sense at the time, what helped, and a few actions."),
+            (8, "problem-management", "Why Did It Really Happen?", "learning", "Problem management: look for causes and patterns across incidents, and fix the thing that keeps breaking."),
+            (9, "known-errors", "We Know the Bug, Now What?", "learning", "Known errors: write down the workaround where the desk can find it, until the real fix lands."),
+            (10, "action-items", "Why Do Action Items Never Close?", "learning", "Few, small, owned and dated actions, reviewed weekly until they're done or honestly dropped."),
+            (11, "incident-metrics", "Which Incident Numbers Mean Anything?", "learning", "Count customer harm and trends by severity; treat averages like MTTR with care."),
+            (12, "change-related-incidents", "Was It a Change?", "hard", "Ask “what changed?” first, and make recent changes visible to whoever is on call."),
+            (13, "client-incident-reports", "Telling a Business Client", "hard", "An incident report a business client can use: what they felt, why, what we did, what changes."),
+            (14, "major-incidents", "When Is It a Major Incident?", "hard", "A separate, practised procedure for the rare incident that hurts the whole business."),
+            (15, "near-misses", "What About the Near Misses?", "hard", "Collect the things that almost broke, because they are free lessons."),
+        ],
+    ),
+    dict(
+        key="ops-3", vol=3, title="Changing Things Safely", short="changing things safely",
+        series=2, book="The IT Operations Notebook", narrator="Eli", brand="IT operations notebook", book_no=5,
+        title_block=True, sheet_doodles="ops",
+        theme="theme-ops", fonts="IBM+Plex+Mono:wght@500;700", subject="IT operations",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="In operations",
+        term="Autumn term · 2030", weekdays=(1, 3), start=date(2030, 9, 3),
+        kicker="the IT operations notebook · book 5 · vol. 3",
+        story="<b>January 2027.</b> The Christmas failover cost 38 minutes and about 900 orders, and on 12 January Femke chose option B (ADR 0017): failover in under two minutes, and no changes in the windows that matter. Two months earlier a tidy-up of network rules, applied at the start of the evening peak, had stopped Dispatch for 25 minutes. Larder now makes about 200 changes a month, and 2027 adds a warehouse move store by store, two new cities and a picker app that ships every week. This volume follows Eli from <b>January to June 2027</b>: deciding which changes need a second look, when nothing may change, how to undo things, and keeping an ageing platform patched and supported.",
+        lead="Volume 3 of <span class=\"hl\">The IT Operations Notebook</span>: change enablement, release and deployment, testing and keeping the platform current, from the ITIL 4 practices with the SRE and DORA view of safe, frequent change. {n} notes in {c} collections: deciding about changes, safety nets, moving big things, and keeping it current. Every note follows <b>Eli</b> at <b>Larder</b> from January to June 2027, in the same months as Ana's warehouse migration and Sanne's Antwerp plan.",
+        blurb="Standard, normal and emergency changes, peer review instead of a change board, freezes, release vs deploy, risk scores, rollbacks, testing, DORA numbers, store cutovers, device rollouts, production access, patching and end-of-life.",
+        attrs=OPS_ATTRS, attrs_title="The nine operations ratings", attrs_side="what a good operations practice is judged on", ratings_h2="Operations ratings",
+        first_law="Most outages start with a change, and most changes are fine. Make the safe ones fast and boring, look twice at the risky few, and never make one you can't undo.",
+        disclaimer=ITIL_NOTE, ops=True,
+        handmade=set(),
+        collections=[
+            ("deciding", "Deciding about changes", "which changes need a second look, who looks, and when nothing changes"),
+            ("nets", "Safety nets", "undo it, test it, handle the urgent one, and count what fails"),
+            ("moving", "Moving big things", "store cutovers, new cities and a fleet of handhelds"),
+            ("current", "Keeping it current", "who may touch production, patching and end-of-life"),
+        ],
+        catalogue=[
+            (1, "change-types", "Which Changes Need a Second Look?", "deciding", "Sort changes into standard (pre-approved recipes), normal (reviewed) and emergency, so most go fast and a few get care."),
+            (2, "change-board", "Do We Need a Change Board?", "deciding", "Peer review by someone who knows the system beats a weekly board; keep a board only for the rare high-risk change."),
+            (3, "change-calendar", "When Must We Not Change Anything?", "deciding", "A change calendar with critical windows and freezes, enforced by the pipeline, with a clear way to make exceptions."),
+            (4, "release-vs-deploy", "Release or Deploy?", "deciding", "Deploying puts code in production; releasing lets people use it. Separate them, and each gets safer."),
+            (5, "change-risk", "How Risky Is This Change?", "deciding", "Five quick questions give a risk score that decides how much review, testing and timing a change needs."),
+            (6, "rollback-plans", "How Do We Undo It?", "nets", "Every change has a tested way back, or a written plan to go forward when there is no way back."),
+            (7, "validation", "Is It Really Ready?", "nets", "Test where it matters: in an environment that is honestly like production, and in production itself, carefully."),
+            (8, "emergency-changes", "The Urgent Fix at 17:00 on a Friday", "nets", "Emergency changes: fewer checks, never zero, two people, and the paperwork afterwards."),
+            (9, "dora-metrics", "Which Changes Fail?", "nets", "Four delivery numbers (frequency, lead time, failure rate, time to restore) show whether change is getting safer."),
+            (10, "store-cutover", "Cutting Over a Store", "moving", "A cutover plan for moving a store to a new system: shadow run, go / no-go, a quiet hour, and a way back."),
+            (11, "new-city-it", "A New City by Checklist", "moving", "The IT side of opening a city as a versioned runbook that gets shorter with every launch."),
+            (12, "device-rollouts", "Updating 120 Handhelds", "moving", "Roll out app versions to store devices in rings, outside store hours, with a way to stop and roll back."),
+            (13, "production-access", "Who May Touch Production?", "current", "Few standing permissions, access on request for a time, and a break-glass account that alarms when used."),
+            (14, "patching", "Patching Without Fear", "current", "A patch routine: automatic for the small, a monthly window for the rest, and machines rebuilt rather than repaired."),
+            (15, "end-of-life", "The Database Runs Out of Support", "current", "Keep a lifecycle register of versions and end-of-support dates, and upgrade on your schedule, not the vendor's."),
+        ],
+    ),
+    dict(
+        key="ops-4", vol=4, title="Promises &amp; Measures", short="promises and measures",
+        series=2, book="The IT Operations Notebook", narrator="Eli", brand="IT operations notebook", book_no=5,
+        title_block=True, sheet_doodles="ops",
+        theme="theme-ops", fonts="IBM+Plex+Mono:wght@500;700", subject="IT operations",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="In operations",
+        term="Winter term · 2031", weekdays=(1, 3), start=date(2031, 1, 7),
+        kicker="the IT operations notebook · book 5 · vol. 4",
+        story="<b>July 2027.</b> Larder runs four cities, the warehouse move is almost done, and Korenwolf's renewal talks start in the autumn, with Ruben asking for an availability number in the contract. Inside, Femke asks the question every head of operations dreads: “how reliable are we, actually?” Eli can count incidents, but he can't yet say what “working” means for each service, or how much unreliability is acceptable. This volume follows him from <b>July to December 2027</b>: SLIs, SLOs and error budgets, Korenwolf's SLA, measuring availability and capacity honestly, a vendor that goes quiet, switching systems off, Antwerp, and the Christmas peak.",
+        lead="Volume 4 of <span class=\"hl\">The IT Operations Notebook</span>: service level management, availability, capacity, measurement and reporting, from the ITIL 4 practices and SRE's SLIs, SLOs and error budgets. {n} notes in {c} collections: making promises, measuring honestly, and running the year. Every note follows <b>Eli</b> at <b>Larder</b> from July to December 2027, in the same months as Ana's capacity and availability work and Grace's service levels in the portal.",
+        blurb="SLIs, SLOs, error budgets, SLAs and OLAs, measuring availability and capacity, service reviews, dashboards, asking users, a quiet vendor, self-service, a second country, decommissioning and a peak.",
+        attrs=OPS_ATTRS, attrs_title="The nine operations ratings", attrs_side="what a good operations practice is judged on", ratings_h2="Operations ratings",
+        first_law="Promise a little less than you can do, measure it the way the user feels it, and decide in advance what happens when you miss.",
+        disclaimer=ITIL_NOTE, ops=True,
+        handmade=set(),
+        collections=[
+            ("promises", "Making promises", "what working means, how good is enough, and what we signed"),
+            ("measuring", "Measuring honestly", "availability, capacity, reports, dashboards and the users' own view"),
+            ("running", "Running the year", "vendors, self-service, a second country, switching off and a peak"),
+        ],
+        catalogue=[
+            (1, "slis", "What Do Users Count as Working?", "promises", "Service level indicators: measure each service the way its users experience it, as good events over all events."),
+            (2, "slos", "How Good Is Good Enough?", "promises", "Service level objectives: a target per indicator, below 100 %, chosen with the business and reviewed quarterly."),
+            (3, "error-budgets", "When Do We Stop Shipping Features?", "promises", "The error budget is the unreliability the SLO allows; a written policy says what happens when it runs out."),
+            (4, "slas", "What Did We Sign?", "promises", "An SLA is a contract with consequences; keep it looser than your SLO, define it precisely and report it automatically."),
+            (5, "olas", "What Do Teams Promise Each Other?", "promises", "Operational level agreements: the internal promises that make the external ones possible."),
+            (6, "measuring-availability", "How Available Were We, Really?", "measuring", "Count availability from real requests and outside checks, with rules for partial outages and maintenance."),
+            (7, "capacity-headroom", "Will Christmas Fit?", "measuring", "Watch headroom on the few limits that matter, alert before they run out, and review capacity before every peak."),
+            (8, "service-reviews", "The Monthly Service Review", "measuring", "One monthly report per service against its SLOs, and a short meeting with its owner that ends in decisions."),
+            (9, "dashboards", "Dashboards People Actually Open", "measuring", "Fewer dashboards, each answering one question for one audience, and delete the ones nobody opens."),
+            (10, "user-satisfaction", "Asking the Users", "measuring", "Ask stores, support and clients how IT feels to them: uptime can be green while people are unhappy."),
+            (11, "vendor-silence", "The Vendor Went Quiet", "running", "Supplier management for silent failures: watch what a vendor should send, review vendors quarterly, keep score."),
+            (12, "shift-left", "What Can the Stores Fix Themselves?", "running", "Move common fixes to the people closest to the problem, with safe self-service and short guides."),
+            (13, "second-country", "Operating in a Second Country", "running", "A new country changes support hours, languages, vendors, holidays and rules; list the differences before opening."),
+            (14, "decommissioning", "Switching a System Off", "running", "Retire systems on purpose: find users, announce, go read-only, keep the data you must, cancel, delete, update the catalogue."),
+            (15, "running-a-peak", "Running a Peak", "running", "Prepare for the busiest weeks with a readiness review, a freeze, extra cover and a daily check-in."),
+        ],
+    ),
+    dict(
+        key="ops-5", vol=5, title="Ready for the Worst", short="ready for the worst",
+        series=2, book="The IT Operations Notebook", narrator="Eli", brand="IT operations notebook", book_no=5,
+        title_block=True, sheet_doodles="ops",
+        theme="theme-ops", fonts="IBM+Plex+Mono:wght@500;700", subject="IT operations",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="In operations",
+        term="Spring term · 2031", weekdays=(1, 3), start=date(2031, 3, 4),
+        kicker="the IT operations notebook · book 5 · vol. 5",
+        story="<b>January 2028.</b> Larder runs seven cities and two countries, Christmas went quietly, and Korenwolf has renewed with a 99.8 % promise. Then, on 10 January, the first full restore of the database takes <b>3 hours 40 minutes</b>. Nobody had ever tried one end to end. It is a quiet week, and nothing is lost, but it shows how much of Larder's safety is assumed rather than tested. This volume follows Eli from <b>January to June 2028</b>: what matters most if everything fails, restores that work, paper fallback in the stores, game days, security operations, access and secrets, the cloud bill, risks, Korenwolf's supplier questionnaire, leaving vendors and keeping continuity plans alive.",
+        lead="Volume 5 of <span class=\"hl\">The IT Operations Notebook</span>: service continuity, information security in operation, risk and money, from the ITIL 4 practices and the SRE habit of practising failure. {n} notes in {c} collections: recovering, security operations, and risk, money and vendors. Every note follows <b>Eli</b> at <b>Larder</b> from January to June 2028, in the same months as Ana's disaster-recovery and cost work and Sanne's 2028 programme.",
+        blurb="Business impact, restore tests, paper fallback, game days, invoking the plan, live plans, security monitoring and incidents, access reviews, secrets, the cloud bill, risks, audits, vendor exits and the office.",
+        attrs=OPS_ATTRS, attrs_title="The nine operations ratings", attrs_side="what a good operations practice is judged on", ratings_h2="Operations ratings",
+        first_law="A backup you have never restored, a plan nobody has practised and a key nobody has rotated are hopes, not safeguards. Test the worst case on a quiet Tuesday, so it's boring on the bad day.",
+        disclaimer=ITIL_NOTE, ops=True,
+        handmade=set(),
+        collections=[
+            ("recover", "Recovering", "what matters most, restoring it, working without it, and practising"),
+            ("security", "Security operations", "seeing attacks, handling them, and keeping access and keys clean"),
+            ("risk", "Risk, money and vendors", "the bill, the risks, the auditor, the exit and the office"),
+        ],
+        catalogue=[
+            (1, "business-impact", "What Matters Most If Everything Fails?", "recover", "A business impact analysis gives each service a recovery time and a data-loss limit, set by what its loss costs."),
+            (2, "restore-tests", "Can We Actually Restore?", "recover", "A backup is only real once it has been restored, timed and checked, on a schedule."),
+            (3, "manual-fallback", "When the Picker App Is Down", "recover", "A practised way to keep working without the system: paper pick lists, hand dispatch and a clear switch-back."),
+            (4, "game-days", "Breaking Things on Purpose", "recover", "Game days and small chaos experiments: practise failures in daylight with a plan, a stop button and a review."),
+            (5, "invoking-the-plan", "Who Decides to Invoke the Plan?", "recover", "A named crisis team, clear triggers and a decision clock for switching to continuity plans."),
+            (6, "living-plans", "The Plan Nobody Has Read", "recover", "Keep continuity plans short, owned, tested and changed after every test, or they rot."),
+            (7, "security-monitoring", "Is the Alarm Real?", "security", "Collect the few logs that show attacks, keep them as long as needed, and alert on what matters."),
+            (8, "security-incidents", "When the Incident Is a Security Incident", "security", "The incident process with extra steps: preserve evidence, contain, involve legal, and notify on time."),
+            (9, "access-reviews", "Who Still Has Access?", "security", "A quarterly review where each owner confirms who has access to what, and removes the rest."),
+            (10, "secrets-rotation", "Rotating the Keys", "security", "Keep secrets in a vault, know their owners and ages, rotate them on a schedule, and practise a full rotation."),
+            (11, "cloud-costs", "What Does It Cost to Run?", "risk", "Service financial management: cost per service and per order, owners who see their bill, and waste removed monthly."),
+            (12, "ops-risk-register", "Which Risks Keep Us Up at Night?", "risk", "An operational risk register with owners, scores, actions and triggers, reviewed monthly."),
+            (13, "audit-evidence", "Prove It to the Auditor", "risk", "Collect evidence as you work, so questionnaires and audits are answered from records, not memory."),
+            (14, "vendor-exit", "Leaving a Vendor", "risk", "An exit plan per critical vendor: data, steps, time and cost, written while you're still friends."),
+            (15, "office-outage", "When the Office Is the Outage", "risk", "Laptops, sign-in, the office network and email are services too: plan for losing them."),
+        ],
+    ),
+    dict(
+        key="ops-6", vol=6, title="Building the Reliability Team", short="building the reliability team",
+        series=2, book="The IT Operations Notebook", narrator="Eli", brand="IT operations notebook", book_no=5,
+        title_block=True, sheet_doodles="ops",
+        theme="theme-ops", fonts="IBM+Plex+Mono:wght@500;700", subject="IT operations",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="In operations",
+        term="Summer term · 2031", weekdays=(1, 3), start=date(2031, 5, 6),
+        kicker="the IT operations notebook · book 5 · vol. 6",
+        story="<b>April 2028.</b> Larder has 30 engineers in five product teams, eight cities by September, and a plan for 60,000 orders a day. Operations still rests on Eli and Bram, and on product teams who carry pagers for systems they didn't choose to run. Femke and Ana agree that Larder needs a <b>reliability team</b> by the autumn, and Eli is asked to build it. This volume follows him from <b>April to October 2028</b>: deciding who runs what, readiness reviews, hiring, humane on-call, handing over the pager on 1 October, the first incident without him, tools, strategy, change, AI and growing people, the last part of making himself unnecessary at 3 a.m.",
+        lead="Volume 6 of <span class=\"hl\">The IT Operations Notebook</span>, the last: building and leading an operations team, from the ITIL 4 practices for workforce, strategy, improvement and organisational change, and SRE's ways of shaping teams and engagement. {n} notes in {c} collections: shaping the team, handing over, setting direction, and leading. Every note follows <b>Eli</b> at <b>Larder</b> from April to October 2028, in the same months as Ana's last notebook.",
+        blurb="Who runs what, production readiness, hiring SREs, humane on-call, handing over the pager, early life support, automation, tools, maturity, strategy, improvement, change, AI, careers and making it yours.",
+        attrs=OPS_ATTRS, attrs_title="The nine operations ratings", attrs_side="what a good operations practice is judged on", ratings_h2="Operations ratings",
+        first_law="The goal was never to be the one who keeps it running. It was to build something that keeps running, and people who keep improving it, without you.",
+        disclaimer=ITIL_NOTE, ops=True,
+        handmade=set(),
+        collections=[
+            ("team", "Shaping the team", "who runs what, who joins, and an on-call people can live with"),
+            ("handover", "Handing over", "readiness, the pager, and the weeks after"),
+            ("direction", "Setting direction", "what to automate, which tools, where we stand and where we're going"),
+            ("leading", "Leading", "improvement that lasts, change, AI, careers and making it yours"),
+        ],
+        catalogue=[
+            (1, "who-runs-what", "Who Runs What?", "team", "Choose per service: the team that builds it runs it, or a reliability team does, with clear terms either way."),
+            (2, "hiring-sres", "Hiring the First SREs", "team", "Hire for curiosity, calm and coding, with a work sample that looks like the real job."),
+            (3, "humane-on-call", "On-Call People Can Live With", "team", "Measure on-call load, cap it, pay and rest fairly, and fix the pages instead of toughening the people."),
+            (4, "production-readiness", "Is This Service Ready for Production?", "handover", "A production readiness review before a team takes on a service: SLOs, alerts, runbooks, capacity, a way back."),
+            (5, "pager-handover", "Handing Over the Pager", "handover", "Move on-call responsibility in steps: shadow, reverse shadow, game days, then a date, with a way back."),
+            (6, "early-life-support", "Did the Handover Work?", "handover", "Early life support: a few weeks of extra help and close watching after a handover, with an exit test."),
+            (7, "automation-strategy", "What to Automate Next", "direction", "Choose automation by toil saved and risk removed, keep a toil budget, and automate the whole job, not half."),
+            (8, "ops-toolset", "Which Tools Do We Really Need?", "direction", "Fewer tools, each with an owner and a job; consolidate overlaps and check what each one costs and saves."),
+            (9, "maturity-check", "Where Are We Weak?", "direction", "A short, honest maturity check per practice, done together, to choose what to improve next."),
+            (10, "ops-strategy", "Where Are We Going?", "direction", "An operations strategy on a page and a roadmap tied to the business plan."),
+            (11, "improvement-register", "Continual Improvement That Continues", "leading", "One improvement register for everything, a small budget of time, and a rhythm that outlives the enthusiasm."),
+            (12, "leading-change", "Leading Change in How Teams Work", "leading", "Change how teams work with a reason, a pilot, help, and patience; people adopt what helps them."),
+            (13, "ai-in-ops", "AI in Operations: Where It Helps, Where It Lies", "leading", "Use AI for drafts, summaries and search, never as the last word on production; check every fact."),
+            (14, "growing-ops-engineers", "Growing Operations Engineers", "leading", "A career path, coaching and real responsibility, so people grow into the jobs you used to do."),
+            (15, "making-it-yours", "Making It Yours", "leading", "Look back at the whole book, pick what fits your place, and start where you are."),
+        ],
+    ),
 ]
 
 # Planned journals and other work, shown on the landing page.
@@ -1143,6 +1391,9 @@ PLANNED_PRODUCT = [
 ]
 # Planned volumes of Series 2, book 3 (see docs/HANDOFF-project-manager.md).
 PLANNED_PROJECT = [
+]
+# Planned volumes of Series 2, book 5 (see docs/HANDOFF-it-operations.md).
+PLANNED_OPS = [
 ]
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Going-deeper chapters for Vols. 7 and 8: aggregates, bounded contexts, ports &amp; adapters"), ("•", "Search across every journal")]),
@@ -1245,7 +1496,23 @@ PROJECT_DOODLES = (
     '<rect class="d d-thin f-green" x="120" y="48" width="74" height="10"/><path class="d f-red" d="M206 54 l8 8 l-8 8 l-8 -8 z"/></g></svg>'
     '</div>'
 )
-DESK_DOODLES = {True: SHEET_DOODLES, "architect": SHEET_DOODLES, "product": PRODUCT_DOODLES, "project": PROJECT_DOODLES}
+# Desk doodles around an operations sheet: a pager, a coffee-stained runbook and a server rack.
+OPS_DOODLES = (
+    '<div class="sheet-doodles" aria-hidden="true">'
+    '<svg class="sd sd-coffee" viewBox="0 0 120 120"><g class="rough">'
+    '<rect class="d f-paper" x="22" y="18" width="76" height="92" rx="12"/><rect class="d d-thin f-green" x="32" y="30" width="56" height="34" rx="3"/>'
+    '<path class="d d-thin" d="M38 42 h30 M38 52 h20"/><circle class="d f-red" cx="44" cy="84" r="7"/><circle class="d d-thin" cx="76" cy="84" r="7" fill="none"/>'
+    '<path class="d d-thin d-soft" d="M100 30 q10 -8 14 0 M104 22 q14 -10 18 2"/></g></svg>'
+    '<svg class="sd sd-compass" viewBox="0 0 70 110"><g class="rough">'
+    '<rect class="d f-paper" x="8" y="6" width="54" height="96" rx="4"/><path class="d d-thin" d="M8 30 h54 M8 54 h54 M8 78 h54"/>'
+    '<circle class="d f-green" cx="52" cy="18" r="3"/><circle class="d f-green" cx="52" cy="42" r="3"/><circle class="d f-red" cx="52" cy="66" r="3"/><circle class="d f-y" cx="52" cy="90" r="3"/></g></svg>'
+    '<svg class="sd sd-pencil" viewBox="0 0 240 80"><g class="rough">'
+    '<rect class="d d-thin f-paper" x="10" y="6" width="220" height="68" rx="3"/>'
+    '<path class="d d-thin d-soft" d="M10 22 h220 M60 6 v68"/><path class="d d-red" d="M70 60 l20 -6 l14 -24 l14 30 l16 -14 h40"/>'
+    '<path class="d d-thin d-dash" d="M64 40 h160"/></g></svg>'
+    '</div>'
+)
+DESK_DOODLES = {True: SHEET_DOODLES, "architect": SHEET_DOODLES, "product": PRODUCT_DOODLES, "project": PROJECT_DOODLES, "ops": OPS_DOODLES}
 KEY = '''  <aside class="key" aria-label="Key to the signifiers on this page">
     <h3>Key</h3>
     <ul>
@@ -1455,6 +1722,54 @@ def pmbok_tag(j, n):
             f'    <p class="pmbok-top"><a class="pmbok-ed" href="../../pmbok/index.html">PMBOK 8 map</a>{doms}</p>\n'
             f'    <ol class="focus" aria-label="Focus areas this note touches">{focus}</ol>\n'
             f'    <dl>{dl}</dl>\n  </aside>')
+
+
+def itil_tag(j, n):
+    """The ITIL tag under an IT operations note's title: practice-group tab(s), the six value chain activities (the ones
+    this note touches filled in), the practices it covers, the SRE word for it, and older names (note field `itil`)."""
+    t = n.get("itil")
+    if not t:
+        return ""
+    names = dict(ITIL_GROUPS)
+    groups = "".join(f'<span class="dom dom-{g}">{names[g]}</span>' for g in t.get("groups", ["service"]))
+    on = t.get("chain", [])
+    chain = "".join(f'<li{" class=on" if k in on else ""}>{label}</li>' for k, label in ITIL_CHAIN)
+    rows = [("practice" if len(t["practices"]) == 1 else "practices", " · ".join(t["practices"]))]
+    if t.get("sre"):
+        rows.append(("in SRE words", t["sre"]))
+    if t.get("principles"):
+        rows.append(("principle", " · ".join(t["principles"])))
+    if t.get("older"):
+        rows.append(("older names", t["older"]))
+    dl = "".join(f"<div><dt>{k}</dt><dd>{v}</dd></div>" for k, v in rows)
+    return (f'  <aside class="pmbok itil" aria-label="Where this note sits in ITIL 4">\n'
+            f'    <p class="pmbok-top"><span class="pmbok-ed">ITIL 4</span>{groups}</p>\n'
+            f'    <ol class="focus" aria-label="Value chain activities this note touches">{chain}</ol>\n'
+            f'    <dl>{dl}</dl>\n  </aside>')
+
+
+LADDER_RUNGS = ("By hand", "Written down", "Scripted", "Automatic")
+
+
+def ladder_block(n):
+    """The maturity ladder: four rungs from by hand to automatic; `ladder_now` (0-3) marks where Larder ends up."""
+    now = n.get("ladder_now")
+    cols = ""
+    for i, (when, items) in enumerate(n["ladder"]):
+        here = ' <span class="rung-here">Larder now</span>' if i == now else ""
+        cols += (f'    <div class="rung rung-{i + 1}{" is-now" if i == now else ""}"><h3><span class="rung-n">{i + 1}</span>'
+                 f'{LADDER_RUNGS[i]}{here}</h3><p class="dial-when">{when}</p>{li(items)}</div>\n')
+    return f'  <div class="dial ladder">\n{cols}  </div>'
+
+
+def pager_block(n):
+    """The pager log: the page as it arrived, before the lesson (note field `pager` = dict(when=, lines=[(time, text)]))."""
+    p = n.get("pager")
+    if not p:
+        return ""
+    rows = "".join(f'<li><time>{t}</time><span>{x}</span></li>' for t, x in p["lines"])
+    return (f'  <aside class="pager-log" aria-label="Pager log">\n    <p class="pager-head"><span>pager log</span>'
+            f'<span>{p["when"]}</span></p>\n    <ol>{rows}</ol>\n  </aside>')
 
 
 def dial_block(n):
@@ -1668,9 +1983,10 @@ def render_note(j, n, back=()):
         f'  <div class="tldr">\n    <span class="tag">TL;DR</span>\n    <p>{n["tldr"]}</p>\n  </div>',
         f'  <ul class="chips" aria-label="At a glance">{chips}</ul>',
         pmbok_tag(j, n),
+        itil_tag(j, n),
         KEY,
         h2(1, "problem", j.get("problem_h2", "The problem"), n.get("problem_side", "why do we even need this?")),
-        n["problem"], figs("problem_figs"), n.get("problem_after", ""), meanwhile_box(j, n, back),
+        n["problem"], pager_block(n), figs("problem_figs"), n.get("problem_after", ""), meanwhile_box(j, n, back),
         h2(2, "analogy", "Real-life analogy", n["analogy_side"]),
         n["analogy"], figs("analogy_figs"),
         f'''  <div class="table-scroll">
@@ -1695,8 +2011,8 @@ def render_note(j, n, back=()):
         f'  <p class="aside">{n["tools"]}</p>' if n.get("tools") else "",
         deep_dive_block(n),
         then_now_block(n),
-        h2(4, "tradeoffs", "Light, standard, heavy", "how much of this do you need?") if n.get("dial") else h2(4, "tradeoffs", "Gains vs losses", "nothing is free"),
-        dial_block(n) if n.get("dial") else f'''  <div class="tchart">
+        h2(4, "tradeoffs", "The maturity ladder", "where are we, and what is the next rung?") if n.get("ladder") else h2(4, "tradeoffs", "Light, standard, heavy", "how much of this do you need?") if n.get("dial") else h2(4, "tradeoffs", "Gains vs losses", "nothing is free"),
+        ladder_block(n) if n.get("ladder") else dial_block(n) if n.get("dial") else f'''  <div class="tchart">
     <div class="gain">
       <h3>What we gain</h3>
       {li(n["gains"])}
@@ -1826,7 +2142,7 @@ def render_index(j):
     <li><b>{j.get("problem_h2", "The problem")}</b>: {"a scene from the case study where it goes wrong" if j.get("book") else "what breaks without the pattern"}, with a doodle.</li>
     <li><b>Real-life analogy</b>: an everyday version, plus a “{j.get("map_caption", "translate to code").lower()}” table.</li>
     <li><b>How it solves it</b>: diagrams, steps, vocabulary and a {"template" if j.get("book") else "code"} card{". Key notes add a <b>going deeper</b> chapter here" if j.get("deep_dives") else ""}{". Then a <b>then &amp; now</b> box: what the original book said, what changed, and a verdict" if j.get("then_now") else ""}.</li>
-    <li>{"<b>Light, standard, heavy</b>: how much of it a small, a typical and a heavy project needs." if j.get("pmbok") else "<b>Gains vs losses</b>: the trade-off spread."}</li>
+    <li>{"<b>The maturity ladder</b>: four rungs, from by hand to automatic, and where Larder stands." if j.get("ops") else "<b>Light, standard, heavy</b>: how much of it a small, a typical and a heavy project needs." if j.get("pmbok") else "<b>Gains vs losses</b>: the trade-off spread."}</li>
     <li><b>Ratings</b>: nine qualities, before → after.</li>
     <li><b>Common pitfalls</b>: each with its fix.</li>
     <li><b>When to use it</b>: and when to skip it.</li>
@@ -2001,7 +2317,7 @@ SPINE_TITLES = {
     "architect-4": "Integration", "architect-5": "Qualities", "architect-6": "Delivery",
     "product-1": "Discovering", "product-2": "Deciding", "product-3": "Idea to Backlog",
     "product-4": "Measuring", "product-5": "Stakeholders", "product-6": "Growing",
-    "pmbok": "PMBOK Map", "project-1": "Lay of the Land", "project-2": "Start, Steer, Close", "project-3": "What, By When", "project-4": "Money and People", "project-5": "People Outside", "project-6": "Making It Yours",
+    "pmbok": "PMBOK Map", "ops-1": "Lights On", "ops-2": "Things Break", "ops-3": "Safe Change", "ops-4": "Promises", "ops-5": "The Worst", "ops-6": "Reliability Team", "Changing Things Safely": "Safe Change", "Promises &amp; Measures": "Promises", "Ready for the Worst": "The Worst", "Building the Reliability Team": "Reliability Team", "project-1": "Lay of the Land", "project-2": "Start, Steer, Close", "project-3": "What, By When", "project-4": "Money and People", "project-5": "People Outside", "project-6": "Making It Yours",
     "People Outside, and Surprises": "People &amp; Surprises",
     "Docker &amp; Kubernetes": "Docker &amp; K8s",   # cheat sheets are looked up by their full title
     # the darkside Acts drop their article on the spine, so even the longest fits
@@ -2087,7 +2403,7 @@ def render_landing(sheets=(), dives=(), darkside=None):
         '  <div class="page-meta"><span class="day">The shelf · 2026</span><span class="topic">series · <b>software design</b></span></div>',
         '  <p class="kicker">pattern notes, deep dives, two notebooks and a stack of cheat sheets</p>',
         '  <h1 class="cover-title"><span class="hl">Jef’s Notes</span></h1>',
-        f'  <p class="lead">Software design, in sizes that fit a working day: <b>{n1} pattern notes, {len(dives)} deep dives, {total - n1} notes from three practitioners and {len(sheets)} cheat sheets</b>. More on the way.</p>',
+        f'  <p class="lead">Software design, in sizes that fit a working day: <b>{n1} pattern notes, {len(dives)} deep dives, {total - n1} notes from four practitioners and {len(sheets)} cheat sheets</b>. More on the way.</p>',
         AUTHOR_NOTE,
         '  <h2 id="shelf"><span class="num">✎</span>Pattern notes <span class="side">ten minutes each</span></h2>',
         f'  <p class="hook">{len(series1)} notebooks, {n1} patterns. Each one fits in a coffee break and has a “what we lose” column, because something always is.</p>',
@@ -2097,7 +2413,7 @@ def render_landing(sheets=(), dives=(), darkside=None):
         f'  <ul class="shelf shelf-series">\n{dive_items(dives)}\n  </ul>',
         '  <h2 id="series-2"><span class="num">✎</span>The Practitioner\'s Notebooks <span class="side">a story in three voices</span></h2>',
         '  <noscript><style>.pulled[hidden] { display: grid !important; } .spines { display: none !important; }</style></noscript>',
-        '  <p class="hook">A soap opera about a grocery start-up, told by its architect, its product owner and its project manager. Nobody dies. Several roadmaps do.</p>',
+        '  <p class="hook">A soap opera about a grocery start-up, told by its architect, its product owner, its project manager and the engineer who keeps it running. Nobody dies. Several roadmaps do.</p>',
         '  <p>The work <b>around</b> the code, following one company, <b>Larder</b>, as it grows from one city to six. Every note has a template to copy and a <b>try it</b> exercise for your own project. Tap a spine to pull a volume out; start with the case file.</p>',
         '  <h3 class="shelf-book">Book 1 · The Solution Architect\'s Notebook <span>narrated by Ana</span></h3>',
         spine_shelf(book_items([j for j in series2 if j.get("book_no", 1) == 1], PLANNED_2, series=2, book=1, casefile=True), "ana", "Book 1 volumes"),
@@ -2105,6 +2421,8 @@ def render_landing(sheets=(), dives=(), darkside=None):
         spine_shelf(book_items([j for j in series2 if j.get("book_no", 1) == 2], PLANNED_PRODUCT, series=2, book=2), "grace", "Book 2 volumes"),
         '  <h3 class="shelf-book">Book 3 · The Project Manager\'s Notebook <span>narrated by Sanne · the PMBOK Guide in plain words</span></h3>',
         spine_shelf(PMBOK_ITEM + "\n" + book_items([j for j in series2 if j.get("book_no", 1) == 3], PLANNED_PROJECT, series=2, book=3), "sanne", "Book 3 volumes"),
+        '  <h3 class="shelf-book">Book 5 · The IT Operations Notebook <span>narrated by Eli · ITIL 4 and SRE in plain words</span></h3>',
+        spine_shelf(book_items([j for j in series2 if j.get("book_no", 1) == 5], PLANNED_OPS, series=2, book=5), "eli", "Book 5 volumes"),
         '  <h2 id="cheatsheets"><span class="num">⌘</span>Cheat sheets <span class="side">thirty seconds each</span></h2>',
         '  <p class="hook">For when you know exactly what you want and have forgotten the flag.</p>',
         '  <p>The commands and decisions you look up twice a week, on a few printable A4 cards. They read fine on a phone too.</p>',
@@ -2117,7 +2435,7 @@ def render_landing(sheets=(), dives=(), darkside=None):
         ] if darkside else []),
         '  <h2 id="future"><span class="num">→</span>Future log <span class="side">plans, not promises</span></h2>',
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
-        '  <p class="aside">the architect\'s and the product owner\'s notebooks are complete, six volumes each, and the project manager\'s has begun (★): the whole PMBOK Guide, one domain per volume. After that: the client manager. The deep dives get a second season too.</p>',
+        '  <p class="aside">the architect\'s, product owner\'s, project manager\'s and IT operations notebooks are complete, six volumes each. Next (★): the client manager. The deep dives get a second season too.</p>',
         f'  <div class="future">\n{chr(10).join(months)}\n  </div>',
         '  <h2 id="inside"><span class="num">?</span>What\'s inside <span class="side">four formats, same idea</span></h2>',
         '''  <ol class="how-to">
@@ -2240,11 +2558,11 @@ def render_casefile():
         c.KORENWOLF,
         '  <h2 id="cast"><span class="num">5</span>The cast <span class="side">who\'s who, and who tells the story</span></h2>',
         f'  <ul class="cast">\n{cast}\n  </ul>',
-        '  <h2 id="books"><span class="num">6</span>The books <span class="side">one company, four notebooks</span></h2>',
+        '  <h2 id="books"><span class="num">6</span>The books <span class="side">one company, five notebooks</span></h2>',
         c.two_books.html(),
         f'  <ul class="bookcards">\n{books}\n  </ul>',
         '  <h2 id="timeline"><span class="num">7</span>The story timeline <span class="side">every note, pinned to its date</span></h2>',
-        '  <p>Read one book from start to end, or follow the story in date order across books. <span class="sig-inline">★</span> story events · <span class="sig-inline">✎</span> Ana’s notebook · <span class="sig-inline sig-2">✎</span> Grace’s notebook · <span class="sig-inline sig-3">✎</span> Sanne’s notebook.</p>',
+        '  <p>Read one book from start to end, or follow the story in date order across books. <span class="sig-inline">★</span> story events · <span class="sig-inline">✎</span> Ana’s notebook · <span class="sig-inline sig-2">✎</span> Grace’s notebook · <span class="sig-inline sig-3">✎</span> Sanne’s notebook · <span class="sig-inline sig-5">✎</span> Eli’s notebook.</p>',
         f'  <div class="future timeline">\n{chr(10).join(months)}\n  </div>',
         '  <p class="aside">the facts on this page are the source of truth for every note. If a note and this page disagree, this page wins (and the note gets fixed).</p>',
         '  <p class="folio">✦</p>',

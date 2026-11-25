@@ -40,6 +40,17 @@ Live site: https://jepzman.github.io/oni-alien/
 | 3 · 2 | Starting, Steering, Closing (`/project-2/`) | 15 | project ratings |
 | 3 · 1 | The Lay of the Land (`/project-1/`) | 15 | project ratings (value focus, predictability, risk reduction, transparency, stakeholder confidence, team ownership, adaptability, quality built in, low overhead) |
 
+**Book 5 · The IT Operations Notebook** (Eli, the platform and operations engineer; skin `theme-ops`, an incident logbook of carbon-copy forms) covers ITIL 4 and SRE in plain words. Each note is a question someone running IT must answer, with an **ITIL tag** under the title (practice group, the six value chain activities, the practices, the SRE word, older names), a **maturity ladder** (by hand → written down → scripted → automatic) in place of gains vs losses, and on incident notes a **pager log**: the alert as it arrived. Ratings: nine operations ratings (user impact, reliability, recovery speed, change safety, visibility, toil reduction, cost awareness, sustainable on-call, low overhead). Book 5 is complete (six volumes); plan and decisions in `docs/HANDOFF-it-operations.md`. Independent study notes, not affiliated with PeopleCert or AXELOS.
+
+| Book · vol. | Journal | Notes |
+|---|---|---|
+| 5 · 1 | Keeping the Lights On (`/ops-1/`) | 15 |
+| 5 · 2 | When Things Break (`/ops-2/`) | 15 |
+| 5 · 3 | Changing Things Safely (`/ops-3/`) | 15 |
+| 5 · 4 | Promises & Measures (`/ops-4/`) | 15 |
+| 5 · 5 | Ready for the Worst (`/ops-5/`) | 15 |
+| 5 · 6 | Building the Reliability Team (`/ops-6/`) | 15 |
+
 Book 3 is *The Project Manager's Notebook* (Sanne, binder skin `theme-project`): the whole **PMBOK Guide, eighth edition** in plain words. Each note is a question a project manager must answer, with a PMBOK tag under the title (domain, focus areas, what it covers, what older editions called it), a **light / standard / heavy** dial in place of gains vs losses, and, on key notes, a **deep dive**. The **PMBOK map** (`/pmbok/`, data in `content/pmbok/map.py`) shows the whole guide on one page and links each part to its note. **The project file** (`/rotterdam/`) collects every template card of the book in order, grouped by project: Rotterdam (vols. 1–4), Antwerp (vol. 5) and the 2028 programme (vol. 6), worked sets of project documents. Book 3 is complete (six volumes). Plan and decisions: `docs/HANDOFF-project-manager.md`. These are independent study notes, not affiliated with PMI.
 
 The landing page (`/`) shows two shelves (Series 1: design patterns; Series 2: practitioner's notebooks, with `series=2` in `JOURNALS`), planned volumes (`PLANNED`, `PLANNED_2`) and a “future log” of upcoming work.

@@ -52,7 +52,8 @@ CAST = [
     ("L", "Lena", "Legal and data protection officer", "GDPR, contracts, Belgian rules", "a breach, or an unsigned contract", "books 1, 4", "mustard"),
     ("T", "Tomás", "Manager, dark store Noord", "his pickers, the picker app, the Wi-Fi", "pickers standing idle", "books 1–2", "mustard"),
     ("S", "Sam", "Customer support lead", "refunds, complaints, the helpdesk", "another week of refunds by hand", "books 1–2", "mustard"),
-    ("B", "Ben · Cho · Dee · Eli", "Orders lead · payments · mobile lead · platform", "shipping without breaking Larder Core", "the next King's Day", "books 1–3", "mustard"),
+    ("B", "Ben · Cho · Dee", "Orders lead · payments · mobile lead", "shipping without breaking Larder Core", "the next King's Day", "books 1–3, 5", "mustard"),
+    ("E", "Eli", "Platform and operations engineer · at Larder before Oct 2025", "that Larder keeps running, and doesn't need him at 3 a.m.", "being the only one who knows", "narrates book 5", "green"),
     ("S", "Sanne", "Delivery manager · joins Jan 2026", "the Rotterdam launch: dates, risks, dependencies", "a launch date nobody believes", "narrates book 3", "red"),
     ("M", "Mo", "Key account manager, Larder for Business · joins Mar 2026", "Korenwolf, the first business client", "losing the account at renewal", "narrates book 4", "red"),
     ("H", "Hanna · Ruben", "Korenwolf: Head of Workplace · procurement", "happy staff / a fair price and firm service levels", "complaints to the board / overpaying", "book 4", "soft"),
@@ -76,6 +77,10 @@ BOOKS = [
      "Larder for Business wins its first client, Korenwolf Group. Mo learns to manage expectations, scope changes, service levels, "
      "monthly reports and a hard renewal, with Hanna and Ruben on the other side of the table.",
      None),
+    ("Book 5", "The IT Operations Notebook", "Eli", "Mar 2026 → Oct 2028", "complete: 6 volumes",
+     "ITIL 4 and SRE in plain words, from the engineer who keeps Larder running. Eli starts at 160 % with everything in his "
+     "head, and builds a catalogue, an on-call rota, alerts that mean something, runbooks, a service desk, incident handling, safe change, SLOs, continuity, and finally a reliability team that runs without him.",
+     "../ops-1/index.html"),
 ]
 
 KORENWOLF = """  <p>Femke wants a second revenue line with predictable volume: <b>Larder for Business</b>, weekly restocking of office pantries
@@ -417,3 +422,108 @@ two_books.box(270, 70, 220, 90, "event storming", "y", sub="21 Oct 2025", size=1
 two_books.arrow(172, 115, 264, 115, dash=True)
 two_books.arrow(588, 115, 496, 115, dash=True)
 two_books.note(380, 196, "the same scene, seen from both sides", "pen", size=17)
+
+
+# Book 5 (Eli, IT operations): pinned to the same story timeline, tag "5".
+TIMELINE_5 = [
+    ("2026-03", "Eli at 160 %; what is IT operations for? 30 Mar", "what-is-it-operations", "ops-1"),
+    ("2026-04", "Service catalogue, 2 Apr", "what-we-run", "ops-1"),
+    ("2026-04", "Checkout's dependency map, 7 Apr", "dependency-map", "ops-1"),
+    ("2026-04", "The domain on an expired card, 9 Apr", "it-assets", "ops-1"),
+    ("2026-04", "Forty Rotterdam starters, 13 Apr", "joiners-leavers", "ops-1"),
+    ("2026-04", "Alert review: 410 pages → 22, 15 Apr", "alert-hygiene", "ops-1"),
+    ("2026-04", "On-call rota from 20 Apr", "on-call-rota", "ops-1"),
+    ("2026-04", "Rotterdam's heartbeat on opening day, 27 Apr", "monitoring", "ops-1"),
+    ("2026-05", "Runbooks; Cho fixes a 02:40 page alone, 9 May", "runbooks", "ops-1"),
+    ("2026-05", "One service desk for the stores, 11 May", "service-desk", "ops-1"),
+    ("2026-05", "Wi-Fi survey at Noord; failover test at Rotterdam", "store-network", "ops-1"),
+    ("2026-05", "Store IT kit v1, 25 May", "store-it-kit", "ops-1"),
+    ("2026-06", "Six standard requests, 1 Jun", "service-requests", "ops-1"),
+    ("2026-06", "Ops docs out of the wiki, 1 Jun", "knowledge", "ops-1"),
+    ("2026-06", "Toil at 41 %, 8–12 Jun", "toil", "ops-1"),
+    ("2026-06", "Severity levels after the iDEAL Friday, 15 Jun", "severity-levels", "ops-2"),
+    ("2026-07", "Incident roles after the 3 Jul sync incident", "incident-roles", "ops-2"),
+    ("2026-07", "A client incident report for Korenwolf, 16 Jul", "client-incident-reports", "ops-2"),
+    ("2026-08", "Escalation after a silent phone, 2 Aug", "escalation", "ops-2"),
+    ("2026-08", "Incident updates and a status page", "incident-communication", "ops-2"),
+    ("2026-08", "StockPilot down at peak, 21 Aug", "vendor-escalation", "ops-2"),
+    ("2026-08", "First blameless review, 26 Aug", "post-incident-review", "ops-2"),
+    ("2026-09", "PRB-003: the sync's retry storm", "problem-management", "ops-2"),
+    ("2026-09", "Known errors for the first line", "known-errors", "ops-2"),
+    ("2026-09", "Tiers for the known, swarming for the new, 14 Sep", "tiers-swarming", "ops-2"),
+    ("2026-10", "37 actions, 11 done: the cleanup, 6 Oct", "action-items", "ops-2"),
+    ("2026-10", "What changed? The 29 Oct network rule", "change-related-incidents", "ops-2"),
+    ("2026-11", "Incident numbers for Femke", "incident-metrics", "ops-2"),
+    ("2026-12", "Major incident: the Christmas failover, 18 Dec", "major-incidents", "ops-2"),
+    ("2026-12", "Near misses, from 1 Dec", "near-misses", "ops-2"),
+    ("2027-01", "Three kinds of change, 18 Jan", "change-types", "ops-3"),
+    ("2027-01", "A change board, tried for three weeks", "change-board", "ops-3"),
+    ("2027-02", "The change calendar, from 1 Feb", "change-calendar", "ops-3"),
+    ("2027-02", "Risk scores for every normal change", "change-risk", "ops-3"),
+    ("2027-02", "Failover: 50 s in staging, 6 min in production", "validation", "ops-3"),
+    ("2027-02", "Device rings after v3.4, 22 Feb", "device-rollouts", "ops-3"),
+    ("2027-02", "Utrecht's city IT runbook, v1", "new-city-it", "ops-3"),
+    ("2027-03", "WELCOME10 at 16:52 on a Friday", "emergency-changes", "ops-3"),
+    ("2027-03", "Four delivery numbers for Marco", "dora-metrics", "ops-3"),
+    ("2027-03", "Who may touch production?", "production-access", "ops-3"),
+    ("2027-03", "The lifecycle register", "end-of-life", "ops-3"),
+    ("2027-04", "Zuid's cutover night, 18 Apr", "store-cutover", "ops-3"),
+    ("2027-04", "The order.placed rename, fixed forward", "rollback-plans", "ops-3"),
+    ("2027-04", "Patching without Eli's Mondays", "patching", "ops-3"),
+    ("2027-06", "Larder Plus released by flag, 8 Jun", "release-vs-deploy", "ops-3"),
+    ("2027-07", "SLIs: what users count as working", "slis", "ops-4"),
+    ("2027-07", "A second-country sheet for Antwerp, 5 Jul", "second-country", "ops-4"),
+    ("2027-07", "Five systems to switch off", "decommissioning", "ops-4"),
+    ("2027-08", "SLOs agreed, 2 Aug", "slos", "ops-4"),
+    ("2027-08", "The billing vendor goes quiet, 31 Aug", "vendor-silence", "ops-4"),
+    ("2027-09", "Error budget policy signed, 13 Sep", "error-budgets", "ops-4"),
+    ("2027-09", "The monthly service review", "service-reviews", "ops-4"),
+    ("2027-10", "Store self-service, 4 Oct", "shift-left", "ops-4"),
+    ("2027-10", "74 dashboards → 11", "dashboards", "ops-4"),
+    ("2027-10", "Capacity headroom for Christmas", "capacity-headroom", "ops-4"),
+    ("2027-11", "Korenwolf's SLA: 99.8 %", "slas", "ops-4"),
+    ("2027-11", "Six internal promises behind it", "olas", "ops-4"),
+    ("2027-11", "Three availability numbers", "measuring-availability", "ops-4"),
+    ("2027-11", "The IT pulse: handhelds 3.1", "user-satisfaction", "ops-4"),
+    ("2027-12", "Christmas 2027: PSP switch in 40 s", "running-a-peak", "ops-4"),
+    ("2028-01", "What matters most if everything fails?", "business-impact", "ops-5"),
+    ("2028-01", "Restores: 3 h 40, then 22 min", "restore-tests", "ops-5"),
+    ("2028-01", "The access review finds agency pickers", "access-reviews", "ops-5"),
+    ("2028-02", "Paper mode drill at Zuid, 16 Feb", "manual-fallback", "ops-5"),
+    ("2028-02", "Five short continuity plans", "living-plans", "ops-5"),
+    ("2028-02", "Security monitoring: six alerts", "security-monitoring", "ops-5"),
+    ("2028-02", "The cloud bill by owner", "cloud-costs", "ops-5"),
+    ("2028-03", "Game day 1, 9 Mar", "game-days", "ops-5"),
+    ("2028-03", "An account takeover, 9 Mar", "security-incidents", "ops-5"),
+    ("2028-03", "The operational risk register", "ops-risk-register", "ops-5"),
+    ("2028-03", "Korenwolf's 186 questions, from evidence", "audit-evidence", "ops-5"),
+    ("2028-04", "Who decides to invoke the plan?", "invoking-the-plan", "ops-5"),
+    ("2028-04", "Who runs what? The operating model, 10 Apr", "who-runs-what", "ops-6"),
+    ("2028-05", "Rotating every secret in a day, 23 May", "secrets-rotation", "ops-5"),
+    ("2028-05", "The billing exit test, 9 May", "vendor-exit", "ops-5"),
+    ("2028-05", "Sign-in down, office stuck, 16 May", "office-outage", "ops-5"),
+    ("2028-05", "Hiring the first SREs", "hiring-sres", "ops-6"),
+    ("2028-06", "On-call people can live with", "humane-on-call", "ops-6"),
+    ("2028-06", "The maturity check, 19 Jun", "maturity-check", "ops-6"),
+    ("2028-06", "What to automate next", "automation-strategy", "ops-6"),
+    ("2028-07", "Operations strategy signed, 24 Jul", "ops-strategy", "ops-6"),
+    ("2028-07", "One improvement register", "improvement-register", "ops-6"),
+    ("2028-07", "17 tools → 9", "ops-toolset", "ops-6"),
+    ("2028-07", "AI in operations: the 25 Jul suggestion", "ai-in-ops", "ops-6"),
+    ("2028-08", "Ordering's readiness review, 28 Aug", "production-readiness", "ops-6"),
+    ("2028-08", "SLOs spread team by team", "leading-change", "ops-6"),
+    ("2028-09", "Handing over the pager", "pager-handover", "ops-6"),
+    ("2028-09", "An operations career path", "growing-ops-engineers", "ops-6"),
+]
+for _key, _text, _slug, _vol in TIMELINE_5:
+    for _k, _label, _items in TIMELINE:
+        if _k == _key:
+            _items.append((_text, f"../{_vol}/notes/{_slug}.html", "5"))
+            break
+
+_oct = [("Early life support; 9 Oct without Eli", "../ops-6/notes/early-life-support.html", "5"),
+        ("Eli's closing note, 30 Oct", "../ops-6/notes/making-it-yours.html", "5")]
+if not any(k == "2028-10" for k, *_ in TIMELINE):
+    TIMELINE.append(("2028-10", "Oct 2028", _oct))
+else:
+    next(items for k, _, items in TIMELINE if k == "2028-10").extend(_oct)
