@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Data Contracts · Jef’s Notes</title>
+<meta name="description" content="Agree a versioned schema and rules with the team that produces the data.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=444906a817">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-pipelines">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 9 · data pipelines &amp; analytics</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="data-contracts">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 10.06.27</span><span class="topic">collection · <b>keeping it trustworthy</b></span></div>
+  <p class="kicker">a.k.a. “an API for data”</p>
+  <h1><span class="hl">Data Contracts</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>When a pipeline reads another team's data, write down the agreement: <b>fields and types</b>, what each <b>means</b>, <b>quality rules</b>, <b>freshness</b>, the <b>owner</b> and a <b>version</b>. Keep the contract in the producer's repository, <b>check it in their CI</b> so breaking changes are blocked before release, and validate incoming data against it. Breaking changes become a new version that runs alongside the old one for a while.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> keeping it trustworthy</li><li><b>Also called:</b> schema contract, data product interface</li><li><b>Lives in:</b> dbt model contracts, ODCS, schema registries</li><li><b>Pairs with:</b> change data capture, open host service</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">The app team renames <code>line_total</code> to <code>amount_gross</code> in a normal Tuesday release. CDC carries the new column; the warehouse still reads the old one, which is now always empty. Revenue shows <span class="hl-pink">€0 for a week</span>, until the finance meeting.</p>
+  <ul>
+    <li>The app team didn't know anyone used that column.</li>
+    <li>The warehouse found out from its users, not from a test.</li>
+    <li>Every source change is a surprise, so the data team spends its weeks firefighting.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a breaking change. The app team renames the column line_total to amount_gross in a normal Tuesday release. The warehouse pipeline still reads line_total, which is now always empty, and revenue shows as zero for a week until the finance meeting."><g class="rough"><rect class="d f-blue" x="20" y="50" width="200" height="90" rx="10"/><path class="d" d="M226 95 L300 95"/><path class="d" d="M289.2 100.2 L300 95 L289.2 89.8"/><rect class="d d-thin d-red f-paper" x="306" y="60" width="210" height="84" rx="4"/><path class="d d-thin d-red f-y" d="M306 64 a4 4 0 0 1 4 -4 h202 a4 4 0 0 1 4 4 v28 h-210 z"/><path class="d d-thin d-soft" d="M312 118 h198"/><path class="d d-red" d="M522 95 L580 95"/><path class="d d-red" d="M569.2 100.2 L580 95 L569.2 89.8"/><rect class="d f-pink d-red" x="586" y="50" width="160" height="90" rx="10"/></g><text class="t-head" x="120" y="91" text-anchor="middle" font-size="20">app release</text><text class="t" x="120" y="115" text-anchor="middle" font-size="13">renames line_total</text><text class="t-head" x="411" y="83" text-anchor="middle" font-size="17">stg_order_lines</text><text class="t" x="316" y="111" font-size="16">line_total: NULL</text><text class="t" x="316" y="137" font-size="16">line_total: NULL</text><text class="t-head t-red" x="666" y="91" text-anchor="middle" font-size="20">revenue</text><text class="t" x="666" y="115" text-anchor="middle" font-size="15">€0 for a week</text><text class="t-s t-red" x="380" y="220" text-anchor="middle">nobody told the app team the column was used</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A normal Tuesday release renames one column. The warehouse finds out a week later.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the supplier's spec sheet</span></h2>
+  <p>A bakery and a supermarket agree a <b>spec</b>: an 800 g loaf, these label fields, delivered by 06:00. If the bakery wants to sell 750 g loaves, it announces <b>version 2</b> a month ahead and supplies both for a while. The shelf never empties because of a change.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="Doodle of a supplier&#x27;s specification sheet. A bakery and a supermarket agree a spec: loaf weight 800 grams, label fields, delivery by 6 am. If the bakery wants to change the weight, it announces version 2 in advance and supplies both for a while."><g class="rough"><g transform="translate(60 40) scale(1.8)"><g class="d"><rect class="f-y" x="0" y="0" width="50" height="62" rx="3"/><path d="M8 12 h34 M8 22 h26 M8 34 h34 M8 44 h30 M8 54 h20"/><circle class="f-y" cx="44" cy="8" r="6"/></g></g><path class="d" d="M190 100 L300 100"/><path class="d" d="M289.2 105.2 L300 100 L289.2 94.8"/><path class="d" d="M200.8 94.8 L190 100 L200.8 105.2"/><g transform="translate(320 50) scale(1.4)"><g class="d"><rect class="f-paper" x="4" y="22" width="60" height="38"/><path class="f-paper" d="M0 22 l8 -16 h52 l8 16 z"/><rect x="26" y="38" width="16" height="22"/></g></g><rect class="d f-green" x="500" y="60" width="240" height="90" rx="10"/></g><text class="t-s" x="110" y="180" text-anchor="middle">spec v1: 800 g · by 06:00</text><text class="t-head" x="620" y="101" text-anchor="middle" font-size="20">v2 announced</text><text class="t" x="620" y="125" text-anchor="middle" font-size="14">both supplied for a month</text><text class="t-s t-pen" x="380" y="220" text-anchor="middle">the shelf never empties because of a change</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A supplier spec: agreed fields and limits, and changes announced as a new version.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The spec sheet</td><td>The contract file: schema, meaning, rules</td></tr>
+      <tr><td>800 g, delivered by 06:00</td><td>Quality rules and freshness SLA</td></tr>
+      <tr><td>The bakery owns the spec</td><td>The producing team owns the contract</td></tr>
+      <tr><td>Announcing version 2</td><td>A new contract version for breaking changes</td></tr>
+      <tr><td>Supplying both for a month</td><td>Old and new versions side by side, then deprecate</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">written down, owned by the producer, checked twice</span></h2>
+  <p>The contract is a small file (YAML) in the producer's repository. Their CI compares every schema change with it: adding a nullable column passes; removing, renaming or retyping a field fails unless the version is bumped. At the warehouse door, the pipeline validates data against the same file and quarantines rows that don't fit.</p>
+  <p>The best contracts aren't on raw tables at all. The producer publishes a designed interface (a view, an outbox event, a published dataset) so their tables stay private and free to change.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="A data contract. The producing team owns a contract file next to its code: the fields, types and nullability, what each field means, quality rules, freshness, the owner and a version. Their continuous integration checks every change against the contract and blocks breaking ones. The pipeline validates incoming data against the same contract and quarantines what doesn&#x27;t fit."><g class="rough"><rect class="d f-y" x="220" y="20" width="320" height="120" rx="10"/><rect class="d f-blue" x="20" y="170" width="220" height="80" rx="10"/><rect class="d f-green" x="520" y="170" width="220" height="80" rx="10"/><path class="d" d="M300 144 L160 166"/><path class="d" d="M169.9 159.2 L160 166 L171.5 169.5"/><path class="d" d="M460 144 L610 166"/><path class="d" d="M598.6 169.6 L610 166 L600.1 159.3"/></g><text class="t-head" x="380" y="76" text-anchor="middle" font-size="21">contract v2</text><text class="t" x="380" y="100" text-anchor="middle" font-size="13">fields · meaning · rules · SLA · owner</text><text class="t-head" x="130" y="206" text-anchor="middle" font-size="19">producer&#x27;s CI</text><text class="t" x="130" y="230" text-anchor="middle" font-size="14">blocks breaking changes</text><text class="t-head" x="630" y="206" text-anchor="middle" font-size="19">pipeline</text><text class="t" x="630" y="230" text-anchor="middle" font-size="14">validates on arrival</text><text class="t-s t-pen" x="380" y="280" text-anchor="middle">breaking change → v3 alongside v2, then deprecate</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One file, owned by the producer, checked in their CI and at the warehouse's door.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Find the critical inputs</b><p>Which source fields do important reports depend on? Start with those.</p></li>
+    <li><b>Write the contract with the producer</b><p>Fields, types, nullability, meaning, rules, freshness, owner, version.</p></li>
+    <li><b>Check it in their CI</b><p>A breaking change fails the build unless it's a new version.</p></li>
+    <li><b>Validate on arrival</b><p>The pipeline checks schema and rules; failures go to quarantine and alert both teams.</p></li>
+    <li><b>Version breaking changes</b><p>Publish v3 alongside v2, migrate consumers, then retire v2 on a date.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Data contract</dt><dd>A versioned agreement on a dataset's shape, meaning and quality.</dd></div>
+    <div><dt>Producer / consumer</dt><dd>The team that creates the data / the teams that use it.</dd></div>
+    <div><dt>Breaking change</dt><dd>Removing, renaming or retyping a field, or tightening its meaning.</dd></div>
+    <div><dt>Schema registry</dt><dd>A service storing message schemas and checking compatibility.</dd></div>
+    <div><dt>Deprecation</dt><dd>Announcing that a version will be retired on a date.</dd></div>
+    <div><dt>Data product</dt><dd>A dataset published for others with an owner and a contract.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>contracts/order_lines.yaml</span><span>ODCS-style contract</span></div>
+<pre><code>dataset: shop.order_lines
+version: 2.1.0
+owner: team-checkout            <span class="c"># who to call, who approves changes</span>
+description: One row per order line, as charged to the customer.
+freshness: { max_delay: 15m }
+fields:
+  - name: order_line_id   <span class="k">type</span>: bigint   required: <span class="k">true</span>   unique: <span class="k">true</span>
+  - name: order_id        <span class="k">type</span>: bigint   required: <span class="k">true</span>
+  - name: sku             <span class="k">type</span>: string   required: <span class="k">true</span>
+  - name: qty             <span class="k">type</span>: int      required: <span class="k">true</span>   min: 1
+  - name: line_total      <span class="k">type</span>: decimal(12,2)   required: <span class="k">true</span>
+    description: Gross amount charged <span class="k">in</span> EUR, including VAT, after discounts.
+  - name: updated_at      <span class="k">type</span>: timestamp       required: <span class="k">true</span>
+breaking_changes: <span class="k">new</span> major version, both served <span class="k">for</span> 30 days</code></pre>
+  </div>
+  <p class="aside">tools: Open Data Contract Standard (ODCS) and the Data Contract CLI, dbt model contracts (<code>contract: enforced</code>), Confluent Schema Registry with Avro or Protobuf compatibility modes, Soda and Great Expectations for the rules, Gable.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Breaking changes caught before release</b>, in the producer's CI.</li><li><b>Clear ownership</b>: who to ask, who approves.</li><li><b>Meaning is written down</b>: “gross, incl. VAT” is no longer folklore.</li><li><b>Producers stay free</b> to change everything not in the contract.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Upfront work and negotiation</b> between teams.</li><li><b>Producers take on a duty</b> they may resist.</li><li><b>Versioning effort</b>: serving two versions for a while.</li><li><b>Contracts can rot</b> if nobody checks them automatically.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Pipeline ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>pipelines reading other teams' tables with no agreement</b> to <b>a versioned contract checked in the producer's CI and at arrival</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One more file per dataset.</td></tr>
+      <tr data-before="3" data-after="4"><td>Freshness<small>how recent?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fewer week-long outages from silent breaks.</td></tr>
+      <tr data-before="2" data-after="5"><td>Correctness<small>is the number right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Breaking changes are blocked or versioned.</td></tr>
+      <tr data-before="3" data-after="3"><td>Replayability<small>safe to rerun?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>10× the data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Works across many producing teams.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Some upfront work saves firefighting.</td></tr>
+      <tr data-before="3" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="5"><td>Observability<small>know when it's wrong?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Violations alert both teams at once.</td></tr>
+      <tr data-before="2" data-after="4"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Producers change freely outside the contract.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Contracts nobody checks</h3><p>A wiki page describes the schema; the next release ignores it. <span class="fix">Fix →</span> check it in CI and at arrival, automatically.</p></li>
+    <li><h3>Contracts on raw tables</h3><p>Every internal refactor of the app becomes a contract change. <span class="fix">Fix →</span> publish a designed view or event, and contract that.</p></li>
+    <li><h3>Imposed by the data team</h3><p>Producers see it as someone else's paperwork and route around it. <span class="fix">Fix →</span> agree it together; start with the few fields that matter.</p></li>
+    <li><h3>Schema only</h3><p>Types match, but “amount” switched from net to gross. <span class="fix">Fix →</span> write meaning and rules too, and test ranges and sums.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Reports depend on another team's data.</li><li>Several consumers use the same source.</li><li>Sources change often or have broken pipelines before.</li><li>Data leaves your company (partners, regulators).</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Your own team produces and consumes the data in one repository.</li><li>Short-lived exploration.</li><li>A source that never changes and has one consumer.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../../data/notes/change-data-capture.html"><b>Change data capture</b></a> (Vol. 3)</li><li><a href="../../ddd/notes/open-host-service.html"><b>Open host service</b></a> (Vol. 7)</li><li><a href="../../testing/notes/contract-testing.html"><b>Contract testing</b></a> (Vol. 4)</li><li><a href="../notes/quality-checks.html"><b>Quality checks and quarantine</b></a></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does a data contract contain?</summary><p>Fields and types, their meaning, quality rules, freshness, the owner and a version.</p></details>
+    <details><summary>Where should the contract be checked first?</summary><p>In the producer's CI, so a breaking change fails before it's released.</p></details>
+    <details><summary>How should a breaking change be handled?</summary><p>As a new version served alongside the old one, with a deprecation date.</p></details>
+    <details><summary>Why contract a view or event rather than raw tables?</summary><p>So the producer can change its own tables freely while the published interface stays stable.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>The checkout team says contracts will slow them down. Revenue broke three times this year from their changes. How do you start?</span></summary><p>Start small and together: a contract for the five order-line fields revenue depends on, checked in their CI with a tool that only fails on breaking changes to those fields. Everything else stays free. Show them the three incidents it would have caught.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Write a contract for one source table your reports use: five fields, their meaning in one sentence each, two rules, a freshness limit and an owner. Show it to the team that owns the table and ask which line surprises them.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>A <span class="hl">spec sheet</span> the producer owns. Changes come as a <span class="hl">new version</span>, never a surprise.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/12-data-contracts.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Andrew Jones, <i>Driving Data Quality with Data Contracts</i> (2023).</li><li>Bitol project, Open Data Contract Standard (ODCS).</li><li>dbt documentation, “Model contracts”.</li><li>Confluent documentation, “Schema evolution and compatibility”.</li></ul>
+  </div>
+  <p class="folio">12</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="write-audit-publish.html"><small>← previous note</small>11 · Write–Audit–Publish</a>
+  <a href="quality-checks.html"><small>Next note →</small>13 · Quality Checks &amp; Quarantine</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 9 · a student's bullet journal on data pipelines &amp; analytics</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

@@ -137,7 +137,7 @@ The future log already names these. The plan is to write them as one batch per v
 | 5 Security | Passkeys · Signed Webhooks · Rate-Limited Login |
 | 6 Cloud | Chaos Engineering · Service Catalogues · Progressive Delivery |
 
-**Vol. 9 · AI App Patterns** (was Vol. 7; on 18 Nov 2026 the owner put Domain-Driven Design first as Vol. 7 and Inside the Application as Vol. 8, see `docs/PLAN-code-design.md`): retrieval-augmented generation, agents and tools,
+**Vol. 10 · AI App Patterns** (was Vol. 7, then Vol. 9; on 25 Nov 2026 Data Pipelines & Analytics became Vol. 9; on 18 Nov 2026 the owner put Domain-Driven Design first as Vol. 7 and Inside the Application as Vol. 8, see `docs/PLAN-code-design.md`): retrieval-augmented generation, agents and tools,
 evaluation, guardrails, cost-aware LLM apps. It is written in the updated shape from the start. Its collection list
 is a separate proposal when its turn comes.
 
@@ -238,4 +238,4 @@ on the live site; deep-dive covers restyled as a printed textbook; long words in
 Cover artwork: the owner chose option C (16 Nov): a paper sticker with one emblem and the volume's paper pressed into the
 cloth, on the six pattern covers (`COVER_ART` in `build_notes.py`).
 
-Next for Series 1: the freshness pass (S5), the depth pass (S4), then Vol. 9 (AI App Patterns).
+Next for Series 1: the freshness pass (S5), the depth pass (S4), then Vol. 10 (AI App Patterns); Vol. 9 · Data Pipelines & Analytics was written on 25 Nov 2026.

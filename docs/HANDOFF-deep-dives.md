@@ -5,9 +5,11 @@ Status **2026-11-19**: **Season 1 is written and live: six deep dives**, each te
 06 Zero-Downtime Change. **Season 2 has begun** with 07 Sign-in, Tokens & Sessions (`/deep-dives/sign-in-tokens-sessions/`,
 the first for the security volume), 08 Replication, Failover & Leader Election (`/deep-dives/replication-failover/`), 09 Sharding & Partitioning
 (`/deep-dives/sharding-partitioning/`), 10 Indexes & Query Plans (`/deep-dives/indexes-query-plans/`) and 11 Rendering on the Web
-(`/deep-dives/rendering-web/`, the first for the frontend volume).
+(`/deep-dives/rendering-web/`, the first for the frontend volume) and, on 25 Nov, 12 From App Database to Warehouse
+(`/deep-dives/app-db-to-warehouse/`: CDC, upserts and star schema joined into one pipeline; the first of a data-engineering
+run planned in `docs/PLAN-data-pipelines.md`).
 Remaining candidates (section 2, and in the future log):
-Observability & SLOs, Multitenancy; also suggested on 19 Nov: A Test Suite You Trust
+Observability & SLOs, Multitenancy, History in the Warehouse (and the later data-engineering dives in `docs/PLAN-data-pipelines.md`); also suggested on 19 Nov: A Test Suite You Trust
 (flaky tests, deterministic tests, parallel and selective runs) for the testing volume.
 
 The landing page was reworked in the same release: the author's note is on top and covers all four formats,

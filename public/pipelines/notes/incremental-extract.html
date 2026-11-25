@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Incremental Extract · Jef’s Notes</title>
+<meta name="description" content="Copy only what changed since last time, using a high-water mark, without missing late rows.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=444906a817">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-pipelines">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 9 · data pipelines &amp; analytics</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="incremental-extract">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 06.05.27</span><span class="topic">collection · <b>getting data in</b></span></div>
+  <p class="kicker">a.k.a. “high-water mark”</p>
+  <h1><span class="hl">Incremental Extract</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Instead of copying a whole table every night, copy only the rows that <b>changed since the last run</b>, found by a column such as <code>updated_at</code> and a saved <b>watermark</b>. Two rules make it safe: re-read a small <b>overlap</b> behind the watermark (transactions commit late) and <b>merge by key</b> so the overlap does no harm. It cannot see hard deletes; for those use CDC or a key comparison.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> getting data in</li><li><b>Needs:</b> a trusted, indexed updated_at</li><li><b>Also called:</b> delta load, high-water mark</li><li><b>Pairs with:</b> idempotent loads, change data capture</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">The shop copies all of <code>order_lines</code> every night. At 60 million rows and 25 GB it now starts at 01:00 and is <span class="hl-pink">still running when the shops open</span>, while the replica it reads from falls behind and slows the app. Only about 108,000 rows changed since yesterday.</p>
+  <ul>
+    <li>The work grows with the <b>size of the table</b>, not with the size of the change.</li>
+    <li>The report can't be fresher than once a night.</li>
+    <li>Every run puts the heaviest possible read on the source.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a nightly full copy that no longer fits the night. The job copies all 60 million order lines, 25 gigabytes, starting at 01:00. At 06:10 it is still running when the first shops open, and the read replica it copies from is lagging, slowing the app."><g class="rough"><path class="d" d="M40 130 H720"/><path class="d" d="M60 124 v12"/><path class="d" d="M188 124 v12"/><path class="d" d="M316 124 v12"/><path class="d" d="M444 124 v12"/><path class="d" d="M572 124 v12"/><path class="d" d="M700 124 v12"/><rect class="d f-y" x="60" y="70" width="610" height="44" rx="10"/><rect class="d f-pink d-red" x="600" y="190" width="150" height="50" rx="10"/></g><text class="t-s" x="60" y="160" text-anchor="middle" font-size="16">01:00</text><text class="t-s" x="188" y="160" text-anchor="middle" font-size="16">02:00</text><text class="t-s" x="316" y="160" text-anchor="middle" font-size="16">03:00</text><text class="t-s" x="444" y="160" text-anchor="middle" font-size="16">04:00</text><text class="t-s" x="572" y="160" text-anchor="middle" font-size="16">05:00</text><text class="t-s" x="700" y="160" text-anchor="middle" font-size="16">06:00</text><text class="t-head" x="365" y="99" text-anchor="middle" font-size="18">copying order_lines · 60 M rows · 25 GB</text><text class="t-head t-red" x="675" y="222" text-anchor="middle" font-size="17">shops open</text><text class="t-s t-red" x="400" y="230" text-anchor="middle">still copying at 06:10 · replica 4 min behind</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The full copy grew past the night: 60 million rows, 25 GB, still running at opening time.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the meter reader</span></h2>
+  <p>A meter reader doesn't count every unit since the house was built. They write down today's value and bill the <b>difference since the last reading</b>, which is on the card. The card is updated only after the bill goes out, so a lost bill never skips a month.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="Doodle of a meter reader. Each month the reader notes the meter value and bills only the difference since last month&#x27;s reading. The previous reading is written on the card, like a bookmark."><g class="rough"><g transform="translate(60 60) scale(1.6)"><g class="d"><path class="f-paper" d="M4 44 a26 26 0 0 1 52 0 z"/><path d="M30 44 l14 -18 M10 36 l4 -2 M30 20 v4 M50 36 l-4 -2"/><circle cx="30" cy="44" r="3"/></g></g><rect class="d f-y" x="260" y="60" width="220" height="90" rx="10"/><path class="d" d="M486 105 L560 105"/><path class="d" d="M549.2 110.2 L560 105 L549.2 99.8"/><rect class="d f-green" x="566" y="60" width="170" height="90" rx="10"/></g><text class="t-s" x="110" y="190" text-anchor="middle">meter now: 41,380</text><text class="t-head" x="370" y="101" text-anchor="middle" font-size="20">last reading</text><text class="t" x="370" y="125" text-anchor="middle" font-size="16">card: 40,910</text><text class="t-head" x="651" y="101" text-anchor="middle" font-size="20">bill 470</text><text class="t" x="651" y="125" text-anchor="middle" font-size="16">only the change</text><text class="t-s t-pen" x="370" y="210" text-anchor="middle">save today&#x27;s reading on the card, after the bill is sent</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The meter reader bills the difference since the last reading on the card.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The meter</td><td>A column that only grows: <code>updated_at</code>, an id, a version</td></tr>
+      <tr><td>Last reading on the card</td><td>The watermark, saved per table</td></tr>
+      <tr><td>Billing the difference</td><td><code>WHERE updated_at &gt; :watermark</code></td></tr>
+      <tr><td>Updating the card after billing</td><td>Save the watermark only after the load commits</td></tr>
+      <tr><td>A house that was demolished</td><td>A deleted row: it has no reading to change</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">watermark, overlap, merge, then move the watermark</span></h2>
+  <p>Keep a small table of watermarks, one per source table. Each run reads rows changed after the watermark <b>minus an overlap</b>, merges them into staging on the primary key, and then stores the largest <code>updated_at</code> it saw. The overlap exists because a row is stamped when it is written but becomes visible when its transaction commits, which can be later than the next run.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="How an incremental extract works. A watermarks table stores the last updated_at loaded for order_lines, 23:50. The next run selects rows whose updated_at is later than the watermark minus a ten minute safety overlap. It merges them into staging by key, and only after that commits does it save the new watermark, the largest updated_at it saw."><g class="rough"><rect class="d d-thin f-paper" x="20" y="40" width="220" height="58" rx="4"/><path class="d d-thin f-y" d="M20 44 a4 4 0 0 1 4 -4 h212 a4 4 0 0 1 4 4 v28 h-220 z"/><path class="d" d="M246 70 L316 70"/><path class="d" d="M305.2 75.2 L316 70 L305.2 64.8"/><rect class="d f-blue" x="322" y="30" width="230" height="80" rx="10"/><path class="d" d="M558 70 L616 70"/><path class="d" d="M605.2 75.2 L616 70 L605.2 64.8"/><rect class="d f-green" x="622" y="30" width="120" height="80" rx="10"/><path class="d" d="M682 116 L682 190"/><path class="d" d="M676.8 179.2 L682 190 L687.2 179.2"/><rect class="d f-y" x="560" y="196" width="190" height="70" rx="10"/><path class="d d-dash" d="M554 230 Q320 250 130 102"/><path class="d" d="M141.7 104.5 L130 102 L135.3 112.8"/></g><text class="t-head" x="130" y="63" text-anchor="middle" font-size="17">etl_watermarks</text><text class="t" x="30" y="91" font-size="16">order_lines · 23:50</text><text class="t-head" x="437" y="66" text-anchor="middle" font-size="19">SELECT changed</text><text class="t" x="437" y="90" text-anchor="middle" font-size="14">updated_at &gt; 23:50 − 10 min</text><text class="t-head" x="682" y="66" text-anchor="middle" font-size="20">MERGE</text><text class="t" x="682" y="90" text-anchor="middle" font-size="14">on line id</text><text class="t-head" x="655" y="227" text-anchor="middle" font-size="18">save watermark</text><text class="t" x="655" y="251" text-anchor="middle" font-size="14">max seen: 00:14</text><text class="t-s t-pen" x="300" y="280" text-anchor="middle">only after the merge commits</text><text class="t-s t-pen" x="330" y="150" text-anchor="middle">overlap re-reads a little:</text><text class="t-s t-pen" x="330" y="174" text-anchor="middle">harmless, because MERGE</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Read past the watermark minus an overlap, merge by key, then move the watermark.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Find a reliable change column</b><p><code>updated_at</code> set by the database (a trigger or default), never by app clocks; or an always-increasing id for append-only tables.</p></li>
+    <li><b>Index it</b><p>So each run is a short range scan, not a full scan.</p></li>
+    <li><b>Read with an overlap</b><p><code>updated_at &gt; watermark − 10 min</code>: longer than your longest transaction.</p></li>
+    <li><b>Merge by key</b><p>So rows read twice are updated, not duplicated.</p></li>
+    <li><b>Save the watermark last</b><p>In the same transaction as the merge, or after it commits, never before.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Watermark</dt><dd>The last change position loaded, saved between runs.</dd></div>
+    <div><dt>Overlap window</dt><dd>How far behind the watermark each run re-reads.</dd></div>
+    <div><dt>Delta</dt><dd>The rows that changed since the last run.</dd></div>
+    <div><dt>Full refresh</dt><dd>Copy the whole table again.</dd></div>
+    <div><dt>Hard delete</dt><dd>A row removed from the table; invisible to timestamp extracts.</dd></div>
+    <div><dt>Reconciliation</dt><dd>Comparing counts, sums or keys between source and copy.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>extract_order_lines.sql</span><span>source: PostgreSQL</span></div>
+<pre><code><span class="c">-- 1 · read the delta, with a safety overlap behind the watermark</span>
+<span class="k">SELECT</span> *
+<span class="k">FROM</span>   order_lines
+<span class="k">WHERE</span>  updated_at &gt;  :watermark - interval <span class="s">'10 minutes'</span>
+  <span class="k">AND</span>  updated_at &lt;= now() - interval <span class="s">'1 minute'</span>   <span class="c">-- leave in-flight rows for next time</span>
+<span class="k">ORDER</span>  <span class="k">BY</span> updated_at;
+
+<span class="c">-- 2 · in the warehouse: MERGE the rows into stg_order_lines on order_line_id</span>
+
+<span class="c">-- 3 · only then move the watermark</span>
+<span class="k">UPDATE</span> etl_watermarks
+<span class="k">SET</span>    last_value = :max_updated_at_seen
+<span class="k">WHERE</span>  table_name = <span class="s">'order_lines'</span>;
+
+<span class="c">-- in the source, once: make updated_at trustworthy</span>
+<span class="k">CREATE</span> TRIGGER order_lines_touch BEFORE <span class="k">UPDATE</span> <span class="k">ON</span> order_lines
+<span class="k">FOR</span> EACH <span class="k">ROW</span> EXECUTE FUNCTION set_updated_at_now();</code></pre>
+  </div>
+  <p class="aside">tools: Airbyte and Fivetran (“incremental” sync modes with a cursor column), dbt <code>is_incremental()</code>, AWS Glue job bookmarks, Azure Data Factory watermark pattern; for deletes and exact ordering use CDC (Debezium) instead.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Work grows with change</b>, not with table size.</li><li><b>Fresher</b>: cheap enough to run every 15 minutes or hourly.</li><li><b>Light on the source</b>: an index range scan, not a full scan.</li><li><b>No new infrastructure</b>: just SQL and one small table.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Blind to hard deletes</b>.</li><li><b>Trusts one column</b>: a script that skips <code>updated_at</code> hides its changes.</li><li><b>Late commits</b> are missed without an overlap.</li><li><b>Only the latest version</b> is seen; changes between runs are lost.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Pipeline ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>a nightly full copy of the table</b> to <b>an incremental extract by watermark with overlap and merge</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A watermark and an overlap to understand.</td></tr>
+      <tr data-before="1" data-after="4"><td>Freshness<small>how recent?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Cheap enough to run hourly or more.</td></tr>
+      <tr data-before="5" data-after="3"><td>Correctness<small>is the number right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Deletes and untouched updates slip through.</td></tr>
+      <tr data-before="4" data-after="3"><td>Replayability<small>safe to rerun?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Reruns are safe with MERGE; backfills need a reset.</td></tr>
+      <tr data-before="1" data-after="4"><td>Scalability<small>10× the data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Work follows the change, not the table.</td></tr>
+      <tr data-before="2" data-after="4"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Far less data read and moved.</td></tr>
+      <tr data-before="3" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral: same columns land.</td></tr>
+      <tr data-before="3" data-after="3"><td>Observability<small>know when it's wrong?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Watermark lag is one more thing to watch.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>No overlap</h3><p>A transaction that commits after the run with an older timestamp is skipped forever. <span class="fix">Fix →</span> re-read a window longer than your longest transaction, and cap transaction time.</p></li>
+    <li><h3>updated_at set by the app</h3><p>A bulk UPDATE script doesn't set it, and its changes never arrive. <span class="fix">Fix →</span> set it in the database with a trigger or default, so every write path updates it.</p></li>
+    <li><h3>Watermark moved too early</h3><p>The job saves the watermark, then fails loading; those rows are skipped. <span class="fix">Fix →</span> save it in the same transaction as the load, or after it commits.</p></li>
+    <li><h3>Deletes forgotten</h3><p>Cancelled orders that were hard-deleted stay in revenue. <span class="fix">Fix →</span> use soft deletes, CDC, or a periodic comparison of all keys.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Large tables where only a small share changes each day.</li><li>Sources where you can't get log access for CDC.</li><li>Append-only tables with an increasing id (events, logs).</li><li>SaaS APIs that offer “changed since” queries.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Small tables: a full copy is simpler and always right.</li><li>Tables with hard deletes you must see: use CDC.</li><li>You need every intermediate version, not just the latest: use CDC.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../../data/notes/change-data-capture.html"><b>Change data capture</b></a> (Vol. 3)</li><li><a href="../notes/idempotent-loads.html"><b>Idempotent loads</b></a></li><li><a href="../notes/late-arriving-data.html"><b>Late-arriving data</b></a></li><li><a href="../../data/notes/soft-delete.html"><b>Soft delete</b></a> (Vol. 3)</li></ul>
+  <p class="aside deeper">go deeper → <a href="../../deep-dives/app-db-to-warehouse/index.html">From App Database to Warehouse: the deep dive</a></p>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why re-read an overlap behind the watermark?</summary><p>Rows are stamped when written but visible when committed; a long transaction can commit after the run with an older timestamp.</p></details>
+    <details><summary>Why must the load merge rather than append?</summary><p>The overlap reads some rows twice; a merge updates them, an append would duplicate them.</p></details>
+    <details><summary>When should the watermark be saved?</summary><p>After the load commits, or in the same transaction, so a failed load is retried rather than skipped.</p></details>
+    <details><summary>What can an incremental extract by timestamp never see?</summary><p>Hard-deleted rows, because no row is left to select.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A support script fixes 3,000 order totals with a plain UPDATE once a month. The warehouse never shows the fixes. Why, and what do you change?</span></summary><p>The script doesn't set updated_at, so the extract never sees those rows. Set updated_at in the database with a trigger on every update, then re-extract the affected period once (reset the watermark or run a targeted backfill).</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>In PostgreSQL, open a transaction, insert a row with <code>updated_at = now()</code>, and keep it open. In another session, run your extract and save the watermark. Commit the first transaction and run the extract again. Did it find the row? Add a 10-minute overlap and a merge, and try again.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Read <span class="hl">past the bookmark, minus a little</span>, merge by key, and move the bookmark last.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/02-incremental-extract.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Ralph Kimball and Joe Caserta, <i>The Data Warehouse ETL Toolkit</i> (2004), on change data capture by audit columns.</li><li>Airbyte documentation, “Incremental sync: append and deduped”.</li><li>PostgreSQL documentation, “Transaction isolation” and <code>idle_in_transaction_session_timeout</code>.</li><li>dbt documentation, “Incremental models”.</li></ul>
+  </div>
+  <p class="folio">02</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="etl-vs-elt.html"><small>← previous note</small>01 · ETL vs ELT</a>
+  <a href="idempotent-loads.html"><small>Next note →</small>03 · Idempotent Loads</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 9 · a student's bullet journal on data pipelines &amp; analytics</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

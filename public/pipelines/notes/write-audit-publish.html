@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Write–Audit–Publish · Jef’s Notes</title>
+<meta name="description" content="Build into a hidden table, test it, and swap it in only when the tests pass.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=444906a817">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-pipelines">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 9 · data pipelines &amp; analytics</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="write-audit-publish">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 07.06.27</span><span class="topic">collection · <b>keeping it trustworthy</b></span></div>
+  <p class="kicker">a.k.a. “WAP, blue-green for data”</p>
+  <h1><span class="hl">Write–Audit–Publish</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Never load straight into the table people read. <b>Write</b> the new data into a hidden copy, <b>audit</b> it there (keys, counts, sums, reconciliation), and <b>publish</b> it with an atomic swap only if the audits pass. If they fail, readers keep yesterday's correct table, with a clear “data as of” note, instead of today's wrong one.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> keeping it trustworthy</li><li><b>Origin:</b> Netflix and Iceberg (2017)</li><li><b>Lives in:</b> Iceberg branches, Snowflake clones, lakeFS, Nessie</li><li><b>Pairs with:</b> quality checks, blue-green (Vol. 6)</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">On Monday the 06:00 load writes straight into <code>fct_sales</code>. The source export was truncated, so half of Sunday is missing. At 07:00 the finance dashboard shows revenue <span class="hl-pink">down 40 %</span>. The tests run at 07:30 and fail correctly, but the CFO has already taken the number to the 08:00 meeting.</p>
+  <ul>
+    <li>Tests that run after publishing only tell you what people have already seen.</li>
+    <li>A half-loaded table is visible for as long as the load takes.</li>
+    <li>Trust is lost faster than it's rebuilt: next week nobody believes the dashboard.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a Monday morning. At 06:00 the load writes straight into the published sales table, but a truncated source export means half of Sunday&#x27;s order lines are missing. At 07:00 the finance dashboard shows revenue down 40 percent. The tests run at 07:30 and fail, but the CFO has already seen the number at the 08:00 meeting."><g class="rough"><path class="d" d="M30 160 H730"/><path class="d" d="M90 152 v16"/><path class="d" d="M300 152 v16"/><path class="d" d="M480 152 v16"/><path class="d" d="M660 152 v16"/><rect class="d f-blue" x="20" y="50" width="150" height="80" rx="10"/><rect class="d f-pink d-red" x="220" y="50" width="160" height="80" rx="10"/><rect class="d f-y" x="410" y="50" width="140" height="80" rx="10"/><rect class="d f-pink d-red" x="590" y="50" width="150" height="80" rx="10"/></g><text class="t-s" x="90" y="192" text-anchor="middle">06:00</text><text class="t-s" x="300" y="192" text-anchor="middle">07:00</text><text class="t-s" x="480" y="192" text-anchor="middle">07:30</text><text class="t-s" x="660" y="192" text-anchor="middle">08:00</text><text class="t-head" x="95" y="86" text-anchor="middle" font-size="20">load</text><text class="t" x="95" y="110" text-anchor="middle" font-size="14">writes fct_sales</text><text class="t-head t-red" x="300" y="86" text-anchor="middle" font-size="20">dashboard</text><text class="t" x="300" y="110" text-anchor="middle" font-size="14">revenue −40 %</text><text class="t-head" x="480" y="86" text-anchor="middle" font-size="20">tests</text><text class="t" x="480" y="110" text-anchor="middle" font-size="14">fail</text><text class="t-head t-red" x="665" y="86" text-anchor="middle" font-size="20">CFO</text><text class="t" x="665" y="110" text-anchor="middle" font-size="14">has seen it</text><text class="t-s t-red" x="380" y="240" text-anchor="middle">the source export was truncated: half of Sunday missing</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Load, publish, then test: the tests are right, and an hour too late.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the newspaper</span></h2>
+  <p>A newspaper is <b>written</b>, then <b>proofread</b>, then <b>printed</b>. If the proofreader finds a wrong headline, the presses wait and yesterday's paper stays on the stand. Nobody prints first and proofreads afterwards.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="Doodle of a newspaper. The edition is written, then a proofreader checks it, and only then is it printed and delivered. If the proofreader finds an error, yesterday&#x27;s paper stays on the stand and nothing wrong goes out."><g class="rough"><rect class="d f-blue" x="14" y="40" width="204" height="90" rx="10"/><rect class="d f-y" x="278" y="40" width="204" height="90" rx="10"/><path class="d" d="M222 85 L274 85"/><path class="d" d="M263.2 90.2 L274 85 L263.2 79.8"/><rect class="d f-green" x="542" y="40" width="204" height="90" rx="10"/><path class="d" d="M486 85 L538 85"/><path class="d" d="M527.2 90.2 L538 85 L527.2 79.8"/><g transform="translate(620 150) scale(0.9)"><g class="d"><rect class="f-paper" x="0" y="0" width="60" height="62" rx="2"/><path d="M8 12 h44 M8 22 h20 M8 30 h20 M8 38 h20 M8 46 h44 M8 54 h44"/><rect x="34" y="20" width="18" height="20"/></g></g></g><text class="t-head" x="116" y="81" text-anchor="middle" font-size="21">write</text><text class="t" x="116" y="105" text-anchor="middle" font-size="15">draft edition</text><text class="t-head" x="380" y="81" text-anchor="middle" font-size="21">proofread</text><text class="t" x="380" y="105" text-anchor="middle" font-size="15">checks pass?</text><text class="t-head" x="644" y="81" text-anchor="middle" font-size="21">print</text><text class="t" x="644" y="105" text-anchor="middle" font-size="15">on the stand</text><text class="t-s t-pen" x="370" y="200" text-anchor="middle">errors found → yesterday&#x27;s paper stays out</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Write the edition, proofread it, then print. Never print and proofread afterwards.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Writing the edition</td><td>Loading into a hidden copy or branch</td></tr>
+      <tr><td>The proofreader</td><td>Audits: tests on the hidden copy</td></tr>
+      <tr><td>Printing</td><td>An atomic swap or branch merge</td></tr>
+      <tr><td>Yesterday's paper on the stand</td><td>The previously published table stays</td></tr>
+      <tr><td>“Late edition” notice</td><td>A “data as of Sunday” banner on dashboards</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">hidden copy, audits, atomic swap</span></h2>
+  <p>The load writes into a copy that readers can't see: a <code>_next</code> table, a zero-copy clone, or a branch in Iceberg, Nessie or lakeFS. Audits run against that copy. Publishing is one atomic step (a table swap, a view pointing at the new table, a branch fast-forward), so readers see the old version or the new one, never half of either.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Write, audit, publish. The load writes into a hidden copy, fct_sales_next, while fct_sales stays published. Audits run on the hidden copy: unique keys, row counts against last week, reconciliation with the source. If they pass, an atomic swap makes the new copy the published table. If they fail, the old table stays published, an alert fires, and the dashboard shows data as of yesterday."><g class="rough"><rect class="d f-blue" x="20" y="40" width="200" height="80" rx="10"/><path class="d" d="M226 80 L280 80"/><path class="d" d="M269.2 85.2 L280 80 L269.2 74.8"/><rect class="d f-y" x="286" y="40" width="200" height="80" rx="10"/><path class="d" d="M492 64 L546 40"/><path class="d" d="M538.2 49.2 L546 40 L534.0 39.6"/><rect class="d f-green" x="552" y="10" width="190" height="64" rx="10"/><path class="d d-red" d="M492 100 L546 160"/><path class="d d-red" d="M534.9 155.5 L546 160 L542.7 148.5"/><rect class="d f-pink d-red" x="552" y="140" width="190" height="80" rx="10"/></g><text class="t-head" x="120" y="76" text-anchor="middle" font-size="21">write</text><text class="t" x="120" y="100" text-anchor="middle" font-size="15">fct_sales_next</text><text class="t-head" x="386" y="76" text-anchor="middle" font-size="21">audit</text><text class="t" x="386" y="100" text-anchor="middle" font-size="15">keys · counts · sums</text><text class="t-s" x="518" y="34" text-anchor="middle">pass</text><text class="t-head" x="647" y="38" text-anchor="middle" font-size="21">swap</text><text class="t" x="647" y="62" text-anchor="middle" font-size="15">atomic rename</text><text class="t-s t-red" x="530" y="118" text-anchor="start">fail</text><text class="t-head t-red" x="647" y="176" text-anchor="middle" font-size="18">keep yesterday</text><text class="t" x="647" y="200" text-anchor="middle" font-size="15">alert · “as of Sun”</text><text class="t-s t-green" x="250" y="200" text-anchor="middle">readers only ever see an audited table</text><text class="t-s t-pen" x="250" y="230" text-anchor="middle">fct_sales stays published the whole time</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Build hidden, test hidden, then swap in one step. A failed audit leaves yesterday in place.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Write hidden</b><p>Build <code>fct_sales_next</code> (or a branch) from the same models.</p></li>
+    <li><b>Audit there</b><p>Unique keys, not nulls, row counts and sums against the usual band, reconciliation with the source.</p></li>
+    <li><b>Publish atomically</b><p><code>ALTER TABLE … SWAP WITH</code>, a rename, a view switch, or a branch merge.</p></li>
+    <li><b>On failure, keep the old</b><p>Alert the owner; dashboards show the data's real age.</p></li>
+    <li><b>Clean up</b><p>Drop or keep the failed copy for debugging, with a short retention.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>WAP</dt><dd>Write–audit–publish.</dd></div>
+    <div><dt>Audit</dt><dd>Checks run on unpublished data.</dd></div>
+    <div><dt>Atomic swap</dt><dd>Replacing a table in one step that readers can't see half-done.</dd></div>
+    <div><dt>Zero-copy clone</dt><dd>A copy that shares storage until changed (Snowflake, Delta).</dd></div>
+    <div><dt>Branch</dt><dd>A named version of tables you can commit to and merge (Iceberg, Nessie, lakeFS).</dd></div>
+    <div><dt>Data as of</dt><dd>The age of the newest data, shown to readers.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>publish_fct_sales.sql</span><span>Snowflake-style SQL</span></div>
+<pre><code><span class="c">-- 1 · write: build the next version where nobody reads</span>
+<span class="k">CREATE</span> <span class="k">OR</span> REPLACE <span class="k">TABLE</span> fct_sales_next CLONE fct_sales;
+MERGE <span class="k">INTO</span> fct_sales_next t <span class="k">USING</span> stg_sales_changes s <span class="k">ON</span> …;   <span class="c">-- the normal load</span>
+
+<span class="c">-- 2 · audit: every check must return zero rows</span>
+<span class="k">SELECT</span> order_line_id <span class="k">FROM</span> fct_sales_next <span class="k">GROUP</span> <span class="k">BY</span> 1 HAVING count(*) &gt; 1;
+<span class="k">SELECT</span> 1 <span class="k">FROM</span> (<span class="k">SELECT</span> count(*) n <span class="k">FROM</span> fct_sales_next <span class="k">WHERE</span> order_date = :day) x
+ <span class="k">WHERE</span> n &lt; 0.7 * (<span class="k">SELECT</span> avg_lines <span class="k">FROM</span> expected_volume <span class="k">WHERE</span> weekday = dayofweek(:day));
+
+<span class="c">-- 3 · publish: one atomic step</span>
+<span class="k">ALTER</span> <span class="k">TABLE</span> fct_sales SWAP <span class="k">WITH</span> fct_sales_next;</code></pre>
+  </div>
+  <p class="aside">tools: Apache Iceberg WAP and branches, Project Nessie, lakeFS, Delta Lake clones, Snowflake zero-copy clones and SWAP, BigQuery table snapshots, dbt <code>build</code> (tests before downstream models) and blue-green deployment macros.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Readers never see unaudited data</b>.</li><li><b>Failures are quiet</b>: yesterday stays, an alert fires.</li><li><b>No half-loaded tables</b> during long loads.</li><li><b>Easy rollback</b>: swap back to the previous copy.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Freshness pauses</b> when an audit fails.</li><li><b>Extra storage and compute</b> for the copy.</li><li><b>Audits to maintain</b>: too strict and every run fails.</li><li><b>Cross-table consistency</b> needs publishing several tables together.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Pipeline ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>loading straight into published tables and testing afterwards</b> to <b>write–audit–publish with an atomic swap</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One more step and naming rule.</td></tr>
+      <tr data-before="4" data-after="3"><td>Freshness<small>how recent?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A failed audit holds back fresh data.</td></tr>
+      <tr data-before="2" data-after="5"><td>Correctness<small>is the number right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Nobody reads data that failed its checks.</td></tr>
+      <tr data-before="3" data-after="4"><td>Replayability<small>safe to rerun?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The previous version is always there to swap back.</td></tr>
+      <tr data-before="3" data-after="3"><td>Scalability<small>10× the data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral: clones and branches scale.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A copy and its audits cost a little.</td></tr>
+      <tr data-before="3" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="5"><td>Observability<small>know when it's wrong?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Audits run every load, before anyone looks.</td></tr>
+      <tr data-before="3" data-after="4"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Changes ship behind the same gate.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Audits after the swap</h3><p>The steps are in the wrong order, and readers see bad data first. <span class="fix">Fix →</span> publish is the last step, and only on success.</p></li>
+    <li><h3>Swapping tables one by one</h3><p>Facts are new, dimensions still old; joins break for an hour. <span class="fix">Fix →</span> publish related tables together (a branch merge or a schema swap).</p></li>
+    <li><h3>Audits that always pass</h3><p>Only “table not empty” is checked. <span class="fix">Fix →</span> check counts and sums against a usual band, and reconcile with the source.</p></li>
+    <li><h3>Silent staleness</h3><p>The audit fails every day for a week and nobody notices, because the dashboard looks fine. <span class="fix">Fix →</span> alert on failed publishes and show data age on every dashboard.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Tables that people make decisions from.</li><li>Loads that take long enough to be seen half-done.</li><li>Sources that sometimes send broken or partial data.</li><li>Any table with an external audience.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Exploration sandboxes.</li><li>Streaming tables where seconds matter: check in the stream instead.</li><li>Small internal tables where a wrong hour does no harm.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/quality-checks.html"><b>Quality checks and quarantine</b></a></li><li><a href="../../cloud/notes/blue-green.html"><b>Blue-green deployment</b></a> (Vol. 6)</li><li><a href="../notes/layered-zones.html"><b>Layered zones</b></a></li><li><a href="../notes/dag-orchestration.html"><b>DAG orchestration and lineage</b></a></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What are the three steps of WAP?</summary><p>Write into a hidden copy, audit it with checks, publish it with an atomic swap only if the checks pass.</p></details>
+    <details><summary>What do readers see when an audit fails?</summary><p>The previously published, audited table, with its real age shown.</p></details>
+    <details><summary>Why must publishing be atomic?</summary><p>So readers see either the old version or the new one, never half of each.</p></details>
+    <details><summary>Why publish facts and dimensions together?</summary><p>So joins between them always see matching versions.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A partner's file sometimes arrives with only half its rows. Your load and tests both run at 06:00, and dashboards refresh at 06:05. What do you change?</span></summary><p>Load into a hidden copy, audit row counts and totals against the usual band for that weekday, and swap only on success. On failure keep yesterday's table, alert the owner, and show “data as of yesterday” on the dashboard until the partner resends.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>In any SQL database, build a <code>_next</code> copy of a table, insert a deliberately broken batch, write two audit queries that must return zero rows, and only rename the copy into place when they do. Then try it with a good batch.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p><span class="hl">Write</span>, <span class="hl">proofread</span>, then print. Yesterday's paper beats today's wrong one.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/11-write-audit-publish.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Ryan Blue, “Write-Audit-Publish” (Netflix, Apache Iceberg, 2017 talk).</li><li>Apache Iceberg documentation, “Branching and tagging” and WAP.</li><li>lakeFS and Project Nessie documentation on data branches.</li><li>Snowflake documentation, “ALTER TABLE … SWAP WITH” and zero-copy cloning.</li></ul>
+  </div>
+  <p class="folio">11</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="one-big-table.html"><small>← previous note</small>10 · One Big Table vs Star</a>
+  <a href="data-contracts.html"><small>Next note →</small>12 · Data Contracts</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 9 · a student's bullet journal on data pipelines &amp; analytics</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

@@ -165,6 +165,17 @@ CODE_ATTRS = [
     ("Low ceremony", "little boilerplate?", "Few extra classes, layers and mappings to write. High = light."),
     ("Team scalability", "many teams at once?", "Several teams can work on the system without stepping on each other."),
 ]
+PIPELINE_ATTRS = [
+    ("Simplicity", "easy to follow?", "A new teammate can trace a number from the report back to the source."),
+    ("Freshness", "how recent?", "How old the data in the report is when someone reads it."),
+    ("Correctness", "is the number right?", "No missing, doubled or misfiled rows, even after failures."),
+    ("Replayability", "safe to rerun?", "Any step can be run again, for any period, and give the same result."),
+    ("Scalability", "10× the data?", "Keeps working when sources, rows and users grow by 10× or 100×."),
+    ("Low cost", "cheap to run?", "Compute, storage and the people who keep it going. High = cheap."),
+    ("Query flexibility", "answer new questions?", "Analysts can ask new questions without a new pipeline."),
+    ("Observability", "know when it's wrong?", "Failures, delays and bad data are seen before the report is read."),
+    ("Evolvability", "easy to change?", "New sources, columns and definitions without rebuilding everything."),
+]
 
 # “Then & now” verdicts (code-design volumes): how a classic idea from the 2000s holds up today.
 VERDICTS = {
@@ -465,6 +476,43 @@ JOURNALS = [
             (16, "decorator-middleware", "Decorator & Middleware", "classic", "Wrap a thing in another with the same shape to add logging, retries or caching."),
             (17, "adapter-facade", "Adapter & Facade", "classic", "Make a foreign interface fit yours, and hide a complicated one behind a simple door."),
             (18, "pattern-museum", "The Pattern Museum", "classic", "Singleton, Service Locator, Visitor and friends: what replaced them, and why."),
+        ],
+    ),
+    # Vol. 9 · Data Pipelines & Analytics. Plan: docs/PLAN-data-pipelines.md. One homeware shop throughout.
+    dict(
+        key="pipelines", vol=9, title="Data Pipelines & Analytics", short="data pipelines &amp; analytics",
+        theme="theme-pipelines", fonts="VT323", subject="data pipelines", term="Summer term · 2027", weekdays=(0, 3), start=date(2027, 5, 3),
+        kicker="printed on green-bar paper, between nightly runs",
+        lead="My notes on <span class=\"hl\">getting data out of the app and into reports people trust</span>: how to extract and load it so a rerun never double-counts, how to model a warehouse past one star, how to keep it trustworthy, and how to serve one number everywhere. {n} patterns in {c} collections, with the same eight sections as the other volumes, rated on nine <b>pipeline</b> qualities like freshness, correctness and replayability. Every note follows the same homeware shop: a web store and 30 shops, orders, order lines, products and customers. SQL is generic warehouse SQL; tools named are examples.",
+        blurb="ETL and ELT, incremental and idempotent loads, slowly changing dimensions, data vault, data contracts, the metrics layer and reporting.",
+        attrs=PIPELINE_ATTRS, attrs_title="The nine pipeline ratings", attrs_side="what finance would ask, and the on-call engineer", ratings_h2="Pipeline ratings",
+        first_law="A pipeline is correct only if you can run any part of it again, for any day, and get the same answer. Everything else is plumbing.",
+        handmade=set(),
+        collections=[
+            ("in", "Getting data in", "extract and load without losing or doubling a row"),
+            ("model", "Modelling the warehouse", "shapes that answer questions and keep history"),
+            ("trust", "Keeping it trustworthy", "stop bad data before anyone reads it"),
+            ("serve", "Serving reports", "one number, fast, for everyone allowed to see it"),
+        ],
+        catalogue=[
+            (1, "etl-vs-elt", "ETL vs ELT", "in", "Transform before loading, or load raw data and transform it inside the warehouse."),
+            (2, "incremental-extract", "Incremental Extract", "in", "Copy only what changed since last time, using a high-water mark, without missing late rows."),
+            (3, "idempotent-loads", "Idempotent Loads", "in", "Load so that running the same batch twice gives the same table as running it once."),
+            (4, "layered-zones", "Layered Zones (Raw, Staging, Marts)", "in", "Keep raw data untouched, clean it in staging, and shape it for reports in marts."),
+            (5, "late-arriving-data", "Late-Arriving Data", "in", "Put each event in the period it happened, even when it reaches you days later."),
+            (6, "slowly-changing-dimensions", "Slowly Changing Dimensions", "model", "Decide per column whether a change overwrites the past or adds a new version."),
+            (7, "fact-table-types", "Fact Table Types", "model", "Transactions, periodic snapshots, accumulating snapshots and factless facts: pick by question."),
+            (8, "conformed-dimensions", "Conformed Dimensions & the Bus Matrix", "model", "Share one product, one customer and one calendar across every fact table."),
+            (9, "data-vault", "Data Vault", "model", "Hubs, links and satellites: an insert-only layer that integrates many sources and keeps all history."),
+            (10, "one-big-table", "One Big Table vs Star", "model", "Flatten everything into one wide table, or keep facts and dimensions apart: choose by engine and team."),
+            (11, "write-audit-publish", "Write–Audit–Publish", "trust", "Build into a hidden table, test it, and swap it in only when the tests pass."),
+            (12, "data-contracts", "Data Contracts", "trust", "Agree a versioned schema and rules with the team that produces the data."),
+            (13, "quality-checks", "Quality Checks & Quarantine", "trust", "Test rows and whole batches on every load; set bad rows aside instead of loading them."),
+            (14, "dag-orchestration", "DAG Orchestration & Lineage", "trust", "Run steps when their inputs are ready, not at a time on the clock, and know what feeds what."),
+            (15, "metrics-layer", "Metrics Layer", "serve", "Define each business number once, in code, and let every dashboard use that definition."),
+            (16, "aggregates-rollups", "Aggregates & Rollups", "serve", "Pre-compute summaries at coarser grain so dashboards stay fast on billions of rows."),
+            (17, "lambda-vs-kappa", "Lambda vs Kappa", "serve", "Fresh numbers from a batch plus a speed layer, or from one stream you can replay."),
+            (18, "embedded-reporting", "Multi-tenant & Embedded Reporting", "serve", "Show each customer or shop only their own numbers, without slowing the app down."),
         ],
     ),
     # ---- Series 2 · The Solution Architect's Notebook ----
@@ -1382,7 +1430,7 @@ JOURNALS = [
 
 # Planned journals and other work, shown on the landing page.
 PLANNED = [
-    (9, "AI App Patterns", "Retrieval-augmented generation, agents and tools, evaluation, guardrails and cost-aware LLM apps."),
+    (10, "AI App Patterns", "Retrieval-augmented generation, agents and tools, evaluation, guardrails and cost-aware LLM apps."),
 ]
 # Planned volumes of Series 2, book 1 (see docs/HANDOFF-solution-architect.md).
 PLANNED_2 = [
@@ -1398,9 +1446,9 @@ PLANNED_OPS = [
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Going-deeper chapters for Vols. 7 and 8: aggregates, bounded contexts, ports &amp; adapters"), ("•", "Search across every journal")]),
     ("Jan 2027", [("•", "One-page printable cheat sheet per collection")]),
-    ("Mar 2027", [("•", "Cheat sheets for Book 3: PMBOK 8 on one page, earned value, critical path"), ("•", "Vol. 9 · AI App Patterns")]),
+    ("Mar 2027", [("•", "Cheat sheets for Book 3: PMBOK 8 on one page, earned value, critical path"), ("•", "Vol. 10 · AI App Patterns"), ("•", "A dimensional modelling cheat sheet for Vol. 9")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations")]),
-    ("Mid 2027", [("↓", "More deep dives: Observability &amp; SLOs, Multitenancy"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
+    ("Mid 2027", [("↓", "More deep dives: Observability &amp; SLOs, Multitenancy, History in the Warehouse"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
     ("Someday", [("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
 
@@ -2254,6 +2302,7 @@ COVER_ART = {
     "testing": ("flask", "cross"), "security": ("lock", "hatch"), "cloud": ("cloud", "iso"),
     "ddd": ("map", "contour"),
     "inside-app": ("hexagon", "grid"),
+    "pipelines": ("copier", "greenbar"),
 }
 COVER_PATTERNS = {
     "grid": '<pattern id="{id}" width="14" height="14" patternUnits="userSpaceOnUse"><path d="M14 0H0V14" fill="none" stroke-width="1"/></pattern>',
@@ -2261,6 +2310,7 @@ COVER_PATTERNS = {
     "cross": '<pattern id="{id}" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M9 5V13M5 9H13" stroke-width="1.4"/></pattern>',
     "hatch": '<pattern id="{id}" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M0 10L10 0M-2 2L2 -2M8 12L12 8" stroke-width="1.2"/></pattern>',
     "iso": '<pattern id="{id}" width="24" height="14" patternUnits="userSpaceOnUse"><path d="M0 7L12 0L24 7L12 14Z" fill="none" stroke-width="1"/></pattern>',
+    "greenbar": '<pattern id="{id}" width="24" height="36" patternUnits="userSpaceOnUse"><path d="M0 0H24V18H0Z" stroke="none" fill="#B7E4C0" fill-opacity=".5"/><path d="M0 18H24" stroke-width="1"/></pattern>',
     "contour": '<pattern id="{id}" width="60" height="40" patternUnits="userSpaceOnUse"><path d="M0 20 q15 -12 30 0 t30 0 M0 32 q15 -10 30 0 t30 0 M0 8 q15 -10 30 0 t30 0" fill="none" stroke-width="1"/></pattern>',
 }
 
@@ -2456,7 +2506,7 @@ def render_landing(sheets=(), dives=(), darkside=None):
 
 # ---------------------------------------------------------------- deep dives (series 3)
 # One long chaptered page per topic: content/deep-dives/<name>.py, rendered by scripts/dive.py.
-DIVES = ["saga", "reliable_messaging", "resilience_stack", "event_sourcing_cqrs", "caching", "zero_downtime_change", "sign_in", "replication_failover", "sharding_partitioning", "indexes_query_plans", "rendering_web"]
+DIVES = ["saga", "reliable_messaging", "resilience_stack", "event_sourcing_cqrs", "caching", "zero_downtime_change", "sign_in", "replication_failover", "sharding_partitioning", "indexes_query_plans", "rendering_web", "app_db_to_warehouse"]
 DEEPER = {}   # (journal key, note slug) -> (dive slug, title); filled by load_dive
 
 

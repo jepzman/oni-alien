@@ -109,7 +109,7 @@ Decisions taken with defaults (the owner said “let's build volume 8” without
    map, the most-used refactorings with before/after code, and safe-refactoring habits (tests first, tiny steps).
 3. Skin: the green engineering pad described above; easy to change in `bujo.css` (`theme-app`).
 
-## 5. How a code-design volume was added (the routine for Vol. 9 or later ones)
+## 5. How a code-design volume was added (the routine Vol. 9 · Data Pipelines followed, and later ones)
 
 1. Add the journal to `JOURNALS` after the previous one with `attrs=CODE_ATTRS`, `then_now=True`, a new `theme`, and move its
    entry out of `PLANNED`.
