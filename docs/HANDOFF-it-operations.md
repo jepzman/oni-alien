@@ -1,6 +1,6 @@
 # Handoff: The IT Operations Notebook (Series 2, Book 5)
 
-Status as of 2026-11-24: **planned, nothing written yet.** Owner's decisions (24 Nov): IT operations (not business
+Status as of 2026-11-25: **planned and reviewed (section 6.7), nothing written yet.** Owner's decisions (24 Nov): IT operations (not business
 operations), narrated by whichever character fits, starting where it fits the story's timeline. Open questions: section 9.
 
 Story facts: `docs/larder-casebook.md` (source of truth) and the public case file `/larder/`.
@@ -84,22 +84,26 @@ font for Eli's notes. Must read well in print and in both themes.
 
 ## 6. Volumes (6 × 15 notes)
 
+Reviewed on 25 Nov 2026 (section 6.7 lists the changes). Each note is **one practice**, not one event: a real incident
+or launch is the *scene* of a note, never its subject. Markers: **[new]** replaced an earlier title, **[merged]** absorbs
+an earlier one, **[reframed]** keeps the topic but changes the angle, **[moved]** comes from another volume.
+
 ### Vol. 1 · Keeping the Lights On (`ops-1`, Mar → Jun 2026)
 Rotterdam opens on 4G; Eli at 160 %; nothing is written down.
 
 1. What is IT operations for? (service value system, value, outcomes, guiding principles)
-2. What do we actually run? (service catalogue)
+2. What do we run, and who owns it? (service catalogue and service owners) **[merged]**
 3. What is connected to what? (service configuration, dependency map)
 4. What do we own, and where is it? (IT asset management: handhelds, routers, laptops, licences)
-5. Who owns each service? (service owners)
+5. Forty new people on Monday (joiners, movers, leavers: accounts and devices for Rotterdam's staff) **[new]**
 6. Who gets woken up? (the first on-call rota)
-7. How do we know it's broken? (monitoring and event management)
+7. How do we know it's broken? (monitoring and event management: what to watch; links Series 1 *Logs, Metrics & Traces*)
 8. Which alerts deserve a human? (alert hygiene: the ½-day alert fix)
 9. What do I do at 3 a.m.? (runbooks)
 10. Where do people report problems? (service desk for stores and office)
 11. Can I have a new handheld? (service requests)
-12. Something is broken: now what? (incident basics)
-13. How does a new store get its IT? (store IT kit; Rotterdam on 4G)
+12. Is it the network? (store Wi-Fi, the 4G backup, the VPN; Noord's Wi-Fi drops) **[new]**
+13. How does a new store get its IT? (the store IT kit, device management for the handhelds)
 14. Where is that written down? (knowledge management; Jasper's missing reasons)
 15. Why am I always busy? (toil, and the 160 % week)
 
@@ -107,19 +111,19 @@ Rotterdam opens on 4G; Eli at 160 %; nothing is written down.
 Ends with the Christmas failover.
 
 1. How bad is it? (severity levels)
-2. Who is in charge? (incident commander and roles)
-3. Who needs to know? (incident communication with Sam, Femke and the stores)
-4. Do we need a status page?
+2. Who is in charge? (incident commander, roles, the scribe and the timeline) **[merged]**
+3. Who needs to know? (incident communication with Sam, Femke and the stores, and the status page) **[merged]**
+4. Who's next if nobody answers? (paging and escalation policies) **[new]**
 5. The vendor is down at peak (supplier escalation)
-6. Writing it down while it happens (incident timeline)
+6. Who fixes what? (support tiers vs swarming) **[new]**
 7. What did we learn? (blameless post-incident review)
-8. Why did it really happen? (problem management, causal analysis)
+8. Why did it really happen? (problem management: causal analysis and trends)
 9. We know the bug, now what? (known errors and workarounds)
 10. Why do action items never close?
 11. Which incident numbers mean anything? (MTTA, MTTR and their traps)
-12. The network rule change of 29 Oct (meanwhile: Ana's deployment view)
+12. Was it a change? (change-related incidents; scene: the network rule change of 29 Oct) **[reframed]**
 13. Telling a business client (Korenwolf incident reports, with Mo)
-14. The Christmas failover of 18 Dec (a major incident, end to end)
+14. When is it a major incident? (major incident procedure; scene: the Christmas failover of 18 Dec) **[reframed]**
 15. What about the near misses?
 
 ### Vol. 3 · Changing Things Safely (`ops-3`, Jan → Jun 2027)
@@ -127,76 +131,113 @@ The warehouse move to WMS B (Zuid 19 Apr, Noord 24 May); Utrecht (12 Apr) and Th
 
 1. Which changes need a second look? (change enablement: standard, normal, emergency)
 2. Do we need a change board? (peer review instead of a CAB)
-3. When must we not change anything? (change calendar and freezes)
+3. When must we not change anything? (change calendar and freezes; ADR 0017's critical windows)
 4. Release or deploy? (release management vs deployment management)
 5. How risky is this change? (change risk scoring)
-6. How do we undo it? (rollback plans; links Series 1 Vol. 6)
-7. Is it really ready? (service validation and testing)
-8. Why do the environments differ? (configuration drift)
+6. How do we undo it? (rollback plans; links Series 1 *Blue–Green* and *Canary*)
+7. Is it really ready? (service validation and testing, and why environments differ) **[merged]**
+8. The database version runs out of support (end-of-life and upgrades of the platform) **[new]**
 9. Cutting over a store (the WMS B cutover plan)
-10. A new city by checklist (city set-up runbook; meanwhile: Sanne's playbook)
+10. A new city by checklist (the IT side of city set-up; meanwhile: Sanne's playbook)
 11. Which changes fail? (change failure rate, DORA metrics)
 12. The urgent fix at 17:00 on a Friday (emergency changes)
 13. Who may touch production? (production access, break-glass)
-14. Patching without fear (patch and vulnerability routine)
-15. Retiring what we no longer need (decommissioning; StockPilot off in Sep 2027)
+14. Patching without fear (patch and vulnerability routine: the hand-patched VMs)
+15. Updating 90 handhelds (rolling out picker app versions to store devices) **[new]**
 
 ### Vol. 4 · Promises & Measures (`ops-4`, Jul → Dec 2027)
-Billing webhooks go silent; Antwerp (18 Oct) and Eindhoven (22 Nov) open; Christmas 2027 goes well.
+Billing webhooks go silent; StockPilot is switched off (15 Sep); Antwerp (18 Oct) and Eindhoven (22 Nov) open; Christmas
+2027 goes well.
 
 1. What do users count as working? (SLIs)
 2. How good is good enough? (SLOs)
-3. When do we stop shipping features? (error budgets)
+3. When do we stop shipping features? (error budgets and the error budget policy) **[merged]**
 4. What did we sign? (SLAs; Korenwolf's 99.8 %, with Mo)
 5. What do teams promise each other? (OLAs and internal agreements)
-6. How available are we, really? (availability management; meanwhile: Ana's availability note)
-7. Will Christmas fit? (capacity and performance management; meanwhile: Ana's capacity plan)
+6. How available were we, really? (measuring availability; Ana's note does the maths) **[reframed]**
+7. Will Christmas fit? (capacity monitoring and headroom alerts; Ana's capacity plan is the design side) **[reframed]**
 8. The vendor went quiet (supplier management; billing webhooks on 31 Aug)
-9. The monthly service report (measurement and reporting)
-10. The service review meeting (relationship management)
+9. The monthly service report and the review meeting (measurement, reporting, relationship management) **[merged]**
+10. Switching a system off (decommissioning StockPilot and the four retired apps) **[moved]**
 11. Dashboards people actually open
-12. Who decides when the budget is spent? (error budget policy)
-13. A foreign city (Antwerp: languages, a second PSP, support hours)
-14. Running a peak (Christmas 2027 war room; PSP switch on 17 Dec)
+12. What can the stores fix themselves? (shift-left and self-service) **[new]**
+13. Operating in a second country (Antwerp: support hours, languages, local vendors) **[reframed]**
+14. Running a peak (the Christmas 2027 war room; the PSP switch on 17 Dec)
 15. Asking the users (user satisfaction beyond uptime)
 
 ### Vol. 5 · Ready for the Worst (`ops-5`, Jan → Jun 2028)
-The 3 h 40 restore, DR tiers, the pilot light in Paris, the Korenwolf supplier questionnaire.
+The 3 h 40 restore, the 22-minute drill, the Korenwolf supplier questionnaire.
 
-1. What matters most if everything fails? (business impact analysis)
-2. Can we actually restore? (backup and restore tests)
-3. How fast must each service return? (continuity tiers, RTO and RPO)
-4. A second region? (pilot light; meanwhile: Ana's ADR 0026)
+1. What matters most if everything fails? (business impact analysis, RTO and RPO per service) **[merged]**
+2. Can we actually restore? (backup and restore tests: 3 h 40 → 22 min)
+3. When the picker app is down (manual fallback in the stores: paper pick lists, hand dispatch) **[new]**
+4. Is the alarm real? (security monitoring and log retention) **[new]**
 5. Breaking things on purpose (game days and chaos experiments)
 6. When the incident is a security incident (security operations)
-7. Who still has access? (access reviews, leavers)
+7. Who still has access? (access reviews)
 8. Rotating the keys (secrets and certificates)
-9. What does it cost to run? (service financial management, cloud bill €78k → €58k)
-10. Which risks keep us up at night? (operational risk register)
+9. What does it cost to run? (service financial management: owners, reviews, the cloud bill €78k → €58k)
+10. Which risks keep us up at night? (the operational risk register; Sanne and Ana have the method)
 11. Prove it to the auditor (evidence for the Korenwolf questionnaire, with Lena)
 12. Leaving a vendor (exit plans)
 13. When the office is the outage (laptops, SSO, the office network)
-14. Crisis communication beyond IT
+14. Who decides to invoke the plan? (the crisis team and invocation) **[reframed]**
 15. The plan nobody has read (keeping continuity plans alive)
 
 ### Vol. 6 · Building the Reliability Team (`ops-6`, Jul → Oct 2028)
 Ghent and Haarlem; the reliability team forms; the pager handover on 1 Oct.
 
 1. Who runs what? (you build it, you run it vs a reliability team)
-2. Is this service ready for production? (production readiness review; meanwhile: Ana's handover to operations)
+2. Is this service ready for production? (production readiness review, the receiving side of Ana's handover)
 3. Hiring the first SREs (workforce and talent)
 4. On-call people can live with (load, pay, rest)
-5. Handing over the pager (game days 14 and 21 Sep, pager 1 Oct)
-6. The first incident without Eli (9 Oct, 18 min)
-7. What to automate next (automation strategy and toil budget)
-8. A platform for the other teams (golden path, from the ops side)
+5. Handing over the pager (transition: game days 14 and 21 Sep, pager 1 Oct)
+6. Did the handover work? (early life support; scene: the first incident without Eli, 9 Oct, 18 min) **[reframed]**
+7. What to automate next (automation strategy and the toil budget)
+8. Which tools do we really need? (the operations toolset: paging, monitoring, tickets) **[new]**
 9. Where are we weak? (an operations maturity check)
-10. The operations roadmap
-11. Continual improvement that continues (improvement register)
+10. Where are we going? (operations strategy and roadmap) **[reframed]**
+11. Continual improvement that continues (the improvement register)
 12. Leading change in how teams work (organisational change management)
 13. AI in operations: where it helps, where it lies (with Lena's rules from Book 3)
 14. Growing operations engineers (career path)
 15. Making it yours
+
+### 6.7 What the review changed, and why
+
+| Was | Now | Why |
+| --- | --- | --- |
+| 1.5 Who owns each service? | merged into 1.2 | the catalogue lists the owner, so it is one practice |
+| 1.12 Incident basics | 1.12 the network | incidents are Vol. 2; store networks were missing, and Rotterdam opened on 4G |
+| (none) | 1.5 joiners, movers, leavers | about 40 new staff per store; the commonest store ticket |
+| 2.4 Status page | merged into 2.3 | too thin for a note |
+| 2.6 Incident timeline | merged into 2.2 | the scribe's job |
+| (none) | 2.4 escalation, 2.6 tiers vs swarming | real incident practices that were missing |
+| 2.12, 2.14 two incidents as notes | reframed | a note is a practice; the incident is the scene |
+| 3.8 Configuration drift | merged into 3.7 | covered by Series 1 *Infrastructure as Code* and *Immutable Infrastructure* |
+| (none) | 3.8 end-of-life upgrades | infrastructure lifecycle work was missing |
+| 3.15 Decommissioning | moved to 4.10 | StockPilot is switched off on 15 Sep 2027, after Vol. 3 ends |
+| (none) | 3.15 device rollouts | getting app versions onto store devices was missing |
+| 4.12 Error budget policy | merged into 4.3 | the same practice as 4.3 |
+| 4.10 Service review | merged into 4.9 | the report and the meeting are one loop |
+| (none) | 4.12 shift-left | a service desk practice that was missing |
+| 4.6, 4.7 | reframed | Ana's Vol. 5 covers availability maths and capacity planning; Eli measures and watches |
+| 4.13 A foreign city | reframed | kept to its IT side |
+| 5.3 DR tiers | merged into 5.1 | the tiers come out of the impact analysis; Ana's *DR Tiers* is the design side |
+| 5.4 A second region | dropped, link Ana's *When to Go Multi-Region* | an architecture decision, not an operations practice |
+| (none) | 5.3 manual fallback, 5.4 security monitoring | store continuity and detection were missing |
+| 5.14 Crisis communication | reframed | communication is 2.3; invoking the plan is the new part |
+| 6.6 First incident without Eli | reframed | an event; early life support is the practice |
+| 6.8 Platform for the other teams | 6.8 the operations toolset | Ana's *Golden Paths* covers the platform |
+| 6.10 Roadmap | reframed | ITIL strategy management was missing |
+
+### 6.8 ITIL 4 coverage
+
+| Practice group | Covered in | Linked elsewhere |
+| --- | --- | --- |
+| Service management (17) | incident 2.1–2.6, 2.14 · problem 2.8–2.9 · change enablement 3.1–3.3, 3.5, 3.12 · release 3.4, 3.15 · validation and testing 3.7 · service desk 1.10, 4.12 · service requests 1.5, 1.11 · monitoring and events 1.7–1.8 · service levels 4.1–4.5 · availability 4.6 · capacity and performance 4.7 · continuity 5.1–5.3, 5.14–5.15 · configuration 1.3 · IT assets 1.4, 1.13 · catalogue 1.2 · service design 6.2 | business analysis → Book 2 |
+| General management (14) | continual improvement 2.10, 6.11 · information security 3.13, 5.4, 5.6–5.8 · knowledge 1.14 · measurement and reporting 2.11, 4.9, 4.11 · organisational change 6.12 · relationship 4.9, 4.15 · risk 5.10 · service financial 5.9 · strategy 6.10 · supplier 2.5, 4.8, 5.12 · workforce and talent 6.3, 6.14 | architecture → Book 1 · portfolio → Book 1 Vol. 4 · project → Book 3 |
+| Technical management (3) | deployment 3.4, 3.6 · infrastructure and platform 1.12, 3.8, 3.14 | software development → Series 1 and Book 1 |
 
 ## 7. Extras
 
