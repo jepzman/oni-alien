@@ -60,7 +60,7 @@ The landing page (`/`) shows two shelves (Series 1: design patterns; Series 2: p
 
 Long, chaptered pages that start where a note stops (`/deep-dives/<slug>/`): the real mechanism, failure drills,
 testing, operations and tools, in the “annotated textbook” skin with a skim mode and a phone chapter dock.
-Written so far: **Saga**, **Reliable Messaging**, **The Resilience Stack**, **Event Sourcing & CQRS**, **Caching**, **Zero-Downtime Change**, **Sign-in, Tokens & Sessions**, **Replication, Failover & Leader Election**, **Sharding & Partitioning**, **Indexes & Query Plans**, **Rendering on the Web** and **From App Database to Warehouse** (10 chapters each, about a 30-minute read). Content `content/deep-dives/<slug>.py`, renderer `scripts/dive.py`, styles and
+Written so far: **Saga**, **Reliable Messaging**, **The Resilience Stack**, **Event Sourcing & CQRS**, **Caching**, **Zero-Downtime Change**, **Sign-in, Tokens & Sessions**, **Replication, Failover & Leader Election**, **Sharding & Partitioning**, **Indexes & Query Plans**, **Rendering on the Web**, **From App Database to Warehouse** and **History in the Warehouse** (10 chapters each, about a 30-minute read). Content `content/deep-dives/<slug>.py`, renderer `scripts/dive.py`, styles and
 script `public/assets/dive.css` / `dive.js`. Plan and format: `docs/HANDOFF-deep-dives.md`.
 
 ## Revisions to finished notes
@@ -82,6 +82,7 @@ a subway-map branch diagram on top and boxed panels below (3 columns on desktop 
 | SQL (`/cheatsheets/sql/`) | 4 | query order and NULLs, joins as Venn diagrams, set operations and CTEs, window functions, upserts and paging, indexes, EXPLAIN and transactions |
 | NFR Checklists (`/cheatsheets/nfr-checklists/`) | 4 | writing measurable NFRs, then questions, measures and typical targets per quality attribute, and the common trade-offs |
 | Refactoring (`/cheatsheets/refactoring/`) | 4 | the 24 code smells by family, a smell → refactoring map, the core refactorings before and after (TypeScript), refactoring safely: the loop, two hats, legacy code, IDE moves, codemods |
+| Data Warehouse (`/cheatsheets/warehouse/`) | 4 | modelling (grain, fact table types, bus matrix, dim_date), history (SCD types, type 2 load, point-in-time lookup, three pasts, traps), loading (idempotent patterns, MERGE newer-only, watermarks, late data, dbt incremental), trust and serving (reconciliation, data tests, drill across, aggregates, metrics, row-level security) |
 | Shell & Network (`/cheatsheets/shell-network/`) | 5 | shell pipes and power tools, walking the network layers (DNS, ports, firewalls), HTTP and TLS with curl and openssl, an error-message decoder, SSH and tunnels |
 
 - Content: `content/cheatsheets/<name>.py` (`PAGES`, each with an optional `figure`, `legend`, `strategies` and a list of `box()` panels).

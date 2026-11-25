@@ -1848,6 +1848,11 @@ SEEN_AT_LARDER = {}  # (series-1 key, slug) -> [(journal, slug, title)]
 UNRESOLVED = []      # (journal key, slug, text): related entries with no matching note (printed by the build)
 CHEAT_TITLES = {}    # cheat sheet slug -> title
 CARD_LINKS = {
+    ("pipelines", "fact-table-types"): ["warehouse"], ("pipelines", "conformed-dimensions"): ["warehouse"],
+    ("pipelines", "slowly-changing-dimensions"): ["warehouse"], ("pipelines", "idempotent-loads"): ["warehouse"],
+    ("pipelines", "incremental-extract"): ["warehouse"], ("pipelines", "late-arriving-data"): ["warehouse"],
+    ("pipelines", "quality-checks"): ["warehouse"], ("pipelines", "aggregates-rollups"): ["warehouse"],
+    ("pipelines", "metrics-layer"): ["warehouse"], ("data", "star-schema"): ["warehouse", "sql"],
     ("data", "indexing"): ["sql"], ("data", "keyset-pagination"): ["sql"], ("data", "n-plus-one"): ["sql"],
     ("data", "optimistic-locking"): ["sql"], ("data", "materialized-views"): ["sql"],
     ("cloud", "health-checks"): ["docker-kubernetes"], ("cloud", "autoscaling"): ["docker-kubernetes"],
@@ -2405,7 +2410,7 @@ def spine_shelf(items_html, name, label):
             + "".join(spines) + "</div>\n" + "\n".join(panels) + "\n  </div>")
 
 
-NUMBER_WORDS = ["none", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"]
+NUMBER_WORDS = ["none", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"]
 
 
 def darkside_items(acts):
@@ -2506,7 +2511,7 @@ def render_landing(sheets=(), dives=(), darkside=None):
 
 # ---------------------------------------------------------------- deep dives (series 3)
 # One long chaptered page per topic: content/deep-dives/<name>.py, rendered by scripts/dive.py.
-DIVES = ["saga", "reliable_messaging", "resilience_stack", "event_sourcing_cqrs", "caching", "zero_downtime_change", "sign_in", "replication_failover", "sharding_partitioning", "indexes_query_plans", "rendering_web", "app_db_to_warehouse"]
+DIVES = ["saga", "reliable_messaging", "resilience_stack", "event_sourcing_cqrs", "caching", "zero_downtime_change", "sign_in", "replication_failover", "sharding_partitioning", "indexes_query_plans", "rendering_web", "app_db_to_warehouse", "history_warehouse"]
 DEEPER = {}   # (journal key, note slug) -> (dive slug, title); filled by load_dive
 
 
@@ -2804,7 +2809,7 @@ def render_pmbok_map(loaded):
 
 
 # ---------------------------------------------------------------- cheat sheets (laminated reference cards)
-CHEATSHEETS = ["git_flow", "docker_k8s", "sql", "nfr", "network", "refactoring"]
+CHEATSHEETS = ["git_flow", "docker_k8s", "sql", "nfr", "network", "refactoring", "warehouse"]
 CS_FONTS = "IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400"
 CS_LOGO = ('<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="8" fill="#FFFFFF" fill-opacity=".1"/>'
            '<path d="M10 7v20" stroke="var(--b-main)" stroke-width="3" stroke-linecap="round" fill="none"/>'
