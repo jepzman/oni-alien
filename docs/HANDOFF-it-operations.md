@@ -1,6 +1,6 @@
 # Handoff: The IT Operations Notebook (Series 2, Book 5)
 
-Status as of 2026-11-25: **Vols. 1–4 are written and built (sections 10–11). Vols. 5–6 are planned (section 6).** Owner's decisions (24 Nov): IT operations (not business
+Status as of 2026-11-25: **Book 5 is complete: six volumes, 90 notes (sections 10–12).** Owner's decisions (24 Nov): IT operations (not business
 operations), narrated by whichever character fits, starting where it fits the story's timeline. Open questions: section 9.
 
 Story facts: `docs/larder-casebook.md` (source of truth) and the public case file `/larder/`.
@@ -320,3 +320,19 @@ Next: Vol. 5 · Ready for the Worst (Jan → Jun 2028). Hooks already in the sto
 22-minute drill (18 Apr), the HH-2024 handheld replacement (from the IT pulse and the lifecycle register), Korenwolf's
 supplier questionnaire (Mar 2028), the access review lapse in Ana's ADR 0021 (a support leaver kept access three weeks in
 2027), and the second DNS provider (Dec 2027).
+
+## 12. Vols. 5 and 6 (built 25 Nov 2026) · Book 5 complete
+
+- `ops-5` **Ready for the Worst** (Jan → Jun 2028), `content/ops-5/`: recovering (business impact, restore tests, paper
+  mode, game days, invoking the plan, living plans), security operations (monitoring, a security incident, access reviews,
+  secrets), risk, money and vendors (cloud costs, risk register, audit evidence, vendor exits, the office outage).
+- `ops-6` **Building the Reliability Team** (Apr → Oct 2028), `content/ops-6/`: shaping the team (who runs what, hiring,
+  humane on-call), handing over (readiness review, pager handover, early life support), setting direction (automation,
+  tools, maturity check, strategy), leading (improvement register, leading change, AI, career path, making it yours).
+- New people: **Lotte** (she/her, SRE from 3 Jul 2028) and **Yusuf** (he/him, SRE from 1 Aug 2028). New facts are in the
+  casebook (“Book 5, Vol. 5” and “Vol. 6”), checked against Ana's Vol. 5–6 (DR tiers, multi-region, cloud cost, risk
+  register, golden path, the Ordering handover: game days 14 and 21 Sep, pager 1 Oct, first incident 9 Oct, 18 min) and
+  Sanne's Vol. 6 (Korenwolf questionnaire 13 Mar 2028, AI trial and Lena's rules, hiring Nadia, the closing note).
+- `PLANNED_OPS` is empty; the future log no longer lists Book 5.
+- Still open (section 9): the title, and a check of the ITIL practice names against the current guide. Not built: the
+  ITIL &amp; SRE map page (`/itil/`) and the runbook binder page (`/runbooks/`).

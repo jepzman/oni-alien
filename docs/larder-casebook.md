@@ -1058,3 +1058,75 @@ Book 5 follows ITIL 4 (practices, value chain, four dimensions, guiding principl
 - **Christmas 2027**: readiness review Mon 29 Nov (12 checks); major-incident drill 30 Nov; failover test 7 Dec (1:37);
   freeze 13 Dec – 3 Jan; Eli/Bram standby 17–24 Dec; 09:00 check-in 13–24 Dec. **Fri 17 Dec 18:12** PSP A slow 22 min →
   PSP B in 40 s, 0 failed orders. Busiest day Thu 23 Dec ≈ 29,400 orders; SEV1 0, SEV2 0, SEV3 6.
+
+## Book 5, Vol. 5: Eli's facts (January → June 2028)
+
+- **Business impact analysis** (17–21 Jan, Femke, Joost, Marco, Mo): tier 1 (RTO 15 min, RPO 1 min) ordering + checkout,
+  payments, Dispatch; tier 2 (1 h, 15 min) business portal + API, store sync, picker back end; tier 3 (1 day, 24 h)
+  billing integration, helpdesk, reporting; tier 4 rebuild. An hour of tier 1 down at a Friday peak ≈ €45k of orders.
+- **Restores**: 10 Jan 3 h 40 (copy 1 h 10, restore 1 h 50, checks by hand 40 min) → snapshots + WAL, scripted checks,
+  Paris copy daily, monthly random restore, quarterly drill: Feb 48 min, Mar (Dispatch DB) 19 min, **18 Apr drill 22 min**.
+- **Paper mode** in stores: pick lists for the next 2 h saved offline every 15 min; store lead declares "paper" after 30 min;
+  first drill **Zuid, Wed 16 Feb 2028, 06:00, 45 min**: 60 % speed, 3 errors / 100; every store twice a year.
+- **Game days**: 2nd Thursday 10:00 from March. **9 Mar**: core-2 stopped (alert linked the wrong runbook), WMS B events
+  stopped (absence alert in 5 min ✓), Utrecht line + 4G pulled (no "store on 4G" alert for Utrecht). 13 Apr: tabletop
+  region outage. 8 Jun: office sign-in game day.
+- **Crisis team** (after the 13 Apr tabletop: 40 min on "who decides?"): Femke decides, then Marco, then Joost (15 min);
+  advisers Eli, Joost, Sam, Lena, Mo; triggers: region > 1 h, a city stopped 2 h, suspected breach, key vendor out a
+  business day; asked at 30 min, decided by 60. Re-run **11 May**: 12 min.
+- **Continuity plans**: the 31-page DR plan of Mar 2026 replaced (Feb) by five 1–2 page plans with owners and last-tested
+  dates, printed in stores and copied offline weekly; untested 12 months → red.
+- **Security monitoring** (Feb): six sources, one store, kept 1 year (Lena, 2 Feb), six alerts; 40 → 4 alerts a week by Apr.
+- **Security incident, Thu 9 Mar 2028**: impossible-travel alert 09:40 on a support agent's account (phishing, prompt
+  approved by habit); contained 09:44; 37 customer orders viewed in 18 min, nothing exported; Lena: regulator notified
+  **Fri 10 Mar** (< 72 h), the 37 customers Mon 13 Mar; number matching (Mar), passkeys for support + admin by May.
+- **Access review Q1** (Jan): 14 tools, 412 accounts, 23 removed (9 agency pickers never on HR's form), 31 roles reduced;
+  agency + contract workers on the form with an end date from 1 Feb; Q2: 6 removed.
+- **Secrets** (Apr): 61 secrets, 19 never rotated, oldest a 2024 PSP key (Jasper), 3 in git history (rotated 4 Apr,
+  scanning from 5 Apr); max ages DB 30 d (auto), keys 90 d, client API keys 1 year; **drill Tue 23 May: 58 of 61 by 17:00**.
+- **Cloud costs**: untagged 61 % (Jan) → 2 %; waste hunt ≈ €9,400/month (staging off nights €4.1k, snapshots €2.6k,
+  replica €1.9k, logs €0.8k); with Ana's changes €78k → €58k/month.
+- **Ops risk register** (March, 14 risks): R1 ops depends on Eli + Bram 4×4 (→ 3×4 by June), R2 phishing 4×3 (→ 2×3),
+  R3 HH-2024 batteries 4×2, R4 billing vendor 3×3, R5 region outage 2×5; top five to Femke monthly.
+- **Korenwolf questionnaire**: 186 questions (Mon 14 Feb), answered from ops/evidence/ in 6 working days, reviewed by Lena,
+  sent **Mon 13 Mar**; 4 follow-ups; gaps found: vendor exits, office sign-in.
+- **Vendor exits** (Apr–May): 8 one-page plans; billing export test **Tue 9 May**: 3 days (1,000 invoices per file + a
+  ticket) → June renewal: full-export API, 90-day exit assistance, lower price. WMS B lock-in accepted.
+- **Sign-in provider outage, Tue 16 May 2028, 08:30–10:40**: stores fine (device certificates); support without the helpdesk
+  2 h 10, ≈ 210 chats waited. Office plan: workplace services in the catalogue, support tooling tier 2, break-glass for
+  helpdesk and console, cached sign-in 7 days, SMS group, two 4G hotspots; game day 8 Jun: back in 6 min.
+
+## Book 5, Vol. 6: Eli's facts (April → October 2028)
+
+- **Operating model** (Mon 10 Apr 2028, Femke, Ana, tech leads): product teams build and run by default; the reliability
+  team (Eli lead, Bram, two SREs) runs tier 1 on-call after a readiness review (Ordering 1 Oct 2028, Dispatch 2029); product
+  team second line; hand-back if readiness drops or budget spent twice in a quarter.
+- **Hiring**: role card, work sample (the 29 Oct 2026 incident timeline + a broken staging service, 90 min with Bram),
+  scoring sheet written 9 May, panel Eli, Bram, Ana; 61 → 12 → 5 → 2. **Lotte** (she/her, from a logistics company's
+  platform team) starts **Mon 3 Jul 2028**; **Yusuf** (he/him, from a bank's operations team) starts **Tue 1 Aug 2028**.
+- **On-call load** (measured May): 31 night pages a month across Larder; apps rota 4 people, 9 nights. Rules from June:
+  ≥ 6 people per rota, ≤ 2 night pages per shift, pager review fixes noisiest alerts first, **€300/week** (Marco, 6 Jun).
+  Apps + business rotas merged (8, 12 Jun). September: 12 night pages a month.
+- **Ordering readiness review** (Mon 28 Aug; Bram, Lotte, Ben's team): 31 checks, 25 met, 6 gaps closed by Mon 11 Sep.
+- **Pager handover**: shadow 4–17 Sep, reverse shadow 18–30 Sep, game days Thu 14 and 21 Sep (led by Lotte and Yusuf),
+  reliability team primary **1 Oct**; way back if 2 SEV1s or budget spent in October.
+- **Early life support** (Oct): exit test (4 weeks no SEV1, 2 incidents alone, runbooks for every page, SLOs met) met
+  31 Oct. **Mon 9 Oct 17:42**: checkout slow after deploy v1207; Lotte leads, Yusuf rolls back; 18 min; Eli not involved.
+- **Automation** (Q3): `larder new-city` end to end in 20 min (used for Haarlem's set-up in August); self-starting restore
+  tests; access review lists from the IdP; golden path creates SLO file, alerts, dashboard, runbook, catalogue entry.
+  Team toil 28 % (Jun) → 19 % (Oct).
+- **Tools** (Jul–Aug): 17 → 9, €11,200 → €6,900 a month; a new tool needs a new job.
+- **Maturity check** (Mon 19 Jun): strongest incidents, change, on-call, monitoring (3); weakest capacity forecasting,
+  knowledge, store self-service, vendors, cost (2); chosen: knowledge, capacity forecasting, the team. Next: December.
+- **Operations strategy** (signed by Femke Mon 24 Jul): "Larder keeps its promises at 60,000 orders a day, without heroics";
+  goals: tier 1 SLOs at 2× volume, a city's IT in 5 days, no single person critical.
+- **Improvement register** (Jul): 7 lists → 64 items; 20 % of team time; WIP ≤ 5; monthly with Ben, Sam, Joost's lead;
+  October 23 done, 11 dropped, 5 doing.
+- **SLOs for product teams**: pilot with Cho's payments team in July (Lotte 2 days; night pages 4 → 1); Cho presents at the
+  all-hands Thu 31 Aug; apps in Sep, data in Oct; 4 of 5 teams by October.
+- **AI rules** (Aug, on Lena's rules): drafts and summaries yes; never act on production, decide in an incident, or see
+  customer data/secrets. **Tue 25 Jul 17:20**: the assistant suggested restarting the primary; Yusuf checked the runbook.
+- **Career path** (Sep): SRE / senior / staff by scope, incidents, automation, teaching; **Bram senior SRE 1 Oct 2028**;
+  Eli becomes reliability lead.
+- **Closing note, Mon 30 Oct 2028**: useful pages 2 % → ≈ 80 %, change failures 6 % → 3 %, restore 3 h 40 → 22 min,
+  toil 41 % → 19 %, Eli's night pages in October 2028: none. **Book 5 is complete.**

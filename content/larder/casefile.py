@@ -77,9 +77,9 @@ BOOKS = [
      "Larder for Business wins its first client, Korenwolf Group. Mo learns to manage expectations, scope changes, service levels, "
      "monthly reports and a hard renewal, with Hanna and Ruben on the other side of the table.",
      None),
-    ("Book 5", "The IT Operations Notebook", "Eli", "Mar 2026 →", "in progress: 4 of 6 volumes",
+    ("Book 5", "The IT Operations Notebook", "Eli", "Mar 2026 → Oct 2028", "complete: 6 volumes",
      "ITIL 4 and SRE in plain words, from the engineer who keeps Larder running. Eli starts at 160 % with everything in his "
-     "head, and builds a catalogue, an on-call rota, alerts that mean something, runbooks, a service desk, incident handling, safe change, SLOs and a Korenwolf SLA.",
+     "head, and builds a catalogue, an on-call rota, alerts that mean something, runbooks, a service desk, incident handling, safe change, SLOs, continuity, and finally a reliability team that runs without him.",
      "../ops-1/index.html"),
 ]
 
@@ -486,9 +486,44 @@ TIMELINE_5 = [
     ("2027-11", "Three availability numbers", "measuring-availability", "ops-4"),
     ("2027-11", "The IT pulse: handhelds 3.1", "user-satisfaction", "ops-4"),
     ("2027-12", "Christmas 2027: PSP switch in 40 s", "running-a-peak", "ops-4"),
+    ("2028-01", "What matters most if everything fails?", "business-impact", "ops-5"),
+    ("2028-01", "Restores: 3 h 40, then 22 min", "restore-tests", "ops-5"),
+    ("2028-01", "The access review finds agency pickers", "access-reviews", "ops-5"),
+    ("2028-02", "Paper mode drill at Zuid, 16 Feb", "manual-fallback", "ops-5"),
+    ("2028-02", "Five short continuity plans", "living-plans", "ops-5"),
+    ("2028-02", "Security monitoring: six alerts", "security-monitoring", "ops-5"),
+    ("2028-02", "The cloud bill by owner", "cloud-costs", "ops-5"),
+    ("2028-03", "Game day 1, 9 Mar", "game-days", "ops-5"),
+    ("2028-03", "An account takeover, 9 Mar", "security-incidents", "ops-5"),
+    ("2028-03", "The operational risk register", "ops-risk-register", "ops-5"),
+    ("2028-03", "Korenwolf's 186 questions, from evidence", "audit-evidence", "ops-5"),
+    ("2028-04", "Who decides to invoke the plan?", "invoking-the-plan", "ops-5"),
+    ("2028-04", "Who runs what? The operating model, 10 Apr", "who-runs-what", "ops-6"),
+    ("2028-05", "Rotating every secret in a day, 23 May", "secrets-rotation", "ops-5"),
+    ("2028-05", "The billing exit test, 9 May", "vendor-exit", "ops-5"),
+    ("2028-05", "Sign-in down, office stuck, 16 May", "office-outage", "ops-5"),
+    ("2028-05", "Hiring the first SREs", "hiring-sres", "ops-6"),
+    ("2028-06", "On-call people can live with", "humane-on-call", "ops-6"),
+    ("2028-06", "The maturity check, 19 Jun", "maturity-check", "ops-6"),
+    ("2028-06", "What to automate next", "automation-strategy", "ops-6"),
+    ("2028-07", "Operations strategy signed, 24 Jul", "ops-strategy", "ops-6"),
+    ("2028-07", "One improvement register", "improvement-register", "ops-6"),
+    ("2028-07", "17 tools → 9", "ops-toolset", "ops-6"),
+    ("2028-07", "AI in operations: the 25 Jul suggestion", "ai-in-ops", "ops-6"),
+    ("2028-08", "Ordering's readiness review, 28 Aug", "production-readiness", "ops-6"),
+    ("2028-08", "SLOs spread team by team", "leading-change", "ops-6"),
+    ("2028-09", "Handing over the pager", "pager-handover", "ops-6"),
+    ("2028-09", "An operations career path", "growing-ops-engineers", "ops-6"),
 ]
 for _key, _text, _slug, _vol in TIMELINE_5:
     for _k, _label, _items in TIMELINE:
         if _k == _key:
             _items.append((_text, f"../{_vol}/notes/{_slug}.html", "5"))
             break
+
+_oct = [("Early life support; 9 Oct without Eli", "../ops-6/notes/early-life-support.html", "5"),
+        ("Eli's closing note, 30 Oct", "../ops-6/notes/making-it-yours.html", "5")]
+if not any(k == "2028-10" for k, *_ in TIMELINE):
+    TIMELINE.append(("2028-10", "Oct 2028", _oct))
+else:
+    next(items for k, _, items in TIMELINE if k == "2028-10").extend(_oct)

@@ -2435,7 +2435,7 @@ def render_landing(sheets=(), dives=(), darkside=None):
         ] if darkside else []),
         '  <h2 id="future"><span class="num">→</span>Future log <span class="side">plans, not promises</span></h2>',
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
-        '  <p class="aside">the architect\'s and the product owner\'s notebooks are complete, six volumes each, and the project manager\'s has begun (★): the whole PMBOK Guide, one domain per volume. After that: the client manager. The deep dives get a second season too.</p>',
+        '  <p class="aside">the architect\'s, product owner\'s, project manager\'s and IT operations notebooks are complete, six volumes each. Next (★): the client manager. The deep dives get a second season too.</p>',
         f'  <div class="future">\n{chr(10).join(months)}\n  </div>',
         '  <h2 id="inside"><span class="num">?</span>What\'s inside <span class="side">four formats, same idea</span></h2>',
         '''  <ol class="how-to">
