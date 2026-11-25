@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How Available Were We, Really? · Jef’s Notes</title>
+<meta name="description" content="Count availability from real requests and outside checks, with rules for partial outages and maintenance.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=444906a817">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-ops">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>IT operations notebook · vol. 4</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="measuring-availability">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+<div class="sheet-doodles" aria-hidden="true"><svg class="sd sd-coffee" viewBox="0 0 120 120"><g class="rough"><rect class="d f-paper" x="22" y="18" width="76" height="92" rx="12"/><rect class="d d-thin f-green" x="32" y="30" width="56" height="34" rx="3"/><path class="d d-thin" d="M38 42 h30 M38 52 h20"/><circle class="d f-red" cx="44" cy="84" r="7"/><circle class="d d-thin" cx="76" cy="84" r="7" fill="none"/><path class="d d-thin d-soft" d="M100 30 q10 -8 14 0 M104 22 q14 -10 18 2"/></g></svg><svg class="sd sd-compass" viewBox="0 0 70 110"><g class="rough"><rect class="d f-paper" x="8" y="6" width="54" height="96" rx="4"/><path class="d d-thin" d="M8 30 h54 M8 54 h54 M8 78 h54"/><circle class="d f-green" cx="52" cy="18" r="3"/><circle class="d f-green" cx="52" cy="42" r="3"/><circle class="d f-red" cx="52" cy="66" r="3"/><circle class="d f-y" cx="52" cy="90" r="3"/></g></svg><svg class="sd sd-pencil" viewBox="0 0 240 80"><g class="rough"><rect class="d d-thin f-paper" x="10" y="6" width="220" height="68" rx="3"/><path class="d d-thin d-soft" d="M10 22 h220 M60 6 v68"/><path class="d d-red" d="M70 60 l20 -6 l14 -24 l14 30 l16 -14 h40"/><path class="d d-thin d-dash" d="M64 40 h160"/></g></svg></div>
+  <div class="page-meta"><span class="day">Thu · 23.01.31</span><span class="topic">collection · <b>measuring honestly</b></span></div>
+  <p class="kicker">a.k.a. “availability management, measured”</p>
+  <h1><span class="hl">How Available Were We, Really?</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>“Availability” can mean very different numbers depending on <b>where and how you count</b>. Server logs miss failures outside your servers, request counts treat a slow minute differently from a dead one, and a contract may count whole minutes. Measure with <b>real requests and outside checks</b>, write precise rules for <b>partial outages and maintenance</b>, publish the numbers <b>side by side</b>, and explain the gap. The honest number is the one your customer would compute.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> measuring honestly</li><li><b>Lives in:</b> ops/slo/availability.md; the monthly service review</li><li><b>Pairs with:</b> SLIs, SLAs, Ana's availability maths</li></ul>
+  <aside class="pmbok itil" aria-label="Where this note sits in ITIL 4">
+    <p class="pmbok-top"><span class="pmbok-ed">ITIL 4</span><span class="dom dom-service">Service management</span></p>
+    <ol class="focus" aria-label="Value chain activities this note touches"><li>plan</li><li class=on>improve</li><li>engage</li><li>design &amp; transition</li><li>obtain / build</li><li class=on>deliver &amp; support</li></ol>
+    <dl><div><dt>practices</dt><dd>availability management · measurement and reporting</dd></div><div><dt>in SRE words</dt><dd>(SLIs measured as close to the user as possible; probes)</dd></div><div><dt>principle</dt><dd>Focus on value · Collaborate and promote visibility</dd></div><div><dt>older names</dt><dd>ITIL v3: availability management (agreed service time, downtime)</dd></div></dl>
+  </aside>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The situation <span class="side">Larder, October–November 2027</span></h2>
+  <p class="lead">For October, Eli has three numbers for business ordering, all called “availability”. The servers' own logs say <b>99.95 %</b>. The request-success SLI says <b>99.86 %</b> (the month the budget ran out). The outside checks, counting down minutes the way the new contract does, say <b>99.79 %</b>, just under the 99.8 % Ruben is about to sign. <span class="hl-pink">Ruben will read the third.</span> The gap is made of minutes when DNS or the content network failed outside Larder's servers, and minutes when a few percent of requests failed.</p>
+  <ul>
+    <li>The flattering number is the one nobody outside sees.</li>
+    <li>Failures outside your servers never reach your server logs.</li>
+    <li>Without written rules, every month's number is a negotiation.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of three numbers for business ordering in October 2027, all called &#x27;availability&#x27;. The servers&#x27; own logs: 99.95 percent. The request-success SLI: 99.86 percent. The outside checks counting down minutes, the way the new contract counts: 99.79 percent. Ruben will read the third. The difference: minutes when DNS or the content network failed outside Larder&#x27;s servers, and minutes where a few percent of requests failed."><g class="rough"><rect class="d f-green" x="14" y="30" width="231" height="110" rx="10"/><rect class="d f-y" x="265" y="30" width="231" height="110" rx="10"/><rect class="d f-pink" x="515" y="30" width="231" height="110" rx="10"/></g><text class="t-head" x="129.5" y="81" text-anchor="middle" font-size="19">server logs</text><text class="t" x="129.5" y="105" text-anchor="middle" font-size="22">99.95 %</text><text class="t-head" x="380.5" y="81" text-anchor="middle" font-size="19">request SLI</text><text class="t" x="380.5" y="105" text-anchor="middle" font-size="22">99.86 %</text><text class="t-head" x="630.5" y="81" text-anchor="middle" font-size="19">outside, per minute</text><text class="t" x="630.5" y="105" text-anchor="middle" font-size="22">99.79 %</text><text class="t-s t-red" x="380" y="190" text-anchor="middle" font-size="19">Ruben reads the third</text><text class="t-s t-pen" x="380" y="226" text-anchor="middle" font-size="16">failures outside the servers never reach the server logs</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Three “availability” numbers for the same month: 99.95, 99.86, 99.79. The contract uses the lowest.</figcaption></figure>
+  <aside class="meanwhile" aria-label="Meanwhile, in another notebook">
+    <span class="tag">meanwhile, in Ana’s notebook</span>
+    <ul><li><a href="../../architect-5/notes/availability-maths.html"><b>Availability Maths</b></a> <small>(Ana, vol. 5)</small>: Ana's availability maths for the business ordering path: 99.69 % → 99.79 % by taking billing off the path (ADR 0025); measured 99.81 % in November.</li></ul>
+  </aside>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the open shop on a closed road</span></h2>
+  <p>A shop's own clock says the door was <b>unlocked from 08:00 to 18:00</b> every day: 100 % open. But on three mornings <b>the road outside was closed</b>, and no customer could get in. Asked how available the shop was, the honest answer counts the road too, because <b>the customer's trip</b> does.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 220" role="img" aria-label="Doodle of a shop measuring how often it was open. The shop&#x27;s own clock says the door was unlocked from 08:00 to 18:00 every day. But on three mornings the road outside was closed, and customers couldn&#x27;t get in. Asked how available the shop was, the honest answer counts the road too, because the customer&#x27;s trip does."><g class="rough"><g transform="translate(60 40) scale(1.5)"><g class="d"><rect class="f-paper" x="4" y="22" width="60" height="38"/><path class="f-paper" d="M0 22 l8 -16 h52 l8 16 z"/><rect x="26" y="38" width="16" height="22"/></g></g><rect class="d f-green" x="170" y="40" width="270" height="100" rx="10"/><rect class="d f-pink" x="470" y="40" width="276" height="100" rx="10"/></g><text class="t-head" x="305" y="86" text-anchor="middle" font-size="18">door unlocked</text><text class="t" x="305" y="110" text-anchor="middle" font-size="14">100 %, by our clock</text><text class="t-head" x="608" y="86" text-anchor="middle" font-size="18">road closed</text><text class="t" x="608" y="110" text-anchor="middle" font-size="14">3 mornings, no customers</text><text class="t-s t-pen" x="450" y="190" text-anchor="middle" font-size="18">measure the customer&#x27;s trip, not the shop door</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The door was unlocked all day, but the road was closed for three mornings. Customers count the road.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to the job</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In operations</th></tr></thead>
+    <tbody>
+      <tr><td>The shop's own clock</td><td>Server logs: 99.95 %</td></tr>
+      <tr><td>The closed road</td><td>DNS and the content network failing outside the servers</td></tr>
+      <tr><td>A customer trying to get in</td><td>An outside check placing a test order every minute</td></tr>
+      <tr><td>Counting the trip</td><td>The contract's down minutes: 99.81 %</td></tr>
+      <tr><td>Writing down what counts</td><td>Rules for partial outages and maintenance</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">real requests plus outside checks, precise rules, both numbers published</span></h2>
+  <p>From <b>November</b>, availability is measured two ways:</p>
+  <ul>
+    <li><b>Real requests</b> at the load balancer: good ÷ valid, the SLI.</li>
+    <li><b>Outside checks</b> every <b>60 seconds</b> from <b>two locations in different countries</b>. Each one logs in as a test office manager and places a test business order, like a real customer would.</li>
+  </ul>
+  <p>The rules are written down. A minute is <b>down</b> if more than <b>5 %</b> of requests fail, or if both outside checks fail. A <b>partial outage</b> counts by its share in the SLI, and as a down minute in the contract measure. <b>Planned maintenance always counts internally</b>, even where the contract excludes it, so nobody is tempted to call an outage “maintenance”.</p>
+  <p>Both numbers go side by side on the monthly review, with <b>the gap explained</b>. November: <b>request SLI 99.92 %, contract minutes 99.81 %</b>, matching Ana's measurement. October's DNS minutes lead to a second DNS provider in December.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 400" role="img" aria-label="Larder&#x27;s availability rules from November 2027. Two measurements: real requests at the load balancer, and outside checks every 60 seconds from two locations in different countries that log in and place a test business order. A minute counts as down if more than 5 percent of requests fail or both outside checks fail. Partial outages count by share in the SLI and as down minutes in the contract measure. Planned maintenance counts internally even when the contract excludes it. Both numbers are published side by side every month with an explanation of the gap. November: request SLI 99.92, contract minutes 99.81 percent, matching Ana&#x27;s measurement."><g class="rough"><rect class="d f-blue" x="14" y="14" width="360" height="120" rx="10"/><rect class="d f-green" x="386" y="14" width="360" height="120" rx="10"/><rect class="d f-paper" x="14" y="160" width="732" height="110" rx="10"/><rect class="d f-y" x="110" y="294" width="250" height="80" rx="10"/><rect class="d f-green" x="400" y="294" width="250" height="80" rx="10"/></g><text class="t-head" x="194" y="70" text-anchor="middle" font-size="19">real requests</text><text class="t" x="194" y="94" text-anchor="middle" font-size="13">load balancer · good ÷ valid</text><text class="t-head" x="566" y="70" text-anchor="middle" font-size="19">outside checks</text><text class="t" x="566" y="94" text-anchor="middle" font-size="13">every 60 s · 2 countries · test order</text><text class="t" x="380" y="190" text-anchor="middle" font-size="15">down minute: &gt; 5 % of requests fail, or both outside checks fail</text><text class="t" x="380" y="218" text-anchor="middle" font-size="15">partial outage: by share (SLI) · as a down minute (contract)</text><text class="t" x="380" y="246" text-anchor="middle" font-size="15">planned maintenance: always counted internally</text><text class="t-head" x="235" y="330" text-anchor="middle" font-size="17">Nov request SLI</text><text class="t" x="235" y="354" text-anchor="middle" font-size="20">99.92 %</text><text class="t-head" x="525" y="330" text-anchor="middle" font-size="17">Nov contract minutes</text><text class="t" x="525" y="354" text-anchor="middle" font-size="20">99.81 %</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Real requests plus outside checks; precise rules for down minutes; both numbers published with the gap explained.</figcaption></figure>
+  <ol class="steps">
+    <li><b>List every “availability” number you have</b><p>And where each is counted.</p></li>
+    <li><b>Add outside checks that act like a customer</b><p>Two locations, every minute, a real flow.</p></li>
+    <li><b>Write the rules</b><p>Down minute, partial outage, maintenance.</p></li>
+    <li><b>Count maintenance internally</b><p>Always, whatever the contract says.</p></li>
+    <li><b>Publish the numbers side by side</b><p>With the gap explained.</p></li>
+    <li><b>Fix what the gap shows</b><p>Often outside your servers: DNS, CDN, vendors.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Availability</dt><dd>The share of time (or requests) a service works for its users.</dd></div>
+    <div><dt>Probe / synthetic check</dt><dd>A robot that uses the service like a customer, on a schedule.</dd></div>
+    <div><dt>Down minute</dt><dd>A minute counted as unavailable under written rules.</dd></div>
+    <div><dt>Partial outage</dt><dd>Some requests or users fail while others work.</dd></div>
+    <div><dt>Agreed service time</dt><dd>The hours a service is promised (24/7, or 06:00–23:00).</dd></div>
+    <div><dt>Measurement gap</dt><dd>The difference between numbers counted in different places.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>ops/slo/availability.md</span><span>rules from November 2027</span></div>
+<pre><code># How Larder counts availability (business ordering)
+
+measure 1   real requests · load balancer · good ÷ valid (SLI)
+measure 2   outside checks · every 60 s · Frankfurt + Paris probes
+            log in as test office manager → place test order → cancel
+down minute &gt; 5 % of requests fail, OR both outside checks fail
+partial     SLI: counted by share · contract: a down minute if &gt; 5 %
+maintenance always counted internally; excluded in the contract only if
+            announced ≥ 5 working days ahead, outside 06:00–20:00
+
+            server logs   request SLI   contract minutes   gap explained
+Oct 2027    99.95 %       99.86 %       99.79 %            DNS minutes (2 × 9 min)
+Nov 2027    99.97 %       99.92 %       99.81 %            one slow PSP hour
+action      second DNS provider (Dec 2027)</code></pre>
+  </div>
+  <p class="aside">tools: load balancer logs, an outside synthetic-check service with two locations, and one page of rules.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>The maturity ladder <span class="side">where are we, and what is the next rung?</span></h2>
+  <div class="dial ladder">
+    <div class="rung rung-1"><h3><span class="rung-n">1</span>By hand</h3><p class="dial-when">the flattering number</p><ul><li>Server logs only.</li><li>Gaps unexplained.</li></ul></div>
+    <div class="rung rung-2 is-now"><h3><span class="rung-n">2</span>Written down <span class="rung-here">Larder now</span></h3><p class="dial-when">real requests + outside checks</p><ul><li>Written rules.</li><li>Both numbers published.</li></ul></div>
+    <div class="rung rung-3"><h3><span class="rung-n">3</span>Scripted</h3><p class="dial-when">customer-identical measurement</p><ul><li>The client can see the same numbers live.</li><li>Disputes rare.</li></ul></div>
+    <div class="rung rung-4"><h3><span class="rung-n">4</span>Automatic</h3><p class="dial-when">gaps designed out</p><ul><li>Outside failures (DNS, CDN) made redundant.</li><li>Numbers converge.</li></ul></div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Operations ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>server-log availability</b> to <b>real requests plus outside checks, written rules, and both numbers with the gap explained</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="2" data-after="4"><td>User impact<small>customers notice less?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Failures outside the servers become visible and get fixed.</td></tr>
+      <tr data-before="3" data-after="3"><td>Reliability<small>breaks less often?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral on its own.</td></tr>
+      <tr data-before="3" data-after="3"><td>Recovery speed<small>back up faster?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Change safety<small>changes land quietly?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="1" data-after="4"><td>Visibility<small>we can see it?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Numbers the client would compute, explained.</td></tr>
+      <tr data-before="3" data-after="3"><td>Toil reduction<small>less repeat handwork?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="3"><td>Cost awareness<small>worth what it costs?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A second DNS provider bought for a measured reason.</td></tr>
+      <tr data-before="3" data-after="3"><td>Sustainable on-call<small>people sleep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low overhead<small>light to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A day to set up the checks.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Reporting the flattering number</h3><p>The client computes a lower one. <span class="fix">Fix →</span> publish the customer's number.</p></li>
+    <li><h3>Checks from inside the cloud</h3><p>They fail with you, or succeed while users can't reach you. <span class="fix">Fix →</span> outside, two locations.</p></li>
+    <li><h3>Maintenance as an excuse</h3><p>Outages relabelled. <span class="fix">Fix →</span> count it internally, always.</p></li>
+    <li><h3>A check that only pings</h3><p>The home page loads; ordering doesn't. <span class="fix">Fix →</span> check a real flow.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>You promise availability in a contract.</li><li>Different numbers circulate for the same thing.</li><li>Customers report outages your logs don't show.</li><li>Before signing an SLA.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Internal tools without promises: the SLI is enough.</li></ul>
+    </div>
+  </div>
+  <h3>Related notes</h3>
+  <ul class="related"><li><a href="../../architect-5/notes/availability-maths.html"><b>Availability Maths</b></a> (Ana, vol. 5)</li><li><a href="../notes/slas.html"><b>What Did We Sign?</b></a> (this volume)</li><li><a href="../notes/slis.html"><b>What Do Users Count as Working?</b></a> (this volume)</li><li><a href="../../ops-1/notes/monitoring.html"><b>How Do We Know It's Broken?</b></a> (vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why did the server logs say 99.95 % when the contract measure said 99.79 %?</summary><p>Failures outside the servers (DNS, content network) and minutes with partial failures never reached the server logs.</p></details>
+    <details><summary>What do Larder's outside checks do?</summary><p>Every 60 s from two countries, they log in as a test office manager and place a test business order.</p></details>
+    <details><summary>When is a minute down?</summary><p>When more than 5 % of requests fail, or both outside checks fail.</p></details>
+    <details><summary>Why count maintenance internally even when the contract excludes it?</summary><p>So outages can't be relabelled as maintenance, and the internal picture stays honest.</p></details>
+    <details><summary>What did the October gap lead to?</summary><p>A second DNS provider in December.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A client's IT team says your availability last month was 99.6 %, but your report says 99.85 %. What do you do?</span></summary><p>Compare how each was counted: where, how often, what counts as down. Share your rules and raw down minutes. If their measure is closer to what users felt, learn from it; if not, agree one method together.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Collect every availability number you report and write where it's counted. Set up one outside check that performs a real user flow every minute. How does its number compare with the others?</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Count availability the way <span class="hl">the customer would</span>: their trip, not your door. Publish the numbers <span class="hl">side by side</span> and explain the gap.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/06-measuring-availability.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>AXELOS, <i>ITIL 4: Availability management</i> practice guide (2020).</li><li>Betsy Beyer et al., <i>The Site Reliability Workbook</i> (2018): chapter 2, choosing an SLI implementation.</li><li>Alex Hidalgo, <i>Implementing Service Level Objectives</i> (2020): measuring from the client side.</li></ul>
+  </div>
+  <div class="titleblock" aria-label="Sheet details"><span class="tb-k">book</span><span class="tb-v">The IT Operations Notebook</span><span class="tb-k">vol.</span><span class="tb-v">4</span><span class="tb-k">sheet</span><span class="tb-v">06 / 15</span><span class="tb-k">rev.</span><span class="tb-v">A</span><span class="tb-k">drawn by</span><span class="tb-v">Jefrey</span></div>
+  <p class="folio">06</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="olas.html"><small>← previous note</small>05 · What Do Teams Promise Each Other?</a>
+  <a href="capacity-headroom.html"><small>Next note →</small>07 · Will Christmas Fit?</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · The IT Operations Notebook · vol. 4</span><span>by Jefrey Romel Tagunicar</span></footer>
+<p class="foot-note">Independent study notes, written in my own words. Not affiliated with or endorsed by PeopleCert or AXELOS. ITIL® is a registered trademark of PeopleCert.</p>
+</main>
+</body>
+</html>

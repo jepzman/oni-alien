@@ -1,0 +1,338 @@
+# Handoff: The IT Operations Notebook (Series 2, Book 5)
+
+Status as of 2026-11-25: **Book 5 is complete: six volumes, 90 notes (sections 10–12).** Owner's decisions (24 Nov): IT operations (not business
+operations), narrated by whichever character fits, starting where it fits the story's timeline. Open questions: section 9.
+
+Story facts: `docs/larder-casebook.md` (source of truth) and the public case file `/larder/`.
+Earlier plans, for format: `docs/HANDOFF-project-manager.md` (closest model: a book with a spine standard and a map page).
+
+## 1. What the book is
+
+Book 5 of Series 2. Narrator: **Eli** (he/him, as in Books 1 and 3), Larder's platform and operations engineer. He was
+there before Series 2 began (one of the 14 engineers in October 2025), and the casebook already shows the job outgrowing him:
+
+- Larder Core runs on 3 VMs he **patches by hand** (Ana, 2026).
+- Week of 23 March 2026: Sanne's levelling shows him at **160 %** (platform 2½ days, RFC-003 1½, on call 1, internet
+  line 1, extras 1½, alert fix ½). Ana takes over his on-call week.
+- Rotterdam opens **27 April 2026** on a 4G router; its internet line (issue I-07, raised by Eli) is live on 13 May.
+- **29 Oct 2026**: a network rule change cuts Dispatch off from Postgres for 25 minutes.
+- **18 Dec 2026, 18:05**: a database failover takes checkout down for 38 minutes (≈ 900 orders lost or late).
+- **31 Aug 2027**: billing webhooks silent for 9 hours; Korenwolf shown as unpaid.
+- **17 Dec 2027**: PSP A slow for 22 min, switched in 40 s, no failed orders.
+- **10 Jan 2028**: first full restore takes 3 h 40; drill on 18 Apr: 22 min.
+- **Autumn 2028**: a reliability team exists; game days 14 and 21 Sep, pager 1 Oct, first incident 9 Oct (18 min).
+
+Ana asks *"how do we build it?"*, Grace *"should we, and for whom?"*, Sanne *"by when, for how much?"*, Mo *"what did
+we promise the client?"*. Eli asks ***"how do we keep it running, and what do we do when it breaks?"***
+
+**Arc:** from the one person who knows where everything is, to the lead of a reliability team that doesn't need him at
+3 a.m. Each volume removes one way the company depends on Eli's memory.
+
+**Timeline:** **Mon 30 March 2026** (the week after the 160 % levelling) to **October 2028** (the reliability team's
+first incident). The book runs alongside Books 1–4 and ends a few weeks after them. It retells several of their events
+from the operations side, which is where the "meanwhile" links come in.
+
+## 2. The spine: ITIL 4 practices plus SRE
+
+Book 3 covered PMBOK. Book 5 covers **ITIL 4** the same way, with **site reliability engineering (SRE)** practices
+where ITIL says what to do and SRE says how small teams actually do it (SLOs, error budgets, toil, blameless reviews).
+
+- ITIL 4: the service value system, **7 guiding principles** (focus on value; start where you are; progress
+  iteratively with feedback; collaborate and promote visibility; think and work holistically; keep it simple and
+  practical; optimise and automate), **4 dimensions** (organisations and people; information and technology; partners
+  and suppliers; value streams and processes), and **34 practices** (14 general, 17 service, 3 technical management).
+- An **ITIL & SRE map** page (`/itil/`, data in `content/itil/map.py`), like the PMBOK map: every principle, dimension
+  and practice → the note that covers it. Practices that belong to other books (project management, portfolio,
+  architecture, business analysis, software development) link there instead.
+
+**Check before writing:** practice names come from public sources. Check them against the current ITIL guide, and
+check whether a newer ITIL edition has replaced ITIL 4 by the time we write. If one has, use the newer edition as the spine
+and keep ITIL 4 as the "in older editions" tag.
+
+**Copyright:** ITIL is a registered trademark of PeopleCert. Everything is written in our own words and drawn from scratch,
+with no copied definitions or figures. Practice names are used as names only. Footer on every page: independent study
+notes, not affiliated with or endorsed by PeopleCert or AXELOS.
+
+## 3. Note format
+
+Kept from Books 1–3: the Larder scene, the analogy with doodles, how it works, the template card, "try it", the quiz,
+"meanwhile" boxes, the case file timeline, nine ratings, one PDF per volume. Like Book 3: the title is a question, and a
+tag under it gives the ITIL practice, the SRE term and older names.
+
+New for Book 5:
+
+- **Maturity ladder** (replaces Book 3's light / standard / heavy dial): four rungs for the practice,
+  **by hand → written down → scripted → self-service / automatic**, with what Larder does at each rung and when to
+  climb. Eli climbs one rung per note, never four.
+- **Pager log** box on incident notes: the real page as it arrived (time, alert text, who answered, minutes to
+  acknowledge), so the reader sees the moment before the lesson.
+- **Deep dives** on key notes (3–5 per volume), as in Book 3.
+
+## 4. Nine ratings (`OPS_ATTRS`)
+
+user impact · reliability · recovery speed · change safety · visibility · toil reduction · cost awareness ·
+sustainable on-call · low overhead
+
+(Series 1 Vol. 6's ratings score *patterns*; these score *practices*, as Books 1–3 do.)
+
+## 5. Skin: `theme-ops`, the incident logbook
+
+Carbon-copy duplicate forms: a perforated tear-off edge, a timestamp column in the margin (`14:05`), a **SEV** stamp
+in place of the "LGTM" stamp, and form fields under the title (service, owner, rung). Palette: incident red, signal
+amber, graphite, a soft phosphor green for "resolved". Fonts: IBM Plex Mono for labels and times, the usual handwriting
+font for Eli's notes. Must read well in print and in both themes.
+
+## 6. Volumes (6 × 15 notes)
+
+Reviewed on 25 Nov 2026 (section 6.7 lists the changes). Each note is **one practice**, not one event: a real incident
+or launch is the *scene* of a note, never its subject. Markers: **[new]** replaced an earlier title, **[merged]** absorbs
+an earlier one, **[reframed]** keeps the topic but changes the angle, **[moved]** comes from another volume.
+
+### Vol. 1 · Keeping the Lights On (`ops-1`, Mar → Jun 2026)
+Rotterdam opens on 4G; Eli at 160 %; nothing is written down.
+
+1. What is IT operations for? (service value system, value, outcomes, guiding principles)
+2. What do we run, and who owns it? (service catalogue and service owners) **[merged]**
+3. What is connected to what? (service configuration, dependency map)
+4. What do we own, and where is it? (IT asset management: handhelds, routers, laptops, licences)
+5. Forty new people on Monday (joiners, movers, leavers: accounts and devices for Rotterdam's staff) **[new]**
+6. Who gets woken up? (the first on-call rota)
+7. How do we know it's broken? (monitoring and event management: what to watch; links Series 1 *Logs, Metrics & Traces*)
+8. Which alerts deserve a human? (alert hygiene: the ½-day alert fix)
+9. What do I do at 3 a.m.? (runbooks)
+10. Where do people report problems? (service desk for stores and office)
+11. Can I have a new handheld? (service requests)
+12. Is it the network? (store Wi-Fi, the 4G backup, the VPN; Noord's Wi-Fi drops) **[new]**
+13. How does a new store get its IT? (the store IT kit, device management for the handhelds)
+14. Where is that written down? (knowledge management; Jasper's missing reasons)
+15. Why am I always busy? (toil, and the 160 % week)
+
+### Vol. 2 · When Things Break (`ops-2`, Jun → Dec 2026)
+Ends with the Christmas failover.
+
+1. How bad is it? (severity levels)
+2. Who is in charge? (incident commander, roles, the scribe and the timeline) **[merged]**
+3. Who needs to know? (incident communication with Sam, Femke and the stores, and the status page) **[merged]**
+4. Who's next if nobody answers? (paging and escalation policies) **[new]**
+5. The vendor is down at peak (supplier escalation)
+6. Who fixes what? (support tiers vs swarming) **[new]**
+7. What did we learn? (blameless post-incident review)
+8. Why did it really happen? (problem management: causal analysis and trends)
+9. We know the bug, now what? (known errors and workarounds)
+10. Why do action items never close?
+11. Which incident numbers mean anything? (MTTA, MTTR and their traps)
+12. Was it a change? (change-related incidents; scene: the network rule change of 29 Oct) **[reframed]**
+13. Telling a business client (Korenwolf incident reports, with Mo)
+14. When is it a major incident? (major incident procedure; scene: the Christmas failover of 18 Dec) **[reframed]**
+15. What about the near misses?
+
+### Vol. 3 · Changing Things Safely (`ops-3`, Jan → Jun 2027)
+The warehouse move to WMS B (Zuid 19 Apr, Noord 24 May); Utrecht (12 Apr) and The Hague (14 Jun) open.
+
+1. Which changes need a second look? (change enablement: standard, normal, emergency)
+2. Do we need a change board? (peer review instead of a CAB)
+3. When must we not change anything? (change calendar and freezes; ADR 0017's critical windows)
+4. Release or deploy? (release management vs deployment management)
+5. How risky is this change? (change risk scoring)
+6. How do we undo it? (rollback plans; links Series 1 *Blue–Green* and *Canary*)
+7. Is it really ready? (service validation and testing, and why environments differ) **[merged]**
+8. The database version runs out of support (end-of-life and upgrades of the platform) **[new]**
+9. Cutting over a store (the WMS B cutover plan)
+10. A new city by checklist (the IT side of city set-up; meanwhile: Sanne's playbook)
+11. Which changes fail? (change failure rate, DORA metrics)
+12. The urgent fix at 17:00 on a Friday (emergency changes)
+13. Who may touch production? (production access, break-glass)
+14. Patching without fear (patch and vulnerability routine: the hand-patched VMs)
+15. Updating 90 handhelds (rolling out picker app versions to store devices) **[new]**
+
+### Vol. 4 · Promises & Measures (`ops-4`, Jul → Dec 2027)
+Billing webhooks go silent; StockPilot is switched off (15 Sep); Antwerp (18 Oct) and Eindhoven (22 Nov) open; Christmas
+2027 goes well.
+
+1. What do users count as working? (SLIs)
+2. How good is good enough? (SLOs)
+3. When do we stop shipping features? (error budgets and the error budget policy) **[merged]**
+4. What did we sign? (SLAs; Korenwolf's 99.8 %, with Mo)
+5. What do teams promise each other? (OLAs and internal agreements)
+6. How available were we, really? (measuring availability; Ana's note does the maths) **[reframed]**
+7. Will Christmas fit? (capacity monitoring and headroom alerts; Ana's capacity plan is the design side) **[reframed]**
+8. The vendor went quiet (supplier management; billing webhooks on 31 Aug)
+9. The monthly service report and the review meeting (measurement, reporting, relationship management) **[merged]**
+10. Switching a system off (decommissioning StockPilot and the four retired apps) **[moved]**
+11. Dashboards people actually open
+12. What can the stores fix themselves? (shift-left and self-service) **[new]**
+13. Operating in a second country (Antwerp: support hours, languages, local vendors) **[reframed]**
+14. Running a peak (the Christmas 2027 war room; the PSP switch on 17 Dec)
+15. Asking the users (user satisfaction beyond uptime)
+
+### Vol. 5 · Ready for the Worst (`ops-5`, Jan → Jun 2028)
+The 3 h 40 restore, the 22-minute drill, the Korenwolf supplier questionnaire.
+
+1. What matters most if everything fails? (business impact analysis, RTO and RPO per service) **[merged]**
+2. Can we actually restore? (backup and restore tests: 3 h 40 → 22 min)
+3. When the picker app is down (manual fallback in the stores: paper pick lists, hand dispatch) **[new]**
+4. Is the alarm real? (security monitoring and log retention) **[new]**
+5. Breaking things on purpose (game days and chaos experiments)
+6. When the incident is a security incident (security operations)
+7. Who still has access? (access reviews)
+8. Rotating the keys (secrets and certificates)
+9. What does it cost to run? (service financial management: owners, reviews, the cloud bill €78k → €58k)
+10. Which risks keep us up at night? (the operational risk register; Sanne and Ana have the method)
+11. Prove it to the auditor (evidence for the Korenwolf questionnaire, with Lena)
+12. Leaving a vendor (exit plans)
+13. When the office is the outage (laptops, SSO, the office network)
+14. Who decides to invoke the plan? (the crisis team and invocation) **[reframed]**
+15. The plan nobody has read (keeping continuity plans alive)
+
+### Vol. 6 · Building the Reliability Team (`ops-6`, Jul → Oct 2028)
+Ghent and Haarlem; the reliability team forms; the pager handover on 1 Oct.
+
+1. Who runs what? (you build it, you run it vs a reliability team)
+2. Is this service ready for production? (production readiness review, the receiving side of Ana's handover)
+3. Hiring the first SREs (workforce and talent)
+4. On-call people can live with (load, pay, rest)
+5. Handing over the pager (transition: game days 14 and 21 Sep, pager 1 Oct)
+6. Did the handover work? (early life support; scene: the first incident without Eli, 9 Oct, 18 min) **[reframed]**
+7. What to automate next (automation strategy and the toil budget)
+8. Which tools do we really need? (the operations toolset: paging, monitoring, tickets) **[new]**
+9. Where are we weak? (an operations maturity check)
+10. Where are we going? (operations strategy and roadmap) **[reframed]**
+11. Continual improvement that continues (the improvement register)
+12. Leading change in how teams work (organisational change management)
+13. AI in operations: where it helps, where it lies (with Lena's rules from Book 3)
+14. Growing operations engineers (career path)
+15. Making it yours
+
+### 6.7 What the review changed, and why
+
+| Was | Now | Why |
+| --- | --- | --- |
+| 1.5 Who owns each service? | merged into 1.2 | the catalogue lists the owner, so it is one practice |
+| 1.12 Incident basics | 1.12 the network | incidents are Vol. 2; store networks were missing, and Rotterdam opened on 4G |
+| (none) | 1.5 joiners, movers, leavers | about 40 new staff per store; the commonest store ticket |
+| 2.4 Status page | merged into 2.3 | too thin for a note |
+| 2.6 Incident timeline | merged into 2.2 | the scribe's job |
+| (none) | 2.4 escalation, 2.6 tiers vs swarming | real incident practices that were missing |
+| 2.12, 2.14 two incidents as notes | reframed | a note is a practice; the incident is the scene |
+| 3.8 Configuration drift | merged into 3.7 | covered by Series 1 *Infrastructure as Code* and *Immutable Infrastructure* |
+| (none) | 3.8 end-of-life upgrades | infrastructure lifecycle work was missing |
+| 3.15 Decommissioning | moved to 4.10 | StockPilot is switched off on 15 Sep 2027, after Vol. 3 ends |
+| (none) | 3.15 device rollouts | getting app versions onto store devices was missing |
+| 4.12 Error budget policy | merged into 4.3 | the same practice as 4.3 |
+| 4.10 Service review | merged into 4.9 | the report and the meeting are one loop |
+| (none) | 4.12 shift-left | a service desk practice that was missing |
+| 4.6, 4.7 | reframed | Ana's Vol. 5 covers availability maths and capacity planning; Eli measures and watches |
+| 4.13 A foreign city | reframed | kept to its IT side |
+| 5.3 DR tiers | merged into 5.1 | the tiers come out of the impact analysis; Ana's *DR Tiers* is the design side |
+| 5.4 A second region | dropped, link Ana's *When to Go Multi-Region* | an architecture decision, not an operations practice |
+| (none) | 5.3 manual fallback, 5.4 security monitoring | store continuity and detection were missing |
+| 5.14 Crisis communication | reframed | communication is 2.3; invoking the plan is the new part |
+| 6.6 First incident without Eli | reframed | an event; early life support is the practice |
+| 6.8 Platform for the other teams | 6.8 the operations toolset | Ana's *Golden Paths* covers the platform |
+| 6.10 Roadmap | reframed | ITIL strategy management was missing |
+
+### 6.8 ITIL 4 coverage
+
+| Practice group | Covered in | Linked elsewhere |
+| --- | --- | --- |
+| Service management (17) | incident 2.1–2.6, 2.14 · problem 2.8–2.9 · change enablement 3.1–3.3, 3.5, 3.12 · release 3.4, 3.15 · validation and testing 3.7 · service desk 1.10, 4.12 · service requests 1.5, 1.11 · monitoring and events 1.7–1.8 · service levels 4.1–4.5 · availability 4.6 · capacity and performance 4.7 · continuity 5.1–5.3, 5.14–5.15 · configuration 1.3 · IT assets 1.4, 1.13 · catalogue 1.2 · service design 6.2 | business analysis → Book 2 |
+| General management (14) | continual improvement 2.10, 6.11 · information security 3.13, 5.4, 5.6–5.8 · knowledge 1.14 · measurement and reporting 2.11, 4.9, 4.11 · organisational change 6.12 · relationship 4.9, 4.15 · risk 5.10 · service financial 5.9 · strategy 6.10 · supplier 2.5, 4.8, 5.12 · workforce and talent 6.3, 6.14 | architecture → Book 1 · portfolio → Book 1 Vol. 4 · project → Book 3 |
+| Technical management (3) | deployment 3.4, 3.6 · infrastructure and platform 1.12, 3.8, 3.14 | software development → Series 1 and Book 1 |
+
+## 7. Extras
+
+- **The runbook binder** (`/runbooks/`): every template card in order (rota, runbook, incident timeline, review,
+  change record, SLO sheet, service report, DR test), like Sanne's project file.
+- **Cheat sheets:** Incident response on one page (roles, severities, comms, review); SLOs and error budgets (the maths,
+  burn-rate alerts).
+- **Deep dives** (Series 3) already planned: *Observability & SLOs* fits this book; add *Incident Response*.
+
+## 8. Rules
+
+- Don't repeat Series 1 Vol. 6 (Cloud & DevOps patterns) or Ana's quality notes. Link to them: Eli's notes are about the
+  practice and the people, and their notes are about the mechanism.
+- Every new fact goes into the casebook under "Book 5". Never contradict existing facts, and check the dates above against
+  the casebook before writing each volume.
+- Add each note to the case file `TIMELINE` (new tag `"5"`), add meanwhile links where a scene is shared, and
+  update the future log.
+- Same house style: short sentences, everyday English, dates and numbers in every scene.
+
+## 9. Open questions for the owner
+
+1. Is the title *The IT Operations Notebook* or *The SRE's Notebook*? (Recommendation: the first. It reads more widely
+   and matches the ITIL spine.)
+2. Should we write it before or after Book 4 (Mo)? This plan doesn't depend on Book 4, apart from three shared scenes
+   (Korenwolf incident reports, the SLA, the questionnaire).
+3. Check the ITIL practice names against the current guide (see section 2).
+
+## 10. What was built (25 Nov 2026)
+
+- **Journals** `ops-1` (Keeping the Lights On) and `ops-2` (When Things Break) in `JOURNALS`, 15 notes each, content in
+  `content/ops-1/` (4 files by collection) and `content/ops-2/` (3 files). Vols. 3–6 are in `PLANNED_OPS` and show on the
+  shelf as planned spines. Landing page: a Book 5 shelf (`spine_shelf(..., "eli", ...)`) after Book 3.
+- **Note fields new in Book 5** (rendered in `scripts/build_notes.py`):
+  - `itil=dict(groups=[general|service|technical], chain=[plan|improve|engage|design|build|deliver], practices=[...],
+    sre=..., principles=[...], older=...)` → `itil_tag()`; reuses the PMBOK tag's frame (`.pmbok.itil`).
+  - `ladder=[(when, [items]) × 4]` and `ladder_now=0–3` → `ladder_block()`; replaces gains/losses (section 4 heading
+    “The maturity ladder”). Rungs: by hand, written down, scripted, automatic.
+  - `pager=dict(when=..., lines=[(time, html)])` → `pager_block()`, shown after the situation text. Keep times short
+    (one time per line), or the time column wraps on phones.
+  - Journal flag `ops=True` switches the index's “how every note is laid out” line to the ladder.
+- **Skin** `theme-ops` at the end of `public/assets/bujo.css`: carbon-copy sheet with a perforated edge, status-lamp
+  section numbers, SUMMARY stamp, “FROM ELI'S RUNBOOK BINDER” card tab, the pager log, ITIL group colours
+  (`--dom-general/service/technical`), cover graphite with a green band (`--cover-ops`). Desk doodles `OPS_DOODLES`.
+- **Case file**: Eli in `CAST`, a Book 5 card in `BOOKS`, every note pinned with tag `"5"` via `TIMELINE_5` at the end
+  of `content/larder/casefile.py`; legend `sig-5`.
+- **Casebook**: “Book 5, Vol. 1” and “Book 5, Vol. 2” sections. New people: **Bram** (he/him), second platform
+  engineer, from 5 Oct 2026. New facts that other books must respect: the on-call rota from 20 Apr 2026, severity levels
+  from 15 Jun, the status page from 1 Sep, the change feed from 30 Oct, the major-incident procedure from 23 Dec 2026.
+- **Meanwhile links**: Sanne's levelling (vol. 1 note 1), Sanne's issue log I-07 (store network), Sanne's lessons
+  (store IT kit), Ana's deployment diagrams (29 Oct), Ana's options page / ADR 0017 (major incidents).
+- `pdf-build.json` lists `ops-1` and `ops-2` so the next deploy renders their PDFs.
+
+Next: Vol. 3 · Changing Things Safely (Jan → Jun 2027). It opens with the first major-incident drill (January) and ADR
+0017's “no changes in critical windows”, and picks up the 29 Oct finding (a normal change at the evening peak) and
+VM patching from Eli's toil log. Still open from section 9: the title, the order relative to Book 4, and a check of the
+ITIL names against the current guide (and whether a newer ITIL edition is out). Not built yet: the ITIL & SRE map page
+(`/itil/`) and the runbook binder page (`/runbooks/`); the ITIL tag currently shows “ITIL 4” without a link.
+
+## 11. Vols. 3 and 4 (built 25 Nov 2026, same day)
+
+- `ops-3` **Changing Things Safely** (Jan → Jun 2027), `content/ops-3/` in four collections: deciding about changes
+  (change types, change board, change calendar, release vs deploy, risk score), safety nets (rollback plans, validation,
+  emergency changes, DORA numbers), moving big things (store cutover, city IT runbook, device rings), keeping it current
+  (production access, patching, end-of-life). The note order differs from the plan in section 6 (grouped by collection);
+  `JOURNALS` in `scripts/build_notes.py` is the source of truth.
+- `ops-4` **Promises &amp; Measures** (Jul → Dec 2027), `content/ops-4/` in three collections: making promises (SLIs, SLOs,
+  error budgets, Korenwolf's SLA, OLAs), measuring honestly (availability, capacity headroom, monthly service review,
+  dashboards, the IT pulse), running the year (vendor silence, store self-service, the Belgium sheet, decommissioning,
+  Christmas 2027).
+- **Name change**: Book 5's second platform engineer is **Bram** (he/him), not Pieter. Pieter is already the Belgian
+  builder's site manager in Book 3. All Book 5 content and the casebook were updated.
+- Facts are in the casebook (“Book 5, Vol. 3” and “Vol. 4”). Dates were checked against Ana's and Sanne's books: the
+  order.placed rename is Wed 14 Apr 2027 (the week after Utrecht opened; ADR 0020 on 19 Apr); the Christmas 2027 numbers
+  match Ana's capacity plan and FMEA; Korenwolf's SLA matches Ana's availability note and Grace's portal service levels.
+- New meanwhile links: Ana's strangler migration, availability maths, capacity planning, FMEA, application portfolio,
+  SaaS integration; Grace's city playbook and picker app as a product; Sanne's stakeholders abroad.
+- `pdf-build.json` lists `ops-1` … `ops-4`.
+
+Next: Vol. 5 · Ready for the Worst (Jan → Jun 2028). Hooks already in the story: the 3 h 40 restore (10 Jan 2028) and the
+22-minute drill (18 Apr), the HH-2024 handheld replacement (from the IT pulse and the lifecycle register), Korenwolf's
+supplier questionnaire (Mar 2028), the access review lapse in Ana's ADR 0021 (a support leaver kept access three weeks in
+2027), and the second DNS provider (Dec 2027).
+
+## 12. Vols. 5 and 6 (built 25 Nov 2026) · Book 5 complete
+
+- `ops-5` **Ready for the Worst** (Jan → Jun 2028), `content/ops-5/`: recovering (business impact, restore tests, paper
+  mode, game days, invoking the plan, living plans), security operations (monitoring, a security incident, access reviews,
+  secrets), risk, money and vendors (cloud costs, risk register, audit evidence, vendor exits, the office outage).
+- `ops-6` **Building the Reliability Team** (Apr → Oct 2028), `content/ops-6/`: shaping the team (who runs what, hiring,
+  humane on-call), handing over (readiness review, pager handover, early life support), setting direction (automation,
+  tools, maturity check, strategy), leading (improvement register, leading change, AI, career path, making it yours).
+- New people: **Lotte** (she/her, SRE from 3 Jul 2028) and **Yusuf** (he/him, SRE from 1 Aug 2028). New facts are in the
+  casebook (“Book 5, Vol. 5” and “Vol. 6”), checked against Ana's Vol. 5–6 (DR tiers, multi-region, cloud cost, risk
+  register, golden path, the Ordering handover: game days 14 and 21 Sep, pager 1 Oct, first incident 9 Oct, 18 min) and
+  Sanne's Vol. 6 (Korenwolf questionnaire 13 Mar 2028, AI trial and Lena's rules, hiring Nadia, the closing note).
+- `PLANNED_OPS` is empty; the future log no longer lists Book 5.
+- Still open (section 9): the title, and a check of the ITIL practice names against the current guide. Not built: the
+  ITIL &amp; SRE map page (`/itil/`) and the runbook binder page (`/runbooks/`).
