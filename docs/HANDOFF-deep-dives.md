@@ -12,7 +12,8 @@ history tables, bitemporal data, SCD and late data; three pasts: as it was, as i
 Everywhere (`/deep-dives/one-number-everywhere/`: conformed dimensions, wide tables, metrics layer and aggregates; fan and
 chasm traps, defining a metric, caching, metric tests and governance). It was written before Reruns and Backfills because
 deep dive 12 already covers reruns and holds those notes' “go deeper” links. The landing page spells counts up to twenty
-(`NUMBER_WORDS`).
+(`NUMBER_WORDS`). Then 15 Data Quality & Pipeline Observability (`/deep-dives/data-quality-observability/`: write–audit–publish,
+contracts, quality checks and lineage; six checkpoints, data SLOs, severities, alert tiers, fault injection for data).
 Remaining candidates (section 2, and in the future log):
 Observability & SLOs, Multitenancy (and the later data-engineering dives in `docs/PLAN-data-pipelines.md`); also suggested on 19 Nov: A Test Suite You Trust
 (flaky tests, deterministic tests, parallel and selective runs) for the testing volume.
