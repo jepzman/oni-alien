@@ -77,9 +77,9 @@ BOOKS = [
      "Larder for Business wins its first client, Korenwolf Group. Mo learns to manage expectations, scope changes, service levels, "
      "monthly reports and a hard renewal, with Hanna and Ruben on the other side of the table.",
      None),
-    ("Book 5", "The IT Operations Notebook", "Eli", "Mar 2026 →", "in progress: 2 of 6 volumes",
+    ("Book 5", "The IT Operations Notebook", "Eli", "Mar 2026 →", "in progress: 4 of 6 volumes",
      "ITIL 4 and SRE in plain words, from the engineer who keeps Larder running. Eli starts at 160 % with everything in his "
-     "head, and builds a catalogue, an on-call rota, alerts that mean something, runbooks, a service desk, and a way to handle incidents together.",
+     "head, and builds a catalogue, an on-call rota, alerts that mean something, runbooks, a service desk, incident handling, safe change, SLOs and a Korenwolf SLA.",
      "../ops-1/index.html"),
 ]
 
@@ -456,6 +456,36 @@ TIMELINE_5 = [
     ("2026-11", "Incident numbers for Femke", "incident-metrics", "ops-2"),
     ("2026-12", "Major incident: the Christmas failover, 18 Dec", "major-incidents", "ops-2"),
     ("2026-12", "Near misses, from 1 Dec", "near-misses", "ops-2"),
+    ("2027-01", "Three kinds of change, 18 Jan", "change-types", "ops-3"),
+    ("2027-01", "A change board, tried for three weeks", "change-board", "ops-3"),
+    ("2027-02", "The change calendar, from 1 Feb", "change-calendar", "ops-3"),
+    ("2027-02", "Risk scores for every normal change", "change-risk", "ops-3"),
+    ("2027-02", "Failover: 50 s in staging, 6 min in production", "validation", "ops-3"),
+    ("2027-02", "Device rings after v3.4, 22 Feb", "device-rollouts", "ops-3"),
+    ("2027-02", "Utrecht's city IT runbook, v1", "new-city-it", "ops-3"),
+    ("2027-03", "WELCOME10 at 16:52 on a Friday", "emergency-changes", "ops-3"),
+    ("2027-03", "Four delivery numbers for Marco", "dora-metrics", "ops-3"),
+    ("2027-03", "Who may touch production?", "production-access", "ops-3"),
+    ("2027-03", "The lifecycle register", "end-of-life", "ops-3"),
+    ("2027-04", "Zuid's cutover night, 18 Apr", "store-cutover", "ops-3"),
+    ("2027-04", "The order.placed rename, fixed forward", "rollback-plans", "ops-3"),
+    ("2027-04", "Patching without Eli's Mondays", "patching", "ops-3"),
+    ("2027-06", "Larder Plus released by flag, 8 Jun", "release-vs-deploy", "ops-3"),
+    ("2027-07", "SLIs: what users count as working", "slis", "ops-4"),
+    ("2027-07", "A second-country sheet for Antwerp, 5 Jul", "second-country", "ops-4"),
+    ("2027-07", "Five systems to switch off", "decommissioning", "ops-4"),
+    ("2027-08", "SLOs agreed, 2 Aug", "slos", "ops-4"),
+    ("2027-08", "The billing vendor goes quiet, 31 Aug", "vendor-silence", "ops-4"),
+    ("2027-09", "Error budget policy signed, 13 Sep", "error-budgets", "ops-4"),
+    ("2027-09", "The monthly service review", "service-reviews", "ops-4"),
+    ("2027-10", "Store self-service, 4 Oct", "shift-left", "ops-4"),
+    ("2027-10", "74 dashboards → 11", "dashboards", "ops-4"),
+    ("2027-10", "Capacity headroom for Christmas", "capacity-headroom", "ops-4"),
+    ("2027-11", "Korenwolf's SLA: 99.8 %", "slas", "ops-4"),
+    ("2027-11", "Six internal promises behind it", "olas", "ops-4"),
+    ("2027-11", "Three availability numbers", "measuring-availability", "ops-4"),
+    ("2027-11", "The IT pulse: handhelds 3.1", "user-satisfaction", "ops-4"),
+    ("2027-12", "Christmas 2027: PSP switch in 40 s", "running-a-peak", "ops-4"),
 ]
 for _key, _text, _slug, _vol in TIMELINE_5:
     for _k, _label, _items in TIMELINE:

@@ -978,3 +978,83 @@ Book 5 follows ITIL 4 (practices, value chain, four dimensions, guiding principl
 - **Near misses** (#near-miss from 1 Dec): 9 in December. 3 Dec DB log disk 91 % (→ 80 % ticket alert); 10 Dec canary
   rolled back core v431 (good save); 21 Dec courier API certificate (set up by Dee's team in November outside auto-renew)
   3 days from expiry (→ auto-renew, every new cert registers in the expiry check, 8 Jan 2027).
+
+## Book 5, Vol. 3: Eli's facts (January → June 2027)
+
+(Book 5's second platform engineer is **Bram**, not Pieter: Pieter is the Belgian builder's site manager in Book 3.)
+
+- **Changes in Dec 2026**: 212 (160 deploys, 31 infra + network, 21 flags); Oct–Dec 9 incidents followed changes, 7 of
+  them infra/network. **Three paths** from Mon 18 Jan 2027: standard (9 recipes, R1–R9), normal (risk score + knowing
+  reviewer + tested way back), emergency. Feb: 87 % / 12 % / 1 %.
+- **Change board trial** (Marco's idea): Thursdays 14 Jan – 4 Feb 2027, 6 people, 41 changes; median wait 1 → 6 days; one
+  change failed anyway. Replaced **Mon 8 Feb** by reviewers per system (network, DB: Eli, Bram · Dispatch: Ben · payments:
+  Cho · devices: Dee) and a 20-min high-risk review (score ≥ 12, ≈ 2 a month); Marco gets monthly numbers.
+- **Change calendar** from 1 Feb 2027, enforced by the pipeline: weekdays 07–09, Fri 17–20; freezes King's Day 26–28 Apr,
+  Christmas 13 Dec 2027 – 3 Jan 2028; emergency label + lead's name. Feb–Jun: 0 changes in windows except 2 emergencies.
+- **Risk score** from 1 Feb: blast radius, way back, tested, timing, new (1–3 each); 5–7 low, 8–11 medium, 12+ high.
+  Picker app weekly 8; Postgres 13→16 14; 29 Oct 2026 tidy-up re-scored 13.
+- **Larder Plus release**: 46 dark deploys from 10 May; staff 24 May; 5 % Amsterdam Tue 1 Jun; renewal bug 2 Jun (flag off
+  11:40–13:40, 2 test customers refunded); everyone **Tue 8 Jun 2027, 10:00**.
+- **order.placed rename** (Wed 14 Apr, noticed Fri 16 Apr): fixed forward, 2 days replayed to billing, 312 invoice lines by
+  20 Apr; "way back" line in every normal change from 26 Apr.
+- **Staging rebuilt from code** (Bram, 2 Mar). Failover: staging 50 s (no replica, 15 Feb) vs production 6 min 10 (23 Feb:
+  Dispatch cached the DB address 5 min) → refresh every 10 s → monthly production test (2nd Tuesday 10:00): 1:40 (9 Mar),
+  1:35 (Apr), 1:38 (May), 1:36 (Jun).
+- **Emergency change, Fri 12 Mar 2027 16:52**: WELCOME10 applied to every order (≈ €40/min); Dee turned the promo flag off
+  at 17:01 (≈ €320 lost); fix on Mon 15 Mar as a normal change. Feb–Jun: 3 emergency changes, all written up.
+- **Delivery numbers** (from March): ≈ 8 deploys/day; lead time 3 h 40 → 2 h 10; change failure rate 6 % (Q4 '26) → 4 % →
+  3 % (Q2 '27); time to restore 22 → 14 min. Q2 by kind: deploys 2 %, flags 1 %, infra 8 %, network 11 %, DB 9 %.
+- **Cutovers** (Eli's plan): Zuid go / no-go Sun 18 Apr 21:00, switch 23:15, test pick 23:40, Tomás + Eli in store Mon 06:00,
+  way back to 2 May; shadow diff 0.3 %. Noord Mon 24 May (label format fixed 06:40 → "a real label prints").
+- **City IT runbook**: v1 61 steps (Utrecht, line ordered 16 Feb, live 30 Mar, opened 12 Apr, week 1 2.9 tickets / 100);
+  v2 48 (11 scripted); v3 39 (The Hague, IT ready in 9 working days, opened 14 Jun on WMS B). Missed at Utrecht: store
+  leads in the service desk.
+- **Device rings** from 22 Feb (after v3.4 on Tue 16 Feb broke scanning on Zuid's 31 HH-2024 devices for 40 min): ring 0 =
+  5 devices of every model at Noord; ring 1 = one store at 23:30; ring 2 = the rest next night; halt rules; previous
+  version kept. April: ring 0 caught v3.9. ≈ 120 handhelds, models HH-2024 and HH-2026.
+- **Production access** (count 1 Mar: 11 can change prod DB, 14 VM logins, 2 shared accounts): from April standing access
+  Eli + Bram only; requests (reason, second person, 4 h, in the feed); break-glass "glass-01" pages Eli + messages Femke;
+  shared accounts deleted 9 Apr. May: 31 requests, median wait 6 min.
+- **Patching** from April: nightly security updates one VM at a time 02:00–04:00; monthly window 1st Tuesday 10:00;
+  critical (CVSS ≥ 9) ≤ 72 h; images scanned weekly; VMs rebuilt from code on Ubuntu 24.04 in June. Toil 5 h → ≈ 30 min/week.
+- **Lifecycle register** (March, 23 components): Postgres 13 (EOL Nov 2025; extended support from 1 Apr ≈ €650/month, paid
+  Apr–May only) → **16 on Tue 18 May 2027 05:00** (logical replication, 4-min switch, way back 1 week, restore practised
+  11 May); Ubuntu 20.04 → 24.04 (June); Django 3.2 → 4.2 (Jul) → 5.2 (Oct) with Python.
+
+## Book 5, Vol. 4: Eli's facts (July → December 2027)
+
+- **SLIs** (July): checkout success (no card declines), checkout speed (< 800 ms), business ordering (portal + API),
+  Dispatch (assigned < 90 s), store sync (< 2 min fresh). June 2027: 99.86 / 96.1 / 99.74 / 98.9 / 99.6 %.
+- **SLOs** (Mon 2 Aug, Femke, Priya, Joost, Mo; rolling 28 days): checkout 99.9 %, speed 95 %, business ordering 99.9 %,
+  Dispatch 99 %, store sync 99.5 %. Reviewed quarterly.
+- **Error budget policy** (signed Mon 13 Sep by Priya and Femke): > 50 % ship; < 25 % high-risk needs Eli; spent → feature
+  releases pause; exceptions Femke only. Burn alerts 2 %/1 h page, 10 %/6 h ticket. **October**: business ordering spent its
+  budget → portal paused 9 working days → API retries + a slow query fixed → 99.93 % (28 days).
+- **Korenwolf SLA** (agreed Nov, signed Dec 2027 with the renewal): ordering availability 99.8 % per calendar month (down
+  minute: > 5 % requests fail; outside checks + real requests; maintenance excluded if announced 5 working days ahead and
+  outside 06–20); credits 5 % (< 99.8), 10 % (< 99.5); deliveries 98 % by 09:00, 10 % of a missed delivery credited;
+  automatic monthly report in the portal; 99.9 % joint goal 2028.
+- **OLAs** (Nov, six): platform → ordering (failover < 2 min, restore < 1 h); ordering (no changes 07–09); payments (billing
+  silence found < 15 min); identity (office SSO 99.9 %); operations (business orders picked by 22:00); support (business
+  tickets < 30 min).
+- **Availability measured** (from Nov): outside checks every 60 s from Frankfurt and Paris placing a test business order.
+  Oct: server logs 99.95 %, request SLI 99.86 %, contract minutes 99.79 % (DNS 2 × 9 min → second DNS provider, Dec).
+  Nov: 99.97 / 99.92 / 99.81 %.
+- **Capacity watch** (Oct): six limits at the Fri 18–19 peak; 70 % ticket, 85 % page; Monday 15-min look. Ana's plan done:
+  pooler 1 Nov, browse replica 8 Nov, primary +1 15 Nov; 5× test 15 Nov; December peak hour connections 41 %.
+- **Monthly service review** from September: one generated page per service; first Thursday, 30 min, ≤ 3 decisions.
+- **Dashboards** (Oct): 74 → 11 (9 used by more than one person in 90 days; three disagreeing checkout dashboards).
+- **IT pulse** (Nov, 214 answers, nl/fr/en): handhelds 3.1, desk 4.2, Antwerp Wi-Fi 2.8, portal 4.0. Spare batteries and a
+  mid-shift swap from Dec; HH-2024 to be replaced in 2028; Antwerp Wi-Fi survey in Dec.
+- **Billing silence** Tue 31 Aug 08:10–17:20 (found by Ruben). Absence alerts (billing webhooks 15 min ticket / 45 page;
+  WMS B 5 min; settlement files by 05:00; PSP report by 06:00); quarterly vendor scorecards for 8 vendors; billing amber Q3.
+- **Store self-service** (from Mon 4 Oct): "just us?", safe MDM buttons, 40-second guides nl/fr, prefilled tickets.
+  Tickets per store per week 9.1 (Sep, five stores) → 6.4 (Dec); 31 % solved in store.
+- **Belgium sheet** (Mon 5 Jul, Eli, Inès, Cho, Lena, Sam): Antwerp line ordered 2 Jun (8 weeks), live 2 Aug; nl + fr desk;
+  BE holidays in the change calendar; Bancontact (Jul); AZERTY laptop; Inès on the escalation list.
+- **Decommissioning**: StockPilot read-only 1 Sep, off 15 Sep, contract ended 30 Sep (a finance spreadsheet found in the
+  logs, moved 23 Aug; stock movements 2024–27 archived to 2034); survey tool, second chat tool, old cron, legacy reporting
+  DB and three Dispatch leftovers gone by 30 Sep.
+- **Christmas 2027**: readiness review Mon 29 Nov (12 checks); major-incident drill 30 Nov; failover test 7 Dec (1:37);
+  freeze 13 Dec – 3 Jan; Eli/Bram standby 17–24 Dec; 09:00 check-in 13–24 Dec. **Fri 17 Dec 18:12** PSP A slow 22 min →
+  PSP B in 40 s, 0 failed orders. Busiest day Thu 23 Dec ≈ 29,400 orders; SEV1 0, SEV2 0, SEV3 6.

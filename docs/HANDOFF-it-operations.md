@@ -1,6 +1,6 @@
 # Handoff: The IT Operations Notebook (Series 2, Book 5)
 
-Status as of 2026-11-25: **Vols. 1 and 2 are written and built (section 10). Vols. 3–6 are planned (section 6).** Owner's decisions (24 Nov): IT operations (not business
+Status as of 2026-11-25: **Vols. 1–4 are written and built (sections 10–11). Vols. 5–6 are planned (section 6).** Owner's decisions (24 Nov): IT operations (not business
 operations), narrated by whichever character fits, starting where it fits the story's timeline. Open questions: section 9.
 
 Story facts: `docs/larder-casebook.md` (source of truth) and the public case file `/larder/`.
@@ -295,3 +295,28 @@ Next: Vol. 3 · Changing Things Safely (Jan → Jun 2027). It opens with the fir
 VM patching from Eli's toil log. Still open from section 9: the title, the order relative to Book 4, and a check of the
 ITIL names against the current guide (and whether a newer ITIL edition is out). Not built yet: the ITIL & SRE map page
 (`/itil/`) and the runbook binder page (`/runbooks/`); the ITIL tag currently shows “ITIL 4” without a link.
+
+## 11. Vols. 3 and 4 (built 25 Nov 2026, same day)
+
+- `ops-3` **Changing Things Safely** (Jan → Jun 2027), `content/ops-3/` in four collections: deciding about changes
+  (change types, change board, change calendar, release vs deploy, risk score), safety nets (rollback plans, validation,
+  emergency changes, DORA numbers), moving big things (store cutover, city IT runbook, device rings), keeping it current
+  (production access, patching, end-of-life). The note order differs from the plan in section 6 (grouped by collection);
+  `JOURNALS` in `scripts/build_notes.py` is the source of truth.
+- `ops-4` **Promises &amp; Measures** (Jul → Dec 2027), `content/ops-4/` in three collections: making promises (SLIs, SLOs,
+  error budgets, Korenwolf's SLA, OLAs), measuring honestly (availability, capacity headroom, monthly service review,
+  dashboards, the IT pulse), running the year (vendor silence, store self-service, the Belgium sheet, decommissioning,
+  Christmas 2027).
+- **Name change**: Book 5's second platform engineer is **Bram** (he/him), not Pieter. Pieter is already the Belgian
+  builder's site manager in Book 3. All Book 5 content and the casebook were updated.
+- Facts are in the casebook (“Book 5, Vol. 3” and “Vol. 4”). Dates were checked against Ana's and Sanne's books: the
+  order.placed rename is Wed 14 Apr 2027 (the week after Utrecht opened; ADR 0020 on 19 Apr); the Christmas 2027 numbers
+  match Ana's capacity plan and FMEA; Korenwolf's SLA matches Ana's availability note and Grace's portal service levels.
+- New meanwhile links: Ana's strangler migration, availability maths, capacity planning, FMEA, application portfolio,
+  SaaS integration; Grace's city playbook and picker app as a product; Sanne's stakeholders abroad.
+- `pdf-build.json` lists `ops-1` … `ops-4`.
+
+Next: Vol. 5 · Ready for the Worst (Jan → Jun 2028). Hooks already in the story: the 3 h 40 restore (10 Jan 2028) and the
+22-minute drill (18 Apr), the HH-2024 handheld replacement (from the IT pulse and the lifecycle register), Korenwolf's
+supplier questionnaire (Mar 2028), the access review lapse in Ana's ADR 0021 (a support leaver kept access three weeks in
+2027), and the second DNS provider (Dec 2027).
