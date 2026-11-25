@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Conformed Dimensions &amp; the Bus Matrix · Jef’s Notes</title>
+<meta name="description" content="Share one product, one customer and one calendar across every fact table.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=ad5eea9853">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-pipelines">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 9 · data pipelines &amp; analytics</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="conformed-dimensions">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 27.05.27</span><span class="topic">collection · <b>modelling the warehouse</b></span></div>
+  <p class="kicker">a.k.a. “one product, one customer, one calendar”</p>
+  <h1><span class="hl">Conformed Dimensions &amp; the Bus Matrix</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Build each dimension <b>once</b> (date, product, customer, shop) and share it across every fact table: sales, returns, web sessions, stock. Then any two processes can be compared by the attributes they share. Plan it with a <b>bus matrix</b>: business processes as rows, shared dimensions as columns. Combine facts by <b>drilling across</b>: aggregate each fact on its own, then join the results on the shared attributes.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> modelling</li><li><b>Origin:</b> Kimball's enterprise data warehouse bus (1990s)</li><li><b>Tool:</b> the bus matrix</li><li><b>Pairs with:</b> bounded context, metrics layer</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">The sales team built <code>dim_product</code> from the ERP; the web team built its own from the website catalogue. The kettle is <i>Kitchen</i> in one and <i>Kitchenware</i> in the other, with different ids. “Return rate by category” combines both, and <span class="hl-pink">nothing lines up</span>.</p>
+  <ul>
+    <li>Each mart answers its own questions; none can be combined.</li>
+    <li>The same customer has three ids in three marts.</li>
+    <li>Every cross-team question becomes a one-off mapping project.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of two marts that can&#x27;t be combined. The sales mart has a product dimension from the ERP with category Kitchen. The web mart built its own product dimension from the website&#x27;s catalogue with category Kitchenware. Return rate by category, combining both, gives mismatched rows and a question mark."><g class="rough"><rect class="d d-thin f-paper" x="20" y="40" width="260" height="58" rx="4"/><path class="d d-thin f-y" d="M20 44 a4 4 0 0 1 4 -4 h252 a4 4 0 0 1 4 4 v28 h-260 z"/><rect class="d d-thin f-paper" x="480" y="40" width="260" height="58" rx="4"/><path class="d d-thin f-blue" d="M480 44 a4 4 0 0 1 4 -4 h252 a4 4 0 0 1 4 4 v28 h-260 z"/><rect class="d f-pink d-red" x="270" y="160" width="220" height="70" rx="10"/><path class="d d-red" d="M150 106 L270 180"/><path class="d d-red" d="M258.1 178.8 L270 180 L263.5 169.9"/><path class="d d-red" d="M610 106 L490 180"/><path class="d d-red" d="M496.5 169.9 L490 180 L501.9 178.8"/></g><text class="t-head" x="150" y="63" text-anchor="middle" font-size="17">sales: dim_product</text><text class="t" x="30" y="91" font-size="16">K-100 · Kitchen</text><text class="t-head" x="610" y="63" text-anchor="middle" font-size="17">web: dim_product_cms</text><text class="t" x="490" y="91" font-size="16">kettle-k100 · Kitchenware</text><text class="t-head t-red" x="380" y="202" text-anchor="middle" font-size="20">return rate?</text><text class="t-s t-red" x="380" y="120" text-anchor="middle">different keys, different names</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Two teams, two product dimensions: “Kitchen” here, “Kitchenware” there, and no way to combine.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">maps with one key</span></h2>
+  <p>A city's transport map, bike map and tourist map share <b>one key</b>: the same district names and the same symbols. Lay one over another and they line up. If each map named the districts its own way, you couldn't plan a bike-and-tram trip.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="Doodle of city maps that share one key. The transport map, the bike map and the tourist map all use the same district names and the same symbols, so you can lay one over another and they line up."><g class="rough"><g transform="translate(60 50) scale(1.3)"><g class="d"><path class="f-paper" d="M0 8 l20 -6 l20 6 l20 -6 v50 l-20 6 l-20 -6 l-20 6 z"/><path d="M20 2 v50 M40 8 v50"/></g></g><g transform="translate(210 50) scale(1.3)"><g class="d"><path class="f-paper" d="M0 8 l20 -6 l20 6 l20 -6 v50 l-20 6 l-20 -6 l-20 6 z"/><path d="M20 2 v50 M40 8 v50"/></g></g><g transform="translate(360 50) scale(1.3)"><g class="d"><path class="f-paper" d="M0 8 l20 -6 l20 6 l20 -6 v50 l-20 6 l-20 -6 l-20 6 z"/><path d="M20 2 v50 M40 8 v50"/></g></g><rect class="d f-green" x="520" y="50" width="220" height="100" rx="10"/></g><text class="t-s" x="100" y="150" text-anchor="middle">transport</text><text class="t-s" x="250" y="150" text-anchor="middle">bikes</text><text class="t-s" x="400" y="150" text-anchor="middle">tourist</text><text class="t-head" x="630" y="96" text-anchor="middle" font-size="21">one key</text><text class="t" x="630" y="120" text-anchor="middle" font-size="14">same names, same symbols</text><text class="t-s t-pen" x="380" y="210" text-anchor="middle">overlay any two: they line up</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Maps that share one key and one set of district names line up when you overlay them.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The shared key</td><td>Conformed dimensions</td></tr>
+      <tr><td>Each themed map</td><td>A fact table for one business process</td></tr>
+      <tr><td>District names</td><td>Shared attributes: category, region, month</td></tr>
+      <tr><td>Overlaying two maps</td><td>Drilling across: compare two facts</td></tr>
+      <tr><td>The list of maps and what each shows</td><td>The bus matrix</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">shared dimensions, planned on one grid</span></h2>
+  <p>Pick the business processes (rows) and the dimensions they share (columns). Build each column once, owned by one team, with one surrogate key and one set of attributes. A coarser fact (stock by month and category) uses a <b>shrunken</b> dimension that is a strict subset (<code>dim_month</code>, <code>dim_category</code>), so it still conforms.</p>
+  <p>To compare processes, never join two fact tables row to row (that multiplies rows). Aggregate each fact to the shared attributes first, then join the small results.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="A bus matrix. Rows are business processes: sales, returns, web sessions and stock. Columns are conformed dimensions: date, product, customer and shop. A cross marks each dimension a process uses. Every fact table uses the same shared dimension tables, so any two processes can be compared by the attributes they share."><g class="rough"><rect class="d f-y" x="20" y="70" width="180" height="44" rx="10"/><rect class="d f-green" x="220" y="70" width="100" height="44" rx="10"/><rect class="d f-green" x="340" y="70" width="100" height="44" rx="10"/><rect class="d f-green" x="460" y="70" width="100" height="44" rx="10"/><rect class="d f-green" x="580" y="70" width="100" height="44" rx="10"/><rect class="d f-y" x="20" y="122" width="180" height="44" rx="10"/><rect class="d f-green" x="220" y="122" width="100" height="44" rx="10"/><rect class="d f-green" x="340" y="122" width="100" height="44" rx="10"/><rect class="d f-green" x="460" y="122" width="100" height="44" rx="10"/><rect class="d f-green" x="580" y="122" width="100" height="44" rx="10"/><rect class="d f-y" x="20" y="174" width="180" height="44" rx="10"/><rect class="d f-green" x="220" y="174" width="100" height="44" rx="10"/><rect class="d f-green" x="340" y="174" width="100" height="44" rx="10"/><rect class="d f-green" x="460" y="174" width="100" height="44" rx="10"/><rect class="d f-paper" x="580" y="174" width="100" height="44" rx="10"/><rect class="d f-y" x="20" y="226" width="180" height="44" rx="10"/><rect class="d f-green" x="220" y="226" width="100" height="44" rx="10"/><rect class="d f-green" x="340" y="226" width="100" height="44" rx="10"/><rect class="d f-paper" x="460" y="226" width="100" height="44" rx="10"/><rect class="d f-green" x="580" y="226" width="100" height="44" rx="10"/></g><text class="t-head" x="270" y="40" text-anchor="middle" font-size="19">date</text><text class="t-head" x="390" y="40" text-anchor="middle" font-size="19">product</text><text class="t-head" x="510" y="40" text-anchor="middle" font-size="19">customer</text><text class="t-head" x="630" y="40" text-anchor="middle" font-size="19">shop</text><text class="t-head" x="110" y="99" text-anchor="middle" font-size="18">sales</text><text class="t-head" x="270" y="99" text-anchor="middle" font-size="20">✕</text><text class="t-head" x="390" y="99" text-anchor="middle" font-size="20">✕</text><text class="t-head" x="510" y="99" text-anchor="middle" font-size="20">✕</text><text class="t-head" x="630" y="99" text-anchor="middle" font-size="20">✕</text><text class="t-head" x="110" y="151" text-anchor="middle" font-size="18">returns</text><text class="t-head" x="270" y="151" text-anchor="middle" font-size="20">✕</text><text class="t-head" x="390" y="151" text-anchor="middle" font-size="20">✕</text><text class="t-head" x="510" y="151" text-anchor="middle" font-size="20">✕</text><text class="t-head" x="630" y="151" text-anchor="middle" font-size="20">✕</text><text class="t-head" x="110" y="203" text-anchor="middle" font-size="18">web sessions</text><text class="t-head" x="270" y="203" text-anchor="middle" font-size="20">✕</text><text class="t-head" x="390" y="203" text-anchor="middle" font-size="20">✕</text><text class="t-head" x="510" y="203" text-anchor="middle" font-size="20">✕</text><text class="t-head" x="110" y="255" text-anchor="middle" font-size="18">stock</text><text class="t-head" x="270" y="255" text-anchor="middle" font-size="20">✕</text><text class="t-head" x="390" y="255" text-anchor="middle" font-size="20">✕</text><text class="t-head" x="630" y="255" text-anchor="middle" font-size="20">✕</text><text class="t-s t-pen" x="380" y="292" text-anchor="middle" font-size="16">drill across: aggregate each fact separately, then join on shared attributes</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The bus matrix: processes down, shared dimensions across. One product dimension for all.</figcaption></figure>
+  <ol class="steps">
+    <li><b>List business processes</b><p>Sales, returns, web sessions, stock: each becomes a fact table.</p></li>
+    <li><b>Draw the bus matrix</b><p>Mark which dimensions each process needs.</p></li>
+    <li><b>Build each dimension once</b><p>One owner, one key, one set of attribute names and values; map sources to it.</p></li>
+    <li><b>Shrink, don't fork</b><p>Coarser grains use subsets (month, category) of the same dimension.</p></li>
+    <li><b>Drill across</b><p>Aggregate each fact separately, join on shared attributes.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Conformed dimension</dt><dd>A dimension shared, identically, by several facts.</dd></div>
+    <div><dt>Bus matrix</dt><dd>Processes × dimensions grid, used to plan a warehouse.</dd></div>
+    <div><dt>Drill across</dt><dd>Combining results from two facts via shared attributes.</dd></div>
+    <div><dt>Shrunken dimension</dt><dd>A conformed subset at a coarser grain (month, category).</dd></div>
+    <div><dt>Fan-out</dt><dd>Rows multiplied by joining two facts directly.</dd></div>
+    <div><dt>Master data</dt><dd>The agreed, cleaned version of core entities across systems.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>return_rate_by_category.sql</span><span>drill across</span></div>
+<pre><code>with sales as (
+    select p.category, sum(f.qty) as sold
+    <span class="k">from</span> fct_sales f join dim_product p using (product_key)
+    where f.date_key between 20260101 and 20260331
+    group by 1
+),
+returns as (
+    select p.category, sum(r.qty) as returned
+    <span class="k">from</span> fct_returns r join dim_product p using (product_key)   <span class="c">-- the same dimension</span>
+    where r.date_key between 20260101 and 20260331
+    group by 1
+)
+select s.category, s.sold, coalesce(r.returned, 0) as returned,
+       round(100.0 * coalesce(r.returned, 0) / s.sold, 1) as return_rate_pct
+<span class="k">from</span> sales s left join returns r using (category);</code></pre>
+  </div>
+  <p class="aside">tools: dbt (one model per dimension, referenced by every mart), metrics layers that join facts through shared dimensions (dbt Semantic Layer, Cube, LookML explores), master data tools for the source mapping.</p>
+  <section class="thennow verdict-grown" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="more relevant today than when it was written">matters more now</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Kimball, 1998</small></h3><p><i>The Data Warehouse Lifecycle Toolkit</i> introduced the bus architecture: build marts one process at a time, but on conformed dimensions agreed up front, recorded in a bus matrix.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>More sources and more teams make it matter more: SaaS tools, web events and acquisitions each bring their own customer and product. Metrics layers rely on conformed dimensions to join facts safely, and data mesh teams publish them as shared data products.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> Agree the shared dimensions before the second fact table. The bus matrix is still the cheapest planning tool in analytics.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Cross-process questions</b> just work.</li><li><b>One definition</b> of category, region, customer.</li><li><b>Incremental build</b>: add processes one at a time.</li><li><b>Safe joins</b> through shared attributes.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Agreement takes time</b> between teams.</li><li><b>A shared owner</b> becomes a dependency.</li><li><b>Source mapping</b> (ERP id to web id) is real work.</li><li><b>Changes ripple</b> to every mart that uses the dimension.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Pipeline ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>each mart with its own dimensions</b> to <b>conformed dimensions shared through a bus matrix</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="4"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One product, one customer, one calendar.</td></tr>
+      <tr data-before="3" data-after="3"><td>Freshness<small>how recent?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="5"><td>Correctness<small>is the number right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Cross-team numbers agree.</td></tr>
+      <tr data-before="3" data-after="3"><td>Replayability<small>safe to rerun?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>10× the data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New processes plug into existing dimensions.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Less duplication, more coordination.</td></tr>
+      <tr data-before="2" data-after="5"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Any two processes can be compared.</td></tr>
+      <tr data-before="3" data-after="3"><td>Observability<small>know when it's wrong?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Changes need agreement, but happen once.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Joining two facts directly</h3><p>Sales joined to returns on product multiplies rows and doubles totals. <span class="fix">Fix →</span> aggregate each fact first, then join (drill across).</p></li>
+    <li><h3>“Almost conformed”</h3><p>The web team adds two extra categories, so totals differ by a few percent. <span class="fix">Fix →</span> a shrunken or extended dimension must map exactly; test that sums match.</p></li>
+    <li><h3>No owner</h3><p>Everyone edits dim_customer and it drifts. <span class="fix">Fix →</span> one owning team; others request changes.</p></li>
+    <li><h3>Waiting for the perfect model</h3><p>A year of meetings before the first mart. <span class="fix">Fix →</span> agree the matrix and the first two dimensions, then build process by process.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Two or more business processes share dimensions.</li><li>Several teams build marts.</li><li>Data comes from several source systems for the same entities.</li><li>You want a metrics layer to join facts safely.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>One fact table, one team: just build the star.</li><li>Exploration sandboxes that will be thrown away.</li><li>Forcing unrelated domains to share a dimension they don't share.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../../data/notes/star-schema.html"><b>Star schema</b></a> (Vol. 3)</li><li><a href="../../ddd/notes/bounded-context.html"><b>Bounded context</b></a> (Vol. 7)</li><li><a href="../notes/metrics-layer.html"><b>Metrics layer</b></a></li><li><a href="../notes/slowly-changing-dimensions.html"><b>Slowly changing dimensions</b></a></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What makes a dimension conformed?</summary><p>It is shared, identically (same keys, attributes and values), by several fact tables.</p></details>
+    <details><summary>What is a bus matrix?</summary><p>A grid of business processes against shared dimensions, marking which process uses which dimension.</p></details>
+    <details><summary>Why not join two fact tables directly on product?</summary><p>Each side has many rows per product, so the join multiplies rows; aggregate each side first.</p></details>
+    <details><summary>What is a shrunken dimension?</summary><p>A conformed subset at a coarser grain, such as month from date or category from product.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>The shop buys a second chain whose product codes differ from yours. Management wants combined sales by category next month. What do you do?</span></summary><p>Keep one dim_product as the conformed dimension. Map the new chain's codes to it (or add its products with your category values) in staging, owned by the dimension's team, and load the new chain's sales into the same fct_sales. Test that category totals match the new chain's own reports.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Draw a bus matrix for your own data: four business processes down the side, five dimensions across. Mark the crosses. Circle every dimension that exists twice today under different names.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>One <span class="hl">key</span> for every map. Aggregate first, <span class="hl">then</span> compare.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/08-conformed-dimensions.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Ralph Kimball et al., <i>The Data Warehouse Lifecycle Toolkit</i> (1998; 2nd ed. 2008).</li><li>Ralph Kimball and Margy Ross, <i>The Data Warehouse Toolkit</i>, 3rd ed. (2013), chapter 4.</li><li>Kimball Group, “The Matrix: Revisited” (design tip).</li><li>dbt Labs, “The dbt Semantic Layer: joins through entities”.</li></ul>
+  </div>
+  <p class="folio">08</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="fact-table-types.html"><small>← previous note</small>07 · Fact Table Types</a>
+  <a href="data-vault.html"><small>Next note →</small>09 · Data Vault</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 9 · a student's bullet journal on data pipelines &amp; analytics</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

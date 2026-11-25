@@ -350,7 +350,8 @@ DIVE = dict(
     builds_on="Vol. 3, notes 11, 15 and 16",
     builds_on_links=[("Change Data Capture", "../../data/notes/change-data-capture.html"), ("Star Schema", "../../data/notes/star-schema.html"),
                      ("Upserts", "../../data/notes/upserts.html")],
-    notes=[("data", "change-data-capture"), ("data", "star-schema"), ("data", "upserts")],
+    notes=[("data", "change-data-capture"), ("data", "star-schema"), ("data", "upserts"),
+           ("pipelines", "incremental-extract"), ("pipelines", "idempotent-loads"), ("pipelines", "layered-zones")],
     facts=[("Example", "order 9001: €55 at 23:58 on 31 March, one mug returned on 3 April")],
     blurb="Raw, staging and marts, six ways to get a wrong number, idempotent loads, three extract variants and reconciliation.",
     chapters=[

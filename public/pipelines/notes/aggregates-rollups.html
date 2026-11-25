@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aggregates &amp; Rollups · Jef’s Notes</title>
+<meta name="description" content="Pre-compute summaries at coarser grain so dashboards stay fast on billions of rows.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=ad5eea9853">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-pipelines">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 9 · data pipelines &amp; analytics</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="aggregates-rollups">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 24.06.27</span><span class="topic">collection · <b>serving reports</b></span></div>
+  <p class="kicker">a.k.a. “summary tables, OLAP cubes”</p>
+  <h1><span class="hl">Aggregates &amp; Rollups</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>When dashboards keep summing billions of rows to show the same daily and monthly totals, <b>pre-compute them</b> at coarser grain: sales by shop, category and day; then by region and month. Additive measures (sums, counts) roll up safely; distinct counts need <b>sketches</b> such as HyperLogLog. Rebuild only the periods that changed, and let queries use the <b>smallest table that can answer</b>.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> serving reports</li><li><b>Also called:</b> rollups, summary tables, cubes, pre-aggregations</li><li><b>Lives in:</b> materialized views, ClickHouse, Druid, Cube</li><li><b>Pairs with:</b> materialized views, fact table types</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">The executive dashboard sums <b>2 billion order lines</b> every time it opens. It takes 40 seconds; on Monday at 09:00 three hundred managers open it at once, queries queue, and <span class="hl-pink">the warehouse bill spikes</span>. The answers are the same daily totals as an hour ago.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a slow executive dashboard. Every time it opens it sums 2 billion order lines. It takes 40 seconds, and on Monday at 9 o&#x27;clock 300 managers open it at once, the warehouse queues queries and the bill spikes."><g class="rough"><g transform="translate(40 50) scale(1.5)"><g class="d"><rect class="f-paper" x="0" y="0" width="64" height="44" rx="4"/><path d="M24 44 l-4 12 h24 l-4 -12"/><path d="M14 30 l10 -10 l8 8 l14 -14"/></g></g><path class="d d-red" d="M150 90 L280 90"/><path class="d d-red" d="M269.2 95.2 L280 90 L269.2 84.8"/><rect class="d d-thin d-red f-paper" x="286" y="40" width="240" height="84" rx="4"/><path class="d d-thin d-red f-y" d="M286 44 a4 4 0 0 1 4 -4 h232 a4 4 0 0 1 4 4 v28 h-240 z"/><path class="d d-thin d-soft" d="M292 98 h228"/><rect class="d f-pink d-red" x="580" y="40" width="160" height="90" rx="10"/></g><text class="t-s t-red" x="85" y="160" text-anchor="middle">40 s ⏳</text><text class="t-head" x="406" y="63" text-anchor="middle" font-size="17">fct_sales</text><text class="t" x="296" y="91" font-size="16">2,000,000,000 rows</text><text class="t" x="296" y="117" font-size="16">scanned on every open</text><text class="t-head t-red" x="660" y="81" text-anchor="middle" font-size="22">× 300</text><text class="t" x="660" y="105" text-anchor="middle" font-size="15">Monday 09:00</text><text class="t-s t-red" x="380" y="220" text-anchor="middle">queued queries, a spiking bill, managers back to spreadsheets</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Every open sums 2 billion rows. Monday 09:00, three hundred managers open it at once.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">till Z-reports</span></h2>
+  <p>At closing, every till prints a <b>Z-report</b>: the day's totals. Head office adds up thirty Z-reports, not every receipt, and still keeps the receipts in case someone asks about one sale.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="Doodle of till Z-reports. At closing each till prints a daily summary of its totals. Head office adds up thirty summaries instead of every receipt, and still has the receipts if it needs detail."><g class="rough"><g transform="translate(20 50) scale(0.9)"><g class="d"><path class="f-paper" d="M6 0 h48 v62 l-8 -6 l-8 6 l-8 -6 l-8 6 l-8 -6 l-8 6 z"/><path d="M14 12 h32 M14 22 h24 M14 32 h32 M14 42 h18"/></g></g><g transform="translate(64 50) scale(0.9)"><g class="d"><path class="f-paper" d="M6 0 h48 v62 l-8 -6 l-8 6 l-8 -6 l-8 6 l-8 -6 l-8 6 z"/><path d="M14 12 h32 M14 22 h24 M14 32 h32 M14 42 h18"/></g></g><g transform="translate(108 50) scale(0.9)"><g class="d"><path class="f-paper" d="M6 0 h48 v62 l-8 -6 l-8 6 l-8 -6 l-8 6 l-8 -6 l-8 6 z"/><path d="M14 12 h32 M14 22 h24 M14 32 h32 M14 42 h18"/></g></g><g transform="translate(152 50) scale(0.9)"><g class="d"><path class="f-paper" d="M6 0 h48 v62 l-8 -6 l-8 6 l-8 -6 l-8 6 l-8 -6 l-8 6 z"/><path d="M14 12 h32 M14 22 h24 M14 32 h32 M14 42 h18"/></g></g><g transform="translate(196 50) scale(0.9)"><g class="d"><path class="f-paper" d="M6 0 h48 v62 l-8 -6 l-8 6 l-8 -6 l-8 6 l-8 -6 l-8 6 z"/><path d="M14 12 h32 M14 22 h24 M14 32 h32 M14 42 h18"/></g></g><path class="d" d="M250 90 L330 90"/><path class="d" d="M319.2 95.2 L330 90 L319.2 84.8"/><rect class="d f-y" x="336" y="50" width="170" height="80" rx="10"/><path class="d" d="M512 90 L580 90"/><path class="d" d="M569.2 95.2 L580 90 L569.2 84.8"/><rect class="d f-green" x="586" y="50" width="150" height="80" rx="10"/></g><text class="t-s" x="130" y="160" text-anchor="middle">thousands of receipts</text><text class="t-head" x="421" y="86" text-anchor="middle" font-size="21">Z-report</text><text class="t" x="421" y="110" text-anchor="middle" font-size="14">one per till per day</text><text class="t-head" x="661" y="86" text-anchor="middle" font-size="19">head office</text><text class="t" x="661" y="110" text-anchor="middle" font-size="14">adds 30 lines</text><text class="t-s t-pen" x="380" y="210" text-anchor="middle">receipts are kept for when detail is needed</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Head office adds up thirty daily till summaries, not every receipt.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The receipts</td><td>The detailed fact table</td></tr>
+      <tr><td>A Z-report per till per day</td><td>An aggregate table at shop · category · day</td></tr>
+      <tr><td>Adding thirty Z-reports</td><td>Querying the aggregate instead of the fact</td></tr>
+      <tr><td>Keeping the receipts</td><td>The detailed fact stays for drill-down</td></tr>
+      <tr><td>Reprinting one day's Z-report</td><td>Rebuilding only changed days</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">coarser tables, built from finer ones</span></h2>
+  <p>Choose grains from the questions: most dashboards ask by day, shop and category, or by month and region. Build each aggregate from the level below it, incrementally by day, and rebuild the days a batch touched (late data). Sums and counts roll up; averages must be stored as sum and count; distinct counts (unique customers) don't add up, so store a HyperLogLog sketch per row and merge sketches.</p>
+  <p>Point dashboards at the right level, or let the BI tool or metrics layer pick it automatically (“aggregate awareness”).</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Aggregates. From fct_sales with 2 billion order lines, a daily table by shop and category is built: about 2 million rows a year. A monthly table by region and category is built from that: a few thousand rows. Each query is answered by the smallest table that has the grain it needs, and only days that changed are rebuilt."><g class="rough"><rect class="d f-y" x="20" y="200" width="220" height="70" rx="10"/><path class="d" d="M246 225 L290 160"/><path class="d" d="M288.3 171.9 L290 160 L279.6 166.0"/><rect class="d f-blue" x="296" y="110" width="220" height="70" rx="10"/><path class="d" d="M522 135 L566 70"/><path class="d" d="M564.3 81.9 L566 70 L555.6 76.0"/><rect class="d f-green" x="572" y="20" width="170" height="70" rx="10"/></g><text class="t-head" x="130" y="231" text-anchor="middle" font-size="21">fct_sales</text><text class="t" x="130" y="255" text-anchor="middle" font-size="15">2 B lines</text><text class="t-head" x="406" y="141" text-anchor="middle" font-size="21">agg_daily</text><text class="t" x="406" y="165" text-anchor="middle" font-size="13">shop · category · day: 2 M/yr</text><text class="t-head" x="657" y="51" text-anchor="middle" font-size="20">agg_monthly</text><text class="t" x="657" y="75" text-anchor="middle" font-size="13">region · category</text><text class="t-s t-pen" x="560" y="160" text-anchor="start" font-size="16">dashboard asks “by month”</text><text class="t-s t-pen" x="560" y="186" text-anchor="start" font-size="16">→ reads agg_monthly</text><text class="t-s t-green" x="380" y="290" text-anchor="middle">rebuild only the days a batch touched</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Each level is built from the one below. Queries go to the smallest table that can answer them.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Find the slow, frequent queries</b><p>Group them by the dimensions and grain they ask for.</p></li>
+    <li><b>Design a few aggregates</b><p>Usually daily and monthly, at the dimensions dashboards use.</p></li>
+    <li><b>Store additive parts</b><p>Sums and counts; sum and count for averages; sketches for distinct counts.</p></li>
+    <li><b>Refresh incrementally</b><p>Rebuild the days touched by each batch, idempotently.</p></li>
+    <li><b>Route queries</b><p>Point dashboards at aggregates, or use aggregate awareness; test totals against the fact.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Aggregate table</dt><dd>A pre-computed summary at a coarser grain.</dd></div>
+    <div><dt>Rollup</dt><dd>Summarising from a fine grain to a coarser one.</dd></div>
+    <div><dt>Aggregate awareness</dt><dd>A tool choosing the smallest table that can answer.</dd></div>
+    <div><dt>HyperLogLog</dt><dd>A small sketch for approximate distinct counts that can be merged.</dd></div>
+    <div><dt>OLAP cube</dt><dd>Pre-aggregated measures over all combinations of dimensions.</dd></div>
+    <div><dt>Drill-down</dt><dd>Going from a summary to the detail behind it.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>agg_sales_daily.sql</span><span>generic SQL · BigQuery-style HLL</span></div>
+<pre><code><span class="c">-- rebuild only the days the latest batch touched</span>
+<span class="k">DELETE</span> <span class="k">FROM</span> agg_sales_daily <span class="k">WHERE</span> order_date <span class="k">IN</span> (<span class="k">SELECT</span> d <span class="k">FROM</span> touched_days);
+<span class="k">INSERT</span> <span class="k">INTO</span> agg_sales_daily
+<span class="k">SELECT</span> order_date, shop_key, category,
+       sum(amount_net)                       <span class="k">AS</span> revenue,
+       count(*)                              <span class="k">AS</span> lines,
+       count(DISTINCT order_id)              <span class="k">AS</span> orders,
+       HLL_COUNT.INIT(customer_key)          <span class="k">AS</span> customers_sketch   <span class="c">-- mergeable</span>
+<span class="k">FROM</span>   fct_sales <span class="k">JOIN</span> dim_product <span class="k">USING</span> (product_key)
+<span class="k">WHERE</span>  order_date <span class="k">IN</span> (<span class="k">SELECT</span> d <span class="k">FROM</span> touched_days)
+<span class="k">GROUP</span>  <span class="k">BY</span> 1, 2, 3;
+
+<span class="c">-- monthly, from daily: sums add, sketches merge</span>
+<span class="k">SELECT</span> date_trunc(order_date, MONTH) <span class="k">AS</span> month, category,
+       sum(revenue) <span class="k">AS</span> revenue,
+       HLL_COUNT.MERGE(customers_sketch) <span class="k">AS</span> unique_customers
+<span class="k">FROM</span>   agg_sales_daily <span class="k">GROUP</span> <span class="k">BY</span> 1, 2;</code></pre>
+  </div>
+  <p class="aside">tools: materialized views (BigQuery, Snowflake, Redshift, PostgreSQL), ClickHouse projections and AggregatingMergeTree, Apache Druid and Pinot rollup at ingestion, Cube pre-aggregations, Looker aggregate awareness, Power BI aggregations, HyperLogLog functions in most warehouses.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Fast dashboards</b>: thousands of rows instead of billions.</li><li><b>Lower cost</b>: scan once per load, not per view.</li><li><b>Predictable load</b> on Monday mornings.</li><li><b>Detail kept</b> for drill-down.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More tables to keep consistent</b> with the fact.</li><li><b>Fixed grains</b>: a new dimension means a new aggregate.</li><li><b>Distinct counts</b> become approximate (sketches).</li><li><b>Refresh lag</b> between fact and aggregate.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Pipeline ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>dashboards summing the detailed fact table every time</b> to <b>incrementally refreshed aggregate tables at the grains they use</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More tables, each simple.</td></tr>
+      <tr data-before="3" data-after="3"><td>Freshness<small>how recent?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral: refreshed with the load.</td></tr>
+      <tr data-before="4" data-after="4"><td>Correctness<small>is the number right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Totals tested against the fact.</td></tr>
+      <tr data-before="3" data-after="4"><td>Replayability<small>safe to rerun?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Rebuild touched days from the fact.</td></tr>
+      <tr data-before="2" data-after="5"><td>Scalability<small>10× the data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Dashboard cost stops growing with history.</td></tr>
+      <tr data-before="2" data-after="5"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Scan once per load, not per view.</td></tr>
+      <tr data-before="4" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Only the dimensions you aggregated by.</td></tr>
+      <tr data-before="3" data-after="3"><td>Observability<small>know when it's wrong?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New questions may need new aggregates.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Averaging averages</h3><p>Monthly average order value is the mean of daily averages. <span class="fix">Fix →</span> store revenue and orders; divide at query time.</p></li>
+    <li><h3>Summing distinct counts</h3><p>Unique customers per day summed for the month count regulars many times. <span class="fix">Fix →</span> store sketches and merge them, or count from the fact.</p></li>
+    <li><h3>Full rebuild every hour</h3><p>The aggregate rereads two billion rows each time. <span class="fix">Fix →</span> rebuild only touched days.</p></li>
+    <li><h3>Aggregate drift</h3><p>A fix to the fact is never reflected in the aggregate. <span class="fix">Fix →</span> build aggregates in the same DAG after the fact, and test totals match.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Dashboards that many people open often.</li><li>Fixed, common grains (day, month, shop, region).</li><li>Very large fact tables.</li><li>Cost or latency limits on the warehouse.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Ad-hoc analysis that needs any dimension.</li><li>Small facts that scan in a second anyway.</li><li>Exact distinct counts that can't be approximate.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../../data/notes/materialized-views.html"><b>Materialized views</b></a> (Vol. 3)</li><li><a href="../notes/fact-table-types.html"><b>Fact table types</b></a></li><li><a href="../notes/metrics-layer.html"><b>Metrics layer</b></a></li><li><a href="../notes/late-arriving-data.html"><b>Late-arriving data</b></a></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why can't you sum daily unique customers to get monthly ones?</summary><p>Customers who bought on several days would be counted several times; use sketches or count from the fact.</p></details>
+    <details><summary>How should an aggregate store averages?</summary><p>As the sum and the count, so averages at any level are computed correctly.</p></details>
+    <details><summary>What is aggregate awareness?</summary><p>A tool picking the smallest aggregate table that can answer a query.</p></details>
+    <details><summary>How do aggregates handle late data?</summary><p>Rebuild the days a batch touched, the same as the fact.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>The regional dashboard needs “unique customers per region per month”, and the fact has 2 billion rows. What do you store in the daily aggregate?</span></summary><p>A HyperLogLog sketch of customer keys per shop per day, merged to region and month at query time (or in a monthly aggregate). It's small, mergeable, and accurate to about 1 %, which is usually fine for a dashboard; an exact count can come from the fact when needed.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Time your slowest dashboard query. Build a daily aggregate for its dimensions, point the query at it, and time it again. Then check that the totals match the fact for a few days.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Add up the <span class="hl">Z-reports</span>, keep the <span class="hl">receipts</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/16-aggregates-rollups.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Ralph Kimball and Margy Ross, <i>The Data Warehouse Toolkit</i>, 3rd ed. (2013), on aggregate navigation.</li><li>Philippe Flajolet et al., “HyperLogLog” (2007).</li><li>Google BigQuery documentation, “HLL functions” and “Materialized views”.</li><li>Cube documentation, “Pre-aggregations”.</li></ul>
+  </div>
+  <p class="folio">16</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="metrics-layer.html"><small>← previous note</small>15 · Metrics Layer</a>
+  <a href="lambda-vs-kappa.html"><small>Next note →</small>17 · Lambda vs Kappa</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 9 · a student's bullet journal on data pipelines &amp; analytics</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

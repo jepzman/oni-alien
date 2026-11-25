@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>One Big Table vs Star · Jef’s Notes</title>
+<meta name="description" content="Flatten everything into one wide table, or keep facts and dimensions apart: choose by engine and team.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=ad5eea9853">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-pipelines">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 9 · data pipelines &amp; analytics</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="one-big-table">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 03.06.27</span><span class="topic">collection · <b>modelling the warehouse</b></span></div>
+  <p class="kicker">a.k.a. “OBT, the wide table”</p>
+  <h1><span class="hl">One Big Table vs Star</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>A <b>one big table</b> joins the fact with every dimension column into one wide, flat table: easy for BI tools, spreadsheets and ML, and cheap to scan on columnar engines. A <b>star</b> keeps facts and dimensions apart: reusable, easy to change, history-friendly. The common answer is both: <b>model as a star, serve wide tables</b> (or views) where a tool or team needs them, and rebuild them from the star.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> modelling</li><li><b>Debate:</b> Kimball vs Inmon vs wide tables</li><li><b>Lives in:</b> BigQuery, ClickHouse, Snowflake, Druid</li><li><b>Pairs with:</b> star schema, metrics layer</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">A store manager opens the BI tool and sees seven tables with lines between them. They drag product next to shop, the tool picks the wrong join path, the <span class="hl-pink">total doubles</span>, and they go back to Excel exports.</p>
+  <ul>
+    <li>Business users can't (and shouldn't have to) choose joins.</li>
+    <li>Some BI and ML tools work best on one flat table.</li>
+    <li>But a 300-column table rebuilt from scratch every night is expensive and fragile.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a store manager in the BI tool facing seven tables with tangled join lines: fact sales, date, product, category, customer, shop and region. They drag the wrong join, the total doubles, and they export to Excel instead."><g class="rough"><rect class="d f-y" x="20" y="30" width="136" height="44" rx="10"/><rect class="d f-paper" x="170" y="30" width="136" height="44" rx="10"/><rect class="d f-paper" x="320" y="30" width="136" height="44" rx="10"/><rect class="d f-paper" x="470" y="30" width="136" height="44" rx="10"/><rect class="d f-paper" x="20" y="120" width="136" height="44" rx="10"/><rect class="d f-paper" x="170" y="120" width="136" height="44" rx="10"/><rect class="d f-paper" x="320" y="120" width="136" height="44" rx="10"/><path class="d d-red" d="M156 52 H170"/><path class="d d-red" d="M88 74 V120"/><path class="d d-red" d="M110 74 L238 120"/><path class="d d-red" d="M130 74 L388 120"/><path class="d d-red" d="M150 34 Q320 -4 470 34"/><path class="d d-red" d="M140 32 Q240 4 320 32"/><path class="d d-red" d="M238 74 L170 120"/><g transform="translate(640 120) scale(1.0)"><g class="d"><rect class="f-paper" x="0" y="0" width="64" height="44" rx="4"/><path d="M24 44 l-4 12 h24 l-4 -12"/><path d="M14 30 l10 -10 l8 8 l14 -14"/></g></g></g><text class="t-head" x="88" y="59" text-anchor="middle" style="font-size:15px">fact_sales</text><text class="t-head" x="238" y="59" text-anchor="middle" style="font-size:15px">dim_date</text><text class="t-head" x="388" y="59" text-anchor="middle" style="font-size:15px">dim_product</text><text class="t-head" x="538" y="59" text-anchor="middle" style="font-size:15px">dim_customer</text><text class="t-head" x="88" y="149" text-anchor="middle" style="font-size:15px">dim_shop</text><text class="t-head" x="238" y="149" text-anchor="middle" style="font-size:15px">dim_region</text><text class="t-head" x="388" y="149" text-anchor="middle" style="font-size:15px">dim_promo</text><text class="t-s t-red" x="380" y="230" text-anchor="middle">wrong join → total doubled → “I&#x27;ll use Excel”</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Seven tables and a tangle of joins: the store manager gives up and exports to Excel.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">phone book vs card index</span></h2>
+  <p>A <b>printed phone book</b> puts everything on one line: name, street, city, number. It's easy to read and terrible to correct: one moved family means a reprint. A <b>card index</b> with cross-references is harder to read, and you fix one card when something changes. Libraries kept the card index and printed directories from it.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="Doodle comparing a printed phone book and a card index. The phone book has everything on one line: name, street, city, number, easy to read, but fixing one address means reprinting. The card index has cross-references between cards: harder to read, easy to update one card."><g class="rough"><g transform="translate(60 50) scale(1.6)"><g class="d"><path class="f-y" d="M4 6 h22 a6 6 0 0 1 6 6 v44 a6 6 0 0 0 -6 -6 h-22 z"/><path class="f-y" d="M60 6 h-22 a6 6 0 0 0 -6 6 v44 a6 6 0 0 1 6 -6 h22 z"/></g></g><g transform="translate(470 50) scale(1.6)"><g class="d"><path class="f-blue" d="M0 22 h64 v38 h-64 z"/><path class="f-blue" d="M6 22 v-16 h52 v16"/><path d="M14 6 v-6 h12 v6 M6 14 h52"/></g></g></g><text class="t-s" x="110" y="170" text-anchor="middle">phone book: one line, all of it</text><text class="t-s t-red" x="110" y="196" text-anchor="middle">fix one address → reprint</text><text class="t-s" x="520" y="170" text-anchor="middle">card index: cross-references</text><text class="t-s t-green" x="520" y="196" text-anchor="middle">fix one card, done</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A printed phone book is easy to read and expensive to correct. A card index is the reverse.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The phone book line</td><td>One wide row: fact plus all dimension columns</td></tr>
+      <tr><td>The card index</td><td>The star: facts and dimensions apart</td></tr>
+      <tr><td>Reprinting</td><td>Rebuilding the wide table after a dimension change</td></tr>
+      <tr><td>Printing from the index</td><td>Building wide tables from the star</td></tr>
+      <tr><td>Readers who just want a number</td><td>BI users, spreadsheets, ML features</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">star underneath, wide on top</span></h2>
+  <p>Columnar engines store each column separately and compress repeated values, so a wide table with “Kitchen” repeated a million times costs little, and a query reads only the columns it names. That made one big tables practical. What they still cost: every dimension change (a type 1 fix, a new attribute) means rebuilding the wide table, and nothing is shared between wide tables.</p>
+  <p>Keep the star as the modelled source of truth. Build wide tables or views from it for the tools that need them, and treat them as disposable outputs.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="The usual compromise. The modelled layer stays a star: fact sales with date, product, customer and shop dimensions. On top, a wide table or view, obt_sales, flattens one row per order line with every column a tool needs: date, month, category, brand, segment, city, region, quantity and amount. Columnar storage reads only the columns a query uses."><g class="rough"><rect class="d f-green" x="20" y="60" width="260" height="150" rx="10"/><path class="d" d="M286 135 L360 135"/><path class="d" d="M349.2 140.2 L360 135 L349.2 129.8"/><rect class="d d-thin f-paper" x="366" y="50" width="280" height="136" rx="4"/><path class="d d-thin f-y" d="M366 54 a4 4 0 0 1 4 -4 h272 a4 4 0 0 1 4 4 v28 h-280 z"/><path class="d d-thin d-soft" d="M372 108 h268"/><path class="d d-thin d-soft" d="M372 134 h268"/><path class="d d-thin d-soft" d="M372 160 h268"/></g><text class="t-head" x="150" y="131" text-anchor="middle" font-size="24">star</text><text class="t" x="150" y="155" text-anchor="middle" font-size="16">facts + dimensions</text><text class="t-s" x="323" y="120" text-anchor="middle">flatten</text><text class="t-head" x="506" y="73" text-anchor="middle" font-size="17">obt_sales</text><text class="t" x="376" y="101" font-size="16">line · date · month</text><text class="t" x="376" y="127" font-size="16">category · brand</text><text class="t" x="376" y="153" font-size="16">segment · city · region</text><text class="t" x="376" y="179" font-size="16">qty · amount</text><text class="t-s t-pen" x="506" y="230" text-anchor="middle">one row per order line, 60 columns</text><text class="t-s t-pen" x="506" y="256" text-anchor="middle">columnar: unused columns cost nothing to read</text><text class="t-s t-green" x="150" y="240" text-anchor="middle">the source of truth</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Model as a star; serve a wide table where a tool or a team needs one.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Model the star first</b><p>Facts at a clear grain, conformed dimensions, type 2 where needed.</p></li>
+    <li><b>Find the consumers</b><p>Which tool or team needs flat data? Self-service BI, a spreadsheet extract, an ML feature set.</p></li>
+    <li><b>Build the wide table from the star</b><p>A view first; a table if it's slow. Only the columns they use.</p></li>
+    <li><b>Rebuild it, don't edit it</b><p>It's an output: regenerate from the star on every load.</p></li>
+    <li><b>Keep definitions upstream</b><p>Measures live in the star or the metrics layer, not in the wide table.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>OBT</dt><dd>One big table: facts and dimension columns flattened together.</dd></div>
+    <div><dt>Columnar storage</dt><dd>Each column stored separately, read only when needed.</dd></div>
+    <div><dt>Denormalisation</dt><dd>Copying attributes onto rows to avoid joins.</dd></div>
+    <div><dt>Inmon EDW</dt><dd>A normalised enterprise warehouse feeding marts (top-down).</dd></div>
+    <div><dt>Kimball bus</dt><dd>Dimensional marts on conformed dimensions (bottom-up).</dd></div>
+    <div><dt>Fan-out</dt><dd>Rows multiplied by a join, inflating totals.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>models/marts/obt_sales.sql</span><span>dbt · served from the star</span></div>
+<pre><code>{{ config(materialized=<span class="s">'table'</span>, partition_by={<span class="s">'field'</span>: <span class="s">'order_date'</span>, <span class="s">'data_type'</span>: <span class="s">'date'</span>}) }}
+
+select
+    f.order_line_id, f.order_date, d.month, d.week, d.is_holiday,
+    p.sku, p.category, p.brand,
+    c.segment, c.city as customer_city,
+    s.shop_name, s.region,
+    f.qty, f.amount
+<span class="k">from</span> {{ ref(<span class="s">'fct_sales'</span>) }}    f
+join {{ ref(<span class="s">'dim_date'</span>) }}     d using (date_key)
+join {{ ref(<span class="s">'dim_product'</span>) }}  p using (product_key)
+join {{ ref(<span class="s">'dim_customer'</span>) }} c using (customer_key)
+join {{ ref(<span class="s">'dim_shop'</span>) }}     s using (shop_key)</code></pre>
+  </div>
+  <p class="aside">tools: BigQuery (nested and repeated fields), ClickHouse and Druid (wide event tables), Snowflake, Databricks; BI semantic models (Power BI, Looker) can hide a star behind one flat view.</p>
+  <section class="thennow verdict-rethought" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="the idea holds, the way the book did it has changed">rethought</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Inmon, 1992 · Kimball, 1996</small></h3><p>Inmon argued for a normalised enterprise warehouse feeding marts; Kimball for dimensional stars. Both avoided flattening everything: on row stores, wide tables wasted disk and every query read every column.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>Columnar engines skip unused columns and compress repeated strings, so wide tables are cheap to scan, and some engines (ClickHouse, Druid) prefer them. Joins also got much cheaper. The debate moved from “which shape” to “which shape for whom”.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> Model as a star, serve wide tables to the tools that want them. Neither shape alone fits every reader.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Easy for users</b>: no joins to choose, no fan-out.</li><li><b>Fast scans</b> on columnar engines.</li><li><b>Good for tools</b>: BI self-service, spreadsheets, ML.</li><li><b>Simple to document</b>: one table, one grain.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Rebuild on any dimension change</b>.</li><li><b>No reuse</b>: each wide table repeats the same joins.</li><li><b>Schema churn</b>: hundreds of columns, many unused.</li><li><b>History is frozen</b> into whatever the row said at build time.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Pipeline ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>users querying a star directly</b> to <b>a star underneath with wide tables built on top</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="4"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Users see one table; engineers keep the star.</td></tr>
+      <tr data-before="3" data-after="3"><td>Freshness<small>how recent?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral: one more build step.</td></tr>
+      <tr data-before="3" data-after="4"><td>Correctness<small>is the number right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No wrong joins in self-service.</td></tr>
+      <tr data-before="4" data-after="4"><td>Replayability<small>safe to rerun?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Wide tables rebuild from the star.</td></tr>
+      <tr data-before="3" data-after="4"><td>Scalability<small>10× the data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Columnar scans of one table are fast.</td></tr>
+      <tr data-before="3" data-after="2"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Extra storage and rebuilds.</td></tr>
+      <tr data-before="3" data-after="4"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Every attribute is a drag-and-drop column.</td></tr>
+      <tr data-before="3" data-after="3"><td>Observability<small>know when it's wrong?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Changes flow from the star, but each wide table must rebuild.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Only the wide table</h3><p>No star underneath; every new question copies and edits the 300-column SQL. <span class="fix">Fix →</span> keep the star as the source of truth.</p></li>
+    <li><h3>Mixed grain in one table</h3><p>Order totals repeated on every line get summed by users. <span class="fix">Fix →</span> one grain per wide table; put order-level data in its own table.</p></li>
+    <li><h3>Measures defined in the wide table</h3><p>Each wide table computes margin slightly differently. <span class="fix">Fix →</span> define measures once, upstream or in the metrics layer.</p></li>
+    <li><h3>Everything, just in case</h3><p>600 columns nobody reads, rebuilt hourly. <span class="fix">Fix →</span> include what consumers use; add columns on request.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Self-service BI for non-technical users.</li><li>Columnar engines that prefer wide tables (ClickHouse, Druid).</li><li>ML feature tables and spreadsheet extracts.</li><li>A dashboard with a fixed set of columns.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>As the only model of the warehouse.</li><li>Dimensions that change often and must be correct everywhere at once.</li><li>Many-to-many relationships that would multiply rows.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../../data/notes/star-schema.html"><b>Star schema</b></a> (Vol. 3)</li><li><a href="../../data/notes/normalization.html"><b>Normalization</b></a> (Vol. 3)</li><li><a href="../notes/metrics-layer.html"><b>Metrics layer</b></a></li><li><a href="../notes/aggregates-rollups.html"><b>Aggregates and rollups</b></a></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What is a one big table?</summary><p>A wide, flat table that joins facts with all their dimension columns.</p></details>
+    <details><summary>Why are wide tables cheap on columnar engines?</summary><p>Queries read only the columns they name, and repeated values compress well.</p></details>
+    <details><summary>What does a wide table cost when a dimension changes?</summary><p>It has to be rebuilt, because the old values are copied into every row.</p></details>
+    <details><summary>What is the usual compromise?</summary><p>Model as a star and build wide tables or views from it for the tools that need them.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A product manager asks you to drop the star and keep only one big table, “because that's what everyone uses”. What do you answer?</span></summary><p>Keep the star as the source of truth and generate the wide table from it on every load. Users keep their one table; you keep type 2 history, conformed dimensions for other facts, and the ability to rebuild everything when a definition changes.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Build a view that flattens your star into one table, and point a BI tool at it. Count the clicks to answer “sales by region by month” with the star and with the view. Then change one product's category and see what each needs to reflect it.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Keep the <span class="hl">card index</span>. Print <span class="hl">phone books</span> from it for whoever wants one.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/10-one-big-table.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>W. H. Inmon, <i>Building the Data Warehouse</i> (1992).</li><li>Ralph Kimball, <i>The Data Warehouse Toolkit</i> (1996).</li><li>Fivetran, “Star schema vs. OBT for data warehouse performance” (benchmark, 2022).</li><li>ClickHouse documentation, “Denormalizing data”.</li></ul>
+  </div>
+  <p class="folio">10</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="data-vault.html"><small>← previous note</small>09 · Data Vault</a>
+  <a href="write-audit-publish.html"><small>Next note →</small>11 · Write–Audit–Publish</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 9 · a student's bullet journal on data pipelines &amp; analytics</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

@@ -1,8 +1,11 @@
 # Plan: ETL, data warehousing and reporting
 
-Status **2026-11-25**: plan written; **deep dive 12 · From App Database to Warehouse** is drafted
-(`content/deep-dives/app_db_to_warehouse.py`, `/deep-dives/app-db-to-warehouse/`). The volume below is
-planned (`PLANNED` in `scripts/build_notes.py`), not started.
+Status **2026-11-25**: **deep dive 12 · From App Database to Warehouse** is written
+(`content/deep-dives/app_db_to_warehouse.py`), and **Vol. 9 · Data Pipelines & Analytics** is written: 18 notes in
+`content/pipelines/` (`01_in.py`, `02_model.py`, `03_trust.py`, `04_serve.py`).
+
+Owner's decisions (25 Nov): the volume moves ahead of AI App Patterns (now Vol. 10); keep the homeware-shop example;
+keep the green-bar printout look.
 
 ## 1. What is already on the shelf
 
@@ -22,14 +25,18 @@ rather than repeating them:
 What is missing is the **pipeline** (how data gets from the app into the warehouse and stays right),
 the **warehouse modelling** past one star, and **serving reports** (one number, everywhere).
 
-## 2. Vol. 10 · Data Pipelines & Analytics (18 notes, Series 1)
+## 2. Vol. 9 · Data Pipelines & Analytics (18 notes, Series 1)
 
 Same note format as the other Series 1 volumes: problem, analogy, how it works, gains vs losses, nine
 ratings, pitfalls, when to use it, quiz. Notes with a long history get a **then & now** box (as in Vols. 7–8).
 
 - **Journal key** `pipelines`, URL `/pipelines/`.
-- **Paper** (proposal): continuous-form *green-bar* printout paper, with sprocket holes down both sides,
-  titles in a dot-matrix face and a “RUN COMPLETE” stamp. Palette: green-bar green, ink navy, highlighter orange.
+- **Paper**: continuous-form *green-bar* printout paper, with sprocket holes down both sides, titles in a
+  dot-matrix face (VT323) and a “RUN COMPLETE” stamp. Palette: green-bar green, ink navy, highlighter orange
+  (`theme-pipelines` in `public/assets/bujo.css`; cover `--cover-pipelines` / `--band-pipelines`).
+- **Then & now** boxes on the seven notes built on older books: ETL vs ELT, SCD, fact table types, conformed
+  dimensions, data vault, one big table, lambda vs kappa. The journal has no `then_now` flag, so the index
+  doesn't claim every note has one.
 - **Ratings** (`PIPELINE_ATTRS`): simplicity, freshness, correctness, replayability, scalability, cost,
   query flexibility, observability, evolvability.
 
@@ -67,16 +74,17 @@ serious variant, an operations story.
 
 | # | Deep dive | Builds on | Status |
 | --- | --- | --- | --- |
-| 12 | **From App Database to Warehouse** | Vol. 3 CDC, Upserts, Star Schema (partitioning in passing) | drafted |
-| — | **History in the Warehouse** (SCD and point-in-time) | Vol. 3 history tables, bitemporal, star schema; Vol. 10 SCD | ready to write |
-| — | **Reruns and Backfills** (“rerun anything”) | Vol. 10 incremental extract, idempotent loads, late data | after Vol. 10 |
-| — | **One Number Everywhere** (the metrics layer: fan and chasm traps, grain, caching, row-level security) | Vol. 10 metrics layer, aggregates | after Vol. 10 |
-| — | **Data Quality and Pipeline Observability** | Vol. 10 WAP, contracts, quality checks; pairs with Observability & SLOs | after Vol. 10 |
-| — | **Streaming Analytics** (windows, watermarks, exactly-once sinks) | Vol. 10 lambda vs kappa, late data | after Vol. 10 |
+| 12 | **From App Database to Warehouse** | Vol. 3 CDC, Upserts, Star Schema; Vol. 9 extract, loads, zones | written |
+| — | **History in the Warehouse** (SCD and point-in-time) | Vol. 3 history tables, bitemporal, star schema; Vol. 9 SCD | ready to write |
+| — | **Reruns and Backfills** (“rerun anything”) | Vol. 9 incremental extract, idempotent loads, late data | ready to write |
+| — | **One Number Everywhere** (the metrics layer: fan and chasm traps, grain, caching, row-level security) | Vol. 9 metrics layer, aggregates | ready to write |
+| — | **Data Quality and Pipeline Observability** | Vol. 9 WAP, contracts, quality checks; pairs with Observability & SLOs | ready to write |
+| — | **Streaming Analytics** (windows, watermarks, exactly-once sinks) | Vol. 9 lambda vs kappa, late data | ready to write |
 | — | **Lakehouse Tables** (Iceberg and Delta internals) | reserve note on open table formats | optional |
 
-Deep dive 12 links only to the CDC, Upserts and Star Schema notes (`notes=`): the partitioning note
-already links to Sharding & Partitioning, and a note has room for one “go deeper” link.
+Deep dive 12 links from the CDC, Upserts and Star Schema notes and from Vol. 9's incremental extract,
+idempotent loads and layered zones (`notes=`). The partitioning note already links to Sharding & Partitioning,
+and a note has room for one “go deeper” link.
 
 ## 4. Cheat sheet
 
@@ -86,13 +94,11 @@ overwrite, MERGE with a newer-only guard, dedupe by key); dbt incremental and sn
 
 ## 5. Order of work
 
-1. Deep dive 12 (this branch). Owner reviews it on a phone and on desktop.
-2. Vol. 10, one collection per PR, in the order above.
-3. The cheat sheet, once collection B (modelling) exists.
+1. Deep dive 12 and Vol. 9 (done, one PR). Owner reviews on a phone and on desktop.
+2. The cheat sheet.
 4. Deep dives: History in the Warehouse, then Reruns and Backfills, then One Number Everywhere.
 
-## 6. Questions for the owner
+## 6. Next
 
-- Volume number: Vol. 10 after AI App Patterns (Vol. 9), or swap them?
-- The green-bar printout skin, or another paper?
-- Keep the shop example for the whole volume, or move the volume into the Larder story (Series 2)?
+- Going-deeper chapters for Vol. 9 (in `content/pipelines/deeper.py`) once the deep dives above exist.
+- Card links from Vol. 9 notes to the warehouse cheat sheet (`CARD_LINKS`) when it is written.

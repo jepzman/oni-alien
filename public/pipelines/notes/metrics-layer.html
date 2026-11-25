@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Metrics Layer · Jef’s Notes</title>
+<meta name="description" content="Define each business number once, in code, and let every dashboard use that definition.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=ad5eea9853">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-pipelines">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 9 · data pipelines &amp; analytics</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="metrics-layer">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 21.06.27</span><span class="topic">collection · <b>serving reports</b></span></div>
+  <p class="kicker">a.k.a. “semantic layer”</p>
+  <h1><span class="hl">Metrics Layer</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Define each business number <b>once, in code</b>: what it sums, which rows it excludes, its time dimension, the dimensions it can be split by, its owner. Dashboards, spreadsheets and notebooks don't write their own SQL for it; they <b>ask the metrics layer</b>, which generates the query, picks the joins safely and computes ratios correctly. Change the definition once and every tool follows.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> serving reports</li><li><b>Also called:</b> semantic layer, headless BI</li><li><b>Lives in:</b> dbt Semantic Layer, Cube, LookML, Malloy</li><li><b>Pairs with:</b> conformed dimensions, aggregates</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">For the same week the finance dashboard says revenue was <b>€1.92M</b> (net, after returns), marketing's says <b>€2.31M</b> (gross, including VAT), and a spreadsheet says <b>€2.05M</b> (net, but without gift cards). All three are called “revenue”, and Monday's meeting is spent <span class="hl-pink">arguing about which is right</span>.</p>
+  <ul>
+    <li>Every tool has its own copy of the SQL, and each drifts.</li>
+    <li>Ratios are averaged wrongly (average of averages).</li>
+    <li>Nobody knows who owns the definition.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of three revenue numbers for the same week. The finance dashboard says 1.92 million euros: net of VAT, after returns. The marketing dashboard says 2.31 million: gross, including VAT. The spreadsheet says 2.05 million: net, but without gift cards. The Monday meeting is spent arguing about which is right."><g class="rough"><rect class="d f-green" x="20" y="40" width="220" height="100" rx="10"/><rect class="d f-blue" x="270" y="40" width="220" height="100" rx="10"/><rect class="d f-y" x="520" y="40" width="220" height="100" rx="10"/></g><text class="t-head" x="130" y="86" text-anchor="middle" font-size="21">finance</text><text class="t" x="130" y="110" text-anchor="middle" font-size="13">€1.92M · net, after returns</text><text class="t-head" x="380" y="86" text-anchor="middle" font-size="21">marketing</text><text class="t" x="380" y="110" text-anchor="middle" font-size="13">€2.31M · gross, incl. VAT</text><text class="t-head" x="630" y="86" text-anchor="middle" font-size="21">spreadsheet</text><text class="t" x="630" y="110" text-anchor="middle" font-size="13">€2.05M · no gift cards</text><text class="t-s t-red" x="380" y="190" text-anchor="middle">all three are called “revenue”</text><text class="t-s t-pen" x="380" y="222" text-anchor="middle">Monday&#x27;s meeting: 40 minutes on which one is right</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Three “revenue” numbers for one week, and a meeting spent arguing about them.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the franchise recipe card</span></h2>
+  <p>Every branch of a burger chain cooks from the same <b>recipe card</b>: same weights, same steps. When head office changes the sauce, it changes the card once, and every branch follows. Branches can choose how to plate it, not what's in it.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="Doodle of a franchise recipe card. Every branch of a burger chain makes the burger from the same card: the same weights, the same steps. Head office changes the card once, and every branch follows."><g class="rough"><g transform="translate(320 30) scale(1.9)"><g class="d"><rect class="f-y" x="0" y="0" width="50" height="62" rx="3"/><path d="M8 12 h34 M8 22 h26 M8 34 h34 M8 44 h30 M8 54 h20"/><circle class="f-y" cx="44" cy="8" r="6"/></g></g><path class="d" d="M420 90 L560 40"/><path class="d" d="M551.6 48.5 L560 40 L548.1 38.7"/><rect class="d f-green" x="566" y="18" width="170" height="46" rx="10"/><path class="d" d="M420 90 L560 100"/><path class="d" d="M548.9 104.4 L560 100 L549.6 94.0"/><rect class="d f-green" x="566" y="78" width="170" height="46" rx="10"/><path class="d" d="M420 90 L560 160"/><path class="d" d="M548.0 159.8 L560 160 L552.7 150.5"/><rect class="d f-green" x="566" y="138" width="170" height="46" rx="10"/><path class="d" d="M220 100 L310 100"/><path class="d" d="M299.2 105.2 L310 100 L299.2 94.8"/></g><text class="t-head" x="651" y="48" text-anchor="middle" font-size="18">branch A</text><text class="t-head" x="651" y="108" text-anchor="middle" font-size="18">branch B</text><text class="t-head" x="651" y="168" text-anchor="middle" font-size="18">branch C</text><text class="t-s t-pen" x="130" y="100" text-anchor="middle">head office edits it once</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Every branch cooks from one recipe card. Change the card once, every branch follows.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The recipe card</td><td>The metric definition in code</td></tr>
+      <tr><td>Head office</td><td>The metric's owner</td></tr>
+      <tr><td>Every branch</td><td>Dashboards, spreadsheets, notebooks, APIs</td></tr>
+      <tr><td>Choosing how to plate</td><td>Choosing dimensions and filters</td></tr>
+      <tr><td>Changing the card once</td><td>One pull request changes revenue everywhere</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">one definition, many tools</span></h2>
+  <p>The layer knows the model: facts, dimensions, how they join (through conformed dimensions), and which measures are additive. A metric is a named measure plus filters and a time dimension. When a tool asks for “revenue by category by week”, the layer writes the SQL, joins only along safe paths (no fan-out), and computes ratios as a ratio of sums, not an average of ratios.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="A metrics layer. Revenue is defined once in code: the sum of net amount from fact sales, excluding gift cards, by order date, sliceable by product, shop and customer. Dashboards, spreadsheets and notebooks ask the layer for revenue by category by week, and the layer writes the SQL, chooses the joins and applies the filters."><g class="rough"><rect class="d f-y" x="230" y="20" width="300" height="110" rx="10"/><rect class="d f-blue" x="20" y="200" width="200" height="60" rx="10"/><path class="d" d="M120 196 L330 134"/><path class="d" d="M321.1 142.1 L330 134 L318.2 132.1"/><path class="d" d="M128.9 187.9 L120 196 L131.8 197.9"/><rect class="d f-blue" x="280" y="200" width="200" height="60" rx="10"/><path class="d" d="M380 196 L380 134"/><path class="d" d="M385.2 144.8 L380 134 L374.8 144.8"/><path class="d" d="M374.8 185.2 L380 196 L385.2 185.2"/><rect class="d f-blue" x="540" y="200" width="200" height="60" rx="10"/><path class="d" d="M640 196 L430 134"/><path class="d" d="M441.8 132.1 L430 134 L438.9 142.1"/><path class="d" d="M628.2 197.9 L640 196 L631.1 187.9"/></g><text class="t-head" x="380" y="71" text-anchor="middle" font-size="23">revenue</text><text class="t" x="380" y="95" text-anchor="middle" font-size="13">sum(amount_net) · no gift cards</text><text class="t-s t-pen" x="115" y="56" text-anchor="middle">owner · description</text><text class="t-s t-pen" x="115" y="84" text-anchor="middle">dimensions · in git</text><text class="t-head" x="120" y="237" text-anchor="middle" font-size="19">dashboard</text><text class="t-head" x="380" y="237" text-anchor="middle" font-size="19">spreadsheet</text><text class="t-head" x="640" y="237" text-anchor="middle" font-size="19">notebook</text><text class="t-s t-pen" x="380" y="290" text-anchor="middle" font-size="16">“revenue by category by week” → generated SQL</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Define the number once, in code. Every tool asks the layer, and the layer writes the SQL.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Pick the top ten numbers</b><p>Revenue, orders, average order value, return rate: the ones in meetings.</p></li>
+    <li><b>Agree each definition</b><p>With its owner: what's in, what's out, net or gross, which date.</p></li>
+    <li><b>Write them in code</b><p>Measures, filters, time dimension, allowed dimensions, description, owner; reviewed in git.</p></li>
+    <li><b>Point tools at the layer</b><p>BI tools, spreadsheets and notebooks query it instead of tables.</p></li>
+    <li><b>Retire copies</b><p>Remove hand-written revenue SQL from dashboards as they move over.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Metric</dt><dd>A named business number with a fixed definition.</dd></div>
+    <div><dt>Measure</dt><dd>The aggregation behind it (sum of net amount).</dd></div>
+    <div><dt>Dimension</dt><dd>What you can split a metric by.</dd></div>
+    <div><dt>Entity</dt><dd>A join key the layer uses to connect models (customer, product).</dd></div>
+    <div><dt>Ratio metric</dt><dd>Numerator and denominator summed first, then divided.</dd></div>
+    <div><dt>Headless BI</dt><dd>Definitions served by an API, independent of the dashboard tool.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>models/metrics/revenue.yml</span><span>dbt Semantic Layer (MetricFlow)</span></div>
+<pre><code>semantic_models:
+  - name: sales
+    model: ref(<span class="s">'fct_sales'</span>)
+    defaults: { agg_time_dimension: order_date }
+    entities:
+      - { name: order_line, <span class="k">type</span>: primary, expr: order_line_id }
+      - { name: product,    <span class="k">type</span>: foreign, expr: product_key }
+      - { name: shop,       <span class="k">type</span>: foreign, expr: shop_key }
+    dimensions:
+      - { name: order_date, <span class="k">type</span>: time, type_params: { time_granularity: day } }
+    measures:
+      - { name: amount_net, agg: sum }
+      - { name: orders,     agg: count_distinct, expr: order_id }
+
+metrics:
+  - name: revenue
+    label: Revenue (net, after returns, excl. gift cards)
+    <span class="k">type</span>: simple
+    type_params: { measure: amount_net }
+    filter: <span class="s">"{{ Dimension('product__is_gift_card') }} = false"</span>
+  - name: average_order_value
+    <span class="k">type</span>: ratio                      <span class="c"># sum / count, never an average of averages</span>
+    type_params: { numerator: revenue, denominator: orders }</code></pre>
+  </div>
+  <p class="aside">tools: dbt Semantic Layer (MetricFlow), Cube, Looker (LookML), Malloy, AtScale, Power BI semantic models; definitions reach Excel, Google Sheets and notebooks through the layer's API or SQL interface.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>One number per name</b>, in every tool.</li><li><b>Safe joins and correct ratios</b>, generated for you.</li><li><b>Owned, reviewed definitions</b> with descriptions.</li><li><b>Tool freedom</b>: change dashboards without re-deriving revenue.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Another layer</b> to run and learn.</li><li><b>Not every tool connects</b> well to every layer.</li><li><b>Agreeing definitions</b> is political work.</li><li><b>Unusual questions</b> may need the raw SQL anyway.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Pipeline ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>each dashboard and spreadsheet writing its own revenue SQL</b> to <b>metrics defined once in a metrics layer</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="2" data-after="4"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One place to read what revenue means.</td></tr>
+      <tr data-before="3" data-after="3"><td>Freshness<small>how recent?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="5"><td>Correctness<small>is the number right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Same definition, correct ratios, safe joins.</td></tr>
+      <tr data-before="3" data-after="3"><td>Replayability<small>safe to rerun?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>10× the data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New tools and teams reuse definitions.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A layer to run; fewer duplicate queries.</td></tr>
+      <tr data-before="3" data-after="4"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Any allowed dimension, no SQL needed.</td></tr>
+      <tr data-before="2" data-after="4"><td>Observability<small>know when it's wrong?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Usage and ownership per metric are visible.</td></tr>
+      <tr data-before="2" data-after="5"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Change a definition once.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Metrics layer as a dump</h3><p>Four hundred metrics, half of them “revenue_v2_final”. <span class="fix">Fix →</span> start with the numbers in meetings; one owner each; deprecate duplicates.</p></li>
+    <li><h3>Definitions still in dashboards</h3><p>The layer exists, but old dashboards keep their own SQL. <span class="fix">Fix →</span> migrate and remove the copies; flag dashboards that bypass the layer.</p></li>
+    <li><h3>Averages of averages</h3><p>Average order value averaged across shops gives every shop equal weight. <span class="fix">Fix →</span> define ratios as sums divided, in the layer.</p></li>
+    <li><h3>No business owner</h3><p>Engineers decide what revenue means. <span class="fix">Fix →</span> every metric has a named business owner who approves changes.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Several tools or teams report the same numbers.</li><li>Numbers are discussed in meetings and disagree.</li><li>Ratios and averages are common.</li><li>You want self-service without everyone writing SQL.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>One dashboard, one analyst.</li><li>Exploratory analysis of brand-new data.</li><li>Before the underlying model (facts, dimensions) is stable.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/conformed-dimensions.html"><b>Conformed dimensions</b></a></li><li><a href="../notes/aggregates-rollups.html"><b>Aggregates and rollups</b></a></li><li><a href="../notes/one-big-table.html"><b>One big table vs star</b></a></li><li><a href="../../ddd/notes/ubiquitous-language.html"><b>Ubiquitous language</b></a> (Vol. 7)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does a metrics layer store?</summary><p>Named business metrics defined once in code: measure, filters, time dimension, allowed dimensions, owner.</p></details>
+    <details><summary>How should average order value be computed across shops?</summary><p>Total revenue divided by total orders, not the average of each shop's average.</p></details>
+    <details><summary>Why does the layer generate the joins?</summary><p>So queries only join along safe paths and don't multiply rows.</p></details>
+    <details><summary>What's the first step in adopting one?</summary><p>Agree definitions for the handful of numbers used in meetings, each with an owner.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Marketing wants “revenue” to include VAT, finance wants it net. Both will use the same metrics layer. What do you do?</span></summary><p>Define two clearly named metrics, revenue_net (owner: finance) and revenue_gross_incl_vat (owner: marketing), with descriptions, and make dashboards label which one they show. “Revenue” alone points to the company's official one, agreed by finance.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Search your BI tool and spreadsheets for every place revenue is calculated. Write down each formula. Agree one with its owner, define it in a metrics layer (or a single SQL view if that's what you have), and repoint the two most-used dashboards.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>One <span class="hl">recipe card</span>. Every branch cooks from it.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/15-metrics-layer.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>dbt documentation, “About MetricFlow” and “Build your metrics”.</li><li>Cube documentation, “Data modeling”.</li><li>Benn Stancil, “The missing piece of the modern data stack” (2021).</li><li>Looker documentation, “LookML terms and concepts”.</li></ul>
+  </div>
+  <p class="folio">15</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="dag-orchestration.html"><small>← previous note</small>14 · DAG Orchestration &amp; Lineage</a>
+  <a href="aggregates-rollups.html"><small>Next note →</small>16 · Aggregates &amp; Rollups</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 9 · a student's bullet journal on data pipelines &amp; analytics</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Slowly Changing Dimensions · Jef’s Notes</title>
+<meta name="description" content="Decide per column whether a change overwrites the past or adds a new version.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=ad5eea9853">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-pipelines">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 9 · data pipelines &amp; analytics</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="slowly-changing-dimensions">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 20.05.27</span><span class="topic">collection · <b>modelling the warehouse</b></span></div>
+  <p class="kicker">a.k.a. “SCD type 1, type 2”</p>
+  <h1><span class="hl">Slowly Changing Dimensions</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Dimension values change: a product moves category, a customer moves city. Decide <b>per column</b> what a change means. <b>Type 1</b> overwrites (fix a typo; history follows the new value). <b>Type 2</b> adds a <b>new row with a new surrogate key</b> and valid dates, so old facts keep the label they had. Type 3 keeps a “previous” column; type 6 mixes them. Use type 2 for anything reports group by.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> modelling</li><li><b>Origin:</b> Ralph Kimball (1990s)</li><li><b>Lives in:</b> dbt snapshots, Delta/Iceberg MERGE</li><li><b>Pairs with:</b> history tables, surrogate keys</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">In April the March report says Kitchen sold <b>€412k</b>. On 12 May the kettle moves to <i>Small appliances</i> and the product table is copied over the old dimension. In June, the same March report says Kitchen sold <span class="hl-pink">€371k</span>. Nobody touched March's sales.</p>
+  <ul>
+    <li>Filed reports change without anyone noticing.</li>
+    <li>“Sales by region last year” moves customers to where they live now.</li>
+    <li>Nobody can answer “what category was it in when we sold it?”</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a filed report that changed. In April, the March report shows Kitchen revenue of 412 thousand euros. On 12 May the kettle moves to the Small appliances category, and the product dimension is overwritten. Run again in June, the same March report shows Kitchen at 371 thousand euros. Nobody changed March&#x27;s sales."><g class="rough"><rect class="d f-green" x="20" y="40" width="300" height="110" rx="10"/><rect class="d f-pink d-red" x="440" y="40" width="300" height="110" rx="10"/><path class="d d-red" d="M326 95 L434 95"/><path class="d d-red" d="M423.2 100.2 L434 95 L423.2 89.8"/></g><text class="t-head" x="170" y="91" text-anchor="middle" font-size="19">March report · April</text><text class="t" x="170" y="115" text-anchor="middle" font-size="17">Kitchen €412k</text><text class="t-head t-red" x="590" y="91" text-anchor="middle" font-size="19">March report · June</text><text class="t" x="590" y="115" text-anchor="middle" font-size="17">Kitchen €371k</text><text class="t-s t-red" x="380" y="180" text-anchor="middle">12 May: kettle → Small appliances</text><text class="t-s t-red" x="380" y="230" text-anchor="middle">dim_product overwritten · history rewritten</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Same March, same sales, a different report: the dimension was overwritten in May.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">whiteboard vs address book</span></h2>
+  <p>On a <b>whiteboard</b> you wipe the old address and write the new one: the old one is gone. In an <b>address book</b> you cross out the old address with an end date and write the new one underneath with a start date. Letters sent last year still went to the old address, and you can see that.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="Doodle comparing a whiteboard and an address book. On the whiteboard, an old address is wiped and the new one written: the old one is gone. In the address book, the old address is crossed out with an end date and the new one written below with a start date: both remain."><g class="rough"><rect class="d f-paper" x="20" y="40" width="300" height="140" rx="10"/><g transform="translate(370 60) scale(1.4)"><g class="d"><path class="f-y" d="M4 6 h22 a6 6 0 0 1 6 6 v44 a6 6 0 0 0 -6 -6 h-22 z"/><path class="f-y" d="M60 6 h-22 a6 6 0 0 0 -6 6 v44 a6 6 0 0 1 6 -6 h22 z"/></g></g></g><text class="t-head" x="170" y="106" text-anchor="middle" font-size="21">whiteboard</text><text class="t" x="170" y="130" text-anchor="middle" font-size="16">wipe, rewrite</text><text class="t-s t-red" x="170" y="210" text-anchor="middle">type 1: the old value is gone</text><text class="t-s t-pen" x="470" y="80" text-anchor="start">Utrecht · until 2026-02</text><text class="t-s t-green" x="470" y="112" text-anchor="start">Rotterdam · from 2026-02</text><text class="t-s t-green" x="560" y="210" text-anchor="middle">type 2: both kept, with dates</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A whiteboard forgets. An address book crosses out and dates.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Wiping the whiteboard</td><td>Type 1: <code>UPDATE dim SET category = …</code></td></tr>
+      <tr><td>Crossing out with a date</td><td>Type 2: close the old row (<code>valid_to</code>), insert a new one</td></tr>
+      <tr><td>A new line in the book</td><td>A new surrogate key for the new version</td></tr>
+      <tr><td>Letters sent last year</td><td>Old facts keep the old key</td></tr>
+      <tr><td>“Previous address” box</td><td>Type 3: a <code>previous_category</code> column</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">one new row per version, facts keep their key</span></h2>
+  <p>A type 2 dimension has a <b>surrogate key</b> per version, the source's natural key (the SKU), and <code>valid_from</code>, <code>valid_to</code> and <code>is_current</code>. When a tracked column changes, the load closes the current row and inserts a new one. When a fact is loaded, it looks up the version that was valid at the event time, and keeps that key forever.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Type 2 in the product dimension. Row with surrogate key 812: SKU K-100 kettle, category Kitchen, valid from 1 September 2025 to 12 May 2026, not current. Row 977: the same SKU, category Small appliances, valid from 12 May 2026, current. The fact row for order 9001, sold 31 March, points at key 812, so March still reports Kitchen."><g class="rough"><rect class="d d-thin f-paper" x="20" y="30" width="360" height="136" rx="4"/><path class="d d-thin f-y" d="M20 34 a4 4 0 0 1 4 -4 h352 a4 4 0 0 1 4 4 v28 h-360 z"/><path class="d d-thin d-soft" d="M26 88 h348"/><path class="d d-thin d-soft" d="M26 114 h348"/><rect class="f-hl" x="23" y="116" width="354" height="22" rx="2" style="stroke:none"/><path class="d d-thin d-soft" d="M26 140 h348"/><rect class="f-hl" x="23" y="142" width="354" height="22" rx="2" style="stroke:none"/><rect class="d d-thin f-paper" x="470" y="60" width="270" height="84" rx="4"/><path class="d d-thin f-green" d="M470 64 a4 4 0 0 1 4 -4 h262 a4 4 0 0 1 4 4 v28 h-270 z"/><path class="d d-thin d-soft" d="M476 118 h258"/><path class="d" d="M464 112 L386 74"/><path class="d" d="M398.0 74.0 L386 74 L393.4 83.4"/></g><text class="t-head" x="200" y="53" text-anchor="middle" font-size="17">dim_product</text><text class="t" x="30" y="81" font-size="16">812 · K-100 · Kitchen</text><text class="t" x="30" y="107" font-size="16">  2025-09-01 → 2026-05-12</text><text class="t" x="30" y="133" font-size="16">977 · K-100 · Small appliances</text><text class="t" x="30" y="159" font-size="16">  2026-05-12 → ∞ · current</text><text class="t-head" x="605" y="83" text-anchor="middle" font-size="17">fact_sales</text><text class="t" x="480" y="111" font-size="16">line 51 · 2026-03-31</text><text class="t" x="480" y="137" font-size="16">product_key 812 · €39</text><text class="t-s t-pen" x="570" y="220" text-anchor="middle">lookup: the key valid on the sale date</text><text class="t-s t-pen" x="570" y="250" text-anchor="middle">new sales from 12 May get 977</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Type 2: a new row with a new key for each version. Facts keep the key they were sold under.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Classify every column</b><p>Type 1 (corrections, descriptions), type 2 (anything reports group or filter by), or type 0 (never changes, e.g. original signup date).</p></li>
+    <li><b>Add version columns</b><p>Surrogate key, natural key, <code>valid_from</code>, <code>valid_to</code>, <code>is_current</code>.</p></li>
+    <li><b>Detect changes</b><p>Compare tracked columns (or a hash of them) with the current row on each load.</p></li>
+    <li><b>Close and insert</b><p>Set <code>valid_to</code> on the old row, insert the new one with a new key, in one transaction.</p></li>
+    <li><b>Look up by event time</b><p>Facts join on the natural key where the sale time is between <code>valid_from</code> and <code>valid_to</code>.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Type 0</dt><dd>Keep the original value forever.</dd></div>
+    <div><dt>Type 1</dt><dd>Overwrite; history follows the new value.</dd></div>
+    <div><dt>Type 2</dt><dd>New row and key per version, with valid dates.</dd></div>
+    <div><dt>Type 3</dt><dd>A column for the previous value.</dd></div>
+    <div><dt>Type 6</dt><dd>Type 2 rows plus a current-value column on every row (1 + 2 + 3).</dd></div>
+    <div><dt>Natural key</dt><dd>The source's id for the thing (SKU), shared by all versions.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>snapshots/products_snapshot.sql + fact lookup</span><span>dbt · generic SQL</span></div>
+<pre><code>{% snapshot products_snapshot %}
+{{ config(unique_key=<span class="s">'sku'</span>, strategy=<span class="s">'check'</span>,
+          check_cols=[<span class="s">'category'</span>, <span class="s">'brand'</span>, <span class="s">'name'</span>]) }}   <span class="c">-- type 2 columns</span>
+select sku, name, brand, category <span class="k">from</span> {{ ref(<span class="s">'stg_products'</span>) }}
+{% endsnapshot %}
+
+<span class="c">-- fact load: the version valid when it was sold</span>
+select s.order_line_id, p.product_key, s.amount
+<span class="k">from</span>   stg_order_lines s
+join   dim_product p
+  on   p.sku = s.sku
+ and   s.sold_at &gt;= p.valid_from
+ and   s.sold_at &lt;  coalesce(p.valid_to, <span class="s">'9999-12-31'</span>)</code></pre>
+  </div>
+  <p class="aside">tools: dbt snapshots (timestamp or check strategy), Delta Lake and Iceberg MERGE, Snowflake streams and tasks, SQL Server temporal tables as a source, AutomateDV.</p>
+  <section class="thennow verdict-core" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="as useful as when it was written">still core</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Kimball, 1996</small></h3><p><i>The Data Warehouse Toolkit</i> named types 1, 2 and 3 and set out how to load them in ETL code, with surrogate keys generated by the ETL server and careful hand-written change detection.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>The idea is unchanged and everywhere. dbt snapshots and MERGE build type 2 in a few lines; temporal tables and CDC give the history for free; columnar storage makes the extra rows cheap. Some teams skip type 2 dimensions and join facts to a full history table at query time instead.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> Still the way to keep reports stable as the business reorganises. Decide per column, and default to type 2 for anything people group by.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Filed reports stay filed</b>: March is March forever.</li><li><b>Both views</b>: “as it was” and, with type 6, “as it is now”.</li><li><b>Audit</b>: you can say when a category changed.</li><li><b>Cheap</b>: dimensions are small; extra rows cost little.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More complex loads</b>: change detection, closing rows.</li><li><b>Lookups by date</b> are easy to get wrong (boundaries).</li><li><b>Surprise for users</b>: “why is the kettle in two categories?”</li><li><b>Fast-changing columns</b> explode the row count.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Pipeline ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>a dimension copied over the old one every night (type 1 only)</b> to <b>per-column type 1 and type 2 with surrogate keys</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Versions and valid dates to understand.</td></tr>
+      <tr data-before="3" data-after="3"><td>Freshness<small>how recent?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="5"><td>Correctness<small>is the number right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Past reports keep their labels.</td></tr>
+      <tr data-before="3" data-after="4"><td>Replayability<small>safe to rerun?</small></td><td class="dcell"></td><td class="score"></td><td class="why">History lives in the dimension, not in last night's copy.</td></tr>
+      <tr data-before="4" data-after="4"><td>Scalability<small>10× the data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Dimensions stay small; facts unchanged.</td></tr>
+      <tr data-before="4" data-after="4"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A few extra rows.</td></tr>
+      <tr data-before="2" data-after="4"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Ask “as it was” or “as it is now”.</td></tr>
+      <tr data-before="2" data-after="4"><td>Observability<small>know when it's wrong?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Changes are visible, with dates.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New tracked columns need a decision each.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Type 2 on everything</h3><p>A last-login column creates a new customer version every day. <span class="fix">Fix →</span> type 2 only for columns people group or filter by; move fast-changing ones to a fact or a mini-dimension.</p></li>
+    <li><h3>Joining facts on the natural key</h3><p>Every fact matches every version and sales are multiplied. <span class="fix">Fix →</span> store the surrogate key on the fact, or join with the date range.</p></li>
+    <li><h3>Overlapping or gapped dates</h3><p>A sale at exactly midnight matches two versions, or none. <span class="fix">Fix →</span> half-open ranges: <code>&gt;= valid_from AND &lt; valid_to</code>, and test for overlaps.</p></li>
+    <li><h3>Late-arriving changes</h3><p>A category change is backdated after facts were loaded with the old key. <span class="fix">Fix →</span> re-key affected facts, or accept the change from its load date; decide with the business.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Categories, regions, segments, price bands: anything reports group by.</li><li>Reports that are filed, audited or compared year on year.</li><li>Dimensions that change slowly (weekly or less).</li><li>Regulated reporting that must be reproducible.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Typos and corrections: type 1.</li><li>Values that change every day: model them as facts.</li><li>Small reports where “as it is now” is all anyone asks.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../../data/notes/history-tables.html"><b>History tables</b></a> (Vol. 3)</li><li><a href="../../data/notes/bitemporal-data.html"><b>Bitemporal data</b></a> (Vol. 3)</li><li><a href="../../data/notes/surrogate-keys.html"><b>Surrogate keys</b></a> (Vol. 3)</li><li><a href="../notes/conformed-dimensions.html"><b>Conformed dimensions</b></a></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does a type 2 change do?</summary><p>Closes the current dimension row and inserts a new one with a new surrogate key and valid dates.</p></details>
+    <details><summary>Why do facts store the surrogate key, not the natural key?</summary><p>The surrogate key names one version; the natural key matches every version and multiplies rows.</p></details>
+    <details><summary>When is type 1 right?</summary><p>For corrections and descriptions where the past should show the fixed value.</p></details>
+    <details><summary>What is type 6?</summary><p>Type 2 rows that also carry the current value on every row, so reports can choose “as it was” or “as it is now”.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Regional managers want last year's sales by the region each shop belongs to now, but finance wants them by the region at the time. One dimension, two answers. What do you build?</span></summary><p>A type 6 shop dimension: type 2 rows with the historical region, plus a current_region column updated on every version. Finance groups by region, managers by current_region, both from the same fact table.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Make a three-row product dimension with type 2 columns, a fact table pointing at it, and a monthly report. Change one product's category, apply type 1, and rerun the report for an old month. Undo, apply type 2, and rerun.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Cross it out and <span class="hl">date it</span>. Facts remember the <span class="hl">key they were sold under</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/06-slowly-changing-dimensions.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Ralph Kimball and Margy Ross, <i>The Data Warehouse Toolkit</i>, 3rd ed. (2013), chapter 5.</li><li>Kimball Group, “Slowly Changing Dimension Techniques” (design tips).</li><li>dbt documentation, “Snapshots”.</li><li>Databricks documentation, “SCD type 2 with MERGE”.</li></ul>
+  </div>
+  <p class="folio">06</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="late-arriving-data.html"><small>← previous note</small>05 · Late-Arriving Data</a>
+  <a href="fact-table-types.html"><small>Next note →</small>07 · Fact Table Types</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 9 · a student's bullet journal on data pipelines &amp; analytics</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

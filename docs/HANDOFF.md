@@ -19,6 +19,7 @@ Read in this order:
 | Series 1 (patterns) | `distributed`, `frontend`, `data`, `testing`, `security`, `cloud` | Vols. 1–6 | 111 |
 | Series 1 (patterns) | `ddd` | Vol. 7 · Domain-Driven Design (with then &amp; now boxes) | 18 |
 | Series 1 (patterns) | `inside-app` | Vol. 8 · Inside the Application (with then &amp; now boxes) | 18 |
+| Series 1 (patterns) | `pipelines` | Vol. 9 · Data Pipelines &amp; Analytics (then &amp; now on 7 notes) | 18 |
 | Series 2 · case file | `/larder/` (not a journal) | Meet Larder | history, cast, books, story timeline |
 | Series 2 · Book 1 (Ana) | `architect-1` | From Requirements to Architecture | 15 |
 | Series 2 · Book 1 (Ana) | `architect-2` | Decisions & Trade-offs | 15 (Mar → Sep 2026) |
@@ -45,7 +46,7 @@ Book 3, *The Project Manager's Notebook*, covers the whole PMBOK Guide (eighth e
 heavy dial, deep dives and the Rotterdam project file (`/rotterdam/`).
 
 Planned: nothing left in Books 1–2 (`PLANNED_2` and `PLANNED_PRODUCT` are empty), nothing in Book 3 (`PLANNED_PROJECT` is empty),
-Series 1 Vol. 9 AI App Patterns (`PLANNED`), Book 4 (Mo: client management, Korenwolf) in the future log.
+Series 1 Vol. 10 AI App Patterns (`PLANNED`), Book 4 (Mo: client management, Korenwolf) in the future log.
 
 **Series 1 Vol. 7 · Domain-Driven Design** (18 Nov 2026, branch `ccr-9390f8f0-wl14yb`): 18 notes in `content/ddd/`, skin `theme-ddd`,
 ratings `CODE_ATTRS`, and a new **then &amp; now** box on every note (`then_now`, verdicts in `VERDICTS`). The owner chose to
@@ -55,7 +56,14 @@ vertical slices, functional core, four classic GoF notes and a museum of retired
 Also fixed: a related note with the same slug in another volume was silently not linked (`related_items`); three older
 links now work (Ana's Strangler Fig ↔ Vol. 1, Sanne's Risk Register → Ana's).
 
-**Series 3 · Deep dives** started on 14 Nov 2026: Season 1 is written (`/deep-dives/<slug>/`), and Season 2 has begun with Sign-in, Tokens & Sessions, Replication, Failover & Leader Election, Sharding & Partitioning, Indexes & Query Plans, Rendering on the Web and From App Database to Warehouse (plan for the data-engineering run, and the planned Vol. 10 · Data Pipelines & Analytics: `docs/PLAN-data-pipelines.md`). Season 1: Saga, Reliable Messaging, The Resilience Stack, Event Sourcing & CQRS
+**Series 1 Vol. 9 · Data Pipelines & Analytics** (25 Nov 2026, branch `ccr-6c2fb384-1vaty7`): 18 notes in `content/pipelines/`
+(four files, one per collection), skin `theme-pipelines` (green-bar printout: bands, sprocket holes, VT323 titles, “RUN COMPLETE”
+stamp), ratings `PIPELINE_ATTRS`, cover `copier` on a `greenbar` cloth. The owner moved it ahead of AI App Patterns (now Vol. 10),
+kept the homeware-shop example from deep dive 12 and the proposed look. Then &amp; now boxes on seven notes, without the journal-wide
+`then_now` flag (only some notes are old ideas). Deep dive 12 links back from incremental extract, idempotent loads and layered zones.
+Plan: `docs/PLAN-data-pipelines.md`.
+
+**Series 3 · Deep dives** started on 14 Nov 2026: Season 1 is written (`/deep-dives/<slug>/`), and Season 2 has begun with Sign-in, Tokens & Sessions, Replication, Failover & Leader Election, Sharding & Partitioning, Indexes & Query Plans, Rendering on the Web and From App Database to Warehouse (plan for the data-engineering run: `docs/PLAN-data-pipelines.md`). Season 1: Saga, Reliable Messaging, The Resilience Stack, Event Sourcing & CQRS
 Caching and Zero-Downtime Change, all deployed. Working branch `claude/design-patterns-deep-dive-ggw0on`. Read `docs/HANDOFF-deep-dives.md` for the plan and format.
 
 ## 1b. In progress: improving the earlier books (2026-11-16)
