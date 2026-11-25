@@ -11,7 +11,7 @@ Read in this order:
    - Book 1 (Ana, architect): `docs/HANDOFF-solution-architect.md`
    - Book 2 (Grace, product owner): `docs/HANDOFF-product-owner.md`
    - **Book 3 (Sanne, project manager): `docs/HANDOFF-project-manager.md`** ← the book in progress; start at its section 16
-   - Book 5 (Eli, IT operations): `docs/HANDOFF-it-operations.md` (planned 24 Nov 2026, not started)
+   - Book 5 (Eli, IT operations): `docs/HANDOFF-it-operations.md` (Vols. 1–2 written 25 Nov 2026; start at its section 10)
 
 ## 1. What's on the shelf
 

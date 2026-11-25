@@ -1,6 +1,6 @@
 # Handoff: The IT Operations Notebook (Series 2, Book 5)
 
-Status as of 2026-11-25: **planned and reviewed (section 6.7), nothing written yet.** Owner's decisions (24 Nov): IT operations (not business
+Status as of 2026-11-25: **Vols. 1 and 2 are written and built (section 10). Vols. 3–6 are planned (section 6).** Owner's decisions (24 Nov): IT operations (not business
 operations), narrated by whichever character fits, starting where it fits the story's timeline. Open questions: section 9.
 
 Story facts: `docs/larder-casebook.md` (source of truth) and the public case file `/larder/`.
@@ -264,3 +264,34 @@ Ghent and Haarlem; the reliability team forms; the pager handover on 1 Oct.
 2. Should we write it before or after Book 4 (Mo)? This plan doesn't depend on Book 4, apart from three shared scenes
    (Korenwolf incident reports, the SLA, the questionnaire).
 3. Check the ITIL practice names against the current guide (see section 2).
+
+## 10. What was built (25 Nov 2026)
+
+- **Journals** `ops-1` (Keeping the Lights On) and `ops-2` (When Things Break) in `JOURNALS`, 15 notes each, content in
+  `content/ops-1/` (4 files by collection) and `content/ops-2/` (3 files). Vols. 3–6 are in `PLANNED_OPS` and show on the
+  shelf as planned spines. Landing page: a Book 5 shelf (`spine_shelf(..., "eli", ...)`) after Book 3.
+- **Note fields new in Book 5** (rendered in `scripts/build_notes.py`):
+  - `itil=dict(groups=[general|service|technical], chain=[plan|improve|engage|design|build|deliver], practices=[...],
+    sre=..., principles=[...], older=...)` → `itil_tag()`; reuses the PMBOK tag's frame (`.pmbok.itil`).
+  - `ladder=[(when, [items]) × 4]` and `ladder_now=0–3` → `ladder_block()`; replaces gains/losses (section 4 heading
+    “The maturity ladder”). Rungs: by hand, written down, scripted, automatic.
+  - `pager=dict(when=..., lines=[(time, html)])` → `pager_block()`, shown after the situation text. Keep times short
+    (one time per line), or the time column wraps on phones.
+  - Journal flag `ops=True` switches the index's “how every note is laid out” line to the ladder.
+- **Skin** `theme-ops` at the end of `public/assets/bujo.css`: carbon-copy sheet with a perforated edge, status-lamp
+  section numbers, SUMMARY stamp, “FROM ELI'S RUNBOOK BINDER” card tab, the pager log, ITIL group colours
+  (`--dom-general/service/technical`), cover graphite with a green band (`--cover-ops`). Desk doodles `OPS_DOODLES`.
+- **Case file**: Eli in `CAST`, a Book 5 card in `BOOKS`, every note pinned with tag `"5"` via `TIMELINE_5` at the end
+  of `content/larder/casefile.py`; legend `sig-5`.
+- **Casebook**: “Book 5, Vol. 1” and “Book 5, Vol. 2” sections. New people: **Pieter** (he/him), second platform
+  engineer, from 5 Oct 2026. New facts that other books must respect: the on-call rota from 20 Apr 2026, severity levels
+  from 15 Jun, the status page from 1 Sep, the change feed from 30 Oct, the major-incident procedure from 23 Dec 2026.
+- **Meanwhile links**: Sanne's levelling (vol. 1 note 1), Sanne's issue log I-07 (store network), Sanne's lessons
+  (store IT kit), Ana's deployment diagrams (29 Oct), Ana's options page / ADR 0017 (major incidents).
+- `pdf-build.json` lists `ops-1` and `ops-2` so the next deploy renders their PDFs.
+
+Next: Vol. 3 · Changing Things Safely (Jan → Jun 2027). It opens with the first major-incident drill (January) and ADR
+0017's “no changes in critical windows”, and picks up the 29 Oct finding (a normal change at the evening peak) and
+VM patching from Eli's toil log. Still open from section 9: the title, the order relative to Book 4, and a check of the
+ITIL names against the current guide (and whether a newer ITIL edition is out). Not built yet: the ITIL & SRE map page
+(`/itil/`) and the runbook binder page (`/runbooks/`); the ITIL tag currently shows “ITIL 4” without a link.

@@ -888,3 +888,93 @@ manager's growth. Template cards are the **programme** pages of the project file
   green software; servant leadership ↔ Ana's growing architects; ethics ↔ Grace's bad news; growing ↔ Grace's growing as a
   PO; hiring ↔ Grace's hiring a PO; handover ↔ Grace's handing over and Ana's handover to operations.
 - **Book 3 is complete.** Open threads for Book 4 (Mo): Korenwolf's supplier questionnaire (Mar 2028) and the renewal.
+
+## Book 5, Vol. 1: Eli's facts (30 March → July 2026)
+
+Book 5 follows ITIL 4 (practices, value chain, four dimensions, guiding principles) with SRE habits. Narrator: **Eli**
+(he/him), platform and operations engineer since before Oct 2025. Plan: `docs/HANDOFF-it-operations.md`.
+
+- **What it's for** (Mon 30 Mar): 23 jobs in the 160 % week, 9 traceable to a customer. A bad hour ≈ €15k of orders.
+- **Catalogue v1** (Thu 2 Apr, signed at tech leads): 47 components → 11 services in 3 tiers. Critical: ordering (Ben),
+  payments (Cho), Dispatch (Eli + Ben), picker app (Dee). Important: stock sync, store network (Eli), courier app (Dee),
+  helpdesk (Sam). Normal: accounts + laptops, price script, domain + email (Eli). Eli owns 6 of 11; 4 were orphans.
+- **Checkout dependency map** (7 Apr): 11 dependencies. Address lookup SaaS on a free plan (10k calls/day; Amsterdam ≈ 9k,
+  with Rotterdam ≈ 14k) → paid plan €49/month from 8 Apr. Nightly price script runs on VM 2 only.
+- **Assets** (9 Apr): 92 handhelds on paper (Noord 31, Zuid 31, Rotterdam 30), 4 at Zuid missing (3 found, 1 written off);
+  21 laptops, 3 routers, 6 label printers; 46 SaaS subscriptions, 9 seats for leavers (≈ €340/month, cancelled).
+  **larder.nl renewed on 23 Apr on Jasper's expired personal card** → moved to the company card 10 Apr.
+- **Joiners, movers, leavers** (13–14 Apr): Rotterdam's 40 starters at ≈ 25 min each by hand (≈ 17 h). Role groups
+  (picker, courier, store lead, office), HR's hiring form in, last day out; < 6 min per person. First monthly check
+  closed 9 accounts incl. **Jasper's admin account** and 3 couriers who left in March.
+- **On-call rota v1** (from Mon 20 Apr): Eli, Ben, Cho, Dee, Ana, one week in five; primary + secondary (= next week's
+  primary); handover Mon 10:00, 15 min; €200/week (Marco, 17 Apr); paged after midnight → start at noon; Eli is
+  escalation until 20 Jun.
+- **Monitoring** (from 14 Apr): orders per 5 min per city vs last week, checkout errors, checkout p95, Dispatch delay,
+  store heartbeat (picker app last sync). 9 Apr: iDEAL failing, support found out first. **27 Apr 12:10**: Rotterdam
+  heartbeat alert, 4G router dropped 6 min, picker app offline-first, orders continued.
+- **Alert review** (Wed 15 Apr, the ½-day alert fix): March 63 rules, 410 pages, 9 useful → 6 paging rules, 8 tickets,
+  49 deleted. May: 22 pages, 17 useful.
+- **Runbooks**: 8 by Fri 8 May, six parts each. **Sat 9 May 02:40**: Cho fixes "db connections > 90 %" alone with RB-06
+  in 11 minutes.
+- **Service desk** (from Mon 11 May): "IT & stores" queue in Sam's helpdesk, QR poster per store, on-call number for
+  stopped picking. April: 146 messages to Eli's phone (Noord 61, Zuid 52, Rotterdam 33). June: 128 tickets, median
+  first response 12 min, 9 personal messages.
+- **Standard requests** (from 1 Jun): 6 (PIN reset by store lead, broken handheld from a spare pool of 3 per store,
+  label printer, laptop 3 days, tool access 1 day, new starter via JML). 46 of the first 74 tickets were these.
+- **Store network**: Noord Wi-Fi survey Thu 14 May (freezer aisle −82 dBm), +2 access points 21 May (€900); "offline"
+  tickets 23 (Apr) → 2 (Jun). Rotterdam line live 13 May; **failover test Tue 19 May 15:00: 4G in 40 s**; repeated on
+  the first Tuesday of each month. Noord and Zuid get 4G backup routers in June.
+- **Store IT kit v1** (Mon 25 May, after Sanne's lesson of 18 May): 34 items in three phases; device management (MDM)
+  live 26 May, €3/device/month (≈ €280); handheld set-up 20 min → 2 min. Workstream 8 in the launch playbook, owner Eli.
+- **Knowledge** (1 Jun): wiki 312 pages, 40 % older than a year; ops docs move to `ops/services/` with five headings;
+  120 archived, 61 rewritten. `legacy_rw` DB user explained (a 2024 data import) and removed in July. Dee's test: 3 → 8
+  of 10 questions (30 Jun).
+- **Toil** (week of 8–12 Jun): 16.5 of 40 h = 41 %. Cap 50 %, target 30 % by Dec. Removed: store figures → dashboard
+  (Jun), certificates → auto-renew (Jul). End of July: 33 %. The log supports **a second platform engineer, approved by
+  Femke in August**.
+
+## Book 5, Vol. 2: Eli's facts (June → December 2026)
+
+- **Pieter** (he/him), second platform engineer, joins **Mon 5 Oct 2026**; on call from week 4 (the 29 Oct incident).
+- **Severity levels** (Mon 15 Jun, tech leads + Femke + Sam): SEV1 city stopped or > 10 % failing (Femke told ≤ 15 min,
+  updates 15 min); SEV2 one store / payment method / client delivery or 2–10 % (updates 30 min); SEV3 degraded with
+  workaround; SEV4 no impact. Trigger: **Fri 12 Jun 18:02** iDEAL ≈ 30 % failing at PSP, 14 min arguing, ≈ 160 orders.
+- **Incident roles** (from 13 Jul): lead (doesn't fix), fixers, comms, scribe. Trigger: **Fri 3 Jul 17:40** stock sync,
+  4 engineers at once, Tomás found out at 18:20, 70 min. First use **Fri 17 Jul**: Dee lead, stores told at minute 6,
+  23 min.
+- **Communication** (August, with Sam): four audiences (support pinned in #incident, store leads' group, Femke for SEV1,
+  business clients on a **status page from 1 Sep**); four lines per update. Femke had heard of 3 Jul from a tweet.
+- **Escalation** (from Mon 3 Aug): primary → +secondary at 5 min → +Eli by page and phone call at 15 min; specialist
+  list; test page on the first on-call morning. Trigger: **Sun 2 Aug 07:20** Rotterdam heartbeat, Ana's phone silenced
+  by an OS update, 22 min until Yara phoned Eli.
+- **Vendors** (`ops/vendors.md`, 24–28 Aug): trigger **Fri 21 Aug 17:30** StockPilot API down 2 h 10 (support 09–17
+  weekdays, status page "operational" for 40 min), ≈ 140 orders with out-of-stock items. Plan B: **low-stock switch**
+  when stale > 15 min (Ben, 18 Sep). No premium support (contract ends Jun 2027).
+- **Tiers and swarming** (Mon 14 Sep): Sam's team first line for store tickets from 1 Sep; known → fixed from the list;
+  new → #help-stores, one owner. Oct: 38 % fixed at first line; median hops 2.4 → 1.1.
+- **Post-incident review** of 21 Aug on **Wed 26 Aug**, facilitator Ana; RB-09 split by Cho. Every SEV1–2 reviewed
+  within a week.
+- **PRB-003 stock sync** (opened 7 Sep): 13 of 41 incidents Jun–Sep; retry storm against StockPilot's 600 req/min
+  limit; backoff + jitter + one batch per store shipped **Mon 14 Sep**; 0 restarts in October; closed 2 Nov.
+- **Known errors**: 11 by October (KE-03 sync, retired 14 Sep; KE-04 picker app frozen after an Android system update,
+  fix = defer system updates to 23:30, A-23, due 3 Nov; KE-07 blank labels, permanent).
+- **Actions** (Tue 6 Oct cleanup): 37 actions from 9 reviews, 11 done; 26 open → 9 dropped, 17 kept; by 30 Nov 15 of
+  17 done. Rules: ≤ 3 per review, owner, date, size, done test, Tuesday 15 min.
+- **Incident page for Femke** (from November): count by SEV, orders affected, time to acknowledge (median 14 min in
+  June → 4 in November), recovery median + longest by SEV, learning. No overall MTTR (a 4-hour SEV3 made it 48 min).
+- **29 Oct 2026, 18:10**: network rule tidy-up (PR 233, Eli's) applied by the pipeline at the start of the evening peak;
+  Pieter (on call, week 4) found it at 18:35; Eli on a train. **Change feed** in #incident live **30 Oct** (A-19, open
+  since July); "what changed in the last 2 hours?" is section 0 of every runbook. November: 4 of 9 incidents followed
+  a change, each found in < 2 min.
+- **Korenwolf pilot incident, Tue 14 Jul**: an app update pushed at 06:00 failed on 9 of 31 Zuid handhelds; restock
+  arrived 09:35. Client report sent by Mo Thu 16 Jul (four parts); app updates on store devices at 23:30 from 20 Jul;
+  Korenwolf's order picked first at 06:00; Mo calls before 08:00 if late. Client reports within 2 working days; Ruben
+  asks for them in the September contract.
+- **18 Dec 2026, 18:05** (detail): managed Postgres failed over in ≈ 90 s; Core's connection pools kept pointing at the
+  old primary until each VM was restarted (18:22–18:43). Dee on call, declared SEV1 18:09, Eli lead; Femke called Eli 3
+  times; 300 chats at support. **Major incident procedure** written 21–23 Dec (SEV1 in a critical window, > 30 min or
+  > 1 city; senior lead, leadership liaison, customer messages, decision log, protected fix team); review **22 Dec** with
+  Femke → Ana's options page → ADR 0017 (12 Jan 2027). First drill: January 2027.
+- **Near misses** (#near-miss from 1 Dec): 9 in December. 3 Dec DB log disk 91 % (→ 80 % ticket alert); 10 Dec canary
+  rolled back core v431 (good save); 21 Dec courier API certificate (set up by Dee's team in November outside auto-renew)
+  3 days from expiry (→ auto-renew, every new cert registers in the expiry check, 8 Jan 2027).
