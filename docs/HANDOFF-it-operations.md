@@ -283,7 +283,7 @@ Ghent and Haarlem; the reliability team forms; the pager handover on 1 Oct.
   (`--dom-general/service/technical`), cover graphite with a green band (`--cover-ops`). Desk doodles `OPS_DOODLES`.
 - **Case file**: Eli in `CAST`, a Book 5 card in `BOOKS`, every note pinned with tag `"5"` via `TIMELINE_5` at the end
   of `content/larder/casefile.py`; legend `sig-5`.
-- **Casebook**: “Book 5, Vol. 1” and “Book 5, Vol. 2” sections. New people: **Pieter** (he/him), second platform
+- **Casebook**: “Book 5, Vol. 1” and “Book 5, Vol. 2” sections. New people: **Bram** (he/him), second platform
   engineer, from 5 Oct 2026. New facts that other books must respect: the on-call rota from 20 Apr 2026, severity levels
   from 15 Jun, the status page from 1 Sep, the change feed from 30 Oct, the major-incident procedure from 23 Dec 2026.
 - **Meanwhile links**: Sanne's levelling (vol. 1 note 1), Sanne's issue log I-07 (store network), Sanne's lessons

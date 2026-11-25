@@ -935,7 +935,7 @@ Book 5 follows ITIL 4 (practices, value chain, four dimensions, guiding principl
 
 ## Book 5, Vol. 2: Eli's facts (June → December 2026)
 
-- **Pieter** (he/him), second platform engineer, joins **Mon 5 Oct 2026**; on call from week 4 (the 29 Oct incident).
+- **Bram** (he/him), second platform engineer, joins **Mon 5 Oct 2026**; on call from week 4 (the 29 Oct incident).
 - **Severity levels** (Mon 15 Jun, tech leads + Femke + Sam): SEV1 city stopped or > 10 % failing (Femke told ≤ 15 min,
   updates 15 min); SEV2 one store / payment method / client delivery or 2–10 % (updates 30 min); SEV3 degraded with
   workaround; SEV4 no impact. Trigger: **Fri 12 Jun 18:02** iDEAL ≈ 30 % failing at PSP, 14 min arguing, ≈ 160 orders.
@@ -963,7 +963,7 @@ Book 5 follows ITIL 4 (practices, value chain, four dimensions, guiding principl
 - **Incident page for Femke** (from November): count by SEV, orders affected, time to acknowledge (median 14 min in
   June → 4 in November), recovery median + longest by SEV, learning. No overall MTTR (a 4-hour SEV3 made it 48 min).
 - **29 Oct 2026, 18:10**: network rule tidy-up (PR 233, Eli's) applied by the pipeline at the start of the evening peak;
-  Pieter (on call, week 4) found it at 18:35; Eli on a train. **Change feed** in #incident live **30 Oct** (A-19, open
+  Bram (on call, week 4) found it at 18:35; Eli on a train. **Change feed** in #incident live **30 Oct** (A-19, open
   since July); "what changed in the last 2 hours?" is section 0 of every runbook. November: 4 of 9 incidents followed
   a change, each found in < 2 min.
 - **Korenwolf pilot incident, Tue 14 Jul**: an app update pushed at 06:00 failed on 9 of 31 Zuid handhelds; restock

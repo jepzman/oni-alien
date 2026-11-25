@@ -2,7 +2,7 @@
 # Narrator: Eli (he/him). Facts: docs/larder-casebook.md, "Book 5, Vol. 2".
 
 # ------------------------------------------------------------------ 12 Was It a Change?
-ch_problem = Doodle(760, 260, "Doodle of Thursday 29 October 2026, 18:10. A network rule tidy-up Eli had written in the afternoon is applied by the pipeline at 18:10 and cuts Dispatch off from the database. Pieter, on call and three weeks into the job, checks Dispatch, then the database, then the containers. Nobody asks what changed. Eli is on a train. After 25 minutes Pieter finds the rule in the pipeline's history. Couriers are assigned by hand for most of that time.",
+ch_problem = Doodle(760, 260, "Doodle of Thursday 29 October 2026, 18:10. A network rule tidy-up Eli had written in the afternoon is applied by the pipeline at 18:10 and cuts Dispatch off from the database. Bram, on call and three weeks into the job, checks Dispatch, then the database, then the containers. Nobody asks what changed. Eli is on a train. After 25 minutes Bram finds the rule in the pipeline's history. Couriers are assigned by hand for most of that time.",
                     "25 minutes checking everything except the one question: what changed?")
 ch_problem.row([("Dispatch?", "looks fine", "paper"), ("database?", "looks fine", "paper"), ("containers?", "look fine", "paper")], x=14, y=30, h=84, w=220, gap=36, size=17, subsize=14, arrows=True)
 ch_problem.box(110, 150, 540, 60, "18:10 network rule tidy-up · applied by the pipeline", "pink", stroke="red", size=16)
@@ -34,16 +34,16 @@ CHANGE_INCIDENTS = dict(
     itil=dict(groups=["service"], chain=["deliver", "improve"], practices=["incident management", "change enablement"],
               sre="“roughly 70 % of outages are due to changes in a live system”", principles=["Collaborate and promote visibility"],
               older="ITIL v3: change management, the forward schedule of change"),
-    pager=dict(when="Thu 29 Oct 2026 · Pieter on call (week 4)", lines=[
+    pager=dict(when="Thu 29 Oct 2026 · Bram on call (week 4)", lines=[
         ("18:10", "pipeline applies network-rules PR 233 (tidy-up, Eli)"),
         ("18:12", "<b>PAGE</b> dispatch_delay 140 s · all cities"),
-        ("18:14", "Pieter ack · Dispatch logs: cannot reach database"),
+        ("18:14", "Bram ack · Dispatch logs: cannot reach database"),
         ("18:20", "database healthy · containers healthy · Eli on a train, no signal"),
         ("18:27", "stores: couriers assigned by hand"),
-        ("18:35", "Pieter finds PR 233 in the pipeline history · reverts it"),
+        ("18:35", "Bram finds PR 233 in the pipeline history · reverts it"),
         ("18:37", "Dispatch reconnects · backlog cleared by 18:50")]),
     problem_side="Larder, Thursday 29 October 2026",
-    problem="""  <p class="lead">At 18:10 the pipeline applies a <b>network rule tidy-up</b> that Eli wrote and had approved that afternoon. It removes a rule Dispatch needs to reach the database. Pieter, three weeks into the job and on call, checks Dispatch, then the database, then the containers, and all of them look healthy. Eli is on a train with no signal. <span class="hl-pink">Nobody asks what changed.</span> At 18:35 Pieter finds the change in the pipeline's history and reverts it. Couriers are assigned by hand for most of those 25 minutes.</p>
+    problem="""  <p class="lead">At 18:10 the pipeline applies a <b>network rule tidy-up</b> that Eli wrote and had approved that afternoon. It removes a rule Dispatch needs to reach the database. Bram, three weeks into the job and on call, checks Dispatch, then the database, then the containers, and all of them look healthy. Eli is on a train with no signal. <span class="hl-pink">Nobody asks what changed.</span> At 18:35 Bram finds the change in the pipeline's history and reverts it. Couriers are assigned by hand for most of those 25 minutes.</p>
   <ul>
     <li>Changes are scattered: pipeline history, chat, the cloud console.</li>
     <li>“What changed?” isn't the first question in any runbook.</li>
@@ -61,7 +61,7 @@ CHANGE_INCIDENTS = dict(
          ("Putting the part back", "Reverting PR 233"),
          ("The garage's job sheet", "One line per change: time, what, who, how to undo")],
     how_side="one feed of every change, and “what changed?” first",
-    how="""  <p>Pieter finishes A-19 on <b>30 October</b>, the day after. From then on every change posts one line into <code>#incident</code>: deploys, infrastructure and network changes, feature flag changes (including automatic ones), and vendor maintenance notices. Each line has the <b>time, what, who, and how to undo it</b>.</p>
+    how="""  <p>Bram finishes A-19 on <b>30 October</b>, the day after. From then on every change posts one line into <code>#incident</code>: deploys, infrastructure and network changes, feature flag changes (including automatic ones), and vendor maintenance notices. Each line has the <b>time, what, who, and how to undo it</b>.</p>
   <p>Every runbook and the incident template now start with the same question: <b>what changed in the last two hours?</b> If something did, and it's plausibly related, <b>undo it first</b> and diagnose afterwards, because a revert is usually faster and safer than a fix under pressure.</p>
   <p>The review of 29 October (facilitated by Ana) adds one more finding. The tidy-up was a <b>normal change applied at 18:10, the start of the evening peak</b>. That question, when changes may run, goes to volume 3. In November <b>4 of 9</b> incidents followed a change, and each time the change was found in <b>under 2 minutes</b>.</p>""",
     how_figs=[ch_how],
@@ -116,7 +116,7 @@ feed sources: deploy pipeline · infrastructure pipeline · flag service
     quiz=[("What's the first question in every Larder incident now?", "What changed in the last two hours?"),
           ("What does each change-feed line contain?", "Time, what, who, and how to undo it."),
           ("Why undo before diagnosing?", "A revert is usually faster and safer than a fix under pressure; diagnose once customers are fine."),
-          ("Why did Pieter take 25 minutes on 29 October?", "Changes weren't visible in one place and no runbook asked “what changed?”, so he checked healthy systems one by one."),
+          ("Why did Bram take 25 minutes on 29 October?", "Changes weren't visible in one place and no runbook asked “what changed?”, so he checked healthy systems one by one."),
           ("What other finding did the review make?", "A normal change ran at 18:10, at the start of the evening peak: when changes may run is a question for vol. 3.")],
     quiz_sit=[("Checkout errors jump at 19:05. The feed shows a flag turned on at 19:02 and a deploy at 17:30. What do you do?", "Turn the flag off first (it's the closest change and easy to undo), say so in the channel, and watch errors. If they don't drop within a few minutes, look at the deploy next.")],
     try_it="Write down every way a change can reach your production systems: pipelines, consoles, flags, vendors. How many of them would on-call see in one place, in one minute? Pick the most hidden one and make it post to a shared channel.",
@@ -384,7 +384,7 @@ afterwards   review ≤ 3 working days, Femke present · options for leadership
 )
 
 # ------------------------------------------------------------------ 15 What About the Near Misses?
-nm_problem = Doodle(760, 250, "Doodle of three things that almost happened in late 2026 and were never written down: on 3 December the log disk on the database reached 91 percent and Pieter cleared it at 14:00; on 10 December a deploy was rolled back by its canary before customers noticed; on 21 December Eli spotted that the courier app's new API certificate, set up by Dee's team in November outside the automatic renewal, would expire in three days. Each one was handled quietly and forgotten.",
+nm_problem = Doodle(760, 250, "Doodle of three things that almost happened in late 2026 and were never written down: on 3 December the log disk on the database reached 91 percent and Bram cleared it at 14:00; on 10 December a deploy was rolled back by its canary before customers noticed; on 21 December Eli spotted that the courier app's new API certificate, set up by Dee's team in November outside the automatic renewal, would expire in three days. Each one was handled quietly and forgotten.",
                     "Three things that almost broke in December, handled quietly, and forgotten.")
 for i, (d, t) in enumerate([("3 Dec", "DB log disk 91 %"), ("10 Dec", "canary rolled back"), ("21 Dec", "cert expires in 3 days")]):
     nm_problem.box(14 + i * 248, 30, 236, 100, d, "y", sub=t, size=19, subsize=14)
@@ -418,7 +418,7 @@ NEAR_MISSES = dict(
               sre="“learning from success”; Safety-II", principles=["Progress iteratively with feedback", "Collaborate and promote visibility"],
               older="ITIL v3: proactive problem management"),
     problem_side="Larder, December 2026",
-    problem="""  <p class="lead">Three things almost go wrong in December. On the <b>3rd</b> the database's log disk reaches <b>91 %</b>, and Pieter clears it at 14:00. On the <b>10th</b> a deploy is <b>rolled back by its canary</b> before customers notice. On the <b>21st</b> Eli spots that the courier app's new API certificate, set up by Dee's team in November <b>outside the automatic renewal</b>, will expire in <b>three days</b>. <span class="hl-pink">Each one is handled quietly and told to nobody.</span> The certificate would have stopped every courier on Christmas Eve.</p>
+    problem="""  <p class="lead">Three things almost go wrong in December. On the <b>3rd</b> the database's log disk reaches <b>91 %</b>, and Bram clears it at 14:00. On the <b>10th</b> a deploy is <b>rolled back by its canary</b> before customers notice. On the <b>21st</b> Eli spots that the courier app's new API certificate, set up by Dee's team in November <b>outside the automatic renewal</b>, will expire in <b>three days</b>. <span class="hl-pink">Each one is handled quietly and told to nobody.</span> The certificate would have stopped every courier on Christmas Eve.</p>
   <ul>
     <li>Near misses look like non-events, so they're forgotten.</li>
     <li>The same gap (a certificate outside the renewal) can be anywhere else too.</li>
@@ -450,9 +450,9 @@ NEAR_MISSES = dict(
            ("Latent condition", "A hidden weakness waiting for the right moment (a cert outside renewal)."),
            ("Leading indicator", "A sign of risk before an incident (near misses, rising disk use).")],
     code=dict(file="#near-miss", note="December 2026 · 9 entries (3 shown)", plain=True, src="""
-03 Dec  DB log disk at 91 % (14:00)        caught: Pieter, on a routine look
+03 Dec  DB log disk at 91 % (14:00)        caught: Bram, on a routine look
         would have: database stops writing → checkout down
-        pattern? no alert below 95 %       → action: ticket alert at 80 % (Pieter)
+        pattern? no alert below 95 %       → action: ticket alert at 80 % (Bram)
 
 10 Dec  deploy core v431 rolled back        caught: canary, errors 3 % on 5 % of traffic
         would have: checkout errors for everyone for ~10 min
