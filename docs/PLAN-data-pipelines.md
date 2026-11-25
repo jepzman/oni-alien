@@ -75,9 +75,9 @@ serious variant, an operations story.
 | # | Deep dive | Builds on | Status |
 | --- | --- | --- | --- |
 | 12 | **From App Database to Warehouse** | Vol. 3 CDC, Upserts, Star Schema; Vol. 9 extract, loads, zones | written |
-| — | **History in the Warehouse** (SCD and point-in-time) | Vol. 3 history tables, bitemporal, star schema; Vol. 9 SCD | ready to write |
+| — | **History in the Warehouse** (SCD and point-in-time) | Vol. 3 history tables, bitemporal, star schema; Vol. 9 SCD | written (13) |
 | — | **Reruns and Backfills** (“rerun anything”) | Vol. 9 incremental extract, idempotent loads, late data | ready to write |
-| — | **One Number Everywhere** (the metrics layer: fan and chasm traps, grain, caching, row-level security) | Vol. 9 metrics layer, aggregates | ready to write |
+| — | **One Number Everywhere** (the metrics layer: fan and chasm traps, grain, caching, row-level security) | Vol. 9 metrics layer, aggregates | written (14) |
 | — | **Data Quality and Pipeline Observability** | Vol. 9 WAP, contracts, quality checks; pairs with Observability & SLOs | ready to write |
 | — | **Streaming Analytics** (windows, watermarks, exactly-once sinks) | Vol. 9 lambda vs kappa, late data | ready to write |
 | — | **Lakehouse Tables** (Iceberg and Delta internals) | reserve note on open table formats | optional |
@@ -88,17 +88,21 @@ and a note has room for one “go deeper” link.
 
 ## 4. Cheat sheet
 
-**Dimensional Modelling & Warehouse SQL** (4 pages, `content/cheatsheets/warehouse.py`): the grain → facts →
-dimensions checklist with a bus-matrix figure; SCD types side by side; load patterns (append, partition
-overwrite, MERGE with a newer-only guard, dedupe by key); dbt incremental and snapshot configs; reconciliation queries.
+**Data Warehouse** (written 25 Nov, `content/cheatsheets/warehouse.py`, `/cheatsheets/warehouse/`), four cards: modelling
+(design steps, fact table types, grain, additivity, bus matrix, keys, dim_date, naming), history (SCD types, type 2
+columns and load, point-in-time lookup, three pasts, traps), loading (load patterns, latest row per key, MERGE newer-only,
+watermark extract, late data, three clocks, dbt incremental, backfill) and trust & serving (reconciliation, data tests,
+drill across, aggregates, metrics, row-level security, freshness). Linked from nine Vol. 9 notes and the star schema
+note (`CARD_LINKS`).
 
 ## 5. Order of work
 
 1. Deep dive 12 and Vol. 9 (done, one PR). Owner reviews on a phone and on desktop.
-2. The cheat sheet.
-4. Deep dives: History in the Warehouse, then Reruns and Backfills, then One Number Everywhere.
+2. The cheat sheet and deep dive 13, History in the Warehouse (done, 25 Nov).
+3. Deep dive 14, One Number Everywhere (done, 25 Nov), ahead of Reruns and Backfills, which overlaps deep dive 12
+   and whose notes already link there.
+4. Next deep dives: Data Quality and Pipeline Observability, then Streaming Analytics.
 
 ## 6. Next
 
 - Going-deeper chapters for Vol. 9 (in `content/pipelines/deeper.py`) once the deep dives above exist.
-- Card links from Vol. 9 notes to the warehouse cheat sheet (`CARD_LINKS`) when it is written.

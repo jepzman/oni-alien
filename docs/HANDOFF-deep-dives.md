@@ -7,9 +7,14 @@ the first for the security volume), 08 Replication, Failover & Leader Election (
 (`/deep-dives/sharding-partitioning/`), 10 Indexes & Query Plans (`/deep-dives/indexes-query-plans/`) and 11 Rendering on the Web
 (`/deep-dives/rendering-web/`, the first for the frontend volume) and, on 25 Nov, 12 From App Database to Warehouse
 (`/deep-dives/app-db-to-warehouse/`: CDC, upserts and star schema joined into one pipeline; the first of a data-engineering
-run planned in `docs/PLAN-data-pipelines.md`).
+run planned in `docs/PLAN-data-pipelines.md`), and 13 History in the Warehouse (`/deep-dives/history-in-the-warehouse/`:
+history tables, bitemporal data, SCD and late data; three pasts: as it was, as it is, as it was reported), and 14 One Number
+Everywhere (`/deep-dives/one-number-everywhere/`: conformed dimensions, wide tables, metrics layer and aggregates; fan and
+chasm traps, defining a metric, caching, metric tests and governance). It was written before Reruns and Backfills because
+deep dive 12 already covers reruns and holds those notes' “go deeper” links. The landing page spells counts up to twenty
+(`NUMBER_WORDS`).
 Remaining candidates (section 2, and in the future log):
-Observability & SLOs, Multitenancy, History in the Warehouse (and the later data-engineering dives in `docs/PLAN-data-pipelines.md`); also suggested on 19 Nov: A Test Suite You Trust
+Observability & SLOs, Multitenancy (and the later data-engineering dives in `docs/PLAN-data-pipelines.md`); also suggested on 19 Nov: A Test Suite You Trust
 (flaky tests, deterministic tests, parallel and selective runs) for the testing volume.
 
 The landing page was reworked in the same release: the author's note is on top and covers all four formats,
