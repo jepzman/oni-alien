@@ -55,7 +55,7 @@ vertical slices, functional core, four classic GoF notes and a museum of retired
 Also fixed: a related note with the same slug in another volume was silently not linked (`related_items`); three older
 links now work (Ana's Strangler Fig ↔ Vol. 1, Sanne's Risk Register → Ana's).
 
-**Series 3 · Deep dives** started on 14 Nov 2026: Season 1 is written (`/deep-dives/<slug>/`), and Season 2 has begun with Sign-in, Tokens & Sessions, Replication, Failover & Leader Election, Sharding & Partitioning, Indexes & Query Plans and Rendering on the Web. Season 1: Saga, Reliable Messaging, The Resilience Stack, Event Sourcing & CQRS
+**Series 3 · Deep dives** started on 14 Nov 2026: Season 1 is written (`/deep-dives/<slug>/`), and Season 2 has begun with Sign-in, Tokens & Sessions, Replication, Failover & Leader Election, Sharding & Partitioning, Indexes & Query Plans, Rendering on the Web and From App Database to Warehouse (plan for the data-engineering run, and the planned Vol. 10 · Data Pipelines & Analytics: `docs/PLAN-data-pipelines.md`). Season 1: Saga, Reliable Messaging, The Resilience Stack, Event Sourcing & CQRS
 Caching and Zero-Downtime Change, all deployed. Working branch `claude/design-patterns-deep-dive-ggw0on`. Read `docs/HANDOFF-deep-dives.md` for the plan and format.
 
 ## 1b. In progress: improving the earlier books (2026-11-16)

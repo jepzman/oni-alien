@@ -1135,6 +1135,7 @@ JOURNALS = [
 # Planned journals and other work, shown on the landing page.
 PLANNED = [
     (9, "AI App Patterns", "Retrieval-augmented generation, agents and tools, evaluation, guardrails and cost-aware LLM apps."),
+    (10, "Data Pipelines &amp; Analytics", "ETL and ELT, incremental loads, slowly changing dimensions, data contracts, the metrics layer and reporting."),
 ]
 # Planned volumes of Series 2, book 1 (see docs/HANDOFF-solution-architect.md).
 PLANNED_2 = [
@@ -1147,9 +1148,9 @@ PLANNED_PROJECT = [
 FUTURE_LOG = [
     ("Dec 2026", [("•", "Going-deeper chapters for Vols. 7 and 8: aggregates, bounded contexts, ports &amp; adapters"), ("•", "Search across every journal")]),
     ("Jan 2027", [("•", "One-page printable cheat sheet per collection")]),
-    ("Mar 2027", [("•", "Cheat sheets for Book 3: PMBOK 8 on one page, earned value, critical path"), ("•", "Vol. 9 · AI App Patterns")]),
+    ("Mar 2027", [("•", "Cheat sheets for Book 3: PMBOK 8 on one page, earned value, critical path"), ("•", "Vol. 9 · AI App Patterns"), ("•", "Vol. 10 · Data Pipelines &amp; Analytics, and a dimensional modelling cheat sheet")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations")]),
-    ("Mid 2027", [("↓", "More deep dives: Observability &amp; SLOs, Multitenancy"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
+    ("Mid 2027", [("↓", "More deep dives: Observability &amp; SLOs, Multitenancy, History in the Warehouse"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
     ("Someday", [("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
 
@@ -2138,7 +2139,7 @@ def render_landing(sheets=(), dives=(), darkside=None):
 
 # ---------------------------------------------------------------- deep dives (series 3)
 # One long chaptered page per topic: content/deep-dives/<name>.py, rendered by scripts/dive.py.
-DIVES = ["saga", "reliable_messaging", "resilience_stack", "event_sourcing_cqrs", "caching", "zero_downtime_change", "sign_in", "replication_failover", "sharding_partitioning", "indexes_query_plans", "rendering_web"]
+DIVES = ["saga", "reliable_messaging", "resilience_stack", "event_sourcing_cqrs", "caching", "zero_downtime_change", "sign_in", "replication_failover", "sharding_partitioning", "indexes_query_plans", "rendering_web", "app_db_to_warehouse"]
 DEEPER = {}   # (journal key, note slug) -> (dive slug, title); filled by load_dive
 
 
