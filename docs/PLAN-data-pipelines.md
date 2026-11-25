@@ -78,7 +78,7 @@ serious variant, an operations story.
 | — | **History in the Warehouse** (SCD and point-in-time) | Vol. 3 history tables, bitemporal, star schema; Vol. 9 SCD | written (13) |
 | — | **Reruns and Backfills** (“rerun anything”) | Vol. 9 incremental extract, idempotent loads, late data | ready to write |
 | — | **One Number Everywhere** (the metrics layer: fan and chasm traps, grain, caching, row-level security) | Vol. 9 metrics layer, aggregates | written (14) |
-| — | **Data Quality and Pipeline Observability** | Vol. 9 WAP, contracts, quality checks; pairs with Observability & SLOs | ready to write |
+| — | **Data Quality and Pipeline Observability** | Vol. 9 WAP, contracts, quality checks; pairs with Observability & SLOs | written (15) |
 | — | **Streaming Analytics** (windows, watermarks, exactly-once sinks) | Vol. 9 lambda vs kappa, late data | ready to write |
 | — | **Lakehouse Tables** (Iceberg and Delta internals) | reserve note on open table formats | optional |
 
@@ -101,7 +101,8 @@ note (`CARD_LINKS`).
 2. The cheat sheet and deep dive 13, History in the Warehouse (done, 25 Nov).
 3. Deep dive 14, One Number Everywhere (done, 25 Nov), ahead of Reruns and Backfills, which overlaps deep dive 12
    and whose notes already link there.
-4. Next deep dives: Data Quality and Pipeline Observability, then Streaming Analytics.
+4. Deep dive 15, Data Quality and Pipeline Observability (done, 25 Nov).
+5. Next deep dives: Streaming Analytics, then Reruns and Backfills or Lakehouse Tables.
 
 ## 6. Next
 
