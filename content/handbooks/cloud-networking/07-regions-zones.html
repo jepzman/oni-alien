@@ -1,0 +1,334 @@
+<!-- Handbook 1 · Networking in the Cloud · Chapter 7. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part II · Your network in the cloud</p>
+  <p class="chno">7</p>
+  <h1>Regions, zones and the shape of a cloud network</h1>
+  <p class="promise">Before you draw a single subnet, it helps to know what you're drawing on. A cloud network is software laid over buildings full of real servers and cables, grouped into zones and regions that fail, cost and perform in predictable ways. This chapter explains that physical shape, and the few decisions it forces on every network you build.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain regions, availability zones and edge locations, and why they exist.</li>
+      <li>Choose a region with latency, law, services and price in mind.</li>
+      <li>Explain how a virtual network runs on the provider's physical one.</li>
+      <li>Estimate latency and cost when traffic crosses zones or regions.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Packets, encapsulation and latency (<a href="#ch1">Chapter 1</a>).</li>
+      <li>Routing (<a href="#ch4">Chapter 4</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>15 minutes, AWS CLI, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 7.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Marco, Larder's CFO, goes through the cloud bill every month. One line has grown from almost nothing to about €700 a month: <em>Data Transfer, regional</em>. Larder sends no more data to customers than before, and all its servers are in Frankfurt. “What are we transferring, and to where?” he asks Eli.</p>
+  <p>The answer is in the gaps between buildings. Section 7.3 explains it.</p>
+</aside>
+
+<!-- ======================================================== 7.1 -->
+<h2 class="sec" id="s7-1"><span class="n">7.1</span>The big picture</h2>
+
+<p class="lead">A cloud provider's infrastructure is arranged in three levels. A <span class="term">region</span> is a geographic area, such as Frankfurt or Ireland, completely separate from other regions. Each region contains several <span class="term">availability zones</span> (AZs): groups of data centres with their own power, cooling and network, far enough apart that a fire, flood or power cut normally hits only one, and close enough to be joined by fast private fibre. Around the world, smaller <span class="term">edge locations</span> sit close to users and run services like CDNs and DNS.</p>
+
+<figure class="wide" id="fig7-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 300" role="img" aria-labelledby="fig7-1-t fig7-1-d">
+      <title id="fig7-1-t">A region, its zones, and a VPC on top</title>
+      <desc id="fig7-1-d">The Frankfurt region contains three availability zones, a, b and c, each made of one or more data centres. The zones are connected to each other by private fibre with round trips of about one to two milliseconds. Your VPC is a layer of software spanning all three zones. Outside the region, edge locations sit close to users, and the provider's backbone connects to other regions.</desc>
+      <rect class="region" x="12" y="40" width="560" height="248" rx="8"/>
+      <text class="t-small" x="26" y="60">Region eu-central-1 (Frankfurt)</text>
+      <rect class="vpc" x="28" y="72" width="528" height="34" rx="6"/>
+      <text class="t-label t-accent" x="292" y="94" text-anchor="middle">your VPC: software, spans every zone in the region</text>
+      <g>
+        <rect class="az" x="28" y="122" width="160" height="150" rx="6"/>
+        <text class="t-label" x="108" y="144" text-anchor="middle">zone a</text>
+        <rect class="priv" x="44" y="156" width="58" height="44" rx="3"/><rect class="priv" x="114" y="156" width="58" height="44" rx="3"/>
+        <rect class="priv" x="79" y="210" width="58" height="44" rx="3"/>
+        <text class="t-small" x="108" y="266" text-anchor="middle">data centres</text>
+      </g>
+      <g>
+        <rect class="az" x="212" y="122" width="160" height="150" rx="6"/>
+        <text class="t-label" x="292" y="144" text-anchor="middle">zone b</text>
+        <rect class="priv" x="228" y="156" width="58" height="44" rx="3"/><rect class="priv" x="298" y="156" width="58" height="44" rx="3"/>
+        <text class="t-small" x="292" y="266" text-anchor="middle">data centres</text>
+      </g>
+      <g>
+        <rect class="az" x="396" y="122" width="160" height="150" rx="6"/>
+        <text class="t-label" x="476" y="144" text-anchor="middle">zone c</text>
+        <rect class="priv" x="412" y="156" width="58" height="44" rx="3"/><rect class="priv" x="482" y="156" width="58" height="44" rx="3"/>
+        <rect class="priv" x="447" y="210" width="58" height="44" rx="3"/>
+        <text class="t-small" x="476" y="266" text-anchor="middle">data centres</text>
+      </g>
+      <path class="wire-accent" d="M188 226 H212 M372 226 H396"/>
+      <path class="wire-accent" d="M108 272 V282 H476 V272"/>
+      <text class="t-small t-accent" x="292" y="232" text-anchor="middle">1–2 ms between zones</text>
+      <rect class="ext" x="610" y="40" width="138" height="44" rx="22"/>
+      <text class="t-label" x="679" y="67" text-anchor="middle">edge locations</text>
+      <rect class="ext" x="610" y="130" width="138" height="44" rx="22"/>
+      <text class="t-label" x="679" y="157" text-anchor="middle">other regions</text>
+      <path class="wire-dash" d="M572 62 H606 M572 152 H606"/>
+      <text class="t-small" x="679" y="104" text-anchor="middle">CDN, DNS, near users</text>
+      <text class="t-small" x="679" y="194" text-anchor="middle">over the provider's</text>
+      <text class="t-small" x="679" y="210" text-anchor="middle">private backbone</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 7.1</b> The physical shape under a cloud network. The VPC is the only part you configure; the zones and the fibre between them decide how it fails, how fast it is and what it costs.</figcaption>
+</figure>
+
+<p>Your VPC is software running across all of this. That has two consequences you'll feel in every design: you get to treat several buildings as one network, and you inherit the physics and the pricing of the gaps between them.</p>
+
+<!-- ======================================================== 7.2 -->
+<h2 class="sec" id="s7-2"><span class="n">7.2</span>Choosing a region</h2>
+
+<p>Your region choice is close to permanent: data, addresses and connections all live there. Weigh four things:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 7.1 · What decides the region</caption>
+    <thead><tr><th>Factor</th><th>Question</th><th>For Larder</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Law and data residency</strong></td><td>Where may this data be stored and processed?</td><td>Customer data must stay in the EU (GDPR, and a requirement from Lena, the DPO).</td></tr>
+      <tr><td><strong>Latency to users</strong></td><td>How many milliseconds from the people and systems you serve?</td><td>Amsterdam, Rotterdam, Antwerp: about 8–12 ms from Frankfurt.</td></tr>
+      <tr><td><strong>Services</strong></td><td>Does the region have every service and instance type you need?</td><td>Frankfurt has everything Larder uses. Newer services arrive in a few regions first.</td></tr>
+      <tr><td><strong>Price</strong></td><td>Prices differ by region, sometimes by 10–20%.</td><td>Ireland is slightly cheaper, but Frankfurt was chosen first and moving isn't worth it.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<aside class="side"><b>Region names</b>Frankfurt is <code>eu-central-1</code> on AWS, <em>Germany West Central</em> on Azure and <code>europe-west3</code> on Google Cloud. Names are stable; use them in code, not city names.</aside>
+
+<p>Regions are deliberately independent: a problem in one shouldn't spread to another, and most services don't share anything across regions unless you ask. That independence is why using a <strong>second region</strong> for disaster recovery is a real architectural decision, with its own networking (<a href="#ch25">Chapter 25</a>), and not a checkbox.</p>
+
+<!-- ======================================================== 7.3 -->
+<h2 class="sec" id="s7-3"><span class="n">7.3</span>Availability zones</h2>
+
+<p>Zones are the main tool for staying up. Anything that runs in only one zone stops when that zone has a problem, and zone-level problems (a power failure, a cooling fault, a network device that misbehaves) happen every year somewhere. So production systems run in at least two zones, usually three, and the network design follows: subnets per zone, NAT gateways per zone, load balancers across zones (<a href="#ch8">Chapter 8</a>).</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">A zone is a failure domain. Design so that losing any one zone leaves a working system, with enough capacity in the others.</p>
+</div>
+
+<h3>Zone names are per account</h3>
+<p>On AWS, <code>eu-central-1a</code> in your account isn't necessarily the same building as <code>eu-central-1a</code> in another account; names are shuffled per account so that everyone doesn't pile into “a”. The stable identifier is the <strong>zone ID</strong>, such as <code>euc1-az2</code>. When you connect your network to a partner's, or line up endpoints across accounts, compare zone IDs, not names.</p>
+
+<h3>Crossing zones costs time and money</h3>
+<p>A round trip between zones takes about 1–2 ms, compared with well under 1 ms inside a zone. That's small for one call and adds up for chatty ones: a page that makes 40 sequential database queries across zones spends 40–80 ms just travelling.</p>
+<p>It also costs money. On AWS, data between zones in the same region is charged in <strong>each direction</strong>, at about $0.01 per GB each way at the time of writing. Data within one zone, using private addresses, is free.</p>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Larder's Kafka cluster has three brokers, one per zone, and every consumer read from whichever broker led each partition, usually in another zone. Each order event was written once, copied to two other zones for safety, and then read by six services, mostly across zones again. Add a cache in zone a that every zone called, and the bill reached about 35 TB of cross-zone traffic a month.</p>
+  <p>Eli made two changes: consumers now read from a replica in their own zone (Kafka's <em>follower fetching</em>), and each zone got its own cache node. Replication between zones stayed, because that's the point of having three. The line on Marco's bill fell by about two thirds.</p>
+</aside>
+
+<p>The lesson generalises. Spread across zones for resilience, but keep the <strong>high-volume, chatty</strong> paths inside a zone where you can: zone-aware load balancing, same-zone replicas and caches, and one NAT gateway per zone (<a href="#ch8">Chapter 8</a>). <a href="#ch23">Chapter 23</a> covers network costs in full.</p>
+
+<!-- ======================================================== 7.4 -->
+<h2 class="sec" id="s7-4"><span class="n">7.4</span>The overlay: how a VPC runs on real hardware</h2>
+
+<p>Your VPC's addresses don't exist on the provider's physical network. Each server in a data centre has the provider's own address; your virtual machines are just tenants on it. When your app server at <code>10.20.17.8</code> sends a packet to the database at <code>10.20.64.12</code>, the provider's virtualisation layer (Nitro, on AWS) looks up which physical host the database is on, <strong>wraps</strong> your packet in an outer packet addressed to that host, and sends it across the physical network. The other host unwraps it and delivers it. This is an <span class="term">overlay network</span>, and the physical network under it is the <span class="term">underlay</span>.</p>
+
+<figure class="wide" id="fig7-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 170" role="img" aria-labelledby="fig7-2-t fig7-2-d">
+      <title id="fig7-2-t">Your packet inside the provider's packet</title>
+      <desc id="fig7-2-d">Your packet, from 10.20.17.8 to 10.20.64.12, is carried inside an outer packet between two physical hosts with the provider's own addresses, tagged with your VPC's identifier. Your VPC never sees the outer header.</desc>
+      <rect class="priv" x="20" y="40" width="720" height="76" rx="5"/>
+      <text class="t-small" x="34" y="32">outer packet (provider's network, invisible to you)</text>
+      <text class="t-label" x="34" y="70">physical host A → host B</text>
+      <text class="t-small" x="34" y="92">+ your VPC's ID</text>
+      <rect class="pub" x="250" y="50" width="476" height="56" rx="4"/>
+      <text class="t-small t-accent" x="262" y="68">your packet</text>
+      <text class="t-mono" x="262" y="92">src 10.20.17.8:51544  →  dst 10.20.64.12:5432  ·  data</text>
+      <text class="t-small" x="20" y="140">Encapsulation (Chapter 1) used once more: the provider's network routes the outer packet; your route tables decide the inner one.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 7.2</b> The overlay. The tag with your VPC's identifier is how two customers can both use <code>10.20.0.0/16</code> on the same hardware without ever seeing each other's packets.</figcaption>
+</figure>
+
+<p>The overlay explains several things that surprise people coming from physical networks:</p>
+<ul>
+  <li><strong>No broadcast or multicast</strong> by default. The virtualisation layer delivers each packet to a known host, so there is nothing to broadcast to. ARP requests are answered by the hypervisor (<a href="#ch4">Chapter 4</a>). AWS offers multicast only through Transit Gateway, when you specifically turn it on.</li>
+  <li><strong>You can't sniff other servers' traffic</strong>, even in the same subnet. Each interface only receives packets addressed to it. To inspect traffic you use mirroring features or flow logs (<a href="#ch22">Chapter 22</a>).</li>
+  <li><strong>Firewalls are enforced at every interface.</strong> Security groups run in the virtualisation layer next to each instance, not in a box in the middle (<a href="#ch9">Chapter 9</a>).</li>
+  <li><strong>Packet size limits vary by path.</strong> Inside a VPC, AWS allows 9,001-byte <em>jumbo</em> frames; traffic leaving through internet, VPN or some peering paths is limited to 1,500 bytes or less (<a href="#ch13">Chapter 13</a>).</li>
+  <li><strong>Bandwidth belongs to the instance.</strong> Each instance size has a network allowance, often “up to” a burst figure, plus limits on packets per second and tracked connections. A small instance can be network-limited long before its CPU is busy.</li>
+</ul>
+
+<!-- ======================================================== 7.5 -->
+<h2 class="sec" id="s7-5"><span class="n">7.5</span>Who is responsible for what</h2>
+
+<p>The provider and you split the work of keeping a network secure and running. Knowing the line tells you which problems are yours to fix.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 7.2 · Shared responsibility for networking</caption>
+    <thead><tr><th>The provider</th><th>You</th></tr></thead>
+    <tbody>
+      <tr><td>Buildings, cables, switches, routers, the backbone between regions</td><td>The address plan and how VPCs are divided into subnets</td></tr>
+      <tr><td>Isolating customers from each other (the overlay)</td><td>Routes: what can reach the internet, other VPCs, your offices</td></tr>
+      <tr><td>Keeping managed gateways and load balancers available and scaled</td><td>Firewall rules: security groups, network ACLs, firewall policies</td></tr>
+      <tr><td>Baseline protection against large network attacks (DDoS)</td><td>What you expose publicly, and the WAF and extra DDoS protection in front of it</td></tr>
+      <tr><td>Encrypting traffic between its own facilities</td><td>Encryption of your traffic end to end (TLS, <a href="#ch6">Chapter 6</a>)</td></tr>
+      <tr><td>Publishing service health and outages</td><td>Designing for zone and region failure</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 7.6 -->
+<h2 class="sec" id="s7-6"><span class="n">7.6</span>Worked example: a latency budget for checkout</h2>
+
+<p>One of Larder's requirements is that checkout answers within 800 ms at the 95th percentile, even at five times normal load. Ana, the architect, asks Eli how much of that the network uses. Eli lists every network hop in one checkout request:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 7.3 · Network time in one checkout request</caption>
+    <thead><tr><th>Step</th><th class="num">Trips</th><th class="num">Per trip</th><th class="num">Total</th></tr></thead>
+    <tbody>
+      <tr><td>Customer to load balancer (TCP + TLS 1.3 + request), Rotterdam–Frankfurt</td><td class="num">3</td><td class="num">11 ms</td><td class="num">33 ms</td></tr>
+      <tr><td>Load balancer to app server (same region, often another zone)</td><td class="num">1</td><td class="num">1 ms</td><td class="num">1 ms</td></tr>
+      <tr><td>App to Postgres primary, sequential queries, cross-zone for two thirds of servers</td><td class="num">25</td><td class="num">1.5 ms</td><td class="num">38 ms</td></tr>
+      <tr><td>App to payment provider over the internet (connection reused)</td><td class="num">1</td><td class="num">30 ms</td><td class="num">30 ms</td></tr>
+      <tr><td>App to Kafka (publish order event)</td><td class="num">1</td><td class="num">2 ms</td><td class="num">2 ms</td></tr>
+      <tr><td colspan="3"><strong>Network total</strong></td><td class="num"><strong>≈ 104 ms</strong></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>The network uses about an eighth of the budget, which is fine. Two lines stand out as the ones worth working on if checkout gets slow: the 25 sequential database queries, where batching would save more than moving servers, and the payment call, which is outside Larder's control but could be cut by a whole TLS handshake if the connection pool weren't reused, as Cho found in <a href="#ch3">Chapter 3</a>.</p>
+
+<!-- ======================================================== 7.7 -->
+<h2 class="sec" id="s7-7"><span class="n">7.7</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 7.4 · Regions and zones at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Zones per region</td><td>3 or more in almost every region</td><td>3 in regions with availability zones; some regions have none</td><td>usually 3</td></tr>
+      <tr><td>Zone naming</td><td>names shuffled per account; stable zone IDs</td><td>logical zones 1–3, also mapped per subscription</td><td><code>europe-west3-a</code>, the same for everyone</td></tr>
+      <tr><td>Network scope</td><td>VPC per region</td><td>VNet per region</td><td>VPC network is global</td></tr>
+      <tr><td>Region pairs</td><td>none built in</td><td>many regions have a paired region for platform updates and recovery</td><td>none built in</td></tr>
+      <tr><td>Cross-zone data</td><td>charged per GB each way</td><td>charged per GB between zones</td><td>charged per GB between zones</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Google Cloud's global VPC is the biggest structural difference: one network can hold subnets in many regions, with routing between them built in. On AWS and Azure, connecting regions is something you build explicitly (<a href="#ch11">Chapter 11</a>).</p>
+
+<!-- ======================================================== 7.8 -->
+<h2 class="sec" id="s7-8"><span class="n">7.8</span>Lab: map your zones and measure regions</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 7 · Zones, IDs and the speed of light</p>
+  <p><strong>You'll</strong> list zones and their IDs, and measure round trips from your computer to several regions. <strong>You need</strong> the AWS CLI logged in to any account (Appendix C) and <code>curl</code>. <strong>Cost:</strong> nothing; these calls only read information.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>List the zones.</strong>
+<pre><code>aws ec2 describe-availability-zones --region eu-central-1 \
+  --query 'AvailabilityZones[].[ZoneName,ZoneId,State]' --output table</code></pre>
+  Note which ID your <code>eu-central-1a</code> maps to. If a colleague runs the same command in another account, compare.</li>
+  <li><strong>List the regions</strong> your account can use: <code>aws ec2 describe-regions --query 'Regions[].RegionName' --output text</code>.</li>
+  <li><strong>Measure distance.</strong> DynamoDB has a public endpoint in each region. Measure the TCP connect time, which is one round trip, to a few:
+<pre><code>for r in eu-central-1 eu-west-1 us-east-1 ap-southeast-2; do
+  printf '%-16s' $r
+  curl -s -o /dev/null -w '%{time_connect}s\n' https://dynamodb.$r.amazonaws.com
+done</code></pre>
+  Put the results next to Table 1.2 in <a href="#ch1">Chapter 1</a>. Which region is closest to you?</li>
+  <li><strong>Do the latency budget.</strong> Using your own numbers, how long would four round trips take to each region? Which regions could serve an 800 ms checkout from where you are?</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Look up your provider's current price for data transfer between zones, and estimate the monthly cost of a service that sends 2 MB per request, 50 requests per second, to a database in another zone.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s7-9"><span class="n">7.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Everything in one zone</td><td>One zone's bad day takes the whole service down.</td><td>At least two zones, ideally three, with capacity to lose one.</td></tr>
+      <tr><td>Ignoring cross-zone traffic</td><td>A growing, unexplained transfer line on the bill; extra latency.</td><td>Keep chatty, high-volume paths zone-local.</td></tr>
+      <tr><td>Matching zones by name across accounts</td><td>“Same zone” endpoints that are in different buildings.</td><td>Use zone IDs.</td></tr>
+      <tr><td>Choosing a region by price alone</td><td>Latency, residency or missing services hurt later; moving is expensive.</td><td>Law, latency and services first, then price.</td></tr>
+      <tr><td>Expecting broadcast, multicast or sniffing to work</td><td>Clustering software and monitoring tools fail in the VPC.</td><td>Use cloud-native discovery, flow logs and traffic mirroring.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum7">
+  <h2 class="sec" id="sum7"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>A <strong>region</strong> is a separate geographic area; it holds several <strong>availability zones</strong>, each one or more independent data centres. <strong>Edge locations</strong> sit near users.</li>
+    <li>Choose a region for law, latency and services first, then price.</li>
+    <li>Zones are <strong>failure domains</strong>: run in two or three, and keep enough capacity to lose one.</li>
+    <li>Crossing zones adds 1–2 ms and is charged per GB in each direction. Keep chatty paths zone-local.</li>
+    <li>A VPC is an <strong>overlay</strong> on the provider's underlay: no broadcast, no sniffing, firewalls at every interface, bandwidth per instance.</li>
+    <li>The provider runs the hardware and isolation; you own addresses, routes, firewalls, exposure and resilience.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Region</dt><dd>A separate geographic area with its own set of zones and services.</dd>
+    <dt>Availability zone</dt><dd>One or more data centres with independent power, cooling and network, inside a region.</dd>
+    <dt>Zone ID</dt><dd>AWS's stable identifier for a zone, the same in every account.</dd>
+    <dt>Edge location</dt><dd>A small site near users, running CDN, DNS and similar services.</dd>
+    <dt>Failure domain</dt><dd>A part of the system that can fail as a unit.</dd>
+    <dt>Overlay network</dt><dd>A virtual network carried inside another network's packets.</dd>
+    <dt>Underlay</dt><dd>The provider's physical network that carries the overlay.</dd>
+    <dt>Jumbo frame</dt><dd>A packet larger than 1,500 bytes; up to 9,001 inside an AWS VPC.</dd>
+    <dt>Shared responsibility</dt><dd>The split of security and operations work between provider and customer.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>What's the difference between a region and an availability zone, and which one is a VPC tied to on AWS? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>A region is a separate geographic area; a zone is an independent group of data centres inside it. An AWS VPC belongs to one region and spans all its zones; each subnet sits in one zone.</p></details>
+    </li>
+    <li>
+      <p>Two services exchange 50 TB a month, and they run in different zones. Roughly what does that cost on AWS, and what would you change? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>At about $0.01 per GB in each direction, 50 TB ≈ 50,000 GB, so roughly $500 for one direction and up to $1,000 if both sides are counted. Make the calls zone-local where possible: same-zone replicas or caches, zone-aware routing, or co-locating the two services in each zone.</p></details>
+    </li>
+    <li>
+      <p>A clustering tool that discovers peers by broadcast works in your data centre but not in a VPC. Why? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>A VPC is an overlay that delivers each packet to a specific host; there's no broadcast (and no multicast without Transit Gateway). Use the tool's cloud discovery option, such as tags, DNS or a registry.</p></details>
+    </li>
+    <li>
+      <p>You and a partner both deploy an endpoint “in <code>eu-central-1a</code>” to keep traffic in one zone. Traffic is still charged as cross-zone. Why? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Zone names are mapped per account, so your <code>1a</code> and the partner's <code>1a</code> can be different zones. Align on zone IDs such as <code>euc1-az2</code>.</p></details>
+    </li>
+    <li>
+      <p>Name three networking responsibilities that stay with you, not the provider. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Any three of: the address plan, route tables, firewall rules, what is exposed to the internet, encrypting your traffic end to end, and designing for zone or region failure.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/ram/latest/userguide/working-with-az-ids.html">Availability Zone IDs</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/reliability/availability-zones-overview">What are availability zones?</a></li>
+    <li>Google Cloud: <a href="https://cloud.google.com/compute/docs/regions-zones">Regions and zones</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="#ch6">6 · HTTP, TLS and certificates</a></div>
+  <div><span>Next</span><a href="#ch8">8 · Inside a VPC</a></div>
+</nav>
