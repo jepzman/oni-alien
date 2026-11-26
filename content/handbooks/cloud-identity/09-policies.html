@@ -1,0 +1,591 @@
+<!-- Handbook 2 · Identity and Access in the Cloud · Chapter 9. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part II · IAM on AWS</p>
+  <p class="chno">9</p>
+  <h1>Reading and writing IAM policies</h1>
+  <p class="promise">Almost everything you're allowed to do on AWS comes down to a few lines of JSON. Most people copy those lines from somewhere and hope. This chapter takes a policy apart field by field, so you can read any statement aloud as a plain sentence, write one that does exactly one job, and check it before it ships.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Read any IAM policy statement as a plain sentence: who may do what, to what, and when.</li>
+      <li>Write an identity policy scoped to one bucket prefix and one secret.</li>
+      <li>Narrow a policy with conditions, variables and tags.</li>
+      <li>Choose between AWS managed, customer managed and inline policies.</li>
+      <li>Validate a policy with IAM Access Analyzer before you attach it.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Principals, actions and resources (<a href="#ch1">Chapter 1</a>).</li>
+      <li>Least privilege and default deny (<a href="#ch6">Chapter 6</a>).</li>
+      <li>What a role is (<a href="#ch8">Chapter 8</a>). This chapter recaps the little it needs.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 50 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, AWS, well under $0.01</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 9.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>In November 2026, after the network work of Handbook 1, Eli, Larder's platform tech lead, audits who can do what in the production account. Most of what he finds can wait a week. One thing can't. Dispatch, the service that assigns couriers and plans the vans' routes, runs on the managed container service with a role whose only policy was copied from a blog post during the move in April:</p>
+<pre><code>{ <span class="s">"Effect"</span>: <span class="s">"Allow"</span>, <span class="s">"Action"</span>: <span class="s">"s3:*"</span>, <span class="s">"Resource"</span>: <span class="s">"*"</span> }</code></pre>
+  <p>Anyone who gets code running inside a Dispatch container can read, overwrite or delete every bucket in the account, including the nightly order exports. Dispatch actually needs three things. Section 9.9 writes the policy that gives it exactly those.</p>
+</aside>
+
+<!-- ======================================================== 9.1 -->
+<h2 class="sec" id="s9-1"><span class="n">9.1</span>What a policy is</h2>
+
+<p class="lead">An IAM <span class="term">policy</span> is a JSON document that allows or denies actions on AWS resources. Every request to AWS (an API call from the console, the CLI, an SDK or another AWS service) is checked against the policies that apply to it, and AWS answers <em>allow</em> or <em>deny</em> before anything else happens.</p>
+
+<p>Policies come in two main families, depending on what they're attached to:</p>
+<ul>
+  <li>An <span class="term">identity-based policy</span> is attached to a user, a group or a role, and says what <em>that identity</em> may do. “Dispatch's role may read objects under <code>config/</code>.” Most of this chapter is about these.</li>
+  <li>A <span class="term">resource-based policy</span> is attached to a resource, such as an S3 bucket, a KMS key or an SQS queue, and says <em>who</em> may use it. “This bucket may be read by the Dispatch role.” These matter most when access crosses accounts (<a href="#ch21">Chapter 21</a>).</li>
+</ul>
+
+<p>Both use the same grammar. Two rules decide what an unlucky combination of them means, and they're worth learning before anything else:</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Nothing is allowed until a statement allows it, and an explicit deny beats any allow.</p>
+</div>
+
+<p>There are more policy types (permission boundaries, session policies, and the organisation-wide guardrails called SCPs and RCPs), and the full order in which AWS combines them is the subject of <a href="#ch10">Chapter 10</a>. For now, one identity and its policies are enough.</p>
+
+<!-- ======================================================== 9.2 -->
+<h2 class="sec" id="s9-2"><span class="n">9.2</span>Anatomy of a statement</h2>
+
+<p>A policy is a <code>Version</code> and a list of <span class="term">statements</span>. Each statement is one rule. Here is the smallest useful policy, with one statement:</p>
+
+<p class="code-title"><span>read-config.json</span><span>identity-based policy</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [
+    {
+      <span class="k">"Sid"</span>: <span class="s">"ReadConfig"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+      <span class="k">"Action"</span>: <span class="s">"s3:GetObject"</span>,
+      <span class="k">"Resource"</span>: <span class="s">"arn:aws:s3:::larder-dispatch-prod/config/*"</span>,
+      <span class="k">"Condition"</span>: { <span class="k">"Bool"</span>: { <span class="s">"aws:SecureTransport"</span>: <span class="s">"true"</span> } }
+    }
+  ]
+}</code></pre>
+
+<figure class="wide" id="fig9-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 290" role="img" aria-labelledby="fig9-1-t fig9-1-d">
+      <title id="fig9-1-t">The fields of a policy statement and the question each one answers</title>
+      <desc id="fig9-1-d">A statement with five fields. Sid is a name for humans and is optional. Effect answers: allow or deny? Action answers: do what? Resource answers: to what? Condition answers: only when? and is optional. Resource-based policies add a sixth field, Principal, which answers: who? Read together, the statement says: allow getting objects under config/ in the bucket larder-dispatch-prod, but only over TLS.</desc>
+      <rect class="priv" x="12" y="14" width="470" height="180" rx="6"/>
+      <text class="t-mono" x="26" y="42">{</text>
+      <text class="t-mono" x="40" y="66">"Sid": "ReadConfig",</text>
+      <text class="t-mono" x="40" y="90">"Effect": "Allow",</text>
+      <text class="t-mono" x="40" y="114">"Action": "s3:GetObject",</text>
+      <text class="t-mono" x="40" y="138">"Resource": "arn:aws:s3:::larder-dispatch-prod/config/*",</text>
+      <text class="t-mono" x="40" y="162">"Condition": {"Bool": {"aws:SecureTransport": "true"}}</text>
+      <text class="t-mono" x="26" y="186">}</text>
+      <path class="wire-dash" d="M486 62 H512"/>
+      <path class="wire-accent" d="M486 86 H512"/>
+      <path class="wire-accent" d="M486 110 H512"/>
+      <path class="wire-accent" d="M486 134 H512"/>
+      <path class="wire-dash" d="M486 158 H512"/>
+      <text class="t-small" x="520" y="66">a name for humans (optional)</text>
+      <text class="t-label" x="520" y="90">allow or deny?</text>
+      <text class="t-label" x="520" y="114">do what?</text>
+      <text class="t-label" x="520" y="138">to what?</text>
+      <text class="t-label" x="520" y="162">only when? <tspan class="t-small">(optional)</tspan></text>
+      <text class="t-small" x="520" y="186">resource policies add Principal: who?</text>
+      <rect class="pub" x="12" y="214" width="736" height="62" rx="6"/>
+      <text class="t-small" x="28" y="236">Read it aloud:</text>
+      <text class="t-label" x="28" y="260">Allow s3:GetObject on objects under config/ in larder-dispatch-prod, only over TLS.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 9.1</b> A statement answers four questions, plus a fifth when it's a resource policy. If you can't read a statement as one plain sentence, it's doing too much.</figcaption>
+</figure>
+
+<p>Field by field:</p>
+<ul>
+  <li><strong><code>Version</code></strong> is the version of the policy <em>language</em>, not of your policy. Always write <code>"2012-10-17"</code>. The only older value, <code>"2008-10-17"</code>, doesn't understand policy variables (9.6), and leaving <code>Version</code> out means the old one.</li>
+  <li><strong><code>Sid</code></strong> (statement ID) is an optional label. Use it: <code>ReadConfig</code> tells the next reader why the statement exists, and it shows up in some tools' output.</li>
+  <li><strong><code>Effect</code></strong> is <code>Allow</code> or <code>Deny</code>.</li>
+  <li><strong><code>Action</code></strong> is one action or a list of them (9.3).</li>
+  <li><strong><code>Resource</code></strong> is one ARN or a list of them (9.4).</li>
+  <li><strong><code>Condition</code></strong> is optional and narrows when the statement applies (9.5).</li>
+  <li><strong><code>Principal</code></strong> appears only in resource-based policies and trust policies, because an identity policy's principal is whoever it's attached to.</li>
+</ul>
+
+<aside class="side"><b>Reading habit</b>Before you approve any policy change, read each statement aloud in the form “Allow / Deny <i>actions</i> on <i>resources</i>, when <i>conditions</i>.” Vague sentences (“allow everything on S3”) are the bugs.</aside>
+
+<p>When a policy has several statements, they are not checked in order. Every statement that matches the request counts, and the two rules from 9.1 combine them: any matching <code>Deny</code> wins; otherwise any matching <code>Allow</code> allows; otherwise the request is denied.</p>
+
+<!-- ======================================================== 9.3 -->
+<h2 class="sec" id="s9-3"><span class="n">9.3</span>Actions</h2>
+
+<p>An <span class="term">action</span> names one API operation, written <code>service:Operation</code>: <code>s3:GetObject</code>, <code>secretsmanager:GetSecretValue</code>, <code>ec2:StartInstances</code>. The prefix is the service's short name, and action names are case-insensitive (<code>s3:getobject</code> works, but nobody will thank you for it).</p>
+
+<p>You can use <code>*</code> and <code>?</code> as wildcards. <code>s3:Get*</code> matches every S3 action that starts with <code>Get</code>, and <code>s3:*</code> matches all of them. Wildcards look tidy, but they <strong>age badly</strong>: when AWS adds a new action whose name happens to match, your policy grants it without anyone reviewing it. <code>s3:Get*</code> already covers dozens of actions today, including reading bucket policies and object ACLs. Prefer listing exact actions; it's a few more lines and every one of them is a decision someone made.</p>
+
+<p>Where do the names come from? The <strong>Service Authorization Reference</strong> (linked in Going further) lists, for every service, each action, the resource types it accepts, and the condition keys it supports. Keep it open while you write policies. Two surprises it will show you:</p>
+<ul>
+  <li><strong>One API call can need several actions.</strong> Copying an object needs <code>s3:GetObject</code> on the source and <code>s3:PutObject</code> on the destination. Reading a secret encrypted with your own KMS key needs <code>secretsmanager:GetSecretValue</code> and <code>kms:Decrypt</code> (<a href="#ch18">Chapter 18</a>).</li>
+  <li><strong>Action names don't always match API names.</strong> The S3 API call <code>ListObjectsV2</code> is authorised by the action <code>s3:ListBucket</code>, and <code>HeadObject</code> by <code>s3:GetObject</code>.</li>
+</ul>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: <code>NotAction</code> with <code>Allow</code></p>
+  <p><code>NotAction</code> means “every action except these”. In an <code>Allow</code> statement, <code>"NotAction": "iam:*"</code> with <code>"Resource": "*"</code> grants every action in every other service, including all the ones AWS launches next year. It has a narrow legitimate use in <code>Deny</code> statements (“deny everything except these, outside the approved regions”), which you'll meet in <a href="#ch20">Chapter 20</a>. In an <code>Allow</code>, treat it as a bug.</p>
+</div>
+
+<!-- ======================================================== 9.4 -->
+<h2 class="sec" id="s9-4"><span class="n">9.4</span>Resources and ARNs</h2>
+
+<p>Every AWS resource has an <span class="term">Amazon Resource Name</span> (ARN), a string that identifies it uniquely across all of AWS. The <code>Resource</code> element lists the ARNs a statement applies to, with the same <code>*</code> and <code>?</code> wildcards as actions. Unlike actions, ARNs are case-sensitive.</p>
+
+<figure class="wide" id="fig9-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 200" role="img" aria-labelledby="fig9-2-t fig9-2-d">
+      <title id="fig9-2-t">The six parts of an ARN</title>
+      <desc id="fig9-2-d">Two ARNs split at their colons. The first, a Secrets Manager secret, has all six parts: the prefix arn, the partition aws, the service secretsmanager, the region eu-central-1, the account ID 111122223333, and the resource secret:dispatch/prod/maps-api-key-AbC123. The second, an S3 object path, has an empty region and an empty account, because S3 bucket names are global, and the resource larder-dispatch-prod/config/*.</desc>
+      <text class="t-small" x="11" y="24">A Secrets Manager secret: all six parts</text>
+      <rect class="node" x="11" y="34" width="40" height="30" rx="3"/><text class="t-mono" x="31" y="54" text-anchor="middle">arn</text>
+      <text class="t-mono" x="57" y="54" text-anchor="middle">:</text>
+      <rect class="node" x="63" y="34" width="40" height="30" rx="3"/><text class="t-mono" x="83" y="54" text-anchor="middle">aws</text>
+      <text class="t-mono" x="109" y="54" text-anchor="middle">:</text>
+      <rect class="node" x="115" y="34" width="112" height="30" rx="3"/><text class="t-mono" x="171" y="54" text-anchor="middle">secretsmanager</text>
+      <text class="t-mono" x="233" y="54" text-anchor="middle">:</text>
+      <rect class="node" x="239" y="34" width="98" height="30" rx="3"/><text class="t-mono" x="288" y="54" text-anchor="middle">eu-central-1</text>
+      <text class="t-mono" x="343" y="54" text-anchor="middle">:</text>
+      <rect class="node" x="349" y="34" width="98" height="30" rx="3"/><text class="t-mono" x="398" y="54" text-anchor="middle">111122223333</text>
+      <text class="t-mono" x="453" y="54" text-anchor="middle">:</text>
+      <rect class="pub" x="459" y="34" width="290" height="30" rx="3"/><text class="t-mono" x="604" y="54" text-anchor="middle">secret:dispatch/prod/maps-api-key-AbC123</text>
+      <text class="t-small" x="31" y="84" text-anchor="middle">prefix</text>
+      <text class="t-small" x="83" y="84" text-anchor="middle">partition</text>
+      <text class="t-small" x="171" y="84" text-anchor="middle">service</text>
+      <text class="t-small" x="288" y="84" text-anchor="middle">region</text>
+      <text class="t-small" x="398" y="84" text-anchor="middle">account ID</text>
+      <text class="t-small" x="604" y="84" text-anchor="middle">resource: type, then name</text>
+      <text class="t-small" x="11" y="122">An S3 object path: no region, no account</text>
+      <rect class="node" x="11" y="132" width="40" height="30" rx="3"/><text class="t-mono" x="31" y="152" text-anchor="middle">arn</text>
+      <text class="t-mono" x="57" y="152" text-anchor="middle">:</text>
+      <rect class="node" x="63" y="132" width="40" height="30" rx="3"/><text class="t-mono" x="83" y="152" text-anchor="middle">aws</text>
+      <text class="t-mono" x="109" y="152" text-anchor="middle">:</text>
+      <rect class="node" x="115" y="132" width="40" height="30" rx="3"/><text class="t-mono" x="135" y="152" text-anchor="middle">s3</text>
+      <text class="t-mono" x="161" y="152" text-anchor="middle">:</text>
+      <rect class="wire-dash" x="167" y="132" width="40" height="30" rx="3"/>
+      <text class="t-mono" x="213" y="152" text-anchor="middle">:</text>
+      <rect class="wire-dash" x="219" y="132" width="40" height="30" rx="3"/>
+      <text class="t-mono" x="265" y="152" text-anchor="middle">:</text>
+      <rect class="pub" x="271" y="132" width="214" height="30" rx="3"/><text class="t-mono" x="378" y="152" text-anchor="middle">larder-dispatch-prod/config/*</text>
+      <text class="t-small" x="213" y="182" text-anchor="middle">empty: bucket names are global</text>
+      <text class="t-small" x="378" y="182" text-anchor="middle">bucket / object key</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 9.2</b> An ARN is six fields separated by colons. Which fields are filled in, and what the resource part looks like, depends on the service.</figcaption>
+</figure>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 9.1 · Six ARNs taken apart</caption>
+    <thead><tr><th>ARN</th><th>What it names</th><th>Notice</th></tr></thead>
+    <tbody>
+      <tr><td><code>arn:aws:s3:::larder-dispatch-prod</code></td><td>a bucket</td><td>no region or account</td></tr>
+      <tr><td><code>arn:aws:s3:::larder-dispatch-prod/config/*</code></td><td>every object under <code>config/</code></td><td>the bucket is a different resource from its objects</td></tr>
+      <tr><td><code>arn:aws:iam::111122223333:role/dispatch-task</code></td><td>an IAM role</td><td>IAM is global: no region</td></tr>
+      <tr><td><code>arn:aws:secretsmanager:eu-central-1:111122223333:secret:dispatch/prod/maps-api-key-??????</code></td><td>one secret</td><td>AWS adds six random characters to every secret's name; match them with <code>??????</code></td></tr>
+      <tr><td><code>arn:aws:dynamodb:eu-central-1:111122223333:table/slots</code></td><td>a DynamoDB table</td><td>its indexes are <code>table/slots/index/*</code></td></tr>
+      <tr><td><code>arn:aws:ecs:eu-central-1:111122223333:service/prod/dispatch</code></td><td>an ECS service</td><td>cluster, then service name</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>The most common mistake in all of IAM lives in the first two rows. A <strong>bucket</strong> and the <strong>objects in it</strong> are different resources, and each S3 action works on one of them:</p>
+<ul>
+  <li><code>s3:ListBucket</code> (list the keys) acts on the <em>bucket</em>: <code>arn:aws:s3:::larder-dispatch-prod</code>.</li>
+  <li><code>s3:GetObject</code>, <code>s3:PutObject</code> and <code>s3:DeleteObject</code> act on <em>objects</em>: <code>arn:aws:s3:::larder-dispatch-prod/*</code> or a narrower path.</li>
+</ul>
+<p>Put <code>ListBucket</code> on the object ARN, or <code>GetObject</code> on the bucket ARN, and the statement simply never matches. AWS doesn't complain when you save it; the request is just denied later.</p>
+
+<aside class="side"><b>403, not 404</b>Without <code>s3:ListBucket</code>, asking for an object that doesn't exist returns <code>AccessDenied</code> instead of <code>NoSuchKey</code>: S3 won't tell you what's missing if you aren't allowed to list. That's why “access denied” sometimes really means “typo in the key”.</aside>
+
+<p>Finally, some actions don't work on a specific resource at all. <code>s3:ListAllMyBuckets</code>, <code>ec2:DescribeInstances</code> and <code>sts:GetCallerIdentity</code> only accept <code>"Resource": "*"</code>; the Service Authorization Reference shows a blank resource type for them. That's the one legitimate reason to write <code>"*"</code> in a <code>Resource</code> element. If an action does support resource ARNs, use them.</p>
+
+<!-- ======================================================== 9.5 -->
+<h2 class="sec" id="s9-5"><span class="n">9.5</span>Conditions</h2>
+
+<p>Actions and resources say <em>what</em>. A <span class="term">condition</span> says <em>when</em>: only from this network, only over TLS, only in these regions, only for resources tagged with my team. A condition block has three levels: a <strong>condition operator</strong>, then a <span class="term">condition key</span> (a value AWS knows about the request), then the value or values to compare it with.</p>
+
+<figure class="wide" id="fig9-3">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 240" role="img" aria-labelledby="fig9-3-t fig9-3-d">
+      <title id="fig9-3-t">How a condition block is evaluated</title>
+      <desc id="fig9-3-d">A condition block with two operators, StringEquals and Bool. StringEquals checks two keys: aws:RequestedRegion against the list eu-central-1 or eu-west-1, and aws:PrincipalTag/team against dispatch. Bool checks aws:SecureTransport against true. The statement applies only if all three checks are true. Within the region check, either value is enough.</desc>
+      <rect class="priv" x="12" y="14" width="420" height="180" rx="6"/>
+      <text class="t-mono" x="24" y="42">"Condition": {</text>
+      <text class="t-mono" x="38" y="66">"StringEquals": {</text>
+      <text class="t-mono" x="52" y="90">"aws:RequestedRegion": ["eu-central-1", "eu-west-1"],</text>
+      <text class="t-mono" x="52" y="114">"aws:PrincipalTag/team": "dispatch"</text>
+      <text class="t-mono" x="38" y="138">},</text>
+      <text class="t-mono" x="38" y="162">"Bool": { "aws:SecureTransport": "true" }</text>
+      <text class="t-mono" x="24" y="186">}</text>
+      <text class="t-label" x="460" y="34">The statement applies only if ALL hold:</text>
+      <rect class="node" x="460" y="48" width="288" height="38" rx="4"/>
+      <text class="t-label" x="474" y="72">region is eu-central-1 <tspan class="t-accent">OR</tspan> eu-west-1</text>
+      <text class="t-small t-accent" x="604" y="102" text-anchor="middle">AND</text>
+      <rect class="node" x="460" y="110" width="288" height="38" rx="4"/>
+      <text class="t-label" x="474" y="134">caller's team tag is dispatch</text>
+      <text class="t-small t-accent" x="604" y="164" text-anchor="middle">AND</text>
+      <rect class="node" x="460" y="172" width="288" height="38" rx="4"/>
+      <text class="t-label" x="474" y="196">the request used TLS</text>
+      <text class="t-small" x="12" y="226">Values in one list: OR · keys under one operator: AND · operators in one block: AND</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 9.3</b> The logic of a condition block. There's no way to write OR between two different keys in one statement: write two statements instead.</figcaption>
+</figure>
+
+<p>Condition keys come in two kinds:</p>
+<ul>
+  <li><strong>Global keys</strong> start with <code>aws:</code> and exist for most requests: <code>aws:SourceIp</code>, <code>aws:SecureTransport</code>, <code>aws:RequestedRegion</code>, <code>aws:PrincipalTag/<i>key</i></code>, <code>aws:ResourceTag/<i>key</i></code>, <code>aws:PrincipalOrgID</code> (the data perimeter key of <a href="#ch22">Chapter 22</a>).</li>
+  <li><strong>Service keys</strong> start with the service's prefix and exist only for some of its actions: <code>s3:prefix</code> for <code>ListBucket</code>, <code>ec2:InstanceType</code> for <code>RunInstances</code>. The Service Authorization Reference lists which keys each action sends.</li>
+</ul>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 9.2 · The condition operators you'll use most</caption>
+    <thead><tr><th>Operator</th><th>Compares</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td><code>StringEquals</code>, <code>StringNotEquals</code></td><td>exact text (case-sensitive)</td><td><code>"aws:PrincipalTag/team": "dispatch"</code></td></tr>
+      <tr><td><code>StringLike</code></td><td>text with <code>*</code> and <code>?</code></td><td><code>"s3:prefix": ["config/*", "routes/*"]</code></td></tr>
+      <tr><td><code>Bool</code></td><td><code>"true"</code> or <code>"false"</code></td><td><code>"aws:SecureTransport": "true"</code></td></tr>
+      <tr><td><code>IpAddress</code>, <code>NotIpAddress</code></td><td>an address against CIDR ranges</td><td><code>"aws:SourceIp": "203.0.113.0/24"</code></td></tr>
+      <tr><td><code>DateLessThan</code>, <code>DateGreaterThan</code></td><td>times</td><td><code>"aws:CurrentTime": "2027-01-31T23:59:59Z"</code></td></tr>
+      <tr><td><code>ArnLike</code>, <code>ArnEquals</code></td><td>ARNs</td><td><code>"aws:SourceArn": "arn:aws:sns:…"</code></td></tr>
+      <tr><td><code>Null</code></td><td>whether a key is present</td><td><code>"aws:ResourceTag/team": "false"</code> (the tag must exist)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p><strong>A missing key fails the check.</strong> If a statement has <code>StringEquals</code> on <code>aws:ResourceTag/team</code> and the resource has no <code>team</code> tag, the condition is false and the statement doesn't match. Add <code>IfExists</code> to the operator (<code>StringEqualsIfExists</code>) to mean “check it if it's there, otherwise pass”. Use that carefully: in an <code>Allow</code>, it lets untagged resources through.</p>
+
+<p><strong>Keys with several values.</strong> A few keys carry a list rather than one value, such as the tag keys in a tagging request (<code>aws:TagKeys</code>). For them, prefix the operator with <code>ForAnyValue:</code> (at least one value in the request matches) or <code>ForAllValues:</code> (every value in the request matches).</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: <code>ForAllValues</code> and the empty list</p>
+  <p><code>ForAllValues</code> is true when <em>every</em> value matches, and if the request has <em>no</em> values at all, every one of none matches: it's true. So an <code>Allow</code> meant as “only these tag keys” also allows a request with no tags. Pair it with a <code>Null</code> check that the key is present, or write the rule as a <code>Deny</code> with <code>ForAnyValue:StringNotEquals</code>.</p>
+</div>
+
+<!-- ======================================================== 9.6 -->
+<h2 class="sec" id="s9-6"><span class="n">9.6</span>Policy variables and tags</h2>
+
+<p>A <span class="term">policy variable</span> is a placeholder, written <code>${…}</code>, that AWS fills in from the request when it evaluates the policy. Variables let one policy serve many identities. They work in <code>Resource</code> and in condition values (and need <code>"Version": "2012-10-17"</code>).</p>
+
+<p>The classic example gives each IAM user a home folder:</p>
+<pre><code>{ <span class="k">"Effect"</span>: <span class="s">"Allow"</span>, <span class="k">"Action"</span>: [<span class="s">"s3:GetObject"</span>, <span class="s">"s3:PutObject"</span>],
+  <span class="k">"Resource"</span>: <span class="s">"arn:aws:s3:::larder-scratch/home/${aws:username}/*"</span> }</code></pre>
+
+<p><code>aws:username</code> only exists for IAM users, and you'll stop using IAM users in <a href="#ch8">Chapter 8</a> and <a href="#ch12">Chapter 12</a>. With roles, the useful variables are <strong>tags</strong>. A <span class="term">principal tag</span> is a key-value pair on the role (or passed in from your identity provider when someone signs in), and a <span class="term">resource tag</span> is one on the resource. Compare the two, and one statement covers every team:</p>
+
+<p class="code-title"><span>team-secrets.json</span><span>attribute-based access control</span></p>
+<pre><code>{
+  <span class="k">"Sid"</span>: <span class="s">"ReadOwnTeamsSecrets"</span>,
+  <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+  <span class="k">"Action"</span>: <span class="s">"secretsmanager:GetSecretValue"</span>,
+  <span class="k">"Resource"</span>: <span class="s">"*"</span>,
+  <span class="k">"Condition"</span>: {
+    <span class="k">"StringEquals"</span>: { <span class="s">"aws:ResourceTag/team"</span>: <span class="s">"${aws:PrincipalTag/team}"</span> }
+  }
+}</code></pre>
+
+<p>Read aloud: “Allow reading any secret whose <code>team</code> tag equals my own <code>team</code> tag.” Dispatch's role is tagged <code>team=dispatch</code>, so it reads secrets tagged <code>team=dispatch</code> and nothing else; a new team needs a tag, not a new policy. This is <span class="term">attribute-based access control</span> (ABAC) from <a href="#ch6">Chapter 6</a>, and <a href="#ch12">Chapter 12</a> uses it with single sign-on. It has one catch: whoever can change tags can change access. Protect tagging itself (only the platform team may set <code>team</code>), or ABAC becomes a polite suggestion.</p>
+
+<!-- ======================================================== 9.7 -->
+<h2 class="sec" id="s9-7"><span class="n">9.7</span>Managed, inline, and how many</h2>
+
+<p>The same policy JSON can live in three places:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 9.3 · Where a policy can live</caption>
+    <thead><tr><th></th><th>AWS managed</th><th>Customer managed</th><th>Inline</th></tr></thead>
+    <tbody>
+      <tr><td>Written by</td><td>AWS</td><td>you</td><td>you</td></tr>
+      <tr><td>Reusable</td><td>yes, attach anywhere</td><td>yes, attach anywhere</td><td>no, part of one user, group or role</td></tr>
+      <tr><td>Versions</td><td>AWS updates it for you</td><td>up to five kept; roll back with one call</td><td>none: edits replace it</td></tr>
+      <tr><td>Size</td><td>n/a</td><td>6,144 characters each</td><td>10,240 characters for all of a role's inline policies together</td></tr>
+      <tr><td>Use it for</td><td>read-only and job-function access to start with, and in sandboxes</td><td>most real permissions</td><td>a strict one-to-one link, deleted with its role</td></tr>
+    </tbody>
+  </table>
+</div>
+<aside class="side"><b>Limits</b>At the time of writing. A role can have 10 managed policies attached by default, and the quota can be raised a little; if you're near it, the role is probably doing too many jobs.</aside>
+
+<p>AWS managed policies are convenient and well maintained, but they're written for everyone, so they're broad: <code>AmazonS3ReadOnlyAccess</code> reads <em>every</em> bucket. Use them where breadth is the point (a <code>ReadOnlyAccess</code> permission set for engineers, or the job-function policies like <code>ViewOnlyAccess</code>) and write your own for workloads. You can't edit an AWS managed policy; to start from one, copy its JSON into a customer managed policy and cut it down.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: the “full access” family</p>
+  <p><code>AdministratorAccess</code>, <code>PowerUserAccess</code> and the <code>…FullAccess</code> policies (<code>AmazonS3FullAccess</code>, <code>AmazonDynamoDBFullAccess</code>…) on a production workload mean that one bug or one leaked credential owns the service, or the account. Larder's <code>deploy-bot</code> user had <code>AdministratorAccess</code>; <a href="#ch17">Chapter 17</a> replaces it. If you see one of these on a role that runs code, it's a finding.</p>
+</div>
+
+<!-- ======================================================== 9.8 -->
+<h2 class="sec" id="s9-8"><span class="n">9.8</span>Across providers</h2>
+
+<p>The three big providers agree on the ideas (principals, actions, resources, conditions) but package them differently. AWS attaches permission <em>documents</em> to principals. Azure and Google Cloud define <em>roles</em> (named sets of permissions) and <strong>bind</strong> a role to a principal at a scope, such as a subscription, a project or one bucket. Where you grant it is part of the grant.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 9.4 · Writing permissions at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Unit of permission</td><td>action, <code>s3:GetObject</code></td><td>operation, <code>Microsoft.Storage/…/blobs/read</code></td><td>permission, <code>storage.objects.get</code></td></tr>
+      <tr><td>What you write</td><td>a policy: statements with effect, actions, resources, conditions</td><td>a role definition: <code>Actions</code>, <code>NotActions</code>, <code>DataActions</code>, <code>NotDataActions</code>, assignable scopes</td><td>a custom role: a list of permissions</td></tr>
+      <tr><td>How it's granted</td><td>attach the policy to a user, group or role</td><td>a role assignment: principal + role + scope</td><td>an allow policy on a resource: role bound to principals</td></tr>
+      <tr><td>Which resources</td><td>ARNs in the policy</td><td>the assignment's scope (management group, subscription, resource group or resource)</td><td>the resource the binding is on, and everything below it in the hierarchy</td></tr>
+      <tr><td>Conditions</td><td>condition block, many keys</td><td>role assignment conditions (ABAC), mainly for storage data</td><td>IAM Conditions written in CEL</td></tr>
+      <tr><td>Explicit deny</td><td>any <code>Deny</code> statement</td><td>deny assignments (limited; mostly set by Azure itself)</td><td>separate IAM deny policies</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>Built-in roles such as <strong>Storage Blob Data Reader</strong> cover most needs; a custom role is a JSON role definition whose <code>DataActions</code> cover data (reading blobs) and <code>Actions</code> cover management (creating the storage account). You then assign it to a user, group or managed identity at the narrowest scope that works: the one storage account, not the subscription. Narrowing to a folder of blobs uses an assignment <em>condition</em>, for example on the blob path.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>You grant a role such as <code>roles/storage.objectViewer</code> by adding a binding to a resource's <strong>allow policy</strong>: on the bucket for one bucket, on the project for every bucket in it. Bindings inherit downwards through organisation, folders and projects, and can't be taken away lower down by an allow policy. Narrowing within a bucket uses an <strong>IAM Condition</strong> such as <code>resource.name.startsWith("projects/_/buckets/larder-dispatch-prod/objects/config/")</code>.</p>
+</div>
+
+<!-- ======================================================== 9.9 -->
+<h2 class="sec" id="s9-9"><span class="n">9.9</span>Writing a least-privilege policy: a method</h2>
+
+<p>Least privilege (<a href="#ch6">Chapter 6</a>) is easy to agree with and hard to write. This method gets you there without guessing:</p>
+
+<ol class="steps">
+  <li><strong>List what the code does</strong>, in plain words, from the code and its owners: “reads its config file”, “writes tonight's route plans”.</li>
+  <li><strong>Map each to actions</strong> with the Service Authorization Reference. Remember the hidden extras (a <code>kms:Decrypt</code>, a <code>ListBucket</code>).</li>
+  <li><strong>Narrow the resources</strong> to exact ARNs or prefixes. <code>"*"</code> only for actions that accept nothing else.</li>
+  <li><strong>Add conditions</strong> where they're cheap and meaningful: a prefix, a tag, the organisation.</li>
+  <li><strong>Validate</strong> with IAM Access Analyzer (in the lab), which catches typos, impossible combinations and risky patterns before anything is attached.</li>
+  <li><strong>Test</strong> the real workload in a non-production environment, including the things it should <em>not</em> be able to do.</li>
+  <li><strong>Watch</strong> CloudTrail for <code>AccessDenied</code> from the role for a few days after rollout (<a href="#ch11">Chapter 11</a> shows how).</li>
+</ol>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Eli walks the method through Dispatch with Ben's team. Step 1 gives three sentences: Dispatch reads its zone and depot settings from <code>config/</code>; Engine A writes each evening's van route plans to <code>routes/</code>; and Dispatch reads the maps provider's API key. Step 2 adds <code>s3:ListBucket</code>, because the settings loader lists <code>config/</code> to find its files. The result, attached to the <code>dispatch-task</code> role:</p>
+</aside>
+
+<p class="code-title"><span>dispatch-task-policy.json</span><span>customer managed, attached to role dispatch-task</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [
+    {
+      <span class="k">"Sid"</span>: <span class="s">"ListOwnPrefixes"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+      <span class="k">"Action"</span>: <span class="s">"s3:ListBucket"</span>,
+      <span class="k">"Resource"</span>: <span class="s">"arn:aws:s3:::larder-dispatch-prod"</span>,
+      <span class="k">"Condition"</span>: { <span class="k">"StringLike"</span>: { <span class="s">"s3:prefix"</span>: [<span class="s">"config/*"</span>, <span class="s">"routes/*"</span>] } }
+    },
+    {
+      <span class="k">"Sid"</span>: <span class="s">"ReadConfig"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+      <span class="k">"Action"</span>: <span class="s">"s3:GetObject"</span>,
+      <span class="k">"Resource"</span>: <span class="s">"arn:aws:s3:::larder-dispatch-prod/config/*"</span>
+    },
+    {
+      <span class="k">"Sid"</span>: <span class="s">"WriteRoutePlans"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+      <span class="k">"Action"</span>: <span class="s">"s3:PutObject"</span>,
+      <span class="k">"Resource"</span>: <span class="s">"arn:aws:s3:::larder-dispatch-prod/routes/*"</span>
+    },
+    {
+      <span class="k">"Sid"</span>: <span class="s">"ReadMapsKey"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+      <span class="k">"Action"</span>: <span class="s">"secretsmanager:GetSecretValue"</span>,
+      <span class="k">"Resource"</span>: <span class="s">"arn:aws:secretsmanager:eu-central-1:111122223333:secret:dispatch/prod/maps-api-key-??????"</span>
+    }
+  ]
+}</code></pre>
+
+<p>Read aloud, it's four sentences, and each one maps to something Dispatch does. Things worth noticing:</p>
+<ul>
+  <li><strong>No delete.</strong> Dispatch overwrites route plans but never deletes them, so a bug or an intruder can't empty the bucket. Old versions are kept by bucket versioning, set on the bucket.</li>
+  <li><strong>Listing is limited to two prefixes</strong> by the <code>s3:prefix</code> condition. Listing the whole bucket, or <code>orders/</code>, is denied.</li>
+  <li><strong>The secret's random suffix</strong> is matched with <code>??????</code> rather than <code>*</code>, so a secret later named <code>maps-api-key-old</code> isn't included by accident.</li>
+  <li><strong>The secret uses the default AWS managed key</strong> for Secrets Manager, so no <code>kms:Decrypt</code> statement is needed. With a customer managed key it would be (<a href="#ch18">Chapter 18</a>).</li>
+  <li><strong>TLS is enforced on the bucket</strong>, not here: a bucket policy that denies any request with <code>aws:SecureTransport</code> false protects the data from every principal, not only Dispatch.</li>
+</ul>
+
+<aside class="box box-story" aria-label="Larder, rollout">
+  <p class="label">At Larder: rollout</p>
+  <p>The new policy goes to staging first, where the team runs a full evening of route planning and checks that writing to <code>config/</code> and reading <code>orders/</code> are both refused. In production, Eli attaches it alongside the old one, watches CloudTrail for a day to confirm nothing Dispatch does depends on the old policy alone, and then detaches <code>s3:*</code>. The account audit has 40 more findings, and <a href="#ch8">Chapter 8</a> and <a href="#ch17">Chapter 17</a> pick up the two worst.</p>
+</aside>
+
+<!-- ======================================================== 9.10 -->
+<h2 class="sec" id="s9-10"><span class="n">9.10</span>Lab: give a role exactly one job</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 9 · A Dispatch-style role, tested and validated</p>
+  <p><strong>You'll build</strong> a bucket shaped like Dispatch's, a role with the policy from 9.9, then predict and test six calls as that role, break the policy twice, and let IAM Access Analyzer review a sloppy policy. <strong>You need</strong> the AWS CLI v2, signed in to a sandbox account with administrator access (Appendix C), and a Unix shell. <strong>Cost:</strong> IAM and policy validation are free; the bucket holds two tiny files, well under $0.01. Clean-up is step 7.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Set up names, a bucket and two files.</strong> Bucket names are global, so the name gets a random suffix. <code>orders/</code> stands in for data Dispatch must never read.
+<pre><code>ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+B=iam-lab-dispatch-$RANDOM$RANDOM
+aws s3 mb s3://$B --region eu-central-1
+echo '{"zones": 3}' &gt; zones.json
+aws s3 cp zones.json s3://$B/config/zones.json
+aws s3 cp zones.json s3://$B/orders/export.json
+echo "bucket: $B"</code></pre></li>
+  <li><strong>Create the role.</strong> Its trust policy (the subject of <a href="#ch8">Chapter 8</a>) lets identities in your own account assume it, if their own policies allow that, which an administrator's do.
+<pre><code>cat &gt; trust.json &lt;&lt;EOF
+{ "Version": "2012-10-17",
+  "Statement": [{ "Effect": "Allow", "Action": "sts:AssumeRole",
+                  "Principal": { "AWS": "arn:aws:iam::$ACCOUNT:root" } }] }
+EOF
+aws iam create-role --role-name iam-lab-dispatch \
+  --assume-role-policy-document file://trust.json</code></pre></li>
+  <li><strong>Give it the Dispatch policy</strong> (the S3 part of 9.9, for your bucket), as an inline policy to keep clean-up simple.
+<pre><code>cat &gt; policy.json &lt;&lt;EOF
+{ "Version": "2012-10-17",
+  "Statement": [
+    { "Sid": "ListOwnPrefixes", "Effect": "Allow", "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::$B",
+      "Condition": { "StringLike": { "s3:prefix": ["config/*", "routes/*"] } } },
+    { "Sid": "ReadConfig", "Effect": "Allow", "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::$B/config/*" },
+    { "Sid": "WriteRoutePlans", "Effect": "Allow", "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::$B/routes/*" } ] }
+EOF
+aws iam put-role-policy --role-name iam-lab-dispatch --policy-name dispatch-s3 \
+  --policy-document file://policy.json</code></pre></li>
+  <li><strong>Make a CLI profile that assumes the role</strong>, then wait about ten seconds: IAM changes take a moment to reach every region. If you normally use a named profile, put its name instead of <code>default</code>.
+<pre><code>aws configure set profile.lab.role_arn arn:aws:iam::$ACCOUNT:role/iam-lab-dispatch
+aws configure set profile.lab.source_profile ${AWS_PROFILE:-default}
+aws sts get-caller-identity --profile lab     <span class="c"># the Arn should end in assumed-role/iam-lab-dispatch/…</span></code></pre></li>
+  <li><strong>Predict, then test.</strong> For each call, write down “works” or “denied”, and which statement decides, <em>before</em> you run it.
+<pre><code>aws s3 ls s3://$B/config/ --profile lab                          <span class="c"># a</span>
+aws s3 cp s3://$B/config/zones.json - --profile lab              <span class="c"># b</span>
+aws s3 cp zones.json s3://$B/routes/plan.json --profile lab      <span class="c"># c</span>
+aws s3 cp zones.json s3://$B/config/zones.json --profile lab     <span class="c"># d</span>
+aws s3 cp s3://$B/orders/export.json - --profile lab             <span class="c"># e</span>
+aws s3 ls s3://$B/ --profile lab                                 <span class="c"># f</span></code></pre>
+  Answers: a, b and c work (<code>ListOwnPrefixes</code>, <code>ReadConfig</code>, <code>WriteRoutePlans</code>). d is denied: there's no <code>PutObject</code> on <code>config/</code>. e is denied: nothing allows <code>orders/</code>. f is denied too: listing the top of the bucket sends an empty prefix, which matches neither pattern.</li>
+  <li><strong>Break it on purpose.</strong> In <code>policy.json</code>, change the <code>ReadConfig</code> resource to <code>arn:aws:s3:::$B/config</code> (drop <code>/*</code>; the variable has already been filled in, so edit the real bucket name), run <code>put-role-policy</code> again, wait, and repeat call b: denied, because the ARN now names one object called <code>config</code>. Put it back. Then change the <code>ListOwnPrefixes</code> resource to <code>arn:aws:s3:::$B/*</code> and repeat call a: denied, because <code>ListBucket</code> acts on the bucket, not on objects. Put that back too.</li>
+  <li><strong>Let Access Analyzer review a sloppy policy.</strong> This one has a typo, a wildcard <code>PassRole</code>, and the bucket/object mix-up:
+<pre><code>cat &gt; sloppy.json &lt;&lt;EOF
+{ "Version": "2012-10-17",
+  "Statement": [
+    { "Effect": "Allow", "Action": ["s3:GetObjects", "s3:ListBucket"],
+      "Resource": "arn:aws:s3:::$B/config/*" },
+    { "Effect": "Allow", "Action": "iam:PassRole", "Resource": "*" } ] }
+EOF
+aws accessanalyzer validate-policy --policy-type IDENTITY_POLICY \
+  --policy-document file://sloppy.json \
+  --query 'findings[].[findingType, issueCode]' --output table</code></pre>
+  You should see an <code>ERROR</code> for the action that doesn't exist and a <code>SECURITY_WARNING</code> for passing any role, plus whatever it says about <code>ListBucket</code> on an object ARN. Fix the policy until the only findings left are ones you can explain, then run the same check on your <code>policy.json</code>: no findings.</li>
+  <li><strong>Clean up.</strong>
+<pre><code>aws s3 rb s3://$B --force
+aws iam delete-role-policy --role-name iam-lab-dispatch --policy-name dispatch-s3
+aws iam delete-role --role-name iam-lab-dispatch
+rm zones.json trust.json policy.json sloppy.json</code></pre>
+  Then delete the <code>[profile lab]</code> section from <code>~/.aws/config</code>.</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Write the <code>ReadMapsKey</code> statement for a secret in your account and validate it without creating the secret: Access Analyzer checks the grammar, not whether the resource exists. (2) Use the role for a few minutes, then, in the IAM console, open the role and choose <em>Generate policy</em>: Access Analyzer builds a policy from the role's CloudTrail activity. Compare it with yours (<a href="#ch24">Chapter 24</a> uses this at scale).</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s9-11"><span class="n">9.11</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Bucket ARN for object actions, or object ARN for <code>ListBucket</code></td><td>The statement never matches; requests are denied.</td><td><code>bucket</code> for <code>ListBucket</code>, <code>bucket/*</code> (or a prefix) for objects.</td></tr>
+      <tr><td><code>NotAction</code> in an <code>Allow</code></td><td>Grants everything else, including future services.</td><td>List the actions; keep <code>NotAction</code> for guardrail denies.</td></tr>
+      <tr><td>Wildcard actions such as <code>s3:Get*</code></td><td>The grant grows whenever AWS adds a matching action.</td><td>Exact actions from the Service Authorization Reference.</td></tr>
+      <tr><td><code>"Resource": "*"</code> for actions that support ARNs</td><td>Access to every resource of that type in the account.</td><td>Exact ARNs or prefixes; <code>*</code> only where nothing else is accepted.</td></tr>
+      <tr><td>A condition on a key the action doesn't send</td><td>The statement never matches (or always does, with <code>IfExists</code>).</td><td>Check the action's condition keys in the reference.</td></tr>
+      <tr><td><code>*FullAccess</code> or <code>AdministratorAccess</code> on a workload</td><td>One bug or leaked credential controls the service or the account.</td><td>A customer managed policy per workload, built with the 9.9 method.</td></tr>
+      <tr><td>Inline policies scattered over many roles</td><td>Nobody can find or review what's granted.</td><td>Customer managed policies, managed as code (<a href="#ch24">Chapter 24</a>).</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum9">
+  <h2 class="sec" id="sum9"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>A policy is a list of statements. Each one says: <strong>Allow or Deny</strong> these <strong>actions</strong> on these <strong>resources</strong>, <strong>when</strong> these conditions hold. Read each one aloud.</li>
+    <li>Default deny; an explicit deny beats any allow; statements aren't ordered.</li>
+    <li>Actions are <code>service:Operation</code>. Prefer exact actions to wildcards, and never <code>NotAction</code> in an allow.</li>
+    <li>Resources are ARNs. A bucket and its objects are different resources.</li>
+    <li>Conditions: values in a list are OR, everything else is AND. Missing keys fail unless you use <code>IfExists</code>; watch <code>ForAllValues</code> on empty lists.</li>
+    <li>Variables and tags let one policy serve many identities (ABAC), as long as tagging is protected.</li>
+    <li>Customer managed policies for workloads; AWS managed ones where breadth is the point; inline rarely.</li>
+    <li>List, map, narrow, condition, validate, test, watch: least privilege without guessing.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Policy</dt><dd>A JSON document of statements that allow or deny actions on resources.</dd>
+    <dt>Statement</dt><dd>One rule in a policy: effect, actions, resources and optional conditions.</dd>
+    <dt>Identity-based policy</dt><dd>A policy attached to a user, group or role.</dd>
+    <dt>Resource-based policy</dt><dd>A policy attached to a resource, naming the principals that may use it.</dd>
+    <dt>Action</dt><dd>One API operation, written <code>service:Operation</code>.</dd>
+    <dt>ARN</dt><dd>Amazon Resource Name: the unique identifier of an AWS resource.</dd>
+    <dt>Condition key</dt><dd>A value AWS knows about a request, compared in a condition block.</dd>
+    <dt>Policy variable</dt><dd>A <code>${…}</code> placeholder filled in from the request at evaluation time.</dd>
+    <dt>Principal tag / resource tag</dt><dd>Key-value pairs on an identity or a resource, used for ABAC.</dd>
+    <dt>Managed / inline policy</dt><dd>A standalone, reusable policy, versus one embedded in a single identity.</dd>
+    <dt>IAM Access Analyzer</dt><dd>The AWS tool that validates policies and generates them from activity.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Read this aloud as one sentence: <code>{"Effect": "Deny", "Action": "s3:DeleteObject", "Resource": "arn:aws:s3:::larder-dispatch-prod/routes/*"}</code>. <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>“Deny deleting any object under <code>routes/</code> in the bucket <code>larder-dispatch-prod</code>.” Because it's an explicit deny, no other policy can allow it.</p></details>
+    </li>
+    <li>
+      <p>A role has <code>s3:ListBucket</code> on <code>arn:aws:s3:::reports/*</code>, and <code>aws s3 ls s3://reports/</code> is denied. Why, and what's the fix? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>ListBucket</code> acts on the bucket, but the resource names objects, so the statement never matches. Use <code>arn:aws:s3:::reports</code>, optionally with an <code>s3:prefix</code> condition.</p></details>
+    </li>
+    <li>
+      <p>Why is <code>"Action": "s3:Get*"</code> riskier than it looks, even if every <code>Get</code> action today seems harmless? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>It already includes reading bucket policies, ACLs and other configuration, and it will include any matching action AWS adds in future, without anyone reviewing the change.</p></details>
+    </li>
+    <li>
+      <p>Write a statement that lets a role read only secrets tagged with the same <code>team</code> as the role. What must you also control for it to be safe? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Allow <code>secretsmanager:GetSecretValue</code> on <code>"*"</code> with <code>StringEquals</code> <code>"aws:ResourceTag/team": "${aws:PrincipalTag/team}"</code>. You must also control who can set the <code>team</code> tag on roles and secrets, or anyone who can tag can grant themselves access.</p></details>
+    </li>
+    <li>
+      <p>A condition block has <code>StringEquals</code> on <code>aws:RequestedRegion</code> with two regions, and <code>Bool</code> on <code>aws:SecureTransport</code>. A request comes from <code>eu-west-1</code> over plain HTTP. Does the statement apply? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>No. The region matches one of the two values (OR), but the two operators must both hold (AND), and the request didn't use TLS.</p></details>
+    </li>
+    <li>
+      <p>Compare how you'd let one service read one storage bucket on AWS and on Google Cloud. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>AWS: write a policy with the read actions and the bucket's ARNs, and attach it to the service's role. Google Cloud: bind a role such as <code>roles/storage.objectViewer</code> to the service account in the <em>bucket's</em> allow policy; the scope of the binding decides which resource it covers.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements.html">IAM JSON policy element reference</a>, <a href="https://docs.aws.amazon.com/service-authorization/latest/reference/reference.html">Service Authorization Reference</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html">global condition keys</a> and <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-policy-validation.html">Access Analyzer policy validation</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/role-based-access-control/role-definitions">Understand role definitions</a>.</li>
+    <li>Google Cloud: <a href="https://cloud.google.com/iam/docs/overview">IAM overview</a> and <a href="https://cloud.google.com/iam/docs/conditions-overview">IAM Conditions</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="#ch8">8 · Users, groups and roles</a></div>
+  <div><span>Next</span><a href="#ch10">10 · How AWS decides</a></div>
+</nav>

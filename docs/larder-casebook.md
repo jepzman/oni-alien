@@ -558,9 +558,14 @@ and must not contradict, ADR 0021 (staff tools SSO/SCIM, May 2027) and the 11 Oc
 - **Account audit (Nov 2026, led by Eli, platform tech lead):** the original AWS account Jasper opened in 2024 still
   has a root access key from 2024, and root MFA is on a phone nobody can find; 11 IAM users with console passwords,
   3 of them for people who have left; engineers share an `ops` IAM user for production fixes (ch. 7–8).
-- **Dispatch task role (ch. 9):** since the April 2026 move to the managed container service (ADR 0010) its only
-  policy was `s3:*` on `*`, copied from a blog post. It needs only: read `config/` and write `routes/` in bucket
-  `larder-dispatch-prod` (Engine A's van route plans, ADR 0015) and read secret `dispatch/prod/maps-api-key`.
+- **Dispatch task role (ch. 9):** role `dispatch-task`; since the April 2026 move to the managed container service
+  (ADR 0010) its only policy was `s3:*` on `*`, copied from a blog post, so it could read the nightly order exports
+  (`orders/` and other buckets). It needs only: list and read `config/` (zone and depot settings) and write `routes/`
+  in bucket `larder-dispatch-prod` (Engine A's van route plans, ADR 0015; no delete; bucket versioning on), and read
+  secret `dispatch/prod/maps-api-key` (default AWS managed key). Eli wrote the four-statement replacement with Ben's
+  team; staging first, then attached alongside the old policy in prod for a day, then `s3:*` detached. The audit
+  had 40 more findings. Roles carry a `team` tag (e.g. `team=dispatch`) used for ABAC; only the platform team may set it.
+  Example account ID in the book: `111122223333` (prod, AWS documentation range).
 - **Deploy key (ch. 17):** CI deployed with a long-lived access key for IAM user `deploy-bot` with
   `AdministratorAccess`, stored as a repository secret; replaced by GitHub OIDC with one role per environment.
 - **Accounts (ch. 20–21):** the hub, dev, staging and prod accounts (Handbook 1 ch. 10) become OUs in one organisation;

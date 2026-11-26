@@ -1,8 +1,9 @@
 # Handoff: Handbook 2 · Identity and Access in the Cloud
 
-Status as of **2026-11-26**: **approved, placeholder live, no chapters written.** The owner approved everything in
-`docs/HANDOFF-handbooks.md` §6 (title, 25 chapters in six parts, AWS as main provider, the Larder storyline, show it
-on the shelf now) and picked **Chapter 9 as the sample**, to be written first, in a later session.
+Status as of **2026-11-26**: **in progress, 1 of 25 chapters written: Chapter 9 (the sample).** The owner approved
+everything in `docs/HANDOFF-handbooks.md` §6 (title, 25 chapters in six parts, AWS as main provider, the Larder
+storyline, show it on the shelf now) and picked Chapter 9 as the sample. **Next: Chapter 1**, then Part I in order
+(`BOOK["next"]` in `book.py` is set to 1, which puts the “next up” badge on the contents page).
 
 Read first: `docs/HANDOFF-handbooks.md` §1–2 (what a handbook is, the voice, the building blocks, the look). This
 book uses exactly the same style, blocks, CSS (`public/assets/book.css`) and build as Handbook 1. The best model to copy
@@ -13,7 +14,7 @@ from is `content/handbooks/cloud-networking/09-firewalls.html` (a chapter about 
 | What | Where |
 | --- | --- |
 | Outline (parts, chapters, summaries, topics, appendices) | `content/handbooks/cloud-identity/book.py` |
-| Chapter bodies (none yet) | `content/handbooks/cloud-identity/<nn>-<slug>.html` → chapter 9 is `09-policies.html` |
+| Chapter bodies | `content/handbooks/cloud-identity/<nn>-<slug>.html`; written: `09-policies.html` |
 | Built contents page | `public/handbooks/cloud-identity/index.html` |
 | Build | `python3 scripts/build_notes.py` (builds everything, including both handbooks and the landing shelf) |
 | Preview | `npm run serve`, then http://localhost:8080/handbooks/cloud-identity/ |
@@ -33,7 +34,27 @@ from is `content/handbooks/cloud-networking/09-firewalls.html` (a chapter about 
   by itself (chapter page, `all.html`, `journals.json` entries, PDF button, “1 of 25 chapters”). Then move `next` to
   the following chapter to write (suggest 1, then Part I in order), or delete it.
 
-## 3. Brief for Chapter 9 (the sample): Reading and writing IAM policies
+## 3. Chapter 9 (the sample): written 2026-11-26
+
+What was built, against the brief below (kept for reference):
+- 11 numbered sections (9.1–9.9 as briefed, 9.10 lab, 9.11 common mistakes), 3 figures (9.1 statement anatomy,
+  9.2 ARN anatomy, 9.3 condition logic), 4 tables (9.1 ARNs, 9.2 condition operators, 9.3 managed/customer
+  managed/inline, 9.4 across providers), 2 Azure/GCP boxes, 3 story boxes (opening, solved, rollout), quiz of 6.
+- Final Dispatch policy has **four** statements (`ListOwnPrefixes` with an `s3:prefix` condition, `ReadConfig`,
+  `WriteRoutePlans`, `ReadMapsKey` with the `-??????` secret suffix). TLS is enforced in the bucket policy, not here.
+- Every JSON example in the chapter was parsed and is valid. Figures checked at 1280 px (light and dark) and 375 px
+  (dark); no page-level horizontal overflow; all cross-references resolve to the contents page until those chapters exist.
+- `public/assets/book.css`: code and diagram mono text now has ligatures switched off (JetBrains Mono drew
+  `s3:::` as a ligature). Affects both handbooks, for the better.
+  Also new: `table.wrap-code` lets long ARNs wrap inside a table; in print, long `pre` lines and table code wrap
+  instead of being clipped (Handbook 1's PDFs had clipped lab commands too; they're fixed by the same rule).
+- Chapter 9 printed to A4 for a check: 22 pages, nothing clipped.
+- **Not done: the lab has not been run in a real AWS account** (no AWS credentials in the session). The commands are
+  standard CLI v2, but run it once before calling the chapter final, especially step 7: the brief only promises an
+  `ERROR` for the misspelled action and a `SECURITY_WARNING` for `iam:PassRole` on `*`; record what Access Analyzer
+  says about `ListBucket` on an object ARN and tighten the text if it's definite.
+
+### The original brief
 
 Part II · IAM on AWS. Slug `policies`, file `09-policies.html`. 40–60 minutes. Lab: free (IAM is free; one S3 bucket
 with a few small files costs well under $0.01; delete it at the end).
@@ -132,5 +153,7 @@ and 375 px, light and dark, with no horizontal overflow; check all links.
 
 ## 5. Open checks
 
-- [ ] Chapter 9 written, built, checked (desktop + 375 px, light + dark, links), lab run once in a real account.
-- [ ] After the first chapter lands, confirm the Pages workflow passes (PDFs now expected for this book).
+- [x] Chapter 9 written, built, checked (desktop + 375 px, light + dark, links).
+- [ ] Chapter 9 lab run once in a real AWS account (see §3).
+- [ ] Confirm the Pages workflow passes now that this book has PDFs (chapter 9 + whole book).
+- [ ] Chapter 1 next, then Part I in order.
