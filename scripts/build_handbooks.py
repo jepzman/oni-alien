@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PUBLIC = ROOT / "public"
 CONTENT = ROOT / "content" / "handbooks"
 AUTHOR = "Jefrey Romel Tagunicar"
-BOOKS = ["cloud-networking"]
+BOOKS = ["cloud-networking", "cloud-identity"]
 FONTS = ("https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&"
          "family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap")
 
@@ -148,6 +148,8 @@ def render_index(book, css_href, home):
         for num, slug, title, summary, covers in part["chapters"]:
             if num in done:
                 t, cls = f'<a href="{page_name(book, num)}">{esc(title)}</a>', ""
+            elif num == book.get("next"):
+                t, cls = f'{esc(title)}<span class="badge badge--soon">next up</span>', ' class="planned"'
             else:
                 t, cls = f'{esc(title)}<span class="badge badge--soon">coming</span>', ' class="planned"'
             items.append(f'''      <li id="ch{num}"{cls}><span class="cn">{num}</span><div>
@@ -163,8 +165,15 @@ def render_index(book, css_href, home):
   </section>''')
     apps = "\n".join(f'      <li id="app{a}" class="planned"><span class="cn">{a}</span><div><h3>{esc(t)}<span class="badge badge--soon">coming</span></h3><p>{esc(d)}</p></div></li>'
                      for a, t, d in book["appendices"])
-    first = page_name(book, min(done))
     pdf = f'pdf/{book["key"]}-handbook.pdf'
+    if done:
+        start = (f'<p>Start at <a href="{page_name(book, min(done))}">Chapter {min(done)}</a>, or <a href="all.html">read every '
+                 f'written chapter on one page</a> (also as a <a href="{pdf}">PDF</a>). Chapters marked “coming” are planned; '
+                 f'the topics they\'ll cover are listed.</p>')
+    else:
+        nxt = f' The first to be written is <a href="#ch{book["next"]}">Chapter {book["next"]}</a>.' if book.get("next") else ""
+        start = (f'<p>This book is being written. No chapters are finished yet; the contents below show every planned '
+                 f'chapter and the topics it will cover.{nxt}</p>')
     return "\n".join([
         head(f"{book['title']} · {book['series']}", book["promise"], css_href, 2),
         runhead(book, f"{len(done)} of {n_ch} chapters written", home),
@@ -179,7 +188,7 @@ def render_index(book, css_href, home):
   <div><h2>How it's built</h2><p>{esc(book['promise'])}</p></div>
   <div><h2>The running example</h2><p>{book['example']}</p></div>
 </section>
-<p>Start at <a href="{first}">Chapter {min(done)}</a>, or <a href="all.html">read every written chapter on one page</a> (also as a <a href="{pdf}">PDF</a>). Chapters marked “coming” are planned; the topics they'll cover are listed.</p>
+{start}
 <h2 class="sec" id="contents"><span class="n">§</span>Contents</h2>''',
         "\n".join(parts_html),
         f'''  <section class="toc-part" aria-labelledby="appendices">
@@ -203,16 +212,19 @@ def build(out_root=None, css_href=None, home="../../index.html"):
         out.mkdir(parents=True, exist_ok=True)
         css = css_href or default_css_href(2)
         (out / "index.html").write_text(render_index(book, css, home), encoding="utf-8")
-        (out / "all.html").write_text(render_all(book, css, home), encoding="utf-8")
+        if done:  # an unstarted book has only its contents page: no whole-book page or PDF yet
+            (out / "all.html").write_text(render_all(book, css, home), encoding="utf-8")
         for num in done:
             (out / page_name(book, num)).write_text(render_chapter(book, num, css, home), encoding="utf-8")
         print(f"[handbooks/{key}] index + {len(done)} chapter(s)")
+        books.append(dict(book, written=done, n_chapters=sum(1 for _ in chapters(book))))
+        if not done:
+            continue
         base = f"handbooks/{key}"
         listing.append(dict(key=base, title=book["title"], all=f"{base}/all.html", pdf=f"{base}/pdf/{key}-handbook.pdf",
                             notes=[dict(num=n, slug=page_name(book, n)[3:-5], title=next(c[2] for _, c in chapters(book) if c[0] == n),
                                         page=f"{base}/{page_name(book, n)}", pdf=f"{base}/pdf/{page_name(book, n)[:-5]}.pdf")
                                    for n in done]))
-        books.append(dict(book, written=done, n_chapters=sum(1 for _ in chapters(book))))
     return books, listing
 
 

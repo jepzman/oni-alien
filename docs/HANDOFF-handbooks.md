@@ -118,10 +118,13 @@ NAT Elastic IP `198.51.100.7` (StockPilot allow-lists it). Chapter 9 should rete
 5. Per chapter: figures checked at desktop and 375 px, light and dark (no horizontal overflow); labs not yet run in a
    real account (owner or a later session should run the AWS labs once); links checked.
 
-## 6. Handbook 2 · Identity and Access in the Cloud (DRAFT for owner review, 2026-11-26)
+## 6. Handbook 2 · Identity and Access in the Cloud (approved 2026-11-26)
 
-Outline: `content/handbooks/cloud-identity/book.py` (same format as Handbook 1). Not yet in `BOOKS` in
-`scripts/build_handbooks.py`, so nothing is built or shown on the landing page until it is approved.
+**Approved by the owner on 2026-11-26** (all six decisions below: yes; sample = Chapter 9; on the shelf now as a
+placeholder). Status, how the placeholder works, and the full Chapter 9 brief: **`docs/HANDOFF-handbook-2-identity.md`**.
+
+Outline: `content/handbooks/cloud-identity/book.py` (same format as Handbook 1). Listed in `BOOKS`; until a chapter
+is written, only its contents page is built (no PDF, not in `journals.json`).
 
 Audience: developers, operators and new cloud engineers who copy IAM policies and hope. Outcome: design
 least-privilege access for people and workloads on AWS, debug any “access denied”, and read the same on Azure/GCP.
@@ -142,7 +145,7 @@ Links to the rest of the shelf: ch. 4 and 6 go deeper than the Security Patterns
 Privilege, Short-Lived Tokens, Zero Trust) and cite it; ch. 16 pairs with Handbook 1 ch. 19; ch. 22 builds on
 Handbook 1 ch. 12 (endpoint policies) and ch. 24 (landing zones); ch. 21 picks up the account layout from Handbook 1 ch. 10.
 
-### Proposed Larder storyline (new facts: confirm, then add to `docs/larder-casebook.md`)
+### Larder storyline (approved; now in `docs/larder-casebook.md`, “Series 3 · Identity and Access in the Cloud”)
 
 Must not contradict the casebook: ADR 0021 (24 May 2027, staff tools SSO/SCIM) and the 11 Oct 2026 security review
 (non-expiring business API keys, unsigned webhooks) are reused, not rewritten.
@@ -159,8 +162,7 @@ Must not contradict the casebook: ADR 0021 (24 May 2027, staff tools SSO/SCIM) a
 - **Partners (ch. 19, 21):** StockPilot and the PSP use cross-account roles with external IDs or signed requests;
   Korenwolf's business API keys expire after 90 days (from the Oct 2026 review).
 
-### Owner decisions needed
+### Owner decisions (all approved 2026-11-26)
 
 1. Title and subtitle. 2. 25 chapters in six parts, as above. 3. AWS main provider again. 4. The Larder storyline
-facts above. 5. Sample chapter: 9 (policies) or 10 (evaluation logic). 6. Show it on the Series 3 shelf as
-“coming” now, or only once the first part is written.
+facts above. 5. Sample chapter: **9** (policies). 6. On the Series 3 shelf now, as “coming soon”.

@@ -549,3 +549,23 @@ Network facts used by Handbook 1 (details and chapter references in `docs/HANDOF
   TTL cutover (ch. 5); missing intermediate on `hooks.larder.example` (ch. 6); cross-zone Kafka traffic ≈ €700/month
   (ch. 7); 29 Oct 2026 Dispatch outage from a removed CIDR rule (ch. 9); Korenwolf overlaps `10.20.0.0/16` →
   PrivateLink (ch. 10).
+
+## Series 3 · Identity and Access in the Cloud (handbook facts)
+
+Identity facts used by Handbook 2 (approved 2026-11-26; plan in `docs/HANDOFF-handbook-2-identity.md`). They extend,
+and must not contradict, ADR 0021 (staff tools SSO/SCIM, May 2027) and the 11 Oct 2026 security review.
+
+- **Account audit (Nov 2026, led by Eli, platform tech lead):** the original AWS account Jasper opened in 2024 still
+  has a root access key from 2024, and root MFA is on a phone nobody can find; 11 IAM users with console passwords,
+  3 of them for people who have left; engineers share an `ops` IAM user for production fixes (ch. 7–8).
+- **Dispatch task role (ch. 9):** since the April 2026 move to the managed container service (ADR 0010) its only
+  policy was `s3:*` on `*`, copied from a blog post. It needs only: read `config/` and write `routes/` in bucket
+  `larder-dispatch-prod` (Engine A's van route plans, ADR 0015) and read secret `dispatch/prod/maps-api-key`.
+- **Deploy key (ch. 17):** CI deployed with a long-lived access key for IAM user `deploy-bot` with
+  `AdministratorAccess`, stored as a repository secret; replaced by GitHub OIDC with one role per environment.
+- **Accounts (ch. 20–21):** the hub, dev, staging and prod accounts (Handbook 1 ch. 10) become OUs in one organisation;
+  Jasper's original account becomes the management account and runs no workloads.
+- **People (ch. 12–14):** IAM Identity Center with the company IdP; permission sets `ReadOnly`, `Developer`,
+  `ProdOperator` (just in time, approved by a tech lead); two break-glass users whose credentials are kept in a safe.
+- **Partners (ch. 19, 21):** StockPilot and the payment provider use cross-account roles with external IDs or signed
+  requests; Korenwolf's business API keys expire after 90 days (a fix from the Oct 2026 review).

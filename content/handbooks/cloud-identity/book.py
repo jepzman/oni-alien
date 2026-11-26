@@ -1,13 +1,14 @@
-# Handbook 2 · Identity and Access in the Cloud. DRAFT outline (parts → chapters) and book metadata.
-# Status: proposal for owner review (see docs/HANDOFF-handbooks.md §6). Not yet listed in
-# scripts/build_handbooks.py BOOKS, so it is not built or shown on the landing page.
-# When approved: add "cloud-identity" to BOOKS; a chapter is written when
-# content/handbooks/cloud-identity/<nn>-<slug>.html exists; the rest show as “coming”.
+# Handbook 2 · Identity and Access in the Cloud. The outline (parts → chapters) and book metadata.
+# Rendered by scripts/build_handbooks.py into public/handbooks/cloud-identity/. Approved 2026-11-26; no chapters yet.
+# A chapter is written when content/handbooks/cloud-identity/<nn>-<slug>.html exists; the rest show as “coming”.
+# While no chapter is written the book has only its contents page (no all.html, no PDF, not in journals.json).
+# Brief for the first chapter (9, the sample): docs/HANDOFF-handbook-2-identity.md
 
 BOOK = dict(
     key="cloud-identity",
     series="Jef’s Handbooks",
     no=2,
+    next=9,  # the sample chapter, written first (owner decision 2026-11-26)
     title="Identity and Access in the Cloud",
     subtitle="From passwords to permission guardrails",
     shelf_blurb="Authentication, OAuth and SSO, IAM policies, roles, workload identity, secrets and multi-account guardrails, with AWS as the main provider and Azure and Google Cloud compared.",
@@ -59,7 +60,7 @@ BOOK = dict(
                   "IAM users and groups · roles and trust policies · AssumeRole · STS and session credentials · the credential chain"),
                  (9, "policies", "Reading and writing IAM policies",
                   "Policy JSON line by line: effects, actions, resources, conditions and variables, and how to write one that does exactly one job.",
-                  "statements · actions and wildcards · resource ARNs · condition keys and operators · policy variables · managed vs inline · sample"),
+                  "statements · actions and wildcards · resource ARNs · condition keys and operators · policy variables · managed vs inline · lab"),
                  (10, "evaluation", "How AWS decides: policy evaluation logic",
                   "Every policy type that can affect a request, and the order AWS checks them in. One flowchart you'll use for the rest of your career.",
                   "explicit deny · identity vs resource policies · permission boundaries · session policies · SCPs and RCPs · same vs cross account"),
