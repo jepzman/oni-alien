@@ -258,3 +258,33 @@ the Vendor Side Taught Me · 15. The Last Day on Floor 19
 - Checked: desktop light and dark, 375 px phone width (no horizontal scroll).
 - Waiting for the owner's review. When the look is approved, move the skin into `bujo.css` (or keep `vendor.css`
   and add it per journal), add the new fields to the renderer (section 10) and start Vol. 1.
+
+## 13. Vols. 1 and 2 written and built (26 Nov 2026)
+
+Owner asked to start with volumes 1 and 2 after approving the sample. Both are written (30 notes) and on the shelf.
+
+- **Content**: `content/vendor-1/` (`01_reading.py`, `02_shaping.py`, `03_competing.py`, `04_closing.py`) and
+  `content/vendor-2/` (`01_paper.py`, `02_arriving.py`, `03_together.py`). Facts: `docs/lodestar-casebook.md` (new, the
+  source of truth for Series 5; it adds to Darkside's facts and must not contradict them).
+- **Renderer**: `scripts/vendor.py` (`render_note`), called from `build_notes.render_note` when a journal has `vendor=True`.
+  Journals `vendor-1`, `vendor-2` in `JOURNALS` (`series=5`, `css=("vendor.css",)`, `VENDOR_ATTRS`, `VENDOR_NOTE` footer).
+  `head()` takes extra stylesheets per journal (`css`). Planned vols. 3–6 in `PLANNED_VENDOR`.
+- **Note fields** (see the docstring in `scripts/vendor.py`): `date` (a `datetime.date`), `meta`, `where`, `pass_kind`
+  (`"contractor"` from 4 Aug 2027), optional `timesheet`, `sides`, `sides_after`, `contract`, `health` (`now` = g/a/r),
+  `pressure`, optional `grimoire`, `late`. Sections are numbered automatically: situation · both sides · analogy · how it
+  works · contract · account health · pressure · ratings · pitfalls (+ Grimoire aside) · when · quiz, then try it,
+  remember, the 23:00 note.
+- **Skin**: `public/assets/vendor.css` (the daybook, the pass, timesheet, sides, contract redlines and stamp, health,
+  gauge, Grimoire aside, 23:00 note, a contractor badge variant, print rules). Covers `book--vendor-*` in `bujo.css`.
+- **Landing page**: a new section `#vendor-side` after the Darkside shelf; a future-log line for vols. 3–6.
+- The sample page `public/samples/on-the-clients-floor/` now redirects to `vendor-1/notes/assumptions.html`.
+- **Related notes**: Series 5 resolves “(this volume)” and “(vol. N)” within its own book first. Notes in other books
+  are named by their real titles (e.g. Sanne's “What Exactly Did We Promise?”).
+- **Checked**: every figure as contact sheets (fixed overlaps), 375 px phone width on all 30 notes (no horizontal
+  scroll), light and dark, the landing shelf and both indexes, and Vol. 1's PDFs rendered locally (the visitor pass
+  gets a print rule so it isn't clipped). `pdf-build.json` lists `vendor-1` and `vendor-2` under `rebuild`.
+- **Story so far** (dates in the casebook): bid 3 Feb – 6 May 2027 (won, £380k discovery + £4.62m fixed after BAFO);
+  Horizon stalls the signature to 30 June; day one 5 July; laptops day 23; kick-off 13 July; IA-01 with Halvorsen;
+  first status amber; baseline v1.0 signed 28 Sep 2027 (pilot 6 Mar 2028, wave 1 24 Jun 2028); A1-07 is risk 1 and
+  Vexmoor's assurance calls the migration plan “optimistic”.
+- **Next**: Vol. 3 · Digging Up the Legacy (discovery, the 31 %, CR-007). Then the Lodestar file extra (section 9).
