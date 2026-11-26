@@ -7,7 +7,7 @@ Status as of **2026-11-17**. Books 1 and 2 are complete (six volumes each). **Bo
 Read in this order:
 1. This file: state, next steps, how to build/verify/deploy, gotchas.
 2. `docs/larder-casebook.md`: the story's facts (source of truth for every Series 2 note).
-3. The plan for the book you're writing:
+3. The plan for the book you're writing (Series 3, the handbooks: `docs/HANDOFF-handbooks.md`):
    - Book 1 (Ana, architect): `docs/HANDOFF-solution-architect.md`
    - Book 2 (Grace, product owner): `docs/HANDOFF-product-owner.md`
    - **Book 3 (Sanne, project manager): `docs/HANDOFF-project-manager.md`** ← the book in progress; start at its section 16

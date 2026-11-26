@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Containers and Kubernetes networking · Networking in the Cloud</title>
+<meta name="description" content="Pod addresses, services, ingress and network policies, and how they map to the VPC underneath.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ba699999a6">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 1</a> · <a href="index.html">Networking in the Cloud</a></span><span>Part V · Chapter 19</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part V · Networking for modern workloads</p>
+  <p class="chno">19</p>
+  <h1>Containers and Kubernetes networking</h1>
+  <p class="promise">Kubernetes adds a second network inside your VPC: every pod gets its own address, services get virtual addresses that belong to no machine, and traffic is routed and filtered by software on each node. On a cloud provider, that inner network is woven into the outer one, which is powerful and easy to get wrong. This chapter explains how pods get addresses, how services and ingress find them, and how to keep a cluster from eating your address plan.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain the Kubernetes network model and what a CNI plugin does.</li>
+      <li>Compare overlay and VPC-native pod networking, and size subnets for pods.</li>
+      <li>Explain how Services, cluster DNS, Ingress and the Gateway API route traffic.</li>
+      <li>Restrict pod-to-pod traffic with network policies and security groups.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>IP planning and non-routed ranges (<a href="10-ip-planning.html">Chapter 10</a>).</li>
+      <li>Security groups (<a href="09-firewalls.html">Chapter 9</a>) and load balancers (<a href="16-load-balancers.html">Chapter 16</a>).</li>
+      <li>Some familiarity with Kubernetes objects (pods, deployments) helps.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 55 minutes</dd>
+      <dt>Lab</dt><dd>40 minutes, your computer (kind), free</dd>
+      <dt>Main provider</dt><dd>AWS (EKS), with AKS and GKE in 19.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Larder's platform team moves its services onto a managed Kubernetes cluster (EKS), with nodes in the three app subnets, <code>10.20.16.0/20</code> and friends: 4,091 usable addresses per zone. For a month, all is well. Then, during a big deploy that briefly doubles the number of pods, new pods hang in <code>ContainerCreating</code> with the event <code>failed to assign an IP address to container</code>. The cluster has CPU and memory to spare. Zone a's subnet has 11 free addresses.</p>
+  <p>Fewer than 900 pods were running in that zone. Where did 4,000 addresses go? Section 19.3 explains.</p>
+</aside>
+
+<!-- ======================================================== 19.1 -->
+<h2 class="sec" id="s19-1"><span class="n">19.1</span>The big picture</h2>
+
+<p class="lead">Kubernetes doesn't ship its own network. It defines a <strong>model</strong> and lets a plug-in implement it. The model has three rules: every <strong>pod</strong> gets its own IP address; every pod can reach every other pod by that address, <strong>without NAT</strong>; and agents on a node can reach all pods on it. A <span class="term">CNI plugin</span> (Container Network Interface) makes it true, by giving pods addresses and setting up routes on each node.</p>
+
+<p>On top of pod addresses, Kubernetes adds three things you'll configure constantly:</p>
+<ul>
+  <li><strong>Services</strong>: stable virtual addresses and names for a changing set of pods.</li>
+  <li><strong>Ingress</strong> and the <strong>Gateway API</strong>: rules for routing outside HTTP traffic to services.</li>
+  <li><strong>Network policies</strong>: firewall rules between pods.</li>
+</ul>
+
+<!-- ======================================================== 19.2 -->
+<h2 class="sec" id="s19-2"><span class="n">19.2</span>Where pod addresses come from</h2>
+
+<p>There are two families of CNI plugin, and the difference decides how a cluster fits into your VPC:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 19.1 · Overlay and VPC-native pod networking</caption>
+    <thead><tr><th></th><th>Overlay</th><th>VPC-native</th></tr></thead>
+    <tbody>
+      <tr><td>Pod addresses</td><td>from a separate pod range that only the cluster knows</td><td>real addresses from VPC subnets</td></tr>
+      <tr><td>Between nodes</td><td>pod packets are wrapped in node-to-node packets (VXLAN, Geneve)</td><td>the VPC routes pod addresses directly</td></tr>
+      <tr><td>Reaching pods from outside the cluster</td><td>only through nodes or load balancers</td><td>directly: load balancers can target pods; security groups can apply</td></tr>
+      <tr><td>Address cost</td><td>almost none from the VPC</td><td>one VPC address per pod, or more (19.3)</td></tr>
+      <tr><td>Examples</td><td>Calico or Cilium in overlay mode, Flannel, Azure CNI Overlay</td><td>Amazon VPC CNI, Azure CNI, GKE VPC-native</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>EKS uses the <strong>Amazon VPC CNI</strong> by default: VPC-native. It's why load balancers can send traffic straight to pods (<a href="16-load-balancers.html">Chapter 16</a>, IP targets), and why a cluster can burn through a subnet.</p>
+
+<!-- ======================================================== 19.3 -->
+<h2 class="sec" id="s19-3"><span class="n">19.3</span>How the VPC CNI hands out addresses</h2>
+
+<p>Each EC2 instance can hold a limited number of network interfaces (ENIs), and each ENI a limited number of addresses, both depending on the instance type. The VPC CNI attaches extra ENIs to each node and gives their secondary addresses to pods. Two consequences:</p>
+<ul>
+  <li><strong>Max pods per node</strong> follows from the instance type: ENIs × (addresses per ENI − 1) + 2. An <code>m5.large</code> has 3 ENIs with 10 addresses each, so 3 × 9 + 2 = <strong>29 pods</strong>, however much CPU is left.</li>
+  <li><strong>Warm pools.</strong> To start pods quickly, the CNI keeps spare addresses ready on every node. By default it keeps a whole spare ENI's worth (<code>WARM_ENI_TARGET=1</code>): on an <code>m5.large</code>, about 9 addresses held in reserve <em>per node</em>, used or not.</li>
+</ul>
+
+<figure class="wide" id="fig19-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig19-1-t fig19-1-d">
+      <title id="fig19-1-t">How a node holds pod addresses</title>
+      <desc id="fig19-1-d">An EKS node has a primary network interface with the node's own address from the app subnet, and secondary interfaces whose addresses are given to pods. With custom networking, the secondary interfaces live in pod subnets from 100.64.0.0/16, a range never routed outside the VPC. With prefix delegation, each slot holds a /28 block of 16 addresses instead of one. A spare interface's worth of addresses is kept warm for new pods.</desc>
+      <rect class="priv" x="12" y="20" width="420" height="210" rx="6"/>
+      <text class="t-label" x="26" y="44">EKS node (m5.large)</text>
+      <rect class="node" x="26" y="58" width="190" height="44" rx="4"/>
+      <text class="t-small" x="36" y="76">primary ENI · node address</text>
+      <text class="t-mono" x="36" y="94">10.20.17.40 (app subnet)</text>
+      <rect class="pub" x="26" y="112" width="190" height="52" rx="4"/>
+      <text class="t-small" x="36" y="130">secondary ENI · pods</text>
+      <text class="t-mono" x="36" y="148">100.64.3.10 … .18</text>
+      <rect class="pub" x="26" y="172" width="190" height="46" rx="4" stroke-dasharray="5 4"/>
+      <text class="t-small" x="36" y="190">spare ENI · warm pool</text>
+      <text class="t-mono" x="36" y="208">9 addresses held</text>
+      <rect class="node" x="240" y="112" width="54" height="24" rx="3"/><text class="t-small" x="267" y="129" text-anchor="middle">pod</text>
+      <rect class="node" x="302" y="112" width="54" height="24" rx="3"/><text class="t-small" x="329" y="129" text-anchor="middle">pod</text>
+      <rect class="node" x="364" y="112" width="54" height="24" rx="3"/><text class="t-small" x="391" y="129" text-anchor="middle">pod</text>
+      <rect class="node" x="240" y="142" width="54" height="24" rx="3"/><text class="t-small" x="267" y="159" text-anchor="middle">pod</text>
+      <rect class="node" x="302" y="142" width="54" height="24" rx="3"/><text class="t-small" x="329" y="159" text-anchor="middle">pod</text>
+      <text class="t-small" x="240" y="196">max 29 pods on this type,</text>
+      <text class="t-small" x="240" y="212">whatever CPU is left</text>
+      <rect class="vpc" x="470" y="20" width="278" height="210" rx="8"/>
+      <text class="t-title t-accent" x="484" y="44">VPC 10.20.0.0/16</text>
+      <text class="t-mono" x="484" y="64">+ secondary 100.64.0.0/16</text>
+      <rect class="node" x="484" y="80" width="250" height="40" rx="4"/>
+      <text class="t-small" x="494" y="105">app subnets 10.20.16.0/20 …: nodes only</text>
+      <rect class="pub" x="484" y="130" width="250" height="40" rx="4"/>
+      <text class="t-small" x="494" y="155">pod subnets 100.64.0.0/18 per zone</text>
+      <text class="t-small" x="484" y="194">pods leaving the VPC are translated</text>
+      <text class="t-small" x="484" y="212">to the node's address (SNAT)</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 19.1</b> One node's addresses. Without custom networking, pods and warm pools draw from the same app subnet as the nodes, and that's where Larder's 4,000 addresses went.</figcaption>
+</figure>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Zone a ran about 100 nodes with about 9 pods each. The CNI attaches whole ENIs, with all their addresses, and keeps one more ENI spare: a node running 9 pods held two ENIs of pod addresses plus a warm one, about 28 addresses in all, for 9 pods. A hundred nodes made about 2,800. The rolling deploy's extra pods and nodes, and the other services in the same subnet, did the rest, and the <code>/20</code> was gone.</p>
+  <p>Eli made three changes. <strong>Custom networking</strong>: a secondary VPC range, <code>100.64.0.0/16</code>, with one pod subnet per zone, so pods no longer draw from the app subnets at all; traffic from pods to anything outside the VPC is translated to the node's address, so stores and other VPCs never see <code>100.64</code> addresses and the range can be reused by every cluster (<a href="10-ip-planning.html">Chapter 10</a>). <strong>Prefix delegation</strong>: each address slot on an ENI now holds a <code>/28</code> of 16 addresses, which raises max pods per node and reduces API calls. And <strong>smaller warm targets</strong> (<code>WARM_IP_TARGET</code> and <code>MINIMUM_IP_TARGET</code>) instead of a whole spare ENI. The app subnets went back to holding only nodes and load balancers.</p>
+</aside>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">With VPC-native pods, size subnets for pods plus warm pools plus deploy surges, or give pods their own non-routed range.</p>
+</div>
+
+<!-- ======================================================== 19.4 -->
+<h2 class="sec" id="s19-4"><span class="n">19.4</span>Services and cluster DNS</h2>
+
+<p>Pods come and go, and their addresses with them. A <span class="term">Service</span> gives a group of pods (chosen by labels) one stable virtual address and a DNS name. The types you'll use:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 19.2 · Kubernetes Service types</caption>
+    <thead><tr><th>Type</th><th>What it gives you</th><th>Use for</th></tr></thead>
+    <tbody>
+      <tr><td><code>ClusterIP</code></td><td>A virtual address reachable only inside the cluster</td><td>Service-to-service calls (the default)</td></tr>
+      <tr><td><code>NodePort</code></td><td>A port opened on every node that forwards to the service</td><td>Rarely directly; older load balancer setups</td></tr>
+      <tr><td><code>LoadBalancer</code></td><td>A cloud load balancer created for the service (an NLB on AWS, with the AWS Load Balancer Controller)</td><td>Non-HTTP services exposed outside the cluster</td></tr>
+      <tr><td>Headless (<code>clusterIP: None</code>)</td><td>No virtual address; DNS returns the pods' own addresses</td><td>Databases and clients that pick pods themselves</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>A <code>ClusterIP</code> belongs to no machine. On each node, <code>kube-proxy</code> (with iptables or IPVS rules) or an eBPF data plane such as Cilium catches packets to that address and rewrites them to a healthy pod's address. Cluster DNS (CoreDNS) answers names like <code>stock.orders.svc.cluster.local</code> with the service's address.</p>
+
+<aside class="side"><b>The ndots surprise</b>Pods' DNS settings default to <code>ndots:5</code> with several search domains, so a lookup of <code>api.payments.example</code> first tries <code>api.payments.example.orders.svc.cluster.local</code> and friends. Busy clients can multiply DNS load several times. Use fully qualified names with a trailing dot, or lower <code>ndots</code> for those pods.</aside>
+
+<!-- ======================================================== 19.5 -->
+<h2 class="sec" id="s19-5"><span class="n">19.5</span>Getting traffic in: Ingress and Gateway API</h2>
+
+<p>For HTTP, you rarely give each service its own load balancer. An <span class="term">Ingress</span> resource describes host and path rules (“<code>api.larder.example/checkout</code> → service <code>checkout</code>”), and an <strong>ingress controller</strong> implements them. On EKS, the <strong>AWS Load Balancer Controller</strong> turns Ingress resources into an ALB with listeners and rules (<a href="16-load-balancers.html">Chapter 16</a>). In <strong>IP mode</strong> it registers pod addresses directly as targets, so traffic goes from the ALB straight to a pod, skipping node ports and a hop.</p>
+
+<p>The <strong>Gateway API</strong> is Kubernetes' newer, more expressive replacement for Ingress. It splits responsibilities: a platform team owns the <code>Gateway</code> (the load balancer and its listeners), and each application team attaches its own <code>HTTPRoute</code>s. Larder's platform team uses it so that teams can add routes without touching the shared load balancer's settings.</p>
+
+<!-- ======================================================== 19.6 -->
+<h2 class="sec" id="s19-6"><span class="n">19.6</span>Filtering pod traffic</h2>
+
+<p>By default, every pod can reach every other pod in the cluster, across all namespaces. A <span class="term">network policy</span> limits that, using labels instead of addresses, very much like security group references (<a href="09-firewalls.html">Chapter 9</a>):</p>
+
+<p class="code-title"><span>policy.yaml</span><span>allow only the API to reach the stock service</span></p>
+<pre><code><span class="k">apiVersion</span>: networking.k8s.io/v1
+<span class="k">kind</span>: NetworkPolicy
+<span class="k">metadata</span>:
+  <span class="k">name</span>: stock-from-api
+  <span class="k">namespace</span>: orders
+<span class="k">spec</span>:
+  <span class="k">podSelector</span>:
+    <span class="k">matchLabels</span>: { app: stock }        <span class="c"># the pods this policy protects</span>
+  <span class="k">policyTypes</span>: [Ingress]
+  <span class="k">ingress</span>:
+    - <span class="k">from</span>:
+        - <span class="k">podSelector</span>:
+            <span class="k">matchLabels</span>: { app: api }   <span class="c"># who may connect</span>
+      <span class="k">ports</span>:
+        - { <span class="k">protocol</span>: TCP, <span class="k">port</span>: 8080 }</code></pre>
+
+<p>Once any policy selects a pod, only traffic that some policy allows reaches it. A common start is a <strong>default-deny</strong> policy per namespace plus explicit allows. Policies are enforced by the CNI or a companion agent; the Amazon VPC CNI enforces them when you turn on its network policy support, and Calico and Cilium do it on any cluster. A policy written for a CNI that doesn't enforce it does nothing at all, silently.</p>
+
+<p>For traffic leaving the cluster to VPC resources, EKS can also give individual pods <strong>security groups</strong>. Then the database's security group can allow “the stock pods' group” rather than the whole node fleet, exactly like Figure 9.2.</p>
+
+<!-- ======================================================== 19.7 -->
+<h2 class="sec" id="s19-7"><span class="n">19.7</span>Worked example: sizing a cluster's addresses</h2>
+
+<p>Before creating a cluster, run the numbers. For one zone of a planned cluster with VPC-native pods in the node subnet:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 19.3 · Addresses needed in one zone</caption>
+    <thead><tr><th>Item</th><th class="num">Count</th><th class="num">Addresses</th></tr></thead>
+    <tbody>
+      <tr><td>Nodes at peak</td><td class="num">60</td><td class="num">60</td></tr>
+      <tr><td>Pods at peak</td><td class="num">1,200</td><td class="num">1,200</td></tr>
+      <tr><td>Deploy surge (+25% while old and new run together)</td><td class="num"></td><td class="num">300</td></tr>
+      <tr><td>Warm pools (default: one spare ENI ≈ 9 per node)</td><td class="num"></td><td class="num">540</td></tr>
+      <tr><td>Load balancer interfaces, endpoints, headroom</td><td class="num"></td><td class="num">100</td></tr>
+      <tr><td colspan="2"><strong>Total</strong></td><td class="num"><strong>2,200</strong></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>That fits a <code>/20</code> (4,091 usable) today with room for less than double growth. With pods in a separate <code>100.64.0.0/18</code> per zone (16,379 addresses), the node subnet needs only about 160 addresses and the pods have room to grow eightfold.</p>
+
+<!-- ======================================================== 19.8 -->
+<h2 class="sec" id="s19-8"><span class="n">19.8</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 19.4 · Managed Kubernetes networking at the big three</caption>
+    <thead><tr><th></th><th>EKS (AWS)</th><th>AKS (Azure)</th><th>GKE (Google Cloud)</th></tr></thead>
+    <tbody>
+      <tr><td>Default pod networking</td><td>Amazon VPC CNI (VPC-native)</td><td>Azure CNI Overlay, or Azure CNI with VNet addresses</td><td>VPC-native: pods use a subnet's secondary (alias) range</td></tr>
+      <tr><td>Saving addresses</td><td>custom networking in <code>100.64.0.0/10</code>; prefix delegation; IPv6</td><td>overlay mode</td><td>sized secondary ranges; non-RFC 1918 ranges; IPv6</td></tr>
+      <tr><td>Data plane</td><td>kube-proxy, or eBPF with Cilium</td><td>Azure CNI powered by Cilium</td><td>Dataplane V2 (eBPF, Cilium-based)</td></tr>
+      <tr><td>Load balancers</td><td>AWS Load Balancer Controller (ALB, NLB)</td><td>Azure Load Balancer; Application Gateway for Containers</td><td>GKE Gateway controller and Ingress (Google Cloud load balancers)</td></tr>
+      <tr><td>Network policy</td><td>VPC CNI network policies; Calico; Cilium</td><td>Azure, Calico or Cilium policies</td><td>built into Dataplane V2</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 19.9 -->
+<h2 class="sec" id="s19-9"><span class="n">19.9</span>Lab: pods, a service and a policy on your laptop</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 19 · kind, a Service, cluster DNS and a NetworkPolicy</p>
+  <p><strong>You'll</strong> run a local Kubernetes cluster, see pod and service addresses, resolve a service by name, and block traffic with a network policy. The cloud parts of this chapter work the same way, with VPC addresses instead of local ones. <strong>You need</strong> Docker, <a href="https://kind.sigs.k8s.io/">kind</a> 0.24 or later (its default network plugin enforces network policies) and <code>kubectl</code>. <strong>Cost:</strong> nothing.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Create a cluster:</strong> <code>kind create cluster --name lab19</code>, then <code>kubectl get nodes -o wide</code>. Note the node's address.</li>
+  <li><strong>Run a service.</strong>
+<pre><code>kubectl create namespace orders
+kubectl -n orders create deployment stock --image=nginx --replicas=3
+kubectl -n orders expose deployment stock --port=80
+kubectl -n orders get pods -o wide        <span class="c"># one address per pod, from the pod range</span>
+kubectl -n orders get service stock       <span class="c"># a ClusterIP from a different range</span></code></pre></li>
+  <li><strong>Call it by name</strong> from a throwaway client pod:
+<pre><code>kubectl -n orders run client --rm -it --image=busybox:1.36 --labels=app=api -- sh
+  nslookup stock          <span class="c"># → the ClusterIP; full name stock.orders.svc.cluster.local</span>
+  wget -qO- stock | head -4
+  cat /etc/resolv.conf    <span class="c"># the search domains and ndots from 19.4</span>
+  exit</code></pre></li>
+  <li><strong>Deny, then allow.</strong> Apply a default-deny policy for the namespace:
+<pre><code>kubectl -n orders apply -f - &lt;&lt;'EOF'
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: default-deny }
+spec: { podSelector: {}, policyTypes: [Ingress] }
+EOF</code></pre>
+  Repeat step 3: <code>wget</code> now times out. Then apply the policy from 19.6 with the port changed to 80 (nginx's pods already carry the label <code>app=stock</code>). The client labelled <code>app=api</code> gets through again; start one with <code>--labels=app=other</code> and it still times out.</li>
+  <li><strong>Clean up:</strong> <code>kind delete cluster --name lab19</code>.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> On EKS (if you have one), run <code>kubectl get pods -o wide</code> and compare pod addresses with your VPC subnets; then look up your node type's max pods with <code>kubectl get node &lt;name&gt; -o jsonpath='{.status.allocatable.pods}'</code> and check it against the formula in 19.3.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s19-10"><span class="n">19.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Pods in small node subnets with default warm pools</td><td>Pods stuck with “failed to assign an IP address”.</td><td>Custom networking in <code>100.64</code>, prefix delegation, tuned warm targets.</td></tr>
+      <tr><td>Choosing nodes by CPU and memory only</td><td>Nodes full at 29 pods with half their CPU idle.</td><td>Check max pods per instance type; use prefix delegation.</td></tr>
+      <tr><td>No network policies</td><td>Every pod can reach every other, in every namespace.</td><td>Default deny per namespace, explicit allows.</td></tr>
+      <tr><td>Policies on a CNI that doesn't enforce them</td><td>A false sense of security.</td><td>Confirm enforcement; test with a denied client.</td></tr>
+      <tr><td>One load balancer per HTTP service</td><td>Dozens of ALBs and bills.</td><td>Ingress or Gateway API on a shared ALB.</td></tr>
+      <tr><td>Short external names from busy pods</td><td>DNS load multiplied by search-domain lookups.</td><td>Fully qualified names or lower <code>ndots</code>.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum19">
+  <h2 class="sec" id="sum19"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Kubernetes' model: every pod has an address, pods reach each other without NAT; a <strong>CNI plugin</strong> implements it.</li>
+    <li><strong>Overlay</strong> CNIs use a private pod range; <strong>VPC-native</strong> CNIs use VPC addresses, so load balancers and security groups reach pods directly.</li>
+    <li>The VPC CNI's ENI limits set <strong>max pods</strong>, and <strong>warm pools</strong> hold extra addresses; use custom networking, prefix delegation and tuned targets.</li>
+    <li><strong>Services</strong> give stable virtual addresses and DNS names; <strong>Ingress</strong> and the <strong>Gateway API</strong> route outside HTTP traffic, on EKS through ALBs with pod targets.</li>
+    <li><strong>Network policies</strong> filter by labels; default deny per namespace; confirm your CNI enforces them.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Pod</dt><dd>The smallest unit Kubernetes runs; one or more containers sharing an address.</dd>
+    <dt>CNI plugin</dt><dd>The component that gives pods addresses and connects them.</dd>
+    <dt>Overlay network</dt><dd>Pod traffic wrapped in node-to-node packets, using a private pod range.</dd>
+    <dt>VPC-native networking</dt><dd>Pods with real VPC addresses, routed by the VPC.</dd>
+    <dt>Warm pool</dt><dd>Spare addresses a node keeps ready for new pods.</dd>
+    <dt>Prefix delegation</dt><dd>Assigning /28 blocks instead of single addresses to node interfaces.</dd>
+    <dt>Service (Kubernetes)</dt><dd>A stable virtual address and name for a set of pods.</dd>
+    <dt>Ingress / Gateway API</dt><dd>Kubernetes resources describing HTTP routing into the cluster.</dd>
+    <dt>Network policy</dt><dd>Label-based rules allowing traffic between pods.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>What's the maximum number of pods on a node with 4 ENIs of 15 addresses each, using the VPC CNI without prefix delegation? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>4 × (15 − 1) + 2 = 58 pods.</p></details>
+    </li>
+    <li>
+      <p>Why can an ALB in IP mode send traffic straight to pods on EKS, but not on a cluster with an overlay CNI? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>With the VPC CNI, pod addresses are real VPC addresses that the VPC routes, so the ALB can reach them. With an overlay, pod addresses exist only inside the cluster; outside traffic must enter through nodes (NodePort) or a component on them.</p></details>
+    </li>
+    <li>
+      <p>Pods in <code>100.64.0.0/16</code> call an API in another VPC over the transit gateway. What source address does that VPC see, and why does it matter? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>The node's address in the app subnet: the CNI translates pod traffic leaving the VPC. That's why the <code>100.64</code> range never needs routing outside the VPC and can be reused in every cluster, but also why the other side can't tell pods apart by address.</p></details>
+    </li>
+    <li>
+      <p>You apply a NetworkPolicy and nothing changes: every pod can still reach the protected one. Name two possible causes. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>The CNI doesn't enforce network policies (or the feature isn't turned on); or the policy's <code>podSelector</code> doesn't match the pods' actual labels or namespace, so it selects nothing.</p></details>
+    </li>
+    <li>
+      <p>Design question: a platform team wants teams to add their own HTTP routes without editing the shared load balancer. Which Kubernetes API fits, and how is responsibility split? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>The Gateway API: the platform team owns the <code>Gateway</code> (load balancer, listeners, certificates) and allows routes from team namespaces; each team owns its <code>HTTPRoute</code> objects attaching to that gateway.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>Kubernetes: <a href="https://kubernetes.io/docs/concepts/services-networking/">Services, load balancing and networking</a>.</li>
+    <li>AWS: <a href="https://docs.aws.amazon.com/eks/latest/best-practices/networking.html">EKS best practices: networking</a>, including IP address management and custom networking.</li>
+    <li>Gateway API: <a href="https://gateway-api.sigs.k8s.io/">gateway-api.sigs.k8s.io</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="18-egress.html">18 · Controlling egress</a></div>
+  <div><span>Next</span><a href="20-serverless.html">20 · Serverless and managed services</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 1 · Networking in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

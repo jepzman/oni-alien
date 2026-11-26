@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>TCP, UDP and ports · Networking in the Cloud</title>
+<meta name="description" content="What a connection is, why the handshake matters, ephemeral ports, and stateful versus stateless filtering.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ba699999a6">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 1</a> · <a href="index.html">Networking in the Cloud</a></span><span>Part I · Chapter 3</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part I · How networks work</p>
+  <p class="chno">3</p>
+  <h1>TCP, UDP and ports</h1>
+  <p class="promise">IP gets a packet to the right machine. The transport layer gets it to the right program, and, if you want, makes sure nothing is lost on the way. Understanding how a connection opens, stays alive and closes explains most firewall rules, most “connection reset” mysteries, and the difference between a timeout and a refusal.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain ports, sockets and the five values that identify a connection.</li>
+      <li>Describe the TCP handshake and what goes wrong when it fails.</li>
+      <li>Choose between TCP and UDP and say what QUIC changes.</li>
+      <li>Explain stateful and stateless filtering, and why idle connections get cut.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Layers and encapsulation (<a href="01-what-happens.html">Chapter 1</a>).</li>
+      <li>IP addresses (<a href="02-ip-and-cidr.html">Chapter 2</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, your own computer, free</dd>
+      <dt>Provider</dt><dd>none; AWS timeouts where they matter</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Cho, who looks after payments, has an odd bug. A few times a day, a card payment fails with <code>Connection reset by peer</code> when Larder's servers call the payment provider. A retry always works. It happens most often at 07:00, when the first breakfast orders arrive, and almost never at 18:00, the busiest time of day.</p>
+  <p>A bug that gets <em>rarer</em> when it's busy is a clue. Section 3.7 explains it.</p>
+</aside>
+
+<!-- ======================================================== 3.1 -->
+<h2 class="sec" id="s3-1"><span class="n">3.1</span>The big picture</h2>
+
+<p class="lead">A server might run a web server, a database and a monitoring agent at the same time, all behind one IP address. The <span class="term">transport layer</span> decides which program each packet belongs to, using port numbers, and offers two very different ways of sending data.</p>
+
+<ul>
+  <li><span class="term">TCP</span> (Transmission Control Protocol) sets up a <strong>connection</strong> first, then delivers a stream of bytes <strong>complete and in order</strong>, resending anything that's lost. The web, databases, SSH and most APIs use it.</li>
+  <li><span class="term">UDP</span> (User Datagram Protocol) just sends individual messages, with <strong>no connection and no guarantees</strong>. It's used where speed matters more than perfection, or where the program handles reliability itself: DNS, video calls, and QUIC, which carries HTTP/3.</li>
+</ul>
+
+<p>Both carry port numbers. Everything else about them differs, and those differences shape how firewalls, load balancers and NAT gateways behave.</p>
+
+<!-- ======================================================== 3.2 -->
+<h2 class="sec" id="s3-2"><span class="n">3.2</span>Ports and sockets</h2>
+
+<p>A <span class="term">port</span> is a 16-bit number, from 0 to 65,535. A server program <strong>listens</strong> on a port it chose in advance, so clients know where to find it. Some numbers are conventions everyone relies on:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 3.1 · Ports you'll see in cloud networks</caption>
+    <thead><tr><th class="num">Port</th><th>Protocol</th><th>Used by</th></tr></thead>
+    <tbody>
+      <tr><td class="num">22</td><td>TCP</td><td>SSH (remote login)</td></tr>
+      <tr><td class="num">53</td><td>UDP and TCP</td><td>DNS</td></tr>
+      <tr><td class="num">80 / 443</td><td>TCP (443 also UDP)</td><td>HTTP / HTTPS (UDP 443 for HTTP/3)</td></tr>
+      <tr><td class="num">123</td><td>UDP</td><td>NTP (clock sync)</td></tr>
+      <tr><td class="num">3306 / 5432</td><td>TCP</td><td>MySQL / PostgreSQL</td></tr>
+      <tr><td class="num">6379</td><td>TCP</td><td>Redis</td></tr>
+      <tr><td class="num">9092</td><td>TCP</td><td>Kafka</td></tr>
+      <tr><td class="num">500, 4500</td><td>UDP</td><td>IPsec VPNs (<a href="13-vpn-bgp.html">Chapter 13</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>The client doesn't need a well-known port. When your browser connects, the operating system picks a free <span class="term">ephemeral port</span> for it, a temporary number from a high range: 32768–60999 on Linux, 49152–65535 on Windows and macOS. The reply comes back to that port, which is how the right browser tab gets it.</p>
+
+<h3>Five values make a connection</h3>
+<p>A connection is identified by five values, together called the <span class="term">5-tuple</span>: protocol, source IP, source port, destination IP, destination port. For example:</p>
+<pre><code>TCP  10.20.17.8:51544  →  10.20.64.12:5432</code></pre>
+<p>A second connection from the same app server to the same database differs only in its source port (say 51545), so the two never get mixed up. Firewalls, NAT gateways and load balancers all keep tables keyed on this 5-tuple. Keep it in mind; it explains a lot of behaviour later in the book.</p>
+
+<aside class="side"><b>Socket</b>The programmer's word for one end of a connection: an IP address and a port, plus the operating system's bookkeeping. “The app opened a socket” means it started or accepted a connection.</aside>
+
+<h3>Which address is it listening on?</h3>
+<p>A program listens on a port <em>and an address</em>. Listening on <code>127.0.0.1</code> means “only this machine may connect”. Listening on <code>0.0.0.0</code> means “any of my addresses”. Plenty of tools and frameworks default to <code>127.0.0.1</code> for safety, and then a perfectly configured network still gets <code>connection refused</code>, because the program isn't listening where the packets arrive. <code>ss -tlnp</code> on Linux shows what's listening where.</p>
+
+<!-- ======================================================== 3.3 -->
+<h2 class="sec" id="s3-3"><span class="n">3.3</span>TCP: a connection in three packets</h2>
+
+<p>Before any data flows, TCP's two ends exchange three packets, the <span class="term">three-way handshake</span>, to agree that they're both there and to pick starting <strong>sequence numbers</strong>. Sequence numbers count bytes: they let the receiver put data back in order and tell the sender exactly what arrived.</p>
+
+<figure class="wide" id="fig3-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 300" role="img" aria-labelledby="fig3-1-t fig3-1-d">
+      <title id="fig3-1-t">The TCP three-way handshake</title>
+      <desc id="fig3-1-d">The client sends SYN with sequence number 1000. The server replies SYN-ACK with its own sequence number 5000 and acknowledges 1001. The client sends ACK 5001. Both sides are now ESTABLISHED and the client sends its first data. The SYN and SYN-ACK take one round trip.</desc>
+      <defs><marker id="c3ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+      <marker id="c3aha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="90" y="14" width="160" height="34" rx="4"/>
+      <text class="t-label" x="170" y="36" text-anchor="middle">client :51544</text>
+      <rect class="node" x="510" y="14" width="160" height="34" rx="4"/>
+      <text class="t-label" x="590" y="36" text-anchor="middle">server :443</text>
+      <path class="wire-dash" d="M170 50 V286"/>
+      <path class="wire-dash" d="M590 50 V286"/>
+      <path class="wire" d="M170 70 L586 100" marker-end="url(#c3ah)"/>
+      <text class="t-mono" x="380" y="76" text-anchor="middle">SYN  seq=1000</text>
+      <path class="wire" d="M590 114 L174 144" marker-end="url(#c3ah)"/>
+      <text class="t-mono" x="380" y="120" text-anchor="middle">SYN-ACK  seq=5000 ack=1001</text>
+      <path class="wire" d="M170 158 L586 188" marker-end="url(#c3ah)"/>
+      <text class="t-mono" x="380" y="164" text-anchor="middle">ACK  ack=5001</text>
+      <path class="wire-accent" d="M170 206 L586 236" marker-end="url(#c3aha)"/>
+      <text class="t-mono t-accent" x="380" y="212" text-anchor="middle">data (TLS ClientHello…)</text>
+      <text class="t-small" x="160" y="74" text-anchor="end">SYN_SENT</text>
+      <text class="t-small" x="160" y="148" text-anchor="end">ESTABLISHED</text>
+      <text class="t-small" x="600" y="66">LISTEN</text>
+      <text class="t-small" x="600" y="118">SYN_RECEIVED</text>
+      <text class="t-small" x="600" y="192">ESTABLISHED</text>
+      <path class="wire-dash" d="M60 70 H40 V144 H60"/>
+      <text class="t-small" x="34" y="112" text-anchor="end">RTT</text>
+      <text class="t-small" x="184" y="276">One round trip passes before the client may send data.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 3.1</b> The handshake. SYN means “synchronise”, ACK means “acknowledge”. The labels on the sides are the connection states you'll see in tools like <code>ss</code> and <code>netstat</code>.</figcaption>
+</figure>
+
+<p>Once established, TCP keeps three promises:</p>
+<ul>
+  <li><strong>Reliability.</strong> The receiver acknowledges what it got. Anything not acknowledged in time is sent again.</li>
+  <li><strong>Order.</strong> Data reaches the program in the order it was sent, even if packets arrived out of order.</li>
+  <li><strong>Pacing.</strong> Flow control stops a fast sender drowning a slow receiver, and congestion control slows everyone down when the network is overloaded.</li>
+</ul>
+
+<p>A connection ends politely with a <strong>FIN</strong> from each side, or abruptly with a <strong>RST</strong> (reset), which means “I don't know this connection, stop”. You'll meet RST again in a moment, because it's behind both “connection refused” and “connection reset”.</p>
+
+<!-- ======================================================== 3.4 -->
+<h2 class="sec" id="s3-4"><span class="n">3.4</span>Refused, timed out, reset</h2>
+
+<p>Each of the three classic connection errors maps to something specific that happened, or didn't, in the handshake. This is the transport-layer version of Table 1.5 in <a href="01-what-happens.html">Chapter 1</a>.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 3.2 · What each error means at the TCP level</caption>
+    <thead><tr><th>Error</th><th>What happened</th><th>Look at</th></tr></thead>
+    <tbody>
+      <tr><td><code>Connection refused</code></td><td>The SYN arrived; the machine answered with RST. Nothing is listening on that port and address.</td><td>Is the program running? Listening on <code>0.0.0.0</code> or only <code>127.0.0.1</code>? Right port?</td></tr>
+      <tr><td><code>Connection timed out</code></td><td>The SYN got no answer at all. The client retried several times, then gave up.</td><td>Routes and firewalls: something dropped the packets, going or returning.</td></tr>
+      <tr><td><code>Connection reset by peer</code></td><td>An established connection received a RST.</td><td>The other end crashed or closed it, or a middlebox (NAT, load balancer, firewall) forgot it.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Watch out: timeouts are slow</p>
+  <p>On Linux, an unanswered SYN is retried six times with growing waits, so a connect attempt can hang for over two minutes before failing. Programs that don't set their own <strong>connect timeout</strong> freeze for that long whenever a firewall drops their traffic. Always set one: a couple of seconds is plenty inside a cloud region.</p>
+</div>
+
+<!-- ======================================================== 3.5 -->
+<h2 class="sec" id="s3-5"><span class="n">3.5</span>UDP, and why HTTP/3 uses it</h2>
+
+<p>UDP sends a <strong>datagram</strong>: one self-contained message with source and destination ports, and nothing more. No handshake, no acknowledgements, no ordering. If it's lost, it's lost, unless the program notices and sends it again.</p>
+
+<p>That sounds worse, but it's exactly right in some cases:</p>
+<ul>
+  <li><strong>DNS</strong>: one small question, one small answer. A handshake would double the time; if the answer doesn't come, the client just asks again.</li>
+  <li><strong>Voice and video</strong>: a late packet is useless, so resending it is pointless. Better to skip it and carry on.</li>
+  <li><strong>QUIC</strong>, the transport under <strong>HTTP/3</strong>: it builds its own reliability and encryption on top of UDP, combining the transport and TLS handshakes so a new connection needs one round trip instead of two or three. It also survives a phone switching from Wi-Fi to mobile data, because connections aren't tied to the 5-tuple.</li>
+</ul>
+
+<p>For cloud networking, the main thing to remember is that UDP traffic must be allowed separately from TCP. A security group that allows “TCP 443” doesn't allow HTTP/3; load balancers have separate UDP support; and DNS needs UDP 53 <em>and</em> TCP 53 (large answers fall back to TCP).</p>
+
+<!-- ======================================================== 3.6 -->
+<h2 class="sec" id="s3-6"><span class="n">3.6</span>Stateful and stateless filtering</h2>
+
+<p>Every connection has traffic in two directions: the request goes to the server's well-known port, and the reply comes back to the client's ephemeral port. A firewall has to allow both. There are two ways it can do that, and cloud providers offer both, so you need to know which one you're configuring.</p>
+
+<figure class="wide" id="fig3-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 270" role="img" aria-labelledby="fig3-2-t fig3-2-d">
+      <title id="fig3-2-t">Stateful and stateless filtering of the same connection</title>
+      <desc id="fig3-2-d">Top: a stateful firewall with one inbound rule allowing TCP 5432. The request from the app server's port 51544 to the database's port 5432 is allowed by the rule; the reply from port 5432 back to port 51544 is allowed automatically because it belongs to a known connection. Bottom: a stateless firewall with the same rule. The request is allowed, but the reply is dropped unless another rule allows outbound traffic to ports 1024 to 65535.</desc>
+      <defs><marker id="c3ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <text class="t-label" x="20" y="26">Stateful (AWS security group): one rule, “allow TCP 5432 in”</text>
+      <rect class="priv" x="20" y="38" width="150" height="80" rx="5"/>
+      <text class="t-label" x="95" y="72" text-anchor="middle">app server</text>
+      <text class="t-mono" x="95" y="92" text-anchor="middle">10.20.17.8</text>
+      <rect class="priv" x="590" y="38" width="150" height="80" rx="5"/>
+      <text class="t-label" x="665" y="72" text-anchor="middle">database</text>
+      <text class="t-mono" x="665" y="92" text-anchor="middle">10.20.64.12</text>
+      <path class="wire" d="M172 60 H586" marker-end="url(#c3ah2)"/>
+      <text class="t-mono" x="380" y="54" text-anchor="middle">:51544 → :5432   ✓ rule</text>
+      <path class="wire-accent" d="M588 96 H176" marker-end="url(#c3ah2)"/>
+      <text class="t-mono" x="380" y="90" text-anchor="middle">:5432 → :51544</text>
+      <text class="t-small t-accent" x="380" y="114" text-anchor="middle">✓ allowed: part of a connection it remembers</text>
+
+      <text class="t-label" x="20" y="156">Stateless (AWS network ACL): the same single rule</text>
+      <rect class="priv" x="20" y="168" width="150" height="80" rx="5"/>
+      <text class="t-label" x="95" y="202" text-anchor="middle">app server</text>
+      <text class="t-mono" x="95" y="222" text-anchor="middle">10.20.17.8</text>
+      <rect class="priv" x="590" y="168" width="150" height="80" rx="5"/>
+      <text class="t-label" x="665" y="202" text-anchor="middle">database</text>
+      <text class="t-mono" x="665" y="222" text-anchor="middle">10.20.64.12</text>
+      <path class="wire" d="M172 190 H586" marker-end="url(#c3ah2)"/>
+      <text class="t-mono" x="380" y="184" text-anchor="middle">:51544 → :5432   ✓ rule</text>
+      <path class="wire-dash" d="M588 226 H400"/>
+      <text class="t-label t-warn" x="388" y="231" text-anchor="end">✗</text>
+      <text class="t-mono" x="494" y="220" text-anchor="middle">:5432 → :51544</text>
+      <text class="t-small t-warn" x="380" y="244" text-anchor="middle">✗ dropped unless a rule allows ports 1024–65535 out</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 3.2</b> The same connection through two kinds of firewall. A stateful firewall keeps a table of connections (by 5-tuple) and lets replies through. A stateless one judges every packet on its own, so you must allow the replies yourself.</figcaption>
+</figure>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">A stateful firewall remembers connections, so you write rules for who may <em>start</em> one. A stateless firewall remembers nothing, so you write rules for every packet, including replies to ephemeral ports.</p>
+</div>
+
+<p>In the cloud, security groups (AWS), network security groups (Azure) and firewall rules (Google Cloud) are stateful. AWS network ACLs are stateless. <a href="09-firewalls.html">Chapter 9</a> uses both, and the ephemeral-port rule is the single most common mistake people make with network ACLs.</p>
+
+<!-- ======================================================== 3.7 -->
+<h2 class="sec" id="s3-7"><span class="n">3.7</span>Idle connections don't live forever</h2>
+
+<p>Anything that keeps a table of connections, whether a stateful firewall, a NAT gateway or a load balancer, has limited memory. So each one forgets connections that have been <strong>idle</strong> for a while. Neither end is told. The next packet on that connection arrives at a device that has never heard of it, and the device either drops it or answers with a RST.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 3.3 · Idle timeouts you'll run into on AWS (defaults)</caption>
+    <thead><tr><th>Device</th><th>Idle timeout</th><th>After that</th></tr></thead>
+    <tbody>
+      <tr><td>NAT gateway</td><td>350 seconds</td><td>RST to the server if it sends again</td></tr>
+      <tr><td>Network Load Balancer (TCP)</td><td>350 seconds (adjustable)</td><td>RST</td></tr>
+      <tr><td>Application Load Balancer</td><td>60 seconds (adjustable)</td><td>Closes the connection</td></tr>
+      <tr><td>Security group connection tracking (TCP, established)</td><td>several days</td><td>Packets dropped</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Larder's payment client keeps a pool of open HTTPS connections to the payment provider, to save the handshakes. Those connections leave through a NAT gateway. During the night there are no orders, so pooled connections sit idle for hours. The NAT gateway forgets them after 350 seconds. At 07:00 the first order picks a pooled connection, sends a request, and the NAT gateway answers with RST: <code>Connection reset by peer</code>. At 18:00 connections are never idle long enough to be forgotten, so the bug disappears.</p>
+  <p>Cho made two changes: the pool now closes connections idle for more than 60 seconds, well under the NAT gateway's 350, and the client retries once on a reset, which is safe because payments carry an idempotency key. The resets stopped.</p>
+</aside>
+
+<p>The general fix has two parts, and you should apply both whenever a connection crosses a NAT gateway, load balancer or firewall:</p>
+<ol class="steps">
+  <li><strong>Close idle connections before the middlebox forgets them.</strong> Set the client's or pool's idle timeout below the shortest timeout on the path.</li>
+  <li><strong>Or keep them visibly alive.</strong> TCP keepalives (with an interval below that timeout, not Linux's default of two hours) or application pings stop the connection from ever going idle.</li>
+</ol>
+
+<!-- ======================================================== 3.8 -->
+<h2 class="sec" id="s3-8"><span class="n">3.8</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 3.4 · Transport-layer behaviour at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Stateful filtering</td><td>security groups</td><td>network security groups</td><td>VPC firewall rules and policies</td></tr>
+      <tr><td>Stateless filtering</td><td>network ACLs</td><td>none at the subnet level</td><td>none at the subnet level</td></tr>
+      <tr><td>NAT idle timeout (TCP)</td><td>350 s, fixed</td><td>4 min by default, up to 120 min</td><td>20 min for established TCP by default, adjustable</td></tr>
+      <tr><td>Layer 4 load balancer</td><td>Network Load Balancer</td><td>Azure Load Balancer</td><td>passthrough Network Load Balancer</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>The numbers differ, so check them for your provider, but the lesson doesn't: <strong>every stateful device on the path has an idle timeout</strong>, and your connection pools must be shorter.</p>
+
+<!-- ======================================================== 3.9 -->
+<h2 class="sec" id="s3-9"><span class="n">3.9</span>Lab: see a handshake with your own eyes</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 3 · Listen, connect, refuse, capture</p>
+  <p><strong>You'll</strong> start a server, see what it listens on, connect to it, cause a refusal, and capture the handshake packets. <strong>You need</strong> macOS or Linux (on Windows, use WSL), Python 3, <code>nc</code> and <code>tcpdump</code> (preinstalled on macOS; <code>apt install netcat-openbsd tcpdump</code> on Ubuntu). <strong>Cost:</strong> nothing.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Start a server on localhost only.</strong> In terminal 1: <code>python3 -m http.server 8000 --bind 127.0.0.1</code>.</li>
+  <li><strong>See what's listening.</strong> In terminal 2: <code>ss -tlnp | grep 8000</code> on Linux, or <code>lsof -nP -iTCP:8000 -sTCP:LISTEN</code> on macOS. Note the address: <code>127.0.0.1:8000</code>.</li>
+  <li><strong>Capture.</strong> In terminal 3: <code>sudo tcpdump -i lo -n 'tcp port 8000'</code> (on macOS the interface is <code>lo0</code>).</li>
+  <li><strong>Connect.</strong> In terminal 2: <code>nc -vz 127.0.0.1 8000</code>. In terminal 3, find the three handshake packets: <code>[S]</code>, <code>[S.]</code> and <code>[.]</code> are SYN, SYN-ACK and ACK. Then the closing <code>[F.]</code> packets.</li>
+  <li><strong>Refuse.</strong> Run <code>nc -vz 127.0.0.1 8001</code>, where nothing listens. You get <code>Connection refused</code> at once, and tcpdump (change the filter to port 8001) shows a <code>[S]</code> answered by <code>[R.]</code>: the RST.</li>
+  <li><strong>The listen-address trap.</strong> Find your machine's network address (<a href="01-what-happens.html">Lab 1</a>) and run <code>nc -vz &lt;that address&gt; 8000</code>. Refused, even though the server is running. Restart it with <code>--bind 0.0.0.0</code> and try again.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Run <code>curl -v https://example.com -o /dev/null</code> while capturing with <code>sudo tcpdump -n 'tcp port 443'</code> on your main interface. Count the round trips before the first data packet from the server.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s3-10"><span class="n">3.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>App listens on <code>127.0.0.1</code> in a container or VM</td><td><code>Connection refused</code> from everywhere else.</td><td>Listen on <code>0.0.0.0</code> (or the right interface) and use firewalls to restrict.</td></tr>
+      <tr><td>No connect timeout in the client</td><td>Requests hang for minutes when a firewall drops traffic.</td><td>Set connect timeouts of a few seconds.</td></tr>
+      <tr><td>Connection pools that outlive middlebox timeouts</td><td>Random <code>connection reset</code> after quiet periods.</td><td>Idle-close below the shortest timeout, or keepalives.</td></tr>
+      <tr><td>Allowing TCP 53 but not UDP 53 (or the reverse)</td><td>DNS fails intermittently, usually for large answers.</td><td>Allow both for DNS.</td></tr>
+      <tr><td>Stateless rules without ephemeral ports</td><td>Requests arrive, replies vanish: timeouts.</td><td>Allow 1024–65535 for return traffic, or use stateful rules.</td></tr>
+      <tr><td>Testing with ping</td><td>“Unreachable” when ICMP is blocked but the port works.</td><td>Test the real port: <code>nc -vz host port</code>.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum3">
+  <h2 class="sec" id="sum3"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Ports pick the program. Servers listen on known ports; clients use temporary <strong>ephemeral ports</strong>.</li>
+    <li>A connection is identified by its <strong>5-tuple</strong>: protocol, source IP and port, destination IP and port.</li>
+    <li><strong>TCP</strong> opens with a three-way handshake and delivers bytes reliably and in order. <strong>UDP</strong> sends independent datagrams; QUIC builds HTTP/3 on it.</li>
+    <li><strong>Refused</strong> = RST to a SYN (nothing listening). <strong>Timed out</strong> = silence (dropped). <strong>Reset</strong> = an established connection was killed or forgotten.</li>
+    <li><strong>Stateful</strong> firewalls allow replies automatically; <strong>stateless</strong> ones need rules for return traffic to ephemeral ports.</li>
+    <li>NAT gateways, load balancers and firewalls forget <strong>idle</strong> connections. Keep pools' idle timeouts shorter.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Port</dt><dd>A 16-bit number that identifies a program's endpoint on a machine.</dd>
+    <dt>Ephemeral port</dt><dd>A temporary high port the client's OS picks for one connection.</dd>
+    <dt>5-tuple</dt><dd>Protocol, source IP, source port, destination IP, destination port.</dd>
+    <dt>TCP</dt><dd>Connection-based transport: reliable, ordered, paced.</dd>
+    <dt>UDP</dt><dd>Connectionless transport of independent datagrams.</dd>
+    <dt>Three-way handshake</dt><dd>SYN, SYN-ACK, ACK: how a TCP connection opens.</dd>
+    <dt>RST</dt><dd>A reset packet: “I don't know this connection”.</dd>
+    <dt>Stateful firewall</dt><dd>Tracks connections and allows their return traffic.</dd>
+    <dt>Stateless firewall</dt><dd>Judges each packet alone, in each direction.</dd>
+    <dt>Idle timeout</dt><dd>How long a device keeps an unused connection before forgetting it.</dd>
+    <dt>QUIC</dt><dd>A reliable, encrypted transport over UDP, used by HTTP/3.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Write the 5-tuple of the reply packet for a request <code>TCP 10.20.17.8:51544 → 10.20.64.12:5432</code>. <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p><code>TCP 10.20.64.12:5432 → 10.20.17.8:51544</code>. Source and destination swap, ports included.</p></details>
+    </li>
+    <li>
+      <p>Calls to a new service fail instantly with <code>Connection refused</code>. The security group allows the port. What do you check first? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>The service itself: is it running, on that port, and listening on an address other than <code>127.0.0.1</code>? A refusal means the packets arrived, so the security group and routes aren't the problem.</p></details>
+    </li>
+    <li>
+      <p>A network ACL allows inbound TCP 443 and outbound TCP 443. Web requests from the internet to a server behind it time out. Why? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Network ACLs are stateless. Replies go from the server's port 443 to the client's ephemeral port, so the outbound rule must allow destination ports 1024–65535, not 443.</p></details>
+    </li>
+    <li>
+      <p>Why does DNS use UDP, and when does it fall back to TCP? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>A DNS lookup is one small question and one small answer, so a handshake would double its time; a lost packet is simply asked again. Answers too large for a UDP response (common with DNSSEC or many records) are retried over TCP, so both must be allowed.</p></details>
+    </li>
+    <li>
+      <p>A worker keeps a database connection open through an AWS Network Load Balancer and is idle for ten minutes between jobs. What will happen, and what are two fixes? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>The load balancer forgets the connection after 350 seconds, and the worker's next query gets a reset. Fixes: close and reopen connections when idle for less than 350 seconds (or validate them before use), or enable TCP keepalives with an interval under 350 seconds. Raising the load balancer's timeout also helps.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateway-troubleshooting.html">Troubleshoot NAT gateways</a>, including the idle timeout.</li>
+    <li>Cloudflare Learning Center: <a href="https://www.cloudflare.com/learning/ddos/glossary/tcp-ip/">What is TCP/IP?</a> and <a href="https://www.cloudflare.com/learning/performance/what-is-http3/">What is HTTP/3?</a></li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="02-ip-and-cidr.html">2 · IP addresses and CIDR without fear</a></div>
+  <div><span>Next</span><a href="04-routing.html">4 · Routing: how packets find their way</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 1 · Networking in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

@@ -1,0 +1,449 @@
+<!-- Handbook 1 · Networking in the Cloud · Chapter 9. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part II · Your network in the cloud</p>
+  <p class="chno">9</p>
+  <h1>Firewalls in the cloud: security groups and network ACLs</h1>
+  <p class="promise">Routes decide where a packet <em>can</em> go. Firewalls decide whether it's <em>allowed</em> to. Cloud networks give you firewalls on every network interface and at every subnet's edge, and the most useful thing you can learn about them is to describe who may talk to whom by role, not by address. Done that way, rules stay short, safe to change and easy to read a year later.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain how security groups and network ACLs differ, and where each one filters.</li>
+      <li>Write tiered rules that reference security groups instead of IP ranges.</li>
+      <li>Use network ACLs for coarse guardrails without breaking return traffic.</li>
+      <li>Change rules safely, and find which rule is blocking a connection.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Ports, stateful and stateless filtering (<a href="#ch3">Chapter 3</a>).</li>
+      <li>Subnets and route tables (<a href="#ch8">Chapter 8</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 50 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, AWS, about $0.40</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 9.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>On Thursday 29 October 2026, at 18:10, the deploy pipeline applied a network rule tidy-up that Eli had written and had approved that afternoon (PR 233): a few address ranges on the database's security group looked unused, so they went. Within minutes Dispatch, the service that assigns couriers to orders, was struggling. Bram, on call, checked Dispatch, the database and the containers, and all of them looked healthy. At 18:35 he found PR 233 in the pipeline's history and reverted it. For 25 minutes, Joost's operations team assigned couriers by hand.</p>
+  <p>The rule change was wrong, but the interesting questions are why the review didn't catch it, and why everything Bram checked looked healthy. Section 9.6 answers both.</p>
+</aside>
+
+<!-- ======================================================== 9.1 -->
+<h2 class="sec" id="s9-1"><span class="n">9.1</span>The big picture</h2>
+
+<p class="lead">On AWS a packet between two servers can be filtered in two places that you configure inside the VPC. A <span class="term">security group</span> wraps each network interface: it's <strong>stateful</strong> and contains only <em>allow</em> rules. A <span class="term">network ACL</span> sits at each subnet's boundary: it's <strong>stateless</strong>, has numbered <em>allow</em> and <em>deny</em> rules, and checks every packet in both directions. A packet must get past every filter on its way, and so must its reply.</p>
+
+<figure class="wide" id="fig9-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 230" role="img" aria-labelledby="fig9-1-t fig9-1-d">
+      <title id="fig9-1-t">The filters between an app server and a database</title>
+      <desc id="fig9-1-d">A packet from an app server in the app subnet to a database in the data subnet passes four filters in order: the app server's security group outbound, the app subnet's network ACL outbound, the data subnet's network ACL inbound, and the database's security group inbound. The reply passes the same four in reverse; the security groups allow it automatically, the network ACLs need rules for it.</desc>
+      <defs><marker id="c9ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="priv" x="12" y="30" width="340" height="140" rx="6"/>
+      <text class="t-small" x="24" y="50">app subnet 10.20.16.0/20</text>
+      <rect class="priv" x="408" y="30" width="340" height="140" rx="6"/>
+      <text class="t-small" x="736" y="50" text-anchor="end">data subnet 10.20.64.0/24</text>
+      <rect class="node" x="30" y="78" width="110" height="50" rx="4"/>
+      <text class="t-label" x="85" y="108" text-anchor="middle">app server</text>
+      <rect class="node" x="620" y="78" width="110" height="50" rx="4"/>
+      <text class="t-label" x="675" y="108" text-anchor="middle">database</text>
+      <rect class="pub" x="150" y="70" width="14" height="66" rx="3"/>
+      <rect class="pub" x="596" y="70" width="14" height="66" rx="3"/>
+      <rect class="node-accent" x="340" y="60" width="16" height="86" rx="3"/>
+      <rect class="node-accent" x="404" y="60" width="16" height="86" rx="3"/>
+      <path class="wire-accent" d="M164 103 H336" marker-end="url(#c9ah)"/>
+      <path class="wire-accent" d="M358 103 H400" marker-end="url(#c9ah)"/>
+      <path class="wire-accent" d="M422 103 H592" marker-end="url(#c9ah)"/>
+      <text class="t-small" x="157" y="152" text-anchor="middle">① SG out</text>
+      <text class="t-small" x="300" y="164" text-anchor="middle">② NACL out</text>
+      <text class="t-small" x="462" y="164" text-anchor="middle">③ NACL in</text>
+      <text class="t-small" x="603" y="152" text-anchor="middle">④ SG in</text>
+      <text class="t-small" x="380" y="20" text-anchor="middle">VPC router</text>
+      <rect class="pub" x="20" y="194" width="14" height="14" rx="2"/>
+      <text class="t-small" x="42" y="206">security group: per interface, stateful, allow only</text>
+      <rect class="node-accent" x="400" y="194" width="14" height="14" rx="2"/>
+      <text class="t-small" x="422" y="206">network ACL: per subnet, stateless, allow and deny</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 9.1</b> Four filters on one connection. Between servers in the <em>same</em> subnet, only the two security groups apply: network ACLs filter traffic only when it crosses a subnet boundary.</figcaption>
+</figure>
+
+<p>Further out there are more layers you'll meet later: network firewalls for inspecting traffic that leaves the VPC (<a href="#ch18">Chapter 18</a>), web application firewalls in front of HTTP services (<a href="#ch17">Chapter 17</a>), and policies inside Kubernetes (<a href="#ch19">Chapter 19</a>). But security groups do most of the everyday work, so most of this chapter is about them.</p>
+
+<!-- ======================================================== 9.2 -->
+<h2 class="sec" id="s9-2"><span class="n">9.2</span>Security groups</h2>
+
+<p>A security group is a set of rules attached to one or more network interfaces. Its behaviour fits in five lines:</p>
+<ul>
+  <li><strong>Stateful.</strong> If a connection is allowed in one direction, its replies are allowed automatically (<a href="#ch3">Chapter 3</a>).</li>
+  <li><strong>Allow rules only.</strong> Anything not allowed is denied. You can't write “deny”.</li>
+  <li><strong>No order.</strong> All rules are checked together; if any rule allows a packet, it's allowed.</li>
+  <li><strong>Inbound and outbound</strong> rules are separate. A new group allows all outbound traffic and no inbound traffic.</li>
+  <li><strong>Per interface.</strong> An interface can have several groups (up to five by default); their rules add up.</li>
+</ul>
+
+<p>Each rule names a protocol, a port or port range, and a <strong>source</strong> (for inbound) or <strong>destination</strong> (for outbound). The source can be a CIDR range, a <em>prefix list</em> (a named, reusable list of ranges), or, most usefully, <strong>another security group</strong>.</p>
+
+<!-- ======================================================== 9.3 -->
+<h2 class="sec" id="s9-3"><span class="n">9.3</span>Reference roles, not addresses</h2>
+
+<p>A rule like “allow 5432 from <code>sg-app</code>” means: allow traffic from any interface that has the security group <code>sg-app</code> attached, whatever its address is right now. When a container restarts with a new IP, or Dispatch scales from two copies to six, the rule still matches. Nobody edits it.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Give each role its own security group, and write rules between groups. Use CIDR ranges only for things outside your VPC.</p>
+</div>
+
+<figure class="wide" id="fig9-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 210" role="img" aria-labelledby="fig9-2-t fig9-2-d">
+      <title id="fig9-2-t">Larder's security groups as a chain</title>
+      <desc id="fig9-2-d">The internet reaches the load balancer group on port 443 from anywhere. The load balancer group reaches the app group on port 8080. The app group and the Dispatch group each reach the database group on port 5432. No rule mentions an IP address inside the VPC.</desc>
+      <defs><marker id="c9ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="ext" x="12" y="40" width="120" height="50" rx="25"/>
+      <text class="t-label" x="72" y="70" text-anchor="middle">internet</text>
+      <rect class="node" x="196" y="40" width="140" height="50" rx="5"/>
+      <text class="t-mono" x="266" y="70" text-anchor="middle">sg-alb</text>
+      <rect class="node" x="400" y="40" width="140" height="50" rx="5"/>
+      <text class="t-mono" x="470" y="70" text-anchor="middle">sg-app</text>
+      <rect class="node-accent" x="604" y="90" width="144" height="56" rx="5"/>
+      <text class="t-mono on-accent" x="676" y="123" text-anchor="middle">sg-db</text>
+      <rect class="node" x="400" y="146" width="140" height="50" rx="5"/>
+      <text class="t-mono" x="470" y="176" text-anchor="middle">sg-dispatch</text>
+      <path class="wire" d="M134 65 H192" marker-end="url(#c9ah2)"/>
+      <text class="t-mono" x="163" y="56" text-anchor="middle">443</text>
+      <path class="wire" d="M338 65 H396" marker-end="url(#c9ah2)"/>
+      <text class="t-mono" x="367" y="56" text-anchor="middle">8080</text>
+      <path class="wire" d="M542 65 L600 104" marker-end="url(#c9ah2)"/>
+      <path class="wire" d="M542 171 L600 134" marker-end="url(#c9ah2)"/>
+      <text class="t-mono" x="586" y="78" text-anchor="middle">5432</text>
+      <text class="t-mono" x="586" y="170" text-anchor="middle">5432</text>
+      <text class="t-small" x="12" y="130">Each arrow is one inbound rule on the</text>
+      <text class="t-small" x="12" y="148">group it points to, with the group it</text>
+      <text class="t-small" x="12" y="166">comes from as the source.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 9.2</b> Rules between roles. Adding a sixth Dispatch copy, or moving the app to new subnets, changes no rule.</figcaption>
+</figure>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 9.1 · The rules behind Figure 9.2 (inbound)</caption>
+    <thead><tr><th>Group</th><th>Port</th><th>Source</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><code>sg-alb</code></td><td>TCP 443</td><td><code>0.0.0.0/0</code>, <code>::/0</code></td><td>Customers on the internet</td></tr>
+      <tr><td><code>sg-app</code></td><td>TCP 8080</td><td><code>sg-alb</code></td><td>Only the load balancer reaches the app, including its health checks</td></tr>
+      <tr><td><code>sg-db</code></td><td>TCP 5432</td><td><code>sg-app</code></td><td>Larder Core and services</td></tr>
+      <tr><td><code>sg-db</code></td><td>TCP 5432</td><td><code>sg-dispatch</code></td><td>Courier dispatch</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<aside class="side"><b>Across VPCs</b>Security group references work within a VPC, across peered VPCs in the same region, and through a transit gateway when its security-group referencing option is on (<a href="#ch11">Chapter 11</a>). Beyond that, you're back to CIDR ranges.</aside>
+
+<!-- ======================================================== 9.4 -->
+<h2 class="sec" id="s9-4"><span class="n">9.4</span>Network ACLs</h2>
+
+<p>A network ACL (NACL) is attached to a subnet and filters every packet that enters or leaves it. It works very differently from a security group:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 9.2 · Security groups and network ACLs side by side</caption>
+    <thead><tr><th></th><th>Security group</th><th>Network ACL</th></tr></thead>
+    <tbody>
+      <tr><td>Attached to</td><td>network interfaces</td><td>subnets</td></tr>
+      <tr><td>State</td><td>stateful: replies allowed</td><td>stateless: replies need their own rules</td></tr>
+      <tr><td>Rule actions</td><td>allow only</td><td>allow and deny</td></tr>
+      <tr><td>Evaluation</td><td>all rules together</td><td>by rule number, lowest first; the first match decides</td></tr>
+      <tr><td>Sources</td><td>CIDRs, prefix lists, security groups</td><td>CIDRs only</td></tr>
+      <tr><td>Default</td><td>new group: no inbound, all outbound</td><td>default NACL: allows everything both ways</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Because they're stateless and address-based, NACLs are a poor tool for everyday rules and a good one for <strong>coarse guardrails</strong>: “nothing outside the app tier may ever reach the data subnets”, or “block this range now” during an incident. Here's Larder's NACL for its data subnets:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 9.3 · NACL <code>nacl-data</code></caption>
+    <thead><tr><th>Direction</th><th class="num">Rule #</th><th>Protocol / ports</th><th>Peer</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td>Inbound</td><td class="num">100</td><td>TCP 5432</td><td><code>10.20.16.0/20</code>–<code>10.20.48.0/20</code> (one rule each)</td><td>allow</td></tr>
+      <tr><td>Inbound</td><td class="num">200</td><td>TCP 1024–65535</td><td><code>0.0.0.0/0</code></td><td>allow (replies to the database's own outbound calls, e.g. S3)</td></tr>
+      <tr><td>Inbound</td><td class="num">*</td><td>all</td><td>all</td><td>deny</td></tr>
+      <tr><td>Outbound</td><td class="num">100</td><td>TCP 1024–65535</td><td><code>10.20.0.0/16</code></td><td>allow (replies to the app tier)</td></tr>
+      <tr><td>Outbound</td><td class="num">200</td><td>TCP 443</td><td><code>0.0.0.0/0</code></td><td>allow (backups to S3 through the endpoint)</td></tr>
+      <tr><td>Outbound</td><td class="num">*</td><td>all</td><td>all</td><td>deny</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: return traffic</p>
+  <p>Every stateless rule set needs the reverse direction too, and replies go to <strong>ephemeral ports</strong>, not the service port. Forgetting outbound rule 100 above makes every database query time out, while the security groups all look perfect. If you're not sure you need NACLs, leave the default (allow all) in place and do your filtering with security groups.</p>
+</div>
+
+<!-- ======================================================== 9.5 -->
+<h2 class="sec" id="s9-5"><span class="n">9.5</span>How the layers combine</h2>
+
+<p>A connection works only if <strong>every</strong> filter on the path allows it, in both directions, and a route exists both ways (<a href="#ch4">Chapter 4</a>). When it doesn't work, check in the order a packet meets them, as in Figure 9.1:</p>
+
+<ol class="steps">
+  <li><strong>Source security group, outbound.</strong> Usually “all”, unless you've restricted egress.</li>
+  <li><strong>Source subnet NACL, outbound</strong>, then <strong>destination subnet NACL, inbound</strong>: only if the two are in different subnets.</li>
+  <li><strong>Destination security group, inbound.</strong> The most common culprit: wrong port, wrong source group, or a rule on the wrong group.</li>
+  <li><strong>The reply:</strong> destination NACL outbound and source NACL inbound, on ephemeral ports.</li>
+</ol>
+
+<p>Security group denials don't send anything back; the packet just disappears, so blocked connections <strong>time out</strong>. A <code>connection refused</code> means you got through every firewall and reached a machine with nothing listening (<a href="#ch3">Chapter 3</a>).</p>
+
+<!-- ======================================================== 9.6 -->
+<h2 class="sec" id="s9-6"><span class="n">9.6</span>Changing rules safely</h2>
+
+<p>One detail of stateful filtering makes firewall changes behave in a way that surprises almost everyone the first time. When you <strong>remove</strong> a security group rule, connections that are already established and tracked usually keep working. Only <strong>new</strong> connections are blocked.</p>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>The database's security group still allowed Dispatch by address range, from before the move to containers, and the range that looked unused was the one Dispatch's tasks had recently started getting addresses from. The plan in PR 233 showed the removal clearly; it just didn't show who depended on it. When the rule went at 18:10, Dispatch's two running copies kept their pooled connections open: already tracked, so still allowed, which is why they looked healthy. But it was the start of the evening peak, so Dispatch scaled up, and every new copy timed out connecting to Postgres while the two old ones were swamped.</p>
+  <p>The network fixes, after the revert: replace every address-based rule inside the VPC with security group references (<code>sg-dispatch</code> in Figure 9.2), so a rule says <em>who</em> it's for; and add a step to the pipeline that runs Reachability Analyzer for the paths that matter, such as Dispatch → Postgres on 5432, after every network change. (The operations side of this incident, a change feed and no changes in the evening peak, is in Eli's IT Operations Notebook.)</p>
+</aside>
+
+<p>The general lessons:</p>
+<ul>
+  <li><strong>A change that “didn't break anything” hasn't been tested yet.</strong> Test with a new connection, not with an existing one.</li>
+  <li><strong>Manage rules as code</strong>, reviewed like any other change, so the plan shows exactly what's removed (<a href="#ch24">Chapter 24</a>). A reviewed plan still can't tell you who depends on a rule; that's what role-based rules and reachability checks are for.</li>
+  <li><strong>Automate reachability checks</strong> for critical paths. AWS Reachability Analyzer works out from configuration alone, without sending traffic, whether a path is open, and which rule blocks it if not.</li>
+  <li><strong>Name and describe every rule.</strong> “Why is this here?” should be answerable from the rule's own description.</li>
+</ul>
+
+<!-- ======================================================== 9.7 -->
+<h2 class="sec" id="s9-7"><span class="n">9.7</span>Least privilege, including outbound</h2>
+
+<p>Most teams tighten inbound rules carefully and leave outbound at the default “allow everything”. That's convenient, but it means a compromised server can send data anywhere. Restrict outbound traffic where the stakes are highest:</p>
+<ul>
+  <li><strong>Data tier:</strong> outbound only to what it needs: replies to the app tier, and S3 through the gateway endpoint using its <em>prefix list</em> as the destination.</li>
+  <li><strong>App tier:</strong> to the database group, the cache group, and HTTPS out. Restricting HTTPS by <em>domain name</em>, not address, needs a different tool: a proxy or network firewall (<a href="#ch18">Chapter 18</a>).</li>
+  <li>Remember the basics the OS needs: DNS to the VPC resolver and time sync are handled by the VPC itself on AWS and aren't filtered by security groups.</li>
+</ul>
+
+<!-- ======================================================== 9.8 -->
+<h2 class="sec" id="s9-8"><span class="n">9.8</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 9.4 · Firewalls inside the network at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Main tool</td><td>security groups (per interface)</td><td>network security groups (NSGs), on a subnet or a NIC</td><td>VPC firewall rules and firewall policies</td></tr>
+      <tr><td>Stateful?</td><td>yes</td><td>yes</td><td>yes</td></tr>
+      <tr><td>Deny rules and order</td><td>no deny; no order</td><td>allow and deny, by priority (100–4096)</td><td>allow and deny, by priority</td></tr>
+      <tr><td>Refer to roles</td><td>security group references</td><td>application security groups, and service tags for Azure services</td><td>network tags or service accounts as targets and sources</td></tr>
+      <tr><td>Stateless subnet filter</td><td>network ACLs</td><td>none</td><td>none</td></tr>
+      <tr><td>Organisation-wide rules</td><td>Firewall Manager policies</td><td>Virtual Network Manager security admin rules</td><td>hierarchical firewall policies</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>An NSG can sit on a subnet, a network interface, or both; traffic must pass both. Default rules allow traffic inside the VNet and from Azure's load balancer, and deny other inbound traffic. Group VMs by role with <strong>application security groups</strong> and refer to Azure services with <strong>service tags</strong> such as <code>Storage.WestEurope</code> instead of address ranges.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>Firewall rules belong to the whole VPC network, not a subnet, and apply to the VMs they <em>target</em>, chosen by network tag or, better, by service account. The implied rules allow all egress and deny all ingress. Organisation and folder-level <strong>hierarchical firewall policies</strong> let a central team set rules that projects can't override.</p>
+</div>
+
+<!-- ======================================================== 9.9 -->
+<h2 class="sec" id="s9-9"><span class="n">9.9</span>Lab: let the analyser find the blocking rule</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 9 · Security groups, a NACL and Reachability Analyzer</p>
+  <p><strong>You'll build</strong> two subnets with a network interface each (no servers needed), tiered security groups and a stateless NACL, then ask Reachability Analyzer whether the app can reach the database, and break it two ways. <strong>You need</strong> the AWS CLI and Terraform (<a href="#appC">Appendix C</a>). <strong>Cost:</strong> the network interfaces, groups and ACLs are free; each analysis costs $0.10, so about $0.40.</p>
+</div>
+
+<p class="code-title"><span>main.tf</span><span>Terraform ≥ 1.5, AWS provider 5.x</span></p>
+<pre><code><span class="k">provider</span> <span class="s">"aws"</span> { region = <span class="s">"eu-central-1"</span> }
+
+<span class="k">resource</span> <span class="s">"aws_vpc"</span> <span class="s">"lab"</span> { cidr_block = <span class="s">"10.30.0.0/16"</span> }
+
+<span class="k">resource</span> <span class="s">"aws_subnet"</span> <span class="s">"app"</span> {
+  vpc_id     = aws_vpc.lab.id
+  cidr_block = <span class="s">"10.30.1.0/24"</span>
+}
+<span class="k">resource</span> <span class="s">"aws_subnet"</span> <span class="s">"data"</span> {
+  vpc_id     = aws_vpc.lab.id
+  cidr_block = <span class="s">"10.30.2.0/24"</span>
+}
+
+<span class="c"># 9.3 · one group per role; the database allows 5432 from the app GROUP</span>
+<span class="k">resource</span> <span class="s">"aws_security_group"</span> <span class="s">"app"</span> {
+  name   = <span class="s">"sg-app"</span>
+  vpc_id = aws_vpc.lab.id
+}
+<span class="k">resource</span> <span class="s">"aws_security_group"</span> <span class="s">"db"</span> {
+  name   = <span class="s">"sg-db"</span>
+  vpc_id = aws_vpc.lab.id
+}
+
+<span class="c"># Terraform removes AWS's default allow-all egress rule, so add it back for the app</span>
+<span class="k">resource</span> <span class="s">"aws_vpc_security_group_egress_rule"</span> <span class="s">"app_out"</span> {
+  security_group_id = aws_security_group.app.id
+  ip_protocol       = <span class="s">"-1"</span>
+  cidr_ipv4         = <span class="s">"0.0.0.0/0"</span>
+}
+<span class="k">resource</span> <span class="s">"aws_vpc_security_group_ingress_rule"</span> <span class="s">"db_from_app"</span> {
+  security_group_id            = aws_security_group.db.id
+  referenced_security_group_id = aws_security_group.app.id
+  ip_protocol                  = <span class="s">"tcp"</span>
+  from_port                    = 5432
+  to_port                      = 5432
+  description                  = <span class="s">"Postgres from the app tier"</span>
+}
+
+<span class="c"># 9.4 · a stateless guardrail on the data subnet</span>
+<span class="k">resource</span> <span class="s">"aws_network_acl"</span> <span class="s">"data"</span> {
+  vpc_id     = aws_vpc.lab.id
+  subnet_ids = [aws_subnet.data.id]
+  ingress {
+    rule_no    = 100
+    action     = <span class="s">"allow"</span>
+    protocol   = <span class="s">"tcp"</span>
+    cidr_block = <span class="s">"10.30.1.0/24"</span>
+    from_port  = 5432
+    to_port    = 5432
+  }
+  egress {                                   <span class="c"># replies to the app subnet</span>
+    rule_no    = 100
+    action     = <span class="s">"allow"</span>
+    protocol   = <span class="s">"tcp"</span>
+    cidr_block = <span class="s">"10.30.1.0/24"</span>
+    from_port  = 1024
+    to_port    = 65535
+  }
+}
+
+<span class="c"># stand-ins for an app server and a database: just network interfaces</span>
+<span class="k">resource</span> <span class="s">"aws_network_interface"</span> <span class="s">"app"</span> {
+  subnet_id       = aws_subnet.app.id
+  security_groups = [aws_security_group.app.id]
+}
+<span class="k">resource</span> <span class="s">"aws_network_interface"</span> <span class="s">"db"</span> {
+  subnet_id       = aws_subnet.data.id
+  security_groups = [aws_security_group.db.id]
+}
+
+<span class="k">output</span> <span class="s">"app_eni"</span> { value = aws_network_interface.app.id }
+<span class="k">output</span> <span class="s">"db_eni"</span>  { value = aws_network_interface.db.id }</code></pre>
+
+<ol class="steps">
+  <li><strong>Create it</strong> with <code>terraform init</code> and <code>terraform apply</code>. Read the plan first: there are no instances, so nothing here costs money.</li>
+  <li><strong>Define the path and analyse it.</strong>
+<pre><code>P=$(aws ec2 create-network-insights-path \
+  --source $(terraform output -raw app_eni) --destination $(terraform output -raw db_eni) \
+  --protocol tcp --destination-port 5432 \
+  --query NetworkInsightsPath.NetworkInsightsPathId --output text)
+
+check() {
+  A=$(aws ec2 start-network-insights-analysis --network-insights-path-id $P \
+      --query NetworkInsightsAnalysis.NetworkInsightsAnalysisId --output text)
+  while [ "$(aws ec2 describe-network-insights-analyses --network-insights-analysis-ids $A \
+            --query 'NetworkInsightsAnalyses[0].Status' --output text)" = running ]; do sleep 5; done
+  aws ec2 describe-network-insights-analyses --network-insights-analysis-ids $A \
+    --query 'NetworkInsightsAnalyses[0].[NetworkPathFound, Explanations[0].ExplanationCode, Explanations[0].Direction]'
+}
+check</code></pre>
+  You should see <code>true</code>: the path is open.</li>
+  <li><strong>Break the NACL.</strong> Delete the <code>egress</code> block from <code>aws_network_acl.data</code>, <code>terraform apply</code>, and run <code>check</code> again. The explanation names the network ACL and the direction: the reply has nowhere to go.</li>
+  <li><strong>Fix it and break the security group.</strong> Restore the egress block, change <code>from_port</code> and <code>to_port</code> in <code>db_from_app</code> to 3306, apply, and <code>check</code>. Now the explanation points at the security group.</li>
+  <li><strong>Clean up.</strong> Restore the rule if you like, then run <code>aws ec2 delete-network-insights-path --network-insights-path-id $P</code> (delete its analyses first if asked) and <code>terraform destroy</code>.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Add a third interface with a new group <code>sg-dispatch</code>, and give the database a second rule for it, as in Figure 9.2. Analyse the Dispatch path without touching the app's rule.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s9-10"><span class="n">9.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>IP ranges for things inside the VPC</td><td>Rules break when tasks get new addresses; ranges grow too wide over time.</td><td>Security group references.</td></tr>
+      <tr><td>Testing a removal with existing connections</td><td>The change looks safe; new connections fail later.</td><td>Test with new connections; use Reachability Analyzer.</td></tr>
+      <tr><td>NACLs without ephemeral-port rules</td><td>Requests arrive, replies vanish: timeouts.</td><td>Allow 1024–65535 for replies, or keep the default NACL.</td></tr>
+      <tr><td><code>0.0.0.0/0</code> inbound on databases or SSH</td><td>Exposed to the whole internet if a route ever allows it.</td><td>Only the groups that need it; Session Manager instead of SSH.</td></tr>
+      <tr><td>Rules with no description</td><td>Nobody dares delete anything, or someone deletes the wrong thing.</td><td>Describe each rule's purpose; manage as code.</td></tr>
+      <tr><td>Changing rules by hand in the console</td><td>No review, no history, drift from code.</td><td>Terraform with reviewed plans (<a href="#ch24">Chapter 24</a>).</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum9">
+  <h2 class="sec" id="sum9"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li><strong>Security groups</strong> sit on interfaces: stateful, allow-only, unordered. <strong>NACLs</strong> sit on subnets: stateless, ordered, allow and deny.</li>
+    <li>A connection needs every filter on the path, both directions, to allow it. Blocked traffic times out.</li>
+    <li>Write rules between <strong>roles</strong> by referencing security groups; use CIDRs only for the outside world.</li>
+    <li>Use NACLs as coarse guardrails, and always allow the ephemeral-port replies.</li>
+    <li>Removing a rule doesn't cut <strong>tracked</strong> connections; test with new ones. Manage rules as code and check critical paths automatically.</li>
+    <li>Restrict outbound traffic where data is most sensitive.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Security group</dt><dd>A stateful, allow-only firewall attached to network interfaces.</dd>
+    <dt>Network ACL</dt><dd>A stateless, ordered allow/deny list attached to a subnet.</dd>
+    <dt>Security group reference</dt><dd>A rule whose source or destination is another security group.</dd>
+    <dt>Prefix list</dt><dd>A named set of CIDR ranges usable in rules and routes.</dd>
+    <dt>Connection tracking</dt><dd>How a stateful firewall remembers connections and allows their replies.</dd>
+    <dt>Least privilege</dt><dd>Allowing only the traffic each role actually needs.</dd>
+    <dt>Reachability Analyzer</dt><dd>An AWS tool that checks from configuration whether a path is open.</dd>
+    <dt>NSG / ASG</dt><dd>Azure's network security groups and application security groups.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Two servers in the same subnet can't talk. Which filters could be responsible: the security groups, the NACL, or both? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Only the security groups. A NACL filters traffic crossing the subnet boundary, and this traffic never leaves the subnet.</p></details>
+    </li>
+    <li>
+      <p>Why is “allow 5432 from <code>sg-app</code>” better than “allow 5432 from <code>10.20.16.0/20</code>”? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>It follows the role, not the address: any interface with <code>sg-app</code> is allowed, wherever it gets its address, and nothing else in that range is. It doesn't need editing when servers move, scale or change subnet.</p></details>
+    </li>
+    <li>
+      <p>You remove a rule and everything keeps working, so you close the change. An hour later a deploy fails to connect. What happened? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>The existing connections were tracked, so they stayed allowed after the rule was removed. The deploy started new processes that opened new connections, which the remaining rules don't allow.</p></details>
+    </li>
+    <li>
+      <p>Write the inbound and outbound NACL rules a public subnet needs for a web server to serve HTTPS to the internet. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Inbound: allow TCP 443 from <code>0.0.0.0/0</code>. Outbound: allow TCP 1024–65535 to <code>0.0.0.0/0</code> for the replies. (If the server also makes outbound calls, add outbound 443 and inbound 1024–65535 for those replies.)</p></details>
+    </li>
+    <li>
+      <p>A platform team wants a rule that no team can override: nothing may reach the data subnets except from the app subnets. Which tools would you use on AWS, Azure and Google Cloud? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>AWS: a NACL on the data subnets (managed centrally), or Firewall Manager policies. Azure: Virtual Network Manager security admin rules, which take precedence over NSGs. Google Cloud: a hierarchical firewall policy at the organisation or folder level.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html">Security groups</a>, <a href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/security-group-connection-tracking.html">connection tracking</a> and <a href="https://docs.aws.amazon.com/vpc/latest/reachability/what-is-reachability-analyzer.html">Reachability Analyzer</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/virtual-network/network-security-groups-overview">Network security groups</a>.</li>
+    <li>Google Cloud: <a href="https://cloud.google.com/firewall/docs/firewalls">VPC firewall rules</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="#ch8">8 · Inside a VPC</a></div>
+  <div><span>Next</span><a href="#ch10">10 · Planning your IP address space</a></div>
+</nav>

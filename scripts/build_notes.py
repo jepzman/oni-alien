@@ -23,6 +23,7 @@ from doodle import ICONS, Doodle, esc, highlight  # noqa: E402
 import cheatsheet  # noqa: E402
 import dive  # noqa: E402
 import grimoire  # noqa: E402
+import build_handbooks  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC = ROOT / "public"
@@ -2439,7 +2440,26 @@ def darkside_shelf(acts):
     return re.sub(r'<span class="spine-vol">\d+</span>', lambda m: f'<span class="spine-vol">{next(numerals)}</span>', html)
 
 
-def render_landing(sheets=(), dives=(), darkside=None):
+def handbook_items(books):
+    items = []
+    for b in books:
+        k = b["key"]
+        n, total = len(b["written"]), b["n_chapters"]
+        count = f"{n} of {total} chapters" if n < total else f"{total} chapters"
+        items.append(f'''    <li class="book book--handbook">
+      <a class="book-cover" href="handbooks/{k}/index.html" aria-label="Open handbook {b['no']}: {esc(b['title'])}">
+        <span class="book-band" aria-hidden="true"></span>
+        <span class="book-label"><small>handbook {b['no']}</small><b>{esc(b['title'])}</b><i>{count}</i></span>
+      </a>
+      <div class="book-meta">
+        <p>{esc(b['subtitle'])}. {esc(b['shelf_blurb'])}</p>
+        <p class="book-actions"><a class="btn" href="handbooks/{k}/index.html">Open book</a><a class="btn btn--ghost" href="handbooks/{k}/pdf/{k}-handbook.pdf">{DL}PDF</a></p>
+      </div>
+    </li>''')
+    return "\n".join(items)
+
+
+def render_landing(sheets=(), dives=(), darkside=None, books=()):
     series1 = [j for j in shelf() if j.get("series", 1) == 1]
     series2 = [j for j in shelf() if j.get("series", 1) == 2]
     months = []
@@ -2449,7 +2469,7 @@ def render_landing(sheets=(), dives=(), darkside=None):
     total = sum(len(j["catalogue"]) for j in shelf())
     n1 = sum(len(j["catalogue"]) for j in series1)
     return "\n".join([
-        head("Jef’s Notes", "Software design in sizes that fit a working day: ten-minute pattern notes with doodles and trade-offs, thirty-minute deep dives, two practitioner notebooks that follow one start-up, and printable cheat sheets.", 0, "Architects+Daughter&family=Permanent+Marker&family=IBM+Plex+Sans+Condensed:wght@700&family=Pirata+One&family=IM+Fell+English+SC"),
+        head("Jef’s Notes", "Software design in sizes that fit a working day: ten-minute pattern notes with doodles and trade-offs, thirty-minute deep dives, two practitioner notebooks that follow one start-up, and printable cheat sheets.", 0, "Architects+Daughter&family=Permanent+Marker&family=IBM+Plex+Sans+Condensed:wght@700&family=Pirata+One&family=IM+Fell+English+SC&family=Archivo:wght@800"),
         body_open(),
         '<a class="skip-link" href="#main">Skip to the shelf</a>',
         bar(None, 0, "shelf"),
@@ -2466,6 +2486,9 @@ def render_landing(sheets=(), dives=(), darkside=None):
         '  <h2 id="deep-dives"><span class="num">↓</span>Deep dives <span class="side">thirty minutes each</span></h2>',
         f'  <p class="hook">The textbook chapter you were supposed to read, with someone else\'s pencil notes in the margin. {NUMBER_WORDS[len(dives)].capitalize()} so far, each one a pattern after it has met production, with a skim mode for the honest.</p>',
         f'  <ul class="shelf shelf-series">\n{dive_items(dives)}\n  </ul>',
+        '  <h2 id="handbooks"><span class="num">❡</span>Handbooks <span class="side">a whole course each</span></h2>',
+        '  <p class="hook">One big topic taught from the ground up, for readers who know a little and want to be competent by the end. Chapters build on each other, with precise diagrams, worked examples from Larder, a hands-on lab and questions to check yourself.</p>',
+        f'  <ul class="shelf shelf-series">\n{handbook_items(books)}\n  </ul>',
         '  <h2 id="series-2"><span class="num">✎</span>The Practitioner\'s Notebooks <span class="side">a story in three voices</span></h2>',
         '  <noscript><style>.pulled[hidden] { display: grid !important; } .spines { display: none !important; }</style></noscript>',
         '  <p class="hook">A soap opera about a grocery start-up, told by its architect, its product owner, its project manager and the engineer who keeps it running. Nobody dies. Several roadmaps do.</p>',
@@ -2492,11 +2515,12 @@ def render_landing(sheets=(), dives=(), darkside=None):
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
         '  <p class="aside">the architect\'s, product owner\'s, project manager\'s and IT operations notebooks are complete, six volumes each. Next (★): the client manager. The deep dives get a second season too.</p>',
         f'  <div class="future">\n{chr(10).join(months)}\n  </div>',
-        '  <h2 id="inside"><span class="num">?</span>What\'s inside <span class="side">four formats, same idea</span></h2>',
+        '  <h2 id="inside"><span class="num">?</span>What\'s inside <span class="side">five formats, same idea</span></h2>',
         '''  <ol class="how-to">
     <li><b>A pattern note</b> has eight sections: the problem, a real-life analogy, how it works, gains vs losses, nine ratings, common pitfalls, when to use it, and a self-check quiz.</li>
     <li><b>A deep dive</b> has ten chapters: a recap of the notes, the real mechanism, failure drills, the hard problem, numbers, testing, running it, tools, a lab and a review checklist. Every chapter opens with its gist.</li>
     <li><b>A practitioner's note</b> has the same eight sections as a pattern note, set inside the Larder story, plus a template to copy and a “try it” exercise.</li>
+    <li><b>A handbook</b> is a book in chapters: each opens with what you'll be able to do, teaches one idea at a time with diagrams and worked examples, and ends with a lab, common mistakes, a summary and questions with answers.</li>
     <li><b>A cheat sheet</b> is a few A4 cards: a map on top, boxed panels below, and a PDF to print.</li>
   </ol>''',
         '  <p class="folio">✦</p>',
@@ -3024,7 +3048,9 @@ def main():
                             pdf=f"deep-dives/{d['slug']}/pdf/{dive.pdf_name(d)}", notes=[]))
         print(f"[deep-dives] wrote {d['slug']} ({len(d['chapters'])} chapters)")
     darkside = grimoire.build(asset)
-    (PUBLIC / "index.html").write_text(render_landing(sheets, dives, darkside), encoding="utf-8")
+    books, hb_listing = build_handbooks.build()
+    listing.extend(hb_listing)
+    (PUBLIC / "index.html").write_text(render_landing(sheets, dives, darkside, books), encoding="utf-8")
     (PUBLIC / "journals.json").write_text(json.dumps(listing, indent=1), encoding="utf-8")
     # old links from before the shelf existed (everything was the distributed journal)
     old = PUBLIC / "notes"

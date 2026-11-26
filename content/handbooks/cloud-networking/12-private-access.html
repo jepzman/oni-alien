@@ -1,0 +1,387 @@
+<!-- Handbook 1 · Networking in the Cloud · Chapter 12. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part III · Connecting networks</p>
+  <p class="chno">12</p>
+  <h1>Private access to cloud services</h1>
+  <p class="promise">Your servers call dozens of services that aren't in your VPC: the provider's own APIs for secrets, keys, queues and container images, and other companies' services too. By default those calls go out through a NAT gateway and across the provider's public endpoints. This chapter shows how to reach them privately instead, and how to offer one of your own services privately to a partner, without connecting your networks at all.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Choose between gateway endpoints, interface endpoints and NAT for a service.</li>
+      <li>Explain how an interface endpoint's private DNS works, and when it surprises people.</li>
+      <li>Publish your own service with PrivateLink and connect a consumer to it.</li>
+      <li>Restrict what can be done through an endpoint with endpoint policies.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>DNS and private zones (<a href="#ch5">Chapter 5</a>).</li>
+      <li>Gateway endpoints and isolated subnets (<a href="#ch8">Chapter 8</a>).</li>
+      <li>Overlapping ranges (<a href="#ch10">Chapter 10</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 50 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, AWS, about $0.40</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 12.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Two requests land on Eli's desk in the same week. Korenwolf wants its office ordering system to call Larder's ordering API privately, and its network uses Larder's production range, <code>10.20.0.0/16</code> (<a href="#ch10">Chapter 10</a>). And Lena, the data protection officer, reviewing the data tier, asks why the database migration job in the isolated subnets has a route to the internet at all. The answer is that it needs Secrets Manager and the container registry, which live “on the internet”.</p>
+  <p>Both requests have the same answer, from opposite sides. This chapter builds it.</p>
+</aside>
+
+<!-- ======================================================== 12.1 -->
+<h2 class="sec" id="s12-1"><span class="n">12.1</span>The big picture</h2>
+
+<p class="lead">A cloud provider's services, like Secrets Manager or S3, are reached through regional endpoints with public addresses. A server in a private subnet calls them through a NAT gateway: out of the VPC, onto the provider's public front door, and back. It works, but it costs NAT processing fees, needs a route to the internet, and makes the traffic harder to restrict. There are two private alternatives on AWS, and a third for services you build yourself:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 12.1 · Ways to reach a service privately on AWS</caption>
+    <thead><tr><th></th><th>Gateway endpoint</th><th>Interface endpoint</th><th>Endpoint service (PrivateLink)</th></tr></thead>
+    <tbody>
+      <tr><td>For</td><td>S3 and DynamoDB only</td><td>most AWS services, and partners' services</td><td>publishing <em>your</em> service to other VPCs and accounts</td></tr>
+      <tr><td>How it works</td><td>a route to the service's prefix list in your route tables</td><td>network interfaces with private IPs in your subnets</td><td>a Network Load Balancer behind an endpoint service; consumers create interface endpoints to it</td></tr>
+      <tr><td>Reachable from</td><td>only the VPC's own subnets</td><td>the VPC, and peered, transit and on-premises networks</td><td>wherever the consumer's endpoint is reachable</td></tr>
+      <tr><td>Cost</td><td>free</td><td>per hour per zone, plus per GB</td><td>the consumer pays for its endpoint; you pay for your NLB</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 12.2 -->
+<h2 class="sec" id="s12-2"><span class="n">12.2</span>Interface endpoints</h2>
+
+<p>An <span class="term">interface endpoint</span> puts a network interface, with a private IP address from your subnet, into each zone you choose. Behind that interface, AWS PrivateLink carries traffic to the service, entirely on AWS's network. To your servers, the service now lives at a few addresses inside your own VPC.</p>
+
+<figure class="wide" id="fig12-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig12-1-t fig12-1-d">
+      <title id="fig12-1-t">An interface endpoint</title>
+      <desc id="fig12-1-d">Inside Larder's VPC, a migration job in the isolated data subnet looks up secretsmanager.eu-central-1.amazonaws.com and gets the private address 10.20.64.25, the endpoint's network interface in the same subnet. Its request goes to that interface and, through PrivateLink, to Secrets Manager. No NAT gateway or internet route is involved. The endpoint has its own security group.</desc>
+      <defs><marker id="c12ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="vpc" x="12" y="20" width="470" height="210" rx="8"/>
+      <text class="t-title t-accent" x="28" y="44">VPC 10.20.0.0/16</text>
+      <rect class="priv" x="28" y="58" width="438" height="156" rx="5"/>
+      <text class="t-label" x="42" y="80">data subnet 10.20.64.0/24 (no internet route)</text>
+      <rect class="node" x="44" y="108" width="150" height="60" rx="4"/>
+      <text class="t-label" x="119" y="134" text-anchor="middle">migration job</text>
+      <text class="t-mono" x="119" y="154" text-anchor="middle">10.20.64.11</text>
+      <rect class="node-accent" x="296" y="102" width="150" height="72" rx="4"/>
+      <text class="t-label on-accent" x="371" y="128" text-anchor="middle">endpoint ENI</text>
+      <text class="t-mono on-accent" x="371" y="148" text-anchor="middle">10.20.64.25</text>
+      <text class="t-small on-accent" x="371" y="164" text-anchor="middle">+ security group</text>
+      <path class="wire-accent" d="M196 138 H292" marker-end="url(#c12ah)"/>
+      <text class="t-mono" x="244" y="130" text-anchor="middle">:443</text>
+      <text class="t-small" x="44" y="198">DNS: secretsmanager.eu-central-1.amazonaws.com → 10.20.64.25</text>
+      <path class="wire-accent" d="M448 138 H590" marker-end="url(#c12ah)"/>
+      <text class="t-small t-accent" x="519" y="130" text-anchor="middle">PrivateLink</text>
+      <rect class="ext" x="596" y="104" width="150" height="68" rx="34"/>
+      <text class="t-label" x="671" y="134" text-anchor="middle">Secrets Manager</text>
+      <text class="t-small" x="671" y="152" text-anchor="middle">(AWS's side)</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 12.1</b> An interface endpoint brings the service into your subnet. The job uses the service's normal name and SDK; private DNS makes that name resolve to the endpoint's address.</figcaption>
+</figure>
+
+<p>Three details make interface endpoints work well, or badly:</p>
+<ul>
+  <li><strong>Private DNS.</strong> With private DNS turned on, the service's ordinary public name (<code>secretsmanager.eu-central-1.amazonaws.com</code>) resolves to the endpoint's private addresses <em>for anything using the VPC's resolver</em>. No code or configuration changes. It needs the VPC's DNS resolution and DNS hostnames settings on (<a href="#ch5">Chapter 5</a>).</li>
+  <li><strong>A security group</strong> on the endpoint decides who may use it. Allow 443 from the groups or ranges that need the service, and nothing else.</li>
+  <li><strong>An endpoint policy</strong> decides what may be done <em>through</em> it, as an IAM-style policy. For example: only secrets belonging to Larder's own accounts, so a compromised job can't send data to a secret in an attacker's account through your endpoint.</li>
+</ul>
+
+<h3>The usual set for a private subnet</h3>
+<p>A workload in a subnet without NAT typically needs a handful of endpoints. Missing one shows up as a timeout in exactly one part of the startup.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 12.2 · Endpoints Larder's data-tier jobs needed</caption>
+    <thead><tr><th>Need</th><th>Endpoints</th></tr></thead>
+    <tbody>
+      <tr><td>Pull container images from ECR</td><td><code>ecr.api</code>, <code>ecr.dkr</code> (interface) and S3 (gateway, image layers live there)</td></tr>
+      <tr><td>Read database credentials</td><td><code>secretsmanager</code></td></tr>
+      <tr><td>Decrypt with KMS keys</td><td><code>kms</code></td></tr>
+      <tr><td>Send logs</td><td><code>logs</code></td></tr>
+      <tr><td>Use IAM roles from inside the job</td><td><code>sts</code> (regional STS endpoint)</td></tr>
+      <tr><td>Session Manager instead of SSH (on VMs)</td><td><code>ssm</code>, <code>ssmmessages</code>, <code>ec2messages</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<aside class="side"><b>Cost check</b>An interface endpoint costs about $0.01 an hour per zone, roughly $22 a month across three zones, plus about $0.01 per GB. Seven endpoints in one VPC is around $150 a month: cheaper than NAT for heavy traffic, dearer for light use. Many companies centralise endpoints in the hub (12.5).</aside>
+
+<!-- ======================================================== 12.3 -->
+<h2 class="sec" id="s12-3"><span class="n">12.3</span>Publishing your own service with PrivateLink</h2>
+
+<p>The same mechanism works for services you build. You put your service behind a <strong>Network Load Balancer</strong> and create an <span class="term">endpoint service</span> from it. Consumers, in other VPCs or other companies' accounts, create interface endpoints that point to your endpoint service. Each consumer's endpoint appears in <em>their</em> subnets, with <em>their</em> addresses.</p>
+
+<figure class="wide" id="fig12-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 236" role="img" aria-labelledby="fig12-2-t fig12-2-d">
+      <title id="fig12-2-t">Larder's ordering API published to Korenwolf with PrivateLink</title>
+      <desc id="fig12-2-d">Korenwolf's VPC, 10.20.0.0/16, contains their ordering system and an interface endpoint with an address in their own subnet. The endpoint connects through PrivateLink to Larder's endpoint service, a Network Load Balancer in front of the ordering API in Larder's VPC, which also uses 10.20.0.0/16. No routes are exchanged and the overlap doesn't matter. Connections can only be started from Korenwolf's side.</desc>
+      <defs><marker id="c12ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="vpc" x="12" y="20" width="330" height="140" rx="8"/>
+      <text class="t-title t-accent" x="26" y="44">Korenwolf VPC 10.20.0.0/16</text>
+      <rect class="node" x="30" y="70" width="140" height="56" rx="4"/>
+      <text class="t-label" x="100" y="94" text-anchor="middle">office ordering</text>
+      <text class="t-small" x="100" y="112" text-anchor="middle">system</text>
+      <rect class="node-accent" x="196" y="70" width="128" height="56" rx="4"/>
+      <text class="t-label on-accent" x="260" y="94" text-anchor="middle">endpoint</text>
+      <text class="t-mono on-accent" x="260" y="112" text-anchor="middle">10.20.5.80</text>
+      <path class="wire-accent" d="M172 98 H192" marker-end="url(#c12ah2)"/>
+      <rect class="vpc" x="418" y="20" width="330" height="140" rx="8"/>
+      <text class="t-title t-accent" x="432" y="44">Larder VPC 10.20.0.0/16</text>
+      <rect class="node-accent" x="436" y="70" width="140" height="56" rx="4"/>
+      <text class="t-label on-accent" x="506" y="94" text-anchor="middle">endpoint service</text>
+      <text class="t-small on-accent" x="506" y="112" text-anchor="middle">Network LB</text>
+      <rect class="node" x="600" y="70" width="130" height="56" rx="4"/>
+      <text class="t-label" x="665" y="94" text-anchor="middle">ordering API</text>
+      <text class="t-small" x="665" y="112" text-anchor="middle">app tier</text>
+      <path class="wire-accent" d="M578 98 H596" marker-end="url(#c12ah2)"/>
+      <path class="wire-accent" d="M326 98 H432" marker-end="url(#c12ah2)"/>
+      <text class="t-small t-accent" x="379" y="90" text-anchor="middle">PrivateLink</text>
+      <text class="t-small" x="380" y="196" text-anchor="middle">no routes exchanged · ranges may overlap</text>
+      <text class="t-small" x="380" y="218" text-anchor="middle">connections start only from the consumer's side</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 12.2</b> PrivateLink between two companies. Korenwolf reaches one service at one address of its own; Larder exposes one load balancer, not a network.</figcaption>
+</figure>
+
+<p>Building it takes five steps:</p>
+<ol class="steps">
+  <li><strong>Provider: a Network Load Balancer</strong> in front of the service, in the zones consumers will use, with target groups pointing at the app.</li>
+  <li><strong>Provider: an endpoint service</strong> on that NLB, with “acceptance required” on and Korenwolf's AWS account added as an allowed principal.</li>
+  <li><strong>Consumer: an interface endpoint</strong> to the endpoint service's name (<code>com.amazonaws.vpce.eu-central-1.vpce-svc-…</code>) in their subnets, with their own security group.</li>
+  <li><strong>Provider: accept</strong> the connection request.</li>
+  <li><strong>Names.</strong> Give the service a private DNS name such as <code>orders.partner.larder.example</code>; AWS asks you to prove you own the domain with a TXT record, then the name resolves to the endpoint inside the consumer's VPC.</li>
+</ol>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Korenwolf's ordering system now calls <code>orders.partner.larder.example</code>, which inside their VPC resolves to <code>10.20.5.80</code>, an address in <em>their</em> <code>10.20.0.0/16</code>. Larder's production VPC is never routed to Korenwolf's network, so the identical ranges never meet. The API sees connections coming from its own NLB; to tell partners apart, the NLB adds <strong>proxy protocol v2</strong> headers that carry the endpoint's ID, and the API authenticates each partner with mTLS on top (<a href="#ch6">Chapter 6</a>).</p>
+  <p>For Lena's question, the data tier got interface endpoints for ECR, Secrets Manager, KMS, logs and STS, with endpoint policies limited to Larder's accounts, and lost its route to the NAT gateway. It now has no way to the internet at all.</p>
+</aside>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Watch out: zones must line up</p>
+  <p>A consumer can only create endpoint interfaces in zones where the provider's NLB has a presence, and zones are matched by <strong>zone ID</strong>, not name (<a href="#ch7">Chapter 7</a>). Run the NLB in every zone of the region, or agree zone IDs with partners up front.</p>
+</div>
+
+<!-- ======================================================== 12.4 -->
+<h2 class="sec" id="s12-4"><span class="n">12.4</span>What PrivateLink is good for</h2>
+
+<ul>
+  <li><strong>One-way.</strong> The consumer can open connections to the service; the provider can't open connections back into the consumer's VPC. That's a much smaller trust relationship than peering or a VPN.</li>
+  <li><strong>Service, not network.</strong> The consumer reaches one load balancer's listeners and nothing else, so there are no routes or firewall rules between networks to get wrong.</li>
+  <li><strong>Overlap doesn't matter</strong>, as Korenwolf shows. That alone makes it the default for partners and SaaS providers.</li>
+  <li><strong>It scales to many consumers</strong>: hundreds of customer VPCs can connect to one endpoint service. Many SaaS products, including monitoring and database vendors, offer PrivateLink endpoints this way.</li>
+</ul>
+<p>Its limits: TCP only (and UDP for some newer setups), a load balancer and an endpoint per zone to pay for, and source addresses hidden behind the NLB unless you read the proxy protocol header.</p>
+
+<!-- ======================================================== 12.5 -->
+<h2 class="sec" id="s12-5"><span class="n">12.5</span>Endpoints and DNS across many VPCs</h2>
+
+<p>With ten VPCs, one set of seven endpoints in each costs ten times as much. A common pattern is to <strong>centralise</strong> interface endpoints in the hub VPC (<a href="#ch11">Chapter 11</a>) and let spokes reach them through the transit gateway. The difficulty is DNS: an endpoint's private DNS only answers inside its own VPC. So you turn private DNS <em>off</em> on the central endpoints, create your own private hosted zones for the service names (such as <code>secretsmanager.eu-central-1.amazonaws.com</code>) pointing at the endpoints, and associate those zones with every spoke VPC.</p>
+
+<p>That design is cheaper and tidier, and it moves cross-VPC traffic through the TGW, which has its own per-GB charge. Do the sums for your traffic. <a href="#ch15">Chapter 15</a> covers sharing DNS across VPCs and with on-premises networks, including how stores and offices can resolve endpoint names too.</p>
+
+<!-- ======================================================== 12.6 -->
+<h2 class="sec" id="s12-6"><span class="n">12.6</span>Choosing</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 12.3 · Which way to a service?</caption>
+    <thead><tr><th>Situation</th><th>Use</th></tr></thead>
+    <tbody>
+      <tr><td>S3 or DynamoDB from your own VPC</td><td>gateway endpoint, always</td></tr>
+      <tr><td>Heavy traffic to an AWS API from private subnets</td><td>interface endpoint (cheaper per GB than NAT)</td></tr>
+      <tr><td>Subnets that must have no internet route</td><td>interface endpoints for everything they need</td></tr>
+      <tr><td>Light, occasional calls from subnets that have NAT anyway</td><td>NAT is fine</td></tr>
+      <tr><td>A partner or customer calls one of your services</td><td>endpoint service (PrivateLink)</td></tr>
+      <tr><td>Two of your own VPCs need broad, two-way access</td><td>peering or transit gateway (<a href="#ch11">Chapter 11</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 12.7 -->
+<h2 class="sec" id="s12-7"><span class="n">12.7</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 12.4 · Private service access at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Provider APIs without public IPs</td><td>interface endpoints; gateway endpoints for S3/DynamoDB</td><td>private endpoints; service endpoints</td><td>Private Google Access; Private Service Connect endpoints for Google APIs</td></tr>
+      <tr><td>Granularity</td><td>one endpoint per service per VPC</td><td>one private endpoint per resource (e.g. one storage account)</td><td>one endpoint for all Google APIs, or per bundle</td></tr>
+      <tr><td>Publish your own service</td><td>endpoint service behind an NLB</td><td>Private Link service behind a Standard Load Balancer</td><td>service attachment (Private Service Connect producer)</td></tr>
+      <tr><td>DNS</td><td>private DNS on the endpoint, or your own private zones</td><td><code>privatelink.*</code> private DNS zones</td><td>Cloud DNS records created for PSC endpoints</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>A <strong>private endpoint</strong> connects to one specific resource, say one storage account or one SQL database, and its name resolves through a private DNS zone such as <code>privatelink.blob.core.windows.net</code>, linked to your VNets. Forgetting to link that zone is the classic mistake: the name still resolves to the public address.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p><strong>Private Google Access</strong> is a per-subnet switch that lets VMs without external IPs reach Google APIs. <strong>Private Service Connect</strong> gives you endpoints with internal addresses, for Google APIs or for services published by other projects and companies. Some managed services, such as Cloud SQL, use an older peering-based model called <em>private services access</em>.</p>
+</div>
+
+<!-- ======================================================== 12.8 -->
+<h2 class="sec" id="s12-8"><span class="n">12.8</span>Lab: an interface endpoint and its DNS</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 12 · STS through an endpoint, no internet anywhere</p>
+  <p><strong>You'll build</strong> a VPC with no internet gateway at all, an interface endpoint for STS with private DNS, and a stand-in client interface, then check the path and read the endpoint's DNS names. <strong>You need</strong> the AWS CLI and Terraform. <strong>Cost:</strong> the endpoint is about $0.02 an hour in two zones, plus $0.10 per analysis: about $0.40.</p>
+</div>
+
+<p class="code-title"><span>main.tf</span><span>Terraform ≥ 1.5, AWS provider 5.x</span></p>
+<pre><code><span class="k">provider</span> <span class="s">"aws"</span> { region = <span class="s">"eu-central-1"</span> }
+
+<span class="k">data</span> <span class="s">"aws_availability_zones"</span> <span class="s">"z"</span> { state = <span class="s">"available"</span> }
+
+<span class="k">resource</span> <span class="s">"aws_vpc"</span> <span class="s">"lab"</span> {
+  cidr_block           = <span class="s">"10.50.0.0/16"</span>
+  enable_dns_support   = true      <span class="c"># both needed for private DNS</span>
+  enable_dns_hostnames = true
+}
+<span class="k">resource</span> <span class="s">"aws_subnet"</span> <span class="s">"s"</span> {
+  count             = 2
+  vpc_id            = aws_vpc.lab.id
+  cidr_block        = cidrsubnet(aws_vpc.lab.cidr_block, 8, count.index)
+  availability_zone = data.aws_availability_zones.z.names[count.index]
+}
+
+<span class="k">resource</span> <span class="s">"aws_security_group"</span> <span class="s">"client"</span> { vpc_id = aws_vpc.lab.id }
+<span class="k">resource</span> <span class="s">"aws_vpc_security_group_egress_rule"</span> <span class="s">"client"</span> {
+  security_group_id = aws_security_group.client.id
+  cidr_ipv4         = <span class="s">"0.0.0.0/0"</span>
+  ip_protocol       = <span class="s">"-1"</span>
+}
+
+<span class="c"># 12.2 · the endpoint's own security group: 443 from the client group only</span>
+<span class="k">resource</span> <span class="s">"aws_security_group"</span> <span class="s">"endpoint"</span> { vpc_id = aws_vpc.lab.id }
+<span class="k">resource</span> <span class="s">"aws_vpc_security_group_ingress_rule"</span> <span class="s">"endpoint"</span> {
+  security_group_id            = aws_security_group.endpoint.id
+  referenced_security_group_id = aws_security_group.client.id
+  ip_protocol                  = <span class="s">"tcp"</span>
+  from_port                    = 443
+  to_port                      = 443
+}
+
+<span class="k">resource</span> <span class="s">"aws_vpc_endpoint"</span> <span class="s">"sts"</span> {
+  vpc_id              = aws_vpc.lab.id
+  service_name        = <span class="s">"com.amazonaws.eu-central-1.sts"</span>
+  vpc_endpoint_type   = <span class="s">"Interface"</span>
+  subnet_ids          = aws_subnet.s[*].id
+  security_group_ids  = [aws_security_group.endpoint.id]
+  private_dns_enabled = true
+}
+
+<span class="k">resource</span> <span class="s">"aws_network_interface"</span> <span class="s">"client"</span> {
+  subnet_id       = aws_subnet.s[0].id
+  security_groups = [aws_security_group.client.id]
+}
+
+<span class="k">output</span> <span class="s">"client_eni"</span>  { value = aws_network_interface.client.id }
+<span class="k">output</span> <span class="s">"endpoint_id"</span> { value = aws_vpc_endpoint.sts.id }</code></pre>
+
+<ol class="steps">
+  <li><strong>Create it</strong> with <code>terraform init</code> and <code>terraform apply</code>. Note there's no internet gateway or NAT in this VPC.</li>
+  <li><strong>Read the endpoint's addresses and names.</strong>
+<pre><code>aws ec2 describe-vpc-endpoints --vpc-endpoint-ids $(terraform output -raw endpoint_id) \
+  --query 'VpcEndpoints[0].[State, PrivateDnsEnabled, DnsEntries[].DnsName, NetworkInterfaceIds]'</code></pre>
+  You'll see endpoint-specific names (<code>vpce-…sts.eu-central-1.vpce.amazonaws.com</code>) and one interface per zone. With private DNS on, <code>sts.eu-central-1.amazonaws.com</code> itself resolves to those interfaces inside the VPC.</li>
+  <li><strong>Check the path.</strong> Create a Reachability Analyzer path from <code>client_eni</code> to the endpoint on TCP 443 (use the endpoint ID as the destination, or, if it isn't accepted, one of the endpoint's network interface IDs from step 2), and analyse it with the <code>check</code> function from <a href="#ch9">Lab 9</a>. Expect <code>true</code>.</li>
+  <li><strong>Break it.</strong> Change the endpoint's ingress rule to port 8443, apply, analyse again: the explanation names the endpoint's security group. Restore it.</li>
+  <li><strong>Clean up.</strong> Delete the insights path, then <code>terraform destroy</code>.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Launch a tiny instance in the subnet with no public IP and an instance profile, connect with Session Manager (you'll need the three <code>ssm</code> endpoints from Table 12.2), and run <code>aws sts get-caller-identity --region eu-central-1</code>. It works with no route to the internet. Then run <code>dig sts.eu-central-1.amazonaws.com</code> on the instance and on your laptop and compare.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s12-9"><span class="n">12.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Private DNS on, but VPC DNS hostnames off</td><td>The service name still resolves publicly; traffic goes to NAT or fails.</td><td>Turn on DNS resolution and DNS hostnames.</td></tr>
+      <tr><td>Endpoint security group not allowing 443 from clients</td><td>Timeouts to the service, everything else fine.</td><td>Allow 443 from the client groups.</td></tr>
+      <tr><td>ECR endpoints without the S3 gateway endpoint</td><td>Image pulls start, then hang on the layers.</td><td><code>ecr.api</code>, <code>ecr.dkr</code> <em>and</em> S3.</td></tr>
+      <tr><td>No endpoint policy</td><td>The endpoint can be used to reach any account's resources.</td><td>Restrict to your organisation's resources.</td></tr>
+      <tr><td>Peering or VPN to a partner with overlapping ranges</td><td>Unroutable, or a NAT tangle.</td><td>PrivateLink endpoint service.</td></tr>
+      <tr><td>An endpoint service NLB in fewer zones than consumers use</td><td>Consumers can't create endpoints in their zones.</td><td>NLB in every zone; match by zone ID.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum12">
+  <h2 class="sec" id="sum12"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li><strong>Gateway endpoints</strong> (S3, DynamoDB) are routes and free; <strong>interface endpoints</strong> are network interfaces in your subnets, paid per hour and per GB.</li>
+    <li><strong>Private DNS</strong> makes the service's normal name resolve to the endpoint inside the VPC; no code changes.</li>
+    <li>Control endpoints with a <strong>security group</strong> (who can use it) and an <strong>endpoint policy</strong> (what can be done through it).</li>
+    <li><strong>PrivateLink endpoint services</strong> publish your service behind an NLB to other VPCs and accounts: one-way, service-level, and indifferent to overlapping ranges.</li>
+    <li>Centralise endpoints in a hub to save money, and handle their DNS with shared private zones.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Interface endpoint</dt><dd>Network interfaces in your subnets that reach a service through PrivateLink.</dd>
+    <dt>Gateway endpoint</dt><dd>A free, route-based path to S3 or DynamoDB.</dd>
+    <dt>PrivateLink</dt><dd>AWS's technology for private, one-way access to a service across VPCs.</dd>
+    <dt>Endpoint service</dt><dd>Your service, behind an NLB, made available to consumers' endpoints.</dd>
+    <dt>Private DNS (endpoint)</dt><dd>The service's public name resolving to the endpoint's private addresses.</dd>
+    <dt>Endpoint policy</dt><dd>A policy limiting the actions and resources reachable through an endpoint.</dd>
+    <dt>Proxy protocol v2</dt><dd>A header the NLB adds so the service can see the original connection's details.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>A job in a subnet with no NAT can pull its image manifest from ECR but hangs downloading layers. What's missing? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>The S3 gateway endpoint: ECR stores image layers in S3, so <code>ecr.api</code> and <code>ecr.dkr</code> interface endpoints aren't enough on their own.</p></details>
+    </li>
+    <li>
+      <p>Why can Korenwolf reach Larder's API with PrivateLink even though both use <code>10.20.0.0/16</code>? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>No routes are exchanged. Korenwolf talks to an endpoint with an address in its own VPC, and PrivateLink carries the connection to Larder's NLB, which forwards it to targets in Larder's VPC. Neither network ever needs to route to the other's addresses.</p></details>
+    </li>
+    <li>
+      <p>An endpoint has private DNS on. Will a server in a <em>peered</em> VPC resolve the service name to the endpoint? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>No. Endpoint private DNS answers only for the VPC the endpoint is in. The peered VPC gets the public address unless you associate a private hosted zone for the name with it (and turn the endpoint's own private DNS off, as in 12.5).</p></details>
+    </li>
+    <li>
+      <p>What do a security group and an endpoint policy each control on an interface endpoint? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The security group controls which network sources may connect to the endpoint. The endpoint policy controls which API actions on which resources may be performed through it, regardless of who connects.</p></details>
+    </li>
+    <li>
+      <p>Your monitoring vendor offers a PrivateLink endpoint or a public HTTPS endpoint. Your servers already have NAT. When is the PrivateLink option worth paying for? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>When traffic is heavy (endpoint per-GB pricing beats NAT processing), when the sending subnets shouldn't have internet access, or when policy requires telemetry to stay off the internet. For light traffic from subnets that already have NAT, the public endpoint is fine.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/vpc/latest/privatelink/what-is-privatelink.html">What is AWS PrivateLink?</a> and <a href="https://docs.aws.amazon.com/vpc/latest/privatelink/create-endpoint-service.html">Create an endpoint service</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/private-link/private-endpoint-overview">What is a private endpoint?</a></li>
+    <li>Google Cloud: <a href="https://cloud.google.com/vpc/docs/private-service-connect">Private Service Connect</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="#ch11">11 · Connecting VPCs</a></div>
+  <div><span>Next</span><a href="#ch13">13 · Site-to-site VPN and BGP</a></div>
+</nav>

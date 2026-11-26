@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>The edge: CDNs, WAF and DDoS protection · Networking in the Cloud</title>
+<meta name="description" content="Serving users from nearby, filtering bad requests and absorbing floods before they reach you.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ba699999a6">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 1</a> · <a href="index.html">Networking in the Cloud</a></span><span>Part IV · Chapter 17</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part IV · Traffic in and out</p>
+  <p class="chno">17</p>
+  <h1>The edge: CDNs, WAF and DDoS protection</h1>
+  <p class="promise">Your users are spread out; your servers are in one region. Between them, cloud providers run hundreds of edge locations that can answer requests close to users, filter out bad ones, and soak up floods before they reach you. This chapter shows how to put that edge to work: what to cache and what never to cache, how a web application firewall decides, and what protects you when someone tries to knock your service over.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain how a CDN serves content from the edge and when it goes back to the origin.</li>
+      <li>Set cache keys and <code>Cache-Control</code> headers safely, including for dynamic pages.</li>
+      <li>Lock the origin so only the CDN can reach it.</li>
+      <li>Write WAF rules, including rate limits, and explain layered DDoS protection.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>HTTP, headers and TLS (<a href="06-http-tls.html">Chapter 6</a>).</li>
+      <li>Load balancers and their security groups (<a href="16-load-balancers.html">Chapter 16</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 50 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, AWS, free tier</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 17.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Friday, 17:00. Larder's marketing team sends a newsletter with a discount to 400,000 subscribers. Within three minutes traffic to the web shop is twelve times normal. The app servers hit 100% CPU, autoscaling can't start new ones fast enough, and checkout, the one page that earns money, slows to a crawl. In the post-incident review, one number stands out: more than 80% of those requests were for the same homepage, the same product pages and the same images.</p>
+  <p>Larder's servers spent the evening building identical answers over and over. Section 17.3 shows what Eli changed before the next newsletter.</p>
+</aside>
+
+<!-- ======================================================== 17.1 -->
+<h2 class="sec" id="s17-1"><span class="n">17.1</span>The big picture</h2>
+
+<p class="lead">The <span class="term">edge</span> is the provider's network of small sites, called <strong>points of presence</strong> (PoPs), in cities around the world, close to users and to their internet providers. Requests reach the nearest one, either through DNS that answers with a nearby address or through <strong>anycast</strong>, where the same address is announced from every site and the internet's routing delivers each user to the closest. At the edge, three jobs get done:</p>
+<ul>
+  <li><strong>Cache</strong>: a <span class="term">content delivery network</span> (CDN) keeps copies of responses and serves them without asking your servers.</li>
+  <li><strong>Filter</strong>: a <span class="term">web application firewall</span> (WAF) inspects HTTP requests and blocks bad ones.</li>
+  <li><strong>Absorb</strong>: DDoS protection soaks up floods of traffic across the whole edge, far from your region.</li>
+</ul>
+
+<figure class="wide" id="fig17-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 240" role="img" aria-labelledby="fig17-1-t fig17-1-d">
+      <title id="fig17-1-t">A CDN between users and the origin</title>
+      <desc id="fig17-1-d">Users in Rotterdam, Amsterdam and Antwerp connect to nearby edge locations in Amsterdam and Brussels. Each edge location answers from its cache when it can. Misses go to a regional edge cache, the origin shield, in Frankfurt, and only its misses reach the origin: Larder's load balancer. The WAF and DDoS protection run at the edge, before anything reaches the origin.</desc>
+      <defs><marker id="c17ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="ext" x="12" y="30" width="120" height="36" rx="18"/><text class="t-small" x="72" y="53" text-anchor="middle">users, Rotterdam</text>
+      <rect class="ext" x="12" y="100" width="120" height="36" rx="18"/><text class="t-small" x="72" y="123" text-anchor="middle">users, Amsterdam</text>
+      <rect class="ext" x="12" y="170" width="120" height="36" rx="18"/><text class="t-small" x="72" y="193" text-anchor="middle">users, Antwerp</text>
+      <rect class="pub" x="200" y="52" width="150" height="58" rx="5"/>
+      <text class="t-label" x="275" y="76" text-anchor="middle">edge · Amsterdam</text>
+      <text class="t-small" x="275" y="96" text-anchor="middle">cache · WAF · DDoS</text>
+      <rect class="pub" x="200" y="146" width="150" height="58" rx="5"/>
+      <text class="t-label" x="275" y="170" text-anchor="middle">edge · Brussels</text>
+      <text class="t-small" x="275" y="190" text-anchor="middle">cache · WAF · DDoS</text>
+      <path class="wire" d="M134 48 L196 72" marker-end="url(#c17ah)"/><path class="wire" d="M134 118 L196 90" marker-end="url(#c17ah)"/><path class="wire" d="M134 188 L196 176" marker-end="url(#c17ah)"/>
+      <rect class="node" x="418" y="96" width="150" height="58" rx="5"/>
+      <text class="t-label" x="493" y="120" text-anchor="middle">origin shield</text>
+      <text class="t-small" x="493" y="140" text-anchor="middle">regional cache, Frankfurt</text>
+      <path class="wire-dash" d="M352 84 L414 116 M352 172 L414 138"/>
+      <text class="t-small" x="384" y="88" text-anchor="middle">miss</text>
+      <rect class="node-accent" x="620" y="96" width="128" height="58" rx="5"/>
+      <text class="t-label on-accent" x="684" y="120" text-anchor="middle">origin</text>
+      <text class="t-small on-accent" x="684" y="140" text-anchor="middle">Larder's ALB</text>
+      <path class="wire-dash" d="M570 125 H616"/>
+      <text class="t-small" x="593" y="116" text-anchor="middle">miss</text>
+      <text class="t-small" x="418" y="200">Most requests stop at the edge. Only misses travel on,</text>
+      <text class="t-small" x="418" y="218">and the shield turns many edge misses into one origin request.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 17.1</b> A CDN in layers. The edge answers what it has; the origin shield collapses misses from many edges into one request; the origin sees only what's left.</figcaption>
+</figure>
+
+<!-- ======================================================== 17.2 -->
+<h2 class="sec" id="s17-2"><span class="n">17.2</span>How a CDN decides</h2>
+
+<p>For each request, the edge builds a <span class="term">cache key</span>, by default the host and path, optionally plus chosen query parameters, headers or cookies, and looks it up. A <strong>hit</strong> is answered at once, often in a few milliseconds. A <strong>miss</strong> goes to the <span class="term">origin</span>, your load balancer or storage bucket, and the response is stored for next time, if the response allows it.</p>
+
+<p>The origin decides what may be cached, and for how long, with the <code>Cache-Control</code> response header. The CDN's own settings can set minimums, maximums and defaults on top.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 17.1 · <code>Cache-Control</code> values you'll use</caption>
+    <thead><tr><th>Value</th><th>Means</th><th>Use for</th></tr></thead>
+    <tbody>
+      <tr><td><code>public, max-age=31536000, immutable</code></td><td>Anyone may cache for a year; it will never change</td><td>Files with a version in the name: <code>app.3f9c2e.js</code>, images by content hash</td></tr>
+      <tr><td><code>public, s-maxage=60, max-age=0</code></td><td>Shared caches (the CDN) for 60 s; browsers must recheck</td><td>Pages that are the same for everyone and may be a minute old</td></tr>
+      <tr><td><code>stale-while-revalidate=30</code></td><td>Serve the old copy for up to 30 s while fetching a fresh one</td><td>Smoothing refreshes of popular pages</td></tr>
+      <tr><td><code>private</code></td><td>Only the user's browser may cache it, never the CDN</td><td>Personalised pages: account, basket</td></tr>
+      <tr><td><code>no-store</code></td><td>Nobody may keep a copy</td><td>Checkout, payment responses, anything sensitive</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Two ways to update cached content: <strong>versioned names</strong> (a new file name for each version, so nothing ever needs removing, and old pages keep working) or <strong>invalidation</strong> (asking the CDN to drop paths). Prefer versioned names for assets; keep invalidation for mistakes and for HTML.</p>
+
+<!-- ======================================================== 17.3 -->
+<h2 class="sec" id="s17-3"><span class="n">17.3</span>Caching dynamic pages, safely</h2>
+
+<p>Static files are the easy part. The bigger win is often pages that are dynamic but <strong>the same for everyone for a short while</strong>: the homepage, category pages, a product page's price and stock for a store. Caching those for even 30 to 60 seconds, called <em>micro-caching</em>, turns thousands of identical requests per minute into one.</p>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Eli put CloudFront in front of the ALB with three cache behaviours. Versioned assets: one year. Anonymous catalogue and homepage requests, keyed on path plus the <code>store</code> query parameter: <code>s-maxage=60</code> with <code>stale-while-revalidate</code>. Everything under <code>/account</code>, <code>/basket</code> and <code>/checkout</code>: not cached at all, every request passed to the origin. An origin shield in Frankfurt sat between the edges and the ALB.</p>
+  <p>At the next newsletter, traffic at the edge was again twelve times normal. Requests reaching the ALB rose by less than double; the cache hit ratio for the catalogue was 93%. Checkout stayed fast, because it no longer shared servers with a stampede of identical homepage requests.</p>
+</aside>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: never cache someone's page for someone else</p>
+  <p>The most damaging CDN bug is caching a personalised response under a key that doesn't include whatever makes it personal. Then the next visitor gets the first visitor's basket, name or address. Rules that prevent it: personalised paths are never cached; the origin sends <code>private</code> or <code>no-store</code> on anything personal; and if a response depends on a cookie or header, that cookie or header is either in the cache key or the response isn't cached. Test it by logging in as two users.</p>
+</div>
+
+<h3>A little arithmetic</h3>
+<p>Cache hit ratio is what decides your origin's load. At 2,000 requests a second, a 90% hit ratio sends 200 to the origin; 99% sends 20. Every extra point of hit ratio near the top halves the remaining load more than once. That's why the cache key matters so much: adding a needless header or a tracking parameter to the key splits one cached object into thousands and sends the hit ratio down.</p>
+
+<!-- ======================================================== 17.4 -->
+<h2 class="sec" id="s17-4"><span class="n">17.4</span>Locking the origin</h2>
+
+<p>A CDN protects your origin only if attackers can't go around it. If the ALB still accepts traffic from the whole internet, anyone who finds its address can skip the cache and the WAF. Lock it, in one of these ways:</p>
+<ul>
+  <li><strong>Private origin.</strong> CloudFront can reach an <em>internal</em> ALB in private subnets through a VPC origin; the load balancer then has no public address at all. The strongest option where it's available.</li>
+  <li><strong>Allow only the CDN's addresses.</strong> Use AWS's managed prefix list for CloudFront's origin-facing addresses as the only source in the ALB's security group (<a href="09-firewalls.html">Chapter 9</a>).</li>
+  <li><strong>A secret header.</strong> Have the CDN add a custom header with a secret value, and have the ALB reject requests without it. Combine it with the prefix list, since other CloudFront customers share those addresses.</li>
+</ul>
+<p>For storage buckets, use <strong>origin access control</strong>: the bucket stays private and accepts reads only from your distribution. The lab does this.</p>
+
+<!-- ======================================================== 17.5 -->
+<h2 class="sec" id="s17-5"><span class="n">17.5</span>Web application firewalls</h2>
+
+<p>A <span class="term">WAF</span> inspects each HTTP request against rules and allows, blocks, counts or challenges it. AWS WAF attaches to CloudFront, ALBs and API gateways. Rules come in a few kinds:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 17.2 · Kinds of WAF rule</caption>
+    <thead><tr><th>Kind</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td>Managed rule groups</td><td>Common exploits, known bad inputs, SQL injection, known malicious IP reputation, bot control. Maintained by the provider or vendors.</td></tr>
+      <tr><td>Rate-based rules</td><td>Block an IP (or a key such as a header) that sends more than 300 requests in 5 minutes to <code>/api/login</code>.</td></tr>
+      <tr><td>Match rules</td><td>Block requests whose path, header, body or query matches a pattern.</td></tr>
+      <tr><td>IP sets and geography</td><td>Allow an admin path only from the office; block countries you don't serve (with care).</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Start every new rule in <strong>count</strong> mode. Watch what it would have blocked for a few days, fix false positives, then switch it to block. A WAF that blocks real customers is an outage you caused yourself.</p>
+
+<p>A week after the newsletter, Larder's login endpoint got about 40,000 attempts an hour from around 600 addresses: <em>credential stuffing</em>, trying passwords leaked from other sites. A rate-based rule on <code>/api/login</code> per IP, plus the managed account-takeover rules, cut it to a trickle within the hour. The WAF didn't need to know which passwords were real; it only had to notice that no human logs in 70 times in five minutes.</p>
+
+<!-- ======================================================== 17.6 -->
+<h2 class="sec" id="s17-6"><span class="n">17.6</span>DDoS protection</h2>
+
+<p>A <span class="term">distributed denial-of-service</span> (DDoS) attack tries to make a service unavailable by flooding it from many machines at once. Attacks come at different layers, and each layer has a different defence:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 17.3 · DDoS attacks and their defences</caption>
+    <thead><tr><th>Layer</th><th>Attack</th><th>Defence</th></tr></thead>
+    <tbody>
+      <tr><td>3 and 4 (network)</td><td>Floods of UDP or SYN packets, reflection attacks, hundreds of gigabits</td><td>The provider's edge absorbs it. AWS Shield Standard is on for everyone, free. Anycast spreads the flood across many sites.</td></tr>
+      <tr><td>7 (application)</td><td>Floods of real-looking HTTP requests to expensive pages</td><td>Caching (most requests never reach you), WAF rate limits, bot rules, autoscaling.</td></tr>
+      <tr><td>Your bill</td><td>Scaling up to serve an attack</td><td>AWS Shield Advanced adds a response team and cost protection for attack-related scaling (about $3,000 a month).</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Push every public request through the edge. A flood absorbed in fifty cities is a non-event; the same flood aimed at one load balancer in one region is an outage.</p>
+</div>
+
+<!-- ======================================================== 17.7 -->
+<h2 class="sec" id="s17-7"><span class="n">17.7</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 17.4 · Edge services at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>CDN</td><td>CloudFront</td><td>Front Door (CDN, global L7 load balancing and WAF in one)</td><td>Cloud CDN (on the global Application Load Balancer); Media CDN</td></tr>
+      <tr><td>WAF</td><td>AWS WAF</td><td>Azure WAF (on Front Door or Application Gateway)</td><td>Cloud Armor security policies</td></tr>
+      <tr><td>DDoS, included</td><td>Shield Standard</td><td>infrastructure protection</td><td>Cloud Armor standard protection</td></tr>
+      <tr><td>DDoS, paid tier</td><td>Shield Advanced</td><td>DDoS Network Protection / IP Protection</td><td>Cloud Armor Enterprise</td></tr>
+      <tr><td>Private origin</td><td>VPC origins; origin access control for S3</td><td>Private Link origins (Front Door Premium)</td><td>backends behind the load balancer are private by design</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 17.8 -->
+<h2 class="sec" id="s17-8"><span class="n">17.8</span>Lab: watch a cache miss become a hit</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 17 · CloudFront, a private bucket and cache headers</p>
+  <p><strong>You'll build</strong> a private S3 bucket with one page, served only through a CloudFront distribution with origin access control, and watch misses, hits and invalidation. <strong>You need</strong> the AWS CLI and Terraform. <strong>Cost:</strong> within CloudFront's and S3's free tiers for this traffic. Creating and deleting a distribution takes several minutes each.</p>
+</div>
+
+<p class="code-title"><span>main.tf</span><span>Terraform ≥ 1.5, AWS provider 5.x</span></p>
+<pre><code><span class="k">provider</span> <span class="s">"aws"</span> { region = <span class="s">"eu-central-1"</span> }
+
+<span class="k">resource</span> <span class="s">"aws_s3_bucket"</span> <span class="s">"site"</span> {
+  bucket_prefix = <span class="s">"handbook-lab17-"</span>
+  force_destroy = true
+}
+<span class="k">resource</span> <span class="s">"aws_s3_object"</span> <span class="s">"index"</span> {
+  bucket        = aws_s3_bucket.site.id
+  key           = <span class="s">"index.html"</span>
+  content       = <span class="s">"&lt;h1&gt;Hello from the origin, version 1&lt;/h1&gt;"</span>
+  content_type  = <span class="s">"text/html"</span>
+  cache_control = <span class="s">"public, max-age=300"</span>     <span class="c"># 17.2 · the origin decides</span>
+}
+
+<span class="c"># 17.4 · the bucket stays private; only this distribution may read it</span>
+<span class="k">resource</span> <span class="s">"aws_cloudfront_origin_access_control"</span> <span class="s">"oac"</span> {
+  name                              = <span class="s">"handbook-lab17"</span>
+  origin_access_control_origin_type = <span class="s">"s3"</span>
+  signing_behavior                  = <span class="s">"always"</span>
+  signing_protocol                  = <span class="s">"sigv4"</span>
+}
+
+<span class="k">resource</span> <span class="s">"aws_cloudfront_distribution"</span> <span class="s">"cdn"</span> {
+  enabled             = true
+  default_root_object = <span class="s">"index.html"</span>
+  origin {
+    domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
+    origin_id                = <span class="s">"s3"</span>
+    origin_access_control_id = aws_cloudfront_origin_access_control.oac.id
+  }
+  default_cache_behavior {
+    target_origin_id       = <span class="s">"s3"</span>
+    viewer_protocol_policy = <span class="s">"redirect-to-https"</span>
+    allowed_methods        = [<span class="s">"GET"</span>, <span class="s">"HEAD"</span>]
+    cached_methods         = [<span class="s">"GET"</span>, <span class="s">"HEAD"</span>]
+    cache_policy_id        = <span class="s">"658327ea-f89d-4fab-a63d-7e88639e58f6"</span>  <span class="c"># managed "CachingOptimized"</span>
+  }
+  restrictions {
+    geo_restriction { restriction_type = <span class="s">"none"</span> }
+  }
+  viewer_certificate { cloudfront_default_certificate = true }
+}
+
+<span class="k">resource</span> <span class="s">"aws_s3_bucket_policy"</span> <span class="s">"site"</span> {
+  bucket = aws_s3_bucket.site.id
+  policy = jsonencode({
+    Version = <span class="s">"2012-10-17"</span>
+    Statement = [{
+      Effect    = <span class="s">"Allow"</span>
+      Principal = { Service = <span class="s">"cloudfront.amazonaws.com"</span> }
+      Action    = <span class="s">"s3:GetObject"</span>
+      Resource  = <span class="s">"${aws_s3_bucket.site.arn}/*"</span>
+      Condition = { StringEquals = { <span class="s">"AWS:SourceArn"</span> = aws_cloudfront_distribution.cdn.arn } }
+    }]
+  })
+}
+
+<span class="k">output</span> <span class="s">"url"</span> { value = <span class="s">"https://${aws_cloudfront_distribution.cdn.domain_name}/"</span> }
+<span class="k">output</span> <span class="s">"id"</span>  { value = aws_cloudfront_distribution.cdn.id }</code></pre>
+
+<ol class="steps">
+  <li><strong>Create it</strong> with <code>terraform init</code> and <code>terraform apply</code>; the distribution takes several minutes to deploy.</li>
+  <li><strong>Miss, then hit.</strong> Run this twice:
+<pre><code>curl -sI $(terraform output -raw url) | grep -iE '^(x-cache|age|x-amz-cf-pop|cache-control)'</code></pre>
+  The first says <code>Miss from cloudfront</code>, the second <code>Hit from cloudfront</code> with an <code>Age</code> header. <code>x-amz-cf-pop</code> names the edge location that answered, a code for a city near you.</li>
+  <li><strong>Try to go around it.</strong> Open the bucket's own URL (<code>https://&lt;bucket&gt;.s3.eu-central-1.amazonaws.com/index.html</code>): <code>AccessDenied</code>. Only the CDN can read the origin.</li>
+  <li><strong>Change the page.</strong> Edit <code>content</code> to say “version 2” and apply. The CDN still serves version 1 until <code>max-age</code> runs out. Then invalidate: <code>aws cloudfront create-invalidation --distribution-id $(terraform output -raw id) --paths "/*"</code>, wait a minute, and fetch again.</li>
+  <li><strong>Clean up</strong> with <code>terraform destroy</code>. Terraform disables the distribution, waits, then deletes it.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Attach an AWS WAF web ACL with a rate-based rule of 100 requests per 5 minutes per IP, in count mode, then loop <code>curl</code> 200 times and find the counted requests in the WAF's sampled requests. (A web ACL costs about $5 a month, prorated; delete it afterwards.)</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s17-9"><span class="n">17.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Personalised pages cached under a shared key</td><td>One user sees another's data.</td><td><code>private</code>/<code>no-store</code> on personal responses; never cache those paths.</td></tr>
+      <tr><td>Origin open to the internet behind a CDN</td><td>Attackers bypass the cache and WAF.</td><td>Private origin, prefix list, or a secret header.</td></tr>
+      <tr><td>Everything in the cache key</td><td>Hit ratio collapses; origin load stays high.</td><td>Key on what really changes the response.</td></tr>
+      <tr><td>Invalidating on every deploy instead of versioning</td><td>Slow, partial updates; old pages ask for missing files.</td><td>Versioned asset names; long TTLs.</td></tr>
+      <tr><td>New WAF rules straight to block</td><td>Real customers blocked.</td><td>Count first, review, then block.</td></tr>
+      <tr><td>Public endpoints that skip the edge</td><td>The one path a DDoS can reach directly.</td><td>Put every public request through the edge.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum17">
+  <h2 class="sec" id="sum17"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>The <strong>edge</strong> is the provider's sites near users. It caches, filters and absorbs before traffic reaches your region.</li>
+    <li>A CDN looks up a <strong>cache key</strong>; hits are served at the edge, misses go to the origin, through a shield if you have one.</li>
+    <li>The origin's <code>Cache-Control</code> decides what's cached. Version assets, micro-cache shared pages, never cache personal ones.</li>
+    <li>Lock the origin so only the CDN can reach it.</li>
+    <li>A <strong>WAF</strong> blocks bad requests with managed rules, rate limits and matches; start in count mode.</li>
+    <li>DDoS defence is layered: the edge absorbs network floods; caching and WAF handle application floods.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Edge / point of presence</dt><dd>A provider site near users that runs CDN, WAF and DDoS services.</dd>
+    <dt>Anycast</dt><dd>One address announced from many places; routing delivers users to the nearest.</dd>
+    <dt>CDN</dt><dd>A network of caches that serves content from the edge.</dd>
+    <dt>Origin</dt><dd>The server or bucket the CDN fetches from on a miss.</dd>
+    <dt>Cache key</dt><dd>The parts of a request that decide which cached copy answers it.</dd>
+    <dt>Origin shield</dt><dd>A regional cache layer between edges and the origin.</dd>
+    <dt>Cache hit ratio</dt><dd>The share of requests answered from cache.</dd>
+    <dt>WAF</dt><dd>A firewall that inspects HTTP requests.</dd>
+    <dt>DDoS</dt><dd>An attack that floods a service from many sources to make it unavailable.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Which <code>Cache-Control</code> header would you send for <code>app.3f9c2e.js</code>, for the homepage, and for the basket page? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>public, max-age=31536000, immutable</code> for the versioned file; something like <code>public, s-maxage=60, max-age=0, stale-while-revalidate=30</code> for the homepage; <code>private, no-store</code> for the basket.</p></details>
+    </li>
+    <li>
+      <p>At 5,000 requests per second, how much does raising the hit ratio from 95% to 99% reduce origin load? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>From 250 to 50 requests per second at the origin: a fivefold reduction from a four-point change.</p></details>
+    </li>
+    <li>
+      <p>Your site is behind CloudFront, but the ALB's security group allows 443 from <code>0.0.0.0/0</code>. Why is that a problem, and what are two fixes? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Anyone who finds the ALB's address can bypass the cache, the WAF and the edge's DDoS absorption. Fixes: make the ALB internal and use a VPC origin; or allow only CloudFront's managed prefix list, plus a secret custom header the ALB checks.</p></details>
+    </li>
+    <li>
+      <p>Why put a new WAF rule in count mode first? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>To see what it would block before it blocks anything: managed rules and patterns can match legitimate requests (unusual inputs, partner integrations), and blocking customers is an outage you caused.</p></details>
+    </li>
+    <li>
+      <p>An attacker floods your login page with real HTTPS requests from 10,000 home routers. Which defences help, and which don't? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Network-level DDoS protection doesn't help much: these are valid requests. Caching doesn't help either, since login can't be cached. What helps: WAF rate-based rules per IP and per other keys, bot-control and account-takeover managed rules, challenges such as CAPTCHAs, and keeping login on servers separate from checkout so the attack can't starve it.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>MDN: <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control">Cache-Control</a>.</li>
+    <li>AWS: <a href="https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Introduction.html">What is CloudFront?</a> and <a href="https://docs.aws.amazon.com/waf/latest/developerguide/what-is-aws-waf.html">What is AWS WAF?</a></li>
+    <li>Cloudflare Learning Center: <a href="https://www.cloudflare.com/learning/ddos/what-is-a-ddos-attack/">What is a DDoS attack?</a></li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="16-load-balancers.html">16 · Load balancers</a></div>
+  <div><span>Next</span><a href="18-egress.html">18 · Controlling egress</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 1 · Networking in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

@@ -1,0 +1,133 @@
+# Handoff: Jef's Handbooks (Series 3). Draft for review
+
+Status as of 2026-11-26: **approved and in progress.** Owner decisions: title OK, AWS as the main provider, Larder as
+the running example, 25 chapters, labs may cost up to about $1 (with clean-up steps). Complete: all 25 chapters
+(Parts I–VI) and appendices A–E. The book is on the landing page (a **Handbooks** section after Deep dives, added when main's
+format-based landing page was merged in) and in `journals.json` (chapter PDFs + whole-book PDF).
+
+- Contents page: `public/handbooks/cloud-networking/index.html`
+- Sample chapter: `public/handbooks/cloud-networking/08-inside-a-vpc.html`
+- Preview: `npm run serve`, then open http://localhost:8080/handbooks/cloud-networking/
+- Sources: `content/handbooks/cloud-networking/book.py` (outline), `…/<nn>-<slug>.html` (chapter bodies; a chapter is
+  “written” when its file exists), `scripts/build_handbooks.py` (build; also run by `build_notes.py`),
+  `public/assets/book.css` (skin)
+- Build: `python3 scripts/build_notes.py` builds everything, including the handbooks, the landing shelf and `all.html`.
+- IDs must be unique across the book (all chapters share `all.html`): prefix SVG markers `c<n>…`, sections `s<n>-<m>`,
+  figures `fig<n>-<m>`, summary `sum<n>`. Cross-references are written `href="#ch<n>"`.
+
+## 1. What the series is, and how it differs from the notebooks
+
+| | Series 1–2 · Notebooks | Series 3 · Handbooks |
+| --- | --- | --- |
+| Unit | a note: one pattern or practice, 1–2 screens | a chapter: one topic in depth, 30–60 minutes |
+| Shape | the same eight sections in every note | a toolbox of parts; each chapter uses the ones its topic needs |
+| Voice | a student's or practitioner's journal, doodles | a patient teacher writing a book; precise diagrams |
+| Goal | recognise and compare patterns | **competence**: the reader can design, build and debug it |
+| Reader | already in the field | knows a little; finishes the book able to do the work |
+| Sequence | notes stand alone | chapters build on each other; Part I is the foundation |
+
+## 2. The style
+
+### Voice
+
+- Comprehensive, but **easy to digest**: one idea at a time, in the order a learner needs them. Concept → picture → worked
+  example → hands-on → check.
+- Plain, direct sentences. Second person (“you”). Define every term the first time, and mark it with `.term`.
+- Concrete before abstract: real addresses (`10.20.17.8`), real prices (“about $0.05 an hour, at the time of writing”),
+  real commands. Use documentation ranges (`198.51.100.0/24`, `203.0.113.0/24`) for public IPs.
+- Explain **why**, not only what: every rule of thumb carries its reason.
+- No hype, no filler, no unexplained acronyms. Cross-reference instead of repeating (“Chapter 9 covers this”).
+- Provider-neutral concepts first; then **AWS as the main worked provider**, with Azure and Google Cloud compared in an
+  “Across providers” section in every chapter where they differ.
+
+### Building blocks (pick per chapter)
+
+| Block | Class | Use |
+| --- | --- | --- |
+| Chapter opener | `.opener` | part, big chapter number, title, a one-paragraph promise |
+| Chapter card | `.chapter-card` | “By the end you can” (3–5 verbs a reader can check), “Before you start” (linked prerequisites), time, lab, provider |
+| Story box | `.box-story` | the running example (Larder): a problem at the start, solved near the end |
+| Numbered sections | `h2.sec` with `.n` | `8.1`, `8.2`… sections are a real sequence, so they're numbered |
+| Side note | `aside.side` | names, rules of thumb, asides; in the margin on wide screens, inline on phones |
+| Key idea | `.box-key` | the one sentence to remember; at most 2–3 per chapter |
+| Watch out | `.box-warn` | a trap that costs money, security or an outage |
+| On &lt;provider&gt; | `.box-provider` | how Azure or Google Cloud differ |
+| Figure | `figure` + inline SVG `.dg` | precise diagrams that use the theme's tokens; numbered “Figure 8.1”, with `<title>`/`<desc>` |
+| Table | `.table-wrap` + `caption` | numbered “Table 8.2”; comparisons, sizes, worked examples |
+| Steps | `ol.steps` | procedures and checklists, where order matters |
+| Lab | `.box-lab` + code | build it: goal, needs, **cost and clean-up**, steps, “break it on purpose”, stretch goals |
+| Common mistakes | table | mistake → what happens → instead |
+| Summary, key terms, quiz | `.summary`, `.terms`, `.quiz` | 5–8 bullets; glossary; 5–6 questions tagged recall / apply / explain / design / compare, answers in `<details>` |
+| Going further | list | official docs first |
+
+Rules: one job per box (don't use a warning box for emphasis); every figure and table earns its place; a chapter that
+isn't hands-on can skip the lab and use a worked design exercise instead.
+
+### Look
+
+- Printed technical book, not a notebook: cool paper, ink, a cable blue-green accent, signal orange for warnings, green
+  for labs, violet for key ideas. Literata (body), Archivo (headings, diagrams), JetBrains Mono (code).
+- One ~68-character reading column plus a margin column for side notes (≥ 1100 px).
+- Light and dark themes from tokens; prints to A4 (answers shown, navigation hidden).
+
+## 3. Handbook 1 · Networking in the Cloud
+
+Audience: developers, operators and new cloud engineers who use the cloud but find networking a black box.
+Outcome: design, build and debug a production network on AWS, and read one on Azure or Google Cloud.
+Running example: **Larder** (one region, Frankfurt, three zones; stores on Wi-Fi + 4G VPN; external PSP and StockPilot).
+
+| Part | Chapters |
+| --- | --- |
+| I · How networks work | 1 What happens when you open a web page · 2 IP addresses and CIDR without fear · 3 TCP, UDP and ports · 4 Routing · 5 DNS · 6 HTTP, TLS and certificates |
+| II · Your network in the cloud | 7 Regions, zones and the shape of a cloud network · **8 Inside a VPC (sample)** · 9 Firewalls: security groups and NACLs · 10 Planning your IP address space |
+| III · Connecting networks | 11 Peering, transit gateways and hubs · 12 Private access to cloud services · 13 Site-to-site VPN and BGP · 14 Dedicated connections · 15 DNS across clouds and data centres |
+| IV · Traffic in and out | 16 Load balancers · 17 CDNs, WAF and DDoS · 18 Controlling egress |
+| V · Modern workloads | 19 Containers and Kubernetes · 20 Serverless and managed services · 21 Service mesh and zero trust |
+| VI · Running it | 22 Observing and troubleshooting · 23 The cost of moving bytes · 24 Networks as code and landing zones · 25 Capstone: Larder's network end to end |
+| Appendices | A CIDR cheat sheet · B AWS/Azure/GCP translation table · C Lab setup and cost safety · D Glossary · E Answers |
+
+Full chapter summaries and topic lists: `content/handbooks/cloud-networking/book.py`.
+
+### New Larder facts (Series 3)
+
+Company plan inside `10.0.0.0/8` (ch. 10): offices `10.0.0.0/13`, stores `10.8.0.0/13` (one /16 per city),
+Frankfurt `10.16.0.0/12` (hub `10.16`, dev `10.17`, staging `10.18`, spare `10.19`, prod `10.20`), second region
+`10.32.0.0/12`, pods `100.64.0.0/10`; Korenwolf also uses `10.20.0.0/16` → PrivateLink (ch. 10, 12).
+Office Amsterdam `10.1.0.0/24`; Amsterdam stores `10.8.0.0/16` (Noord `10.8.3.0/24`,
+router `10.8.3.1`); Rotterdam stores `10.9.0.0/16`; store VPNs use BGP after the Rotterdam missing-route incident (ch. 4).
+Jasper's first VPC was `172.17.0.0/16` and clashed with Docker (ch. 2). Public API `api.larder.example` (TTL incident,
+ch. 5); webhooks `hooks.larder.example` (missing intermediate, ch. 6); payment client resets via NAT idle timeout (ch. 3).
+VPC `10.20.0.0/16`, eu-central-1 · public `10.20.0–2.0/24` · app `10.20.16.0/20`, `10.20.32.0/20`, `10.20.48.0/20` ·
+data `10.20.64–66.0/24` · `10.20.128.0/17` spare · other Larder networks in `10.0.0.0/8` via a transit gateway ·
+NAT Elastic IP `198.51.100.7` (StockPilot allow-lists it). Chapter 9 should retell the casebook's 29 Oct 2026 incident
+(a network rule change cut Dispatch off from Postgres for 25 minutes). Add these to `docs/larder-casebook.md`.
+
+## 4. Decisions (owner, 2026-11-26)
+
+1. Title and series name: OK. 2. AWS main provider: OK. 3. Larder stays. 4. 25 chapters. 5. Labs up to ~$1.
+
+## 5. Progress and checklist
+
+1. [x] Landing page: Handbooks section (`handbook_items()` in `build_notes.py`); `journals.json` entries for chapter and whole-book PDFs.
+2. [x] Part I: chapters 1–6. [x] Part II: chapters 7–10. [x] Part III: chapters 11–15. [x] Part IV: chapters 16–18. [x] Part V: chapters 19–21. [x] Part VI: chapters 22–25.
+3. [x] Appendices: A (CIDR tables generated with Python's ipaddress; the one-off generator lives in the history),
+   B (provider translation table, hand-written), C (lab setup; its lab table was generated from the chapter cards),
+   D (glossary) and E (answers) are **generated at build time** from every chapter's key terms and quiz by
+   `glossary_body()` / `answers_body()` in `scripts/build_handbooks.py`, so they stay in sync automatically.
+   Appendix pages are `appendix-<letter>-<slug>.html`; cross-references are written `href="#appC"`.
+   ch. 24 networks as code, VPC sharing vs per-team VPCs; ch. 25 second region and DNS failover;
+   ch. 21 identity-aware access instead of client VPN;
+   ch. 22 flow logs and Reachability Analyzer; ch. 25 second region (`10.32.0.0/12`) and DNS failover.
+4. Lab code: the Python labs (ch. 2, 4, 10, 14, 23, 24's plan check) and the openssl mTLS lab (ch. 21) were run and print what the text says. The Terraform labs (ch. 8, 9, 11, 12, 13, 15, 16, 17, 18, 20, 22, 24)
+   were not run or validated (Terraform wasn't available in the session); run `terraform validate` and one real apply.
+5. Per chapter: figures checked at desktop and 375 px, light and dark (no horizontal overflow); labs not yet run in a
+   real account (owner or a later session should run the AWS labs once); links checked.
+
+## 6. Merge with main (2026-11-26)
+
+- Main had moved on (Books 3 and 5, deep dives, cheat sheets, the Darkside, a spine-shelf landing page, cached PDFs).
+  Merged into this branch; generated pages taken from main and rebuilt.
+- Chapter 9's story now matches the casebook's 29 Oct 2026 incident (PR 233, applied 18:10, Bram reverts 18:35).
+- PDFs: `scripts/build-pdf.mjs` renders never-rendered PDFs automatically, so the handbook's 11 PDFs build on the
+  next deploy without touching `pdf-build.json`. Verified locally with
+  `CHROMIUM_PATH=/opt/pw-browsers/chromium PDF_JOURNALS=handbooks/cloud-networking npm run pdf`.

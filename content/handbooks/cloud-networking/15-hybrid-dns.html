@@ -1,0 +1,336 @@
+<!-- Handbook 1 · Networking in the Cloud · Chapter 15. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part III · Connecting networks</p>
+  <p class="chno">15</p>
+  <h1>DNS across clouds and data centres</h1>
+  <p class="promise">Once your offices, stores and VPCs are connected, packets can flow. Names often can't. A store's handheld asks its usual resolver for a cloud service's private name and gets “no such name”; a server in a VPC can't resolve the office's file server. This chapter connects the DNS worlds the same way Part III connected the networks: deliberately, in both directions.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Share private zones across VPCs and accounts.</li>
+      <li>Use split-horizon DNS without hiding your public records by accident.</li>
+      <li>Let sites resolve cloud names with an inbound resolver endpoint, and the cloud resolve site names with outbound rules.</li>
+      <li>Resolve PrivateLink endpoint names from outside their VPC.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>DNS, resolvers and private zones (<a href="#ch5">Chapter 5</a>).</li>
+      <li>Endpoint private DNS (<a href="#ch12">Chapter 12</a>).</li>
+      <li>A VPN between sites and the cloud (<a href="#ch13">Chapter 13</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>40 minutes, AWS, under $1</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 15.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Larder's new stock service lives at <code>stock.internal.larder.example</code>, in a private hosted zone attached to the production and hub VPCs. Inside the cloud, everything finds it. At the Noord store, the handhelds get <code>NXDOMAIN</code>. The VPN is up, the routes are right, and the handhelds can reach the service by IP address. They just can't find out what the address is.</p>
+  <p>Routing joined the networks; nothing joined the names. Section 15.3 does.</p>
+</aside>
+
+<!-- ======================================================== 15.1 -->
+<h2 class="sec" id="s15-1"><span class="n">15.1</span>The big picture</h2>
+
+<p class="lead">Every network has a resolver it trusts. In a VPC, it's the provider's resolver (<a href="#ch5">Chapter 5</a>), which knows your private zones. In a store or office, it's the router, a local DNS server, or the internet provider's resolver, which knows nothing about them. <span class="term">Hybrid DNS</span> means teaching each side to <strong>forward</strong> questions about the other side's names to a resolver that knows the answer.</p>
+
+<figure class="wide" id="fig15-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 270" role="img" aria-labelledby="fig15-1-t fig15-1-d">
+      <title id="fig15-1-t">DNS forwarding in both directions</title>
+      <desc id="fig15-1-d">On the site side, the store router forwards questions about internal.larder.example over the VPN to two inbound resolver endpoint addresses in the hub VPC, which hand them to the VPC resolver; it answers from the private hosted zone. In the other direction, a server in a VPC asks the VPC resolver about office.larder.example; a forwarding rule sends that question through an outbound resolver endpoint to the office's DNS server at 10.1.0.53.</desc>
+      <defs><marker id="c15ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker>
+      <marker id="c15ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="priv" x="12" y="20" width="230" height="230" rx="6"/>
+      <text class="t-small" x="24" y="40">stores and office (over the VPN)</text>
+      <rect class="node" x="28" y="56" width="198" height="62" rx="4"/>
+      <text class="t-label" x="127" y="78" text-anchor="middle">store router (DNS)</text>
+      <text class="t-small" x="127" y="96" text-anchor="middle">internal.larder.example →</text>
+      <text class="t-small" x="127" y="110" text-anchor="middle">inbound endpoint</text>
+      <rect class="node" x="28" y="166" width="198" height="62" rx="4"/>
+      <text class="t-label" x="127" y="190" text-anchor="middle">office DNS server</text>
+      <text class="t-mono" x="127" y="210" text-anchor="middle">10.1.0.53</text>
+      <rect class="vpc" x="320" y="20" width="428" height="230" rx="8"/>
+      <text class="t-title t-accent" x="334" y="42">hub VPC 10.16.0.0/16</text>
+      <rect class="node-accent" x="336" y="56" width="140" height="62" rx="4"/>
+      <text class="t-label on-accent" x="406" y="80" text-anchor="middle">inbound endpoint</text>
+      <text class="t-mono on-accent" x="406" y="100" text-anchor="middle">10.16.1.10, .2.10</text>
+      <rect class="node" x="520" y="108" width="210" height="56" rx="4"/>
+      <text class="t-label" x="625" y="132" text-anchor="middle">VPC resolver</text>
+      <text class="t-small" x="625" y="150" text-anchor="middle">private zones + forwarding rules</text>
+      <rect class="pub" x="520" y="56" width="210" height="38" rx="4"/>
+      <text class="t-small" x="625" y="80" text-anchor="middle">private zone internal.larder.example</text>
+      <rect class="node-accent" x="336" y="166" width="140" height="62" rx="4"/>
+      <text class="t-label on-accent" x="406" y="190" text-anchor="middle">outbound endpoint</text>
+      <text class="t-small on-accent" x="406" y="210" text-anchor="middle">rule: office.larder.example</text>
+      <rect class="node" x="520" y="190" width="210" height="40" rx="4"/>
+      <text class="t-small" x="625" y="215" text-anchor="middle">server asking for files.office…</text>
+      <path class="wire-accent" d="M228 87 H332" marker-end="url(#c15ah)"/>
+      <path class="wire-accent" d="M478 87 Q 500 87 520 120" marker-end="url(#c15ah)"/>
+      <path class="wire" d="M625 188 V168" marker-end="url(#c15ahd)"/>
+      <path class="wire" d="M540 164 Q 500 197 480 197" marker-end="url(#c15ahd)"/>
+      <path class="wire" d="M334 197 H230" marker-end="url(#c15ahd)"/>
+      <text class="t-small t-accent" x="281" y="80" text-anchor="middle">① ask cloud</text>
+      <text class="t-small" x="281" y="190" text-anchor="middle">② ask site</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 15.1</b> Two directions, two kinds of endpoint. Inbound endpoints give sites addresses to send questions to; outbound endpoints and forwarding rules send the cloud's questions to the sites' DNS servers.</figcaption>
+</figure>
+
+<!-- ======================================================== 15.2 -->
+<h2 class="sec" id="s15-2"><span class="n">15.2</span>Private zones across VPCs and accounts</h2>
+
+<p>Start inside the cloud. A private hosted zone answers only in the VPCs it's <strong>associated</strong> with (<a href="#ch5">Chapter 5</a>), so every VPC that needs <code>internal.larder.example</code> must be associated with the zone. That's a one-line setting for VPCs in the same account. For a VPC in another account, the zone's owner first <strong>authorises</strong> the association, then the VPC's owner completes it. Do it in code, as part of creating each VPC, so a new VPC is never born unable to resolve the company's internal names.</p>
+
+<p>Larder keeps all private zones in the network account, alongside the transit gateway, and associates them with every VPC that's attached to the TGW. One owner for internal names, like one owner for the address plan (<a href="#ch10">Chapter 10</a>).</p>
+
+<!-- ======================================================== 15.3 -->
+<h2 class="sec" id="s15-3"><span class="n">15.3</span>Sites asking the cloud: inbound endpoints</h2>
+
+<p>The VPC resolver isn't reachable from outside the VPC: its address works only for traffic that starts inside. To let sites use it, create a Route 53 Resolver <span class="term">inbound endpoint</span>: network interfaces with fixed private addresses in your subnets (at least two, in different zones), which accept DNS queries from anywhere you route to them and pass them to the VPC resolver.</p>
+
+<p>Then, on each site's DNS server or router, add a <span class="term">conditional forwarder</span>: “questions about <code>internal.larder.example</code> go to <code>10.16.1.10</code> and <code>10.16.2.10</code>”. Everything else keeps going to the site's usual resolver.</p>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Eli put an inbound endpoint in the hub VPC, with one address in each of two zones, and a security group allowing TCP and UDP port 53 from <code>10.0.0.0/13</code>, the offices and stores. The store routers got a conditional forwarder for <code>internal.larder.example</code>, rolled out with the same template as the MSS clamp from <a href="#ch13">Chapter 13</a>. The handhelds now resolve the stock service, and because the hub VPC is associated with every Larder private zone, any new internal name works at every store the moment it's created.</p>
+</aside>
+
+<p>Inbound endpoints cost about $0.125 an hour per address, so roughly $180 a month for two. One pair in the hub serves every site, as long as the hub VPC is associated with every zone the sites need.</p>
+
+<!-- ======================================================== 15.4 -->
+<h2 class="sec" id="s15-4"><span class="n">15.4</span>The cloud asking sites: outbound rules</h2>
+
+<p>The reverse problem: a server in a VPC needs <code>files.office.larder.example</code>, which only the office DNS server at <code>10.1.0.53</code> knows. Create an <span class="term">outbound endpoint</span> (again, addresses in two zones) and a <strong>forwarding rule</strong>: “for <code>office.larder.example</code>, forward to <code>10.1.0.53</code> through this outbound endpoint”. Then associate the rule with each VPC that should use it. Rules can be shared with other accounts through Resource Access Manager, so the network team writes them once.</p>
+
+<p>The VPC resolver picks the most specific rule that matches a name, as with routes (<a href="#ch4">Chapter 4</a>). There are also <em>system</em> rules, which say “answer this name the normal way”, for carving exceptions out of a broad forward.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: forwarding loops</p>
+  <p>If the office forwards <code>larder.example</code> to the cloud, and the cloud forwards <code>larder.example</code> to the office, queries bounce between them until they time out. Forward <em>specific</em> zones in each direction, and make sure no name is forwarded both ways.</p>
+</div>
+
+<!-- ======================================================== 15.5 -->
+<h2 class="sec" id="s15-5"><span class="n">15.5</span>Split horizon without surprises</h2>
+
+<p>A private zone can have the same name as a public one: <span class="term">split-horizon DNS</span> (<a href="#ch5">Chapter 5</a>). It's useful when the same name should lead to a private address inside and a public one outside, say <code>api.larder.example</code> resolving to an internal load balancer for VPC traffic. But there's a trap in how it works.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Inside a VPC, a private zone replaces the public zone of the same name completely. Any record you didn't copy into the private zone doesn't exist there.</p>
+</div>
+
+<p>Create a private zone called <code>larder.example</code> with just <code>api</code> in it, and from inside the VPC <code>www.larder.example</code>, <code>hooks.larder.example</code> and the mail records all return <code>NXDOMAIN</code>. The resolver found the most specific zone it's responsible for and doesn't fall back to the public one. Safer patterns: put internal names under their own subdomain (<code>internal.larder.example</code>, as Larder does), or make the private zone as specific as possible (a zone for <code>api.larder.example</code> alone).</p>
+
+<!-- ======================================================== 15.6 -->
+<h2 class="sec" id="s15-6"><span class="n">15.6</span>Endpoint names from outside the VPC</h2>
+
+<p>Interface endpoints with private DNS (<a href="#ch12">Chapter 12</a>) make <code>secretsmanager.eu-central-1.amazonaws.com</code> resolve to private addresses, but only through the VPC's resolver. A server in an office or another VPC asks its own resolver and gets the public address. Two fixes:</p>
+<ul>
+  <li><strong>For sites:</strong> add conditional forwarders for the service names (for example <code>secretsmanager.eu-central-1.amazonaws.com</code>) to the inbound endpoint in the endpoint's VPC. The VPC resolver answers with the endpoint's private addresses, and traffic flows over the VPN or Direct Connect.</li>
+  <li><strong>For other VPCs:</strong> the centralised pattern from <a href="#ch12">Chapter 12</a>: private DNS off on the endpoints, your own private zones for the service names, associated with every spoke.</li>
+</ul>
+<p>Forward only the specific service names you've built endpoints for. Forwarding all of <code>amazonaws.com</code> to the cloud sends every AWS lookup from the site there, including names you don't have endpoints for, which then resolve publicly anyway.</p>
+
+<!-- ======================================================== 15.7 -->
+<h2 class="sec" id="s15-7"><span class="n">15.7</span>Across providers, and two useful extras</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 15.1 · Hybrid DNS at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Private zones</td><td>Route 53 private hosted zones, associated with VPCs</td><td>Private DNS zones, linked to VNets</td><td>Cloud DNS private zones, visible to chosen networks</td></tr>
+      <tr><td>Sites → cloud</td><td>Resolver inbound endpoints</td><td>DNS Private Resolver inbound endpoints</td><td>inbound server policy (forwarder addresses in each subnet)</td></tr>
+      <tr><td>Cloud → sites</td><td>outbound endpoints and forwarding rules</td><td>outbound endpoints and forwarding rulesets</td><td>forwarding zones</td></tr>
+      <tr><td>Share across networks</td><td>zone associations; rules shared with RAM</td><td>virtual network links; rulesets linked to VNets</td><td>DNS peering zones</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Two extras earn their place in most designs:</p>
+<ul>
+  <li><strong>Query logging.</strong> Route 53 Resolver query logs record every name each VPC looks up. They're invaluable in incidents (“what was this server talking to?”) and cheap compared with what they answer. <a href="#ch22">Chapter 22</a> uses them.</li>
+  <li><strong>DNS firewall.</strong> Route 53 Resolver DNS Firewall blocks lookups of domains on lists you choose, including managed lists of known malicious domains. Because almost every connection starts with a lookup, it's one of the cheapest controls on what servers can reach (<a href="#ch18">Chapter 18</a>).</li>
+</ul>
+
+<!-- ======================================================== 15.8 -->
+<h2 class="sec" id="s15-8"><span class="n">15.8</span>Lab: a private zone, an inbound endpoint and a forwarding rule</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 15 · Both directions, built and inspected</p>
+  <p><strong>You'll build</strong> a private zone with a record, an inbound endpoint that a site would forward to, and an outbound endpoint with a rule pointing at a (pretend) office DNS server, then inspect what you've built. <strong>You need</strong> the AWS CLI and Terraform. <strong>Cost:</strong> four endpoint addresses at about $0.125 an hour each, so about $0.50 an hour; the hosted zone is free if deleted within 12 hours. Destroy it within the hour.</p>
+</div>
+
+<p class="code-title"><span>main.tf</span><span>Terraform ≥ 1.5, AWS provider 5.x</span></p>
+<pre><code><span class="k">provider</span> <span class="s">"aws"</span> { region = <span class="s">"eu-central-1"</span> }
+
+<span class="k">data</span> <span class="s">"aws_availability_zones"</span> <span class="s">"z"</span> { state = <span class="s">"available"</span> }
+
+<span class="k">resource</span> <span class="s">"aws_vpc"</span> <span class="s">"hub"</span> {
+  cidr_block           = <span class="s">"10.70.0.0/16"</span>
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+}
+<span class="k">resource</span> <span class="s">"aws_subnet"</span> <span class="s">"s"</span> {
+  count             = 2
+  vpc_id            = aws_vpc.hub.id
+  cidr_block        = cidrsubnet(aws_vpc.hub.cidr_block, 8, count.index + 1)
+  availability_zone = data.aws_availability_zones.z.names[count.index]
+}
+
+<span class="c"># 15.2 · a private zone, associated with the hub VPC</span>
+<span class="k">resource</span> <span class="s">"aws_route53_zone"</span> <span class="s">"internal"</span> {
+  name = <span class="s">"internal.lab.example"</span>
+  vpc { vpc_id = aws_vpc.hub.id }
+}
+<span class="k">resource</span> <span class="s">"aws_route53_record"</span> <span class="s">"stock"</span> {
+  zone_id = aws_route53_zone.internal.zone_id
+  name    = <span class="s">"stock.internal.lab.example"</span>
+  type    = <span class="s">"A"</span>
+  ttl     = 60
+  records = [<span class="s">"10.70.1.50"</span>]
+}
+
+<span class="c"># DNS from the sites (10.0.0.0/13) in, and to the office out</span>
+<span class="k">resource</span> <span class="s">"aws_security_group"</span> <span class="s">"dns"</span> { vpc_id = aws_vpc.hub.id }
+<span class="k">resource</span> <span class="s">"aws_vpc_security_group_ingress_rule"</span> <span class="s">"dns"</span> {
+  for_each          = toset([<span class="s">"udp"</span>, <span class="s">"tcp"</span>])
+  security_group_id = aws_security_group.dns.id
+  cidr_ipv4         = <span class="s">"10.0.0.0/13"</span>
+  ip_protocol       = each.key
+  from_port         = 53
+  to_port           = 53
+}
+<span class="k">resource</span> <span class="s">"aws_vpc_security_group_egress_rule"</span> <span class="s">"dns"</span> {
+  security_group_id = aws_security_group.dns.id
+  cidr_ipv4         = <span class="s">"0.0.0.0/0"</span>
+  ip_protocol       = <span class="s">"-1"</span>
+}
+
+<span class="c"># 15.3 · sites forward internal.lab.example to these two addresses</span>
+<span class="k">resource</span> <span class="s">"aws_route53_resolver_endpoint"</span> <span class="s">"inbound"</span> {
+  direction          = <span class="s">"INBOUND"</span>
+  security_group_ids = [aws_security_group.dns.id]
+  ip_address { subnet_id = aws_subnet.s[0].id }
+  ip_address { subnet_id = aws_subnet.s[1].id }
+}
+
+<span class="c"># 15.4 · the VPC forwards office.lab.example to the office DNS server</span>
+<span class="k">resource</span> <span class="s">"aws_route53_resolver_endpoint"</span> <span class="s">"outbound"</span> {
+  direction          = <span class="s">"OUTBOUND"</span>
+  security_group_ids = [aws_security_group.dns.id]
+  ip_address { subnet_id = aws_subnet.s[0].id }
+  ip_address { subnet_id = aws_subnet.s[1].id }
+}
+<span class="k">resource</span> <span class="s">"aws_route53_resolver_rule"</span> <span class="s">"office"</span> {
+  domain_name          = <span class="s">"office.lab.example"</span>
+  rule_type            = <span class="s">"FORWARD"</span>
+  resolver_endpoint_id = aws_route53_resolver_endpoint.outbound.id
+  target_ip { ip = <span class="s">"10.1.0.53"</span> }
+}
+<span class="k">resource</span> <span class="s">"aws_route53_resolver_rule_association"</span> <span class="s">"office"</span> {
+  resolver_rule_id = aws_route53_resolver_rule.office.id
+  vpc_id           = aws_vpc.hub.id
+}
+
+<span class="k">output</span> <span class="s">"inbound_ips"</span> {
+  value = [<span class="k">for</span> a <span class="k">in</span> aws_route53_resolver_endpoint.inbound.ip_address : a.ip]
+}</code></pre>
+
+<ol class="steps">
+  <li><strong>Create it</strong> with <code>terraform init</code> and <code>terraform apply</code>. Endpoints take a few minutes.</li>
+  <li><strong>Read the inbound addresses:</strong> <code>terraform output inbound_ips</code>. These are what you'd type into a store router's conditional forwarder for <code>internal.lab.example</code>.</li>
+  <li><strong>Read the rules</strong> the VPC now follows: <code>aws route53resolver list-resolver-rules --query 'ResolverRules[].[DomainName,RuleType,TargetIps[0].Ip]' --output table</code>. Find your <code>FORWARD</code> rule and the built-in <code>SYSTEM</code> rule for <code>.</code>, which means “everything else, the normal way”.</li>
+  <li><strong>Find the split-horizon trap on paper.</strong> If you created a private zone named <code>lab.example</code> instead, what would a server in this VPC get for <code>www.lab.example</code>? Why is <code>internal.lab.example</code> safer?</li>
+  <li><strong>Clean up</strong> with <code>terraform destroy</code>, and check in the console that the endpoints are gone; they're the part that bills by the hour.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> If you built the VPN in <a href="#ch13">Lab 13</a> with a real router at your end, point a conditional forwarder on it at the inbound addresses and run <code>dig stock.internal.lab.example</code> from your laptop.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s15-9"><span class="n">15.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>A private zone named after your whole public domain</td><td>Public records vanish inside the VPC.</td><td>A subdomain such as <code>internal.</code>, or very specific zones.</td></tr>
+      <tr><td>Forgetting to associate a zone with a new VPC</td><td>Internal names fail only in that VPC.</td><td>Associate zones when creating VPCs, in code.</td></tr>
+      <tr><td>Sites pointing at the VPC resolver's <code>.2</code> address</td><td>No answer: it only serves traffic from inside the VPC.</td><td>Inbound endpoints.</td></tr>
+      <tr><td>Security group allows UDP 53 only</td><td>Large answers fail when they retry over TCP.</td><td>Allow UDP and TCP 53.</td></tr>
+      <tr><td>Forwarding the same zone both ways</td><td>Queries loop and time out.</td><td>Forward specific zones in one direction each.</td></tr>
+      <tr><td>Forwarding all of <code>amazonaws.com</code> to the cloud</td><td>Every AWS lookup from sites goes through the endpoint, for no benefit.</td><td>Forward only service names you have endpoints for.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum15">
+  <h2 class="sec" id="sum15"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Connected networks still need connected <strong>names</strong>: each side forwards questions about the other side's zones.</li>
+    <li>Associate private zones with every VPC that needs them, across accounts with authorisation; own them centrally.</li>
+    <li><strong>Inbound endpoints</strong> give sites addresses to send cloud questions to, via conditional forwarders.</li>
+    <li><strong>Outbound endpoints</strong> and <strong>forwarding rules</strong> send the cloud's questions about site names to site DNS servers.</li>
+    <li>A private zone replaces the public zone of the same name inside the VPC; use subdomains for internal names.</li>
+    <li>Resolve endpoint names from sites through inbound endpoints; log queries and filter them with a DNS firewall.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Hybrid DNS</dt><dd>Resolving names across cloud and on-premises networks.</dd>
+    <dt>Conditional forwarder</dt><dd>A DNS server setting that sends questions about one zone to specific servers.</dd>
+    <dt>Inbound endpoint</dt><dd>Addresses in a VPC that accept DNS queries from outside and pass them to the VPC resolver.</dd>
+    <dt>Outbound endpoint</dt><dd>Addresses in a VPC through which the resolver forwards queries elsewhere.</dd>
+    <dt>Forwarding rule</dt><dd>A rule sending one domain's queries to chosen DNS servers.</dd>
+    <dt>Zone association</dt><dd>Linking a private zone to a VPC so its resolver answers for it.</dd>
+    <dt>DNS firewall</dt><dd>Blocking lookups of chosen domains at the resolver.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Why can't a store's router simply use the VPC resolver's address, <code>10.16.0.2</code>, as its DNS server over the VPN? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>The VPC resolver only answers queries that originate inside the VPC. Traffic arriving from the VPN can't use it; an inbound endpoint provides addresses that can.</p></details>
+    </li>
+    <li>
+      <p>Someone creates a private zone <code>larder.example</code> containing only <code>api</code>. What breaks, and where? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Inside every VPC associated with the zone, every other <code>larder.example</code> name (<code>www</code>, <code>hooks</code>, mail records) returns <code>NXDOMAIN</code>, because the private zone replaces the public one there. Outside those VPCs nothing changes.</p></details>
+    </li>
+    <li>
+      <p>A server in a VPC must resolve <code>printer3.office.larder.example</code>. List what you'd create. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>An outbound resolver endpoint (two subnets), a forwarding rule for <code>office.larder.example</code> targeting the office DNS server, an association of that rule with the server's VPC, and a route plus firewall rules allowing DNS from the endpoint to the office server over the VPN.</p></details>
+    </li>
+    <li>
+      <p>Why forward only specific AWS service names, not all of <code>amazonaws.com</code>, from a site to an inbound endpoint? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Only names that have interface endpoints with private DNS benefit; everything else would just resolve publicly through the cloud resolver instead of locally, adding a dependency on the VPN and the endpoint for every AWS lookup at the site.</p></details>
+    </li>
+    <li>
+      <p>Design question: where should Larder's inbound and outbound endpoints live, and why? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>In the hub VPC, which every site reaches through the TGW and which is associated with every private zone. One pair of each serves all sites and VPCs; forwarding rules are shared with other accounts through RAM and associated with each VPC.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resolver.html">What is Route 53 Resolver?</a></li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/dns/dns-private-resolver-overview">What is Azure DNS Private Resolver?</a></li>
+    <li>Google Cloud: <a href="https://cloud.google.com/dns/docs/best-practices">Best practices for Cloud DNS</a>, including hybrid patterns.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="#ch14">14 · Dedicated connections</a></div>
+  <div><span>Next</span><a href="#ch16">16 · Load balancers</a></div>
+</nav>

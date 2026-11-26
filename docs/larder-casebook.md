@@ -1130,3 +1130,49 @@ Book 5 follows ITIL 4 (practices, value chain, four dimensions, guiding principl
   Eli becomes reliability lead.
 - **Closing note, Mon 30 Oct 2028**: useful pages 2 % → ≈ 80 %, change failures 6 % → 3 %, restore 3 h 40 → 22 min,
   toil 41 % → 19 %, Eli's night pages in October 2028: none. **Book 5 is complete.**
+
+## Series 3 · Networking in the Cloud (handbook facts)
+
+Network facts used by Handbook 1 (details and chapter references in `docs/HANDOFF-handbooks.md`):
+
+- Address plan in `10.0.0.0/8`: offices `10.0.0.0/13` (Amsterdam office `10.1.0.0/24`), stores `10.8.0.0/13`, one
+  `/16` per city (Amsterdam `10.8`, Rotterdam `10.9`, Antwerp `10.10`; Noord `10.8.3.0/24`), Frankfurt `10.16.0.0/12`
+  (prod VPC `10.20.0.0/16`), second region `10.32.0.0/12`. Jasper's first VPC was `172.17.0.0/16` (clashed with Docker).
+- Prod VPC subnets: public `10.20.0–2.0/24`, app `10.20.16.0/20`, `.32.0/20`, `.48.0/20`, data `10.20.64–66.0/24`;
+  one NAT gateway per zone; NAT Elastic IP `198.51.100.7` is allow-listed by StockPilot.
+- Incidents told in the book: reporting subnet left on the main route table (ch. 8); Rotterdam store replies with no
+  route back (ch. 4, then BGP for store VPNs); payment resets after NAT idle timeout (ch. 3); `api.larder.example`
+  TTL cutover (ch. 5); missing intermediate on `hooks.larder.example` (ch. 6); cross-zone Kafka traffic ≈ €700/month
+  (ch. 7); 29 Oct 2026 Dispatch outage (PR 233, 18:10–18:35): the removed rule allowed Dispatch by CIDR; tracked connections kept the old copies looking healthy while new copies failed (ch. 9); Korenwolf overlaps `10.20.0.0/16` →
+  PrivateLink (ch. 10).
+- Part III facts: hub VPC `10.16.0.0/16` holds CI runners, store VPN attachments' DNS and the Resolver endpoints
+  (inbound `10.16.1.10`, `10.16.2.10`); TGW route tables `tgw-rt-prod`, `tgw-rt-nonprod`, `tgw-rt-shared` (ch. 11);
+  early design was hub-and-peering, replaced by the TGW when stores needed prod (peering isn't transitive). Korenwolf
+  calls `orders.partner.larder.example` through a PrivateLink endpoint service (NLB, proxy protocol v2, mTLS); data-tier
+  jobs use interface endpoints and have no internet route (ch. 12). Store routers: ASN 65008 at Noord, fibre + 4G, a
+  VPN connection on each, 4G prepended; MSS clamp after the stock-count MTU black hole (ch. 13). Direct Connect
+  decided against: revisit above ~1 Gbps / 20 TB a month at one site (ch. 14). Private zone `internal.larder.example`
+  (stock service `stock.internal.larder.example`); office DNS `10.1.0.53` for `office.larder.example` (ch. 15).
+- Part IV facts: ALB rules host `api.larder.example` → tg-api, `/checkout/*` → tg-checkout, default tg-web; 502s at
+  quiet times fixed by app keep-alive 75 s > ALB idle 60 s (ch. 16). Friday 17:00 newsletter to 400,000 subscribers,
+  12× traffic, >80 % identical requests → CloudFront with micro-caching, origin shield in Frankfurt, catalogue hit
+  ratio 93 %; credential stuffing on `/api/login` (~40,000 attempts/hour, ~600 addresses) stopped by WAF rate rules
+  (ch. 17). Reporting job's compromised Python package sent env vars to `telemetry-collect.example` for nine days;
+  found in DNS query logs; secrets rotated; 37 production egress domains; DNS Firewall, endpoints, then centralised
+  egress through a firewall VPC, allow-list in alert mode for two weeks then drop (ch. 18).
+- Part V facts: services move to EKS with nodes in the app subnets; a deploy surge exhausts zone a's `/20` (~100
+  nodes × ~28 addresses with default warm pools) → custom networking with secondary `100.64.0.0/16` (one `/18` pod subnet
+  per zone), prefix delegation, smaller warm targets; Gateway API owned by the platform team (ch. 19). WMS B webhook
+  receiver: API Gateway → Lambda in private app subnets (it had been put in public subnets and lost internet access)
+  → RDS Proxy → Postgres; calls back to WMS B through NAT (ch. 20). Lena's ADR 0021 review also found the leaver's VPN
+  profile still worked and reached all of `10.0.0.0/8`; staff tools moved behind AWS Verified Access with SSO and
+  device checks, staff VPN off for tools in October, kept for two engineers' incident access; mTLS in the payments
+  path, no service mesh yet (about twenty services, three teams; revisit at ~fifty) (ch. 21).
+- Part VI facts: new cache's security group allowed Redis from zone a's subnet only → ~1 in 3 calls failed; found
+  with one flow-log query (ch. 22). Quarterly network bill review with Marco: $9,000 → $5,060 a month (endpoints,
+  per-zone NAT, zone-local Kafka/cache, peering prod → analytics for ~40 TB nightly, CloudFront, released IPv4) (ch. 23).
+  Data team's hand-built account (`10.0.0.0/16`, public subnets) rebuilt from account vending with `10.21.0.0/16`;
+  SCP denies internet gateways in workload accounts; product teams share prod/staging VPCs (ch. 24). Pilot light in
+  Paris (ADR 0026): hub `10.32.0.0/16`, prod `10.36.0.0/16`, TGW peered with Frankfurt, DB replica; NAT, firewall,
+  endpoints, load balancers and store VPNs built on failover from code and pre-generated configs; idle network
+  under €200/month of the €1,200 (ch. 25).

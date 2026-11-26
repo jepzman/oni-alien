@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Hybrid connectivity I: site-to-site VPN and BGP · Networking in the Cloud</title>
+<meta name="description" content="IPsec tunnels, dynamic routing with BGP, and how Larder&#x27;s dark stores reach Frankfurt over 4G.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ba699999a6">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 1</a> · <a href="index.html">Networking in the Cloud</a></span><span>Part III · Chapter 13</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part III · Connecting networks</p>
+  <p class="chno">13</p>
+  <h1>Hybrid connectivity I: site-to-site VPN and BGP</h1>
+  <p class="promise">Offices, stores, factories and data centres reach the cloud most often through a site-to-site VPN: an encrypted tunnel across the ordinary internet. It's cheap, quick to set up and good enough for most sites. This chapter explains how the tunnels work, how BGP runs inside them to keep routes and failover automatic, and the packet-size problem that catches almost everyone once.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain what IPsec does and what a VPN tunnel adds to every packet.</li>
+      <li>Set up an AWS site-to-site VPN with two tunnels and BGP.</li>
+      <li>Design redundancy across tunnels, devices and internet links.</li>
+      <li>Recognise and fix an MTU black hole.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Encapsulation (<a href="01-what-happens.html">Chapter 1</a>) and UDP (<a href="03-tcp-udp-ports.html">Chapter 3</a>).</li>
+      <li>BGP basics and both directions of a path (<a href="04-routing.html">Chapter 4</a>).</li>
+      <li>Transit gateway route tables (<a href="11-connecting-vpcs.html">Chapter 11</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 50 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, your computer and AWS, about $0.10</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 13.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Tomás, who runs the Noord dark store, reports something strange. Since the new stock-count feature went live, the picker handhelds' end-of-day count upload spins forever and fails. Scanning items, small updates, looking up orders: all fine. Same handhelds, same Wi-Fi, same VPN to Frankfurt. Only the big upload, about 2 MB, never arrives. Eli sees the upload's connection open on the server, then nothing.</p>
+  <p>Small packets work and big ones vanish. That pattern has one usual cause, and section 13.5 finds it.</p>
+</aside>
+
+<!-- ======================================================== 13.1 -->
+<h2 class="sec" id="s13-1"><span class="n">13.1</span>The big picture</h2>
+
+<p class="lead">A <span class="term">site-to-site VPN</span> joins a whole network, like a store's LAN, to a cloud network, through an encrypted <strong>tunnel</strong> over the internet. Your end is a router or firewall called the <span class="term">customer gateway</span>; the cloud end is a managed gateway, on AWS either a <strong>virtual private gateway</strong> (for one VPC) or a <strong>transit gateway</strong> attachment (for many, <a href="11-connecting-vpcs.html">Chapter 11</a>). Devices behind each end don't know the tunnel exists: they just route to the other side's addresses.</p>
+
+<figure class="wide" id="fig13-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig13-1-t fig13-1-d">
+      <title id="fig13-1-t">A store connected to Frankfurt with a site-to-site VPN</title>
+      <desc id="fig13-1-d">The Noord store's LAN, 10.8.3.0/24, sits behind the store router, the customer gateway, with ASN 65008. Two IPsec tunnels cross the internet to two AWS VPN endpoints in different zones, both belonging to one VPN connection on Larder's transit gateway, ASN 64512. A BGP session runs inside each tunnel. The store advertises 10.8.3.0/24; AWS advertises the ranges the store may reach.</desc>
+      <rect class="priv" x="12" y="40" width="170" height="150" rx="6"/>
+      <text class="t-small" x="24" y="60">Noord store LAN</text>
+      <text class="t-mono" x="24" y="78">10.8.3.0/24</text>
+      <rect class="node" x="40" y="110" width="140" height="56" rx="5"/>
+      <text class="t-label" x="110" y="134" text-anchor="middle">store router</text>
+      <text class="t-small" x="110" y="152" text-anchor="middle">customer gw · 65008</text>
+      <ellipse class="ext" cx="370" cy="125" rx="110" ry="92"/>
+      <text class="t-small" x="370" y="50" text-anchor="middle">the internet</text>
+      <path class="wire-accent" d="M182 128 C 260 80, 470 70, 560 82"/>
+      <path class="wire-accent" d="M182 140 C 260 190, 470 190, 560 168"/>
+      <text class="t-small t-accent" x="370" y="94" text-anchor="middle">tunnel 1 · IPsec + BGP</text>
+      <text class="t-small t-accent" x="370" y="168" text-anchor="middle">tunnel 2 · IPsec + BGP</text>
+      <rect class="node" x="560" y="62" width="110" height="40" rx="4"/>
+      <text class="t-small" x="615" y="87" text-anchor="middle">AWS endpoint 1</text>
+      <rect class="node" x="560" y="148" width="110" height="40" rx="4"/>
+      <text class="t-small" x="615" y="173" text-anchor="middle">AWS endpoint 2</text>
+      <rect class="node-accent" x="686" y="62" width="64" height="126" rx="5"/>
+      <text class="t-label on-accent" x="718" y="120" text-anchor="middle">TGW</text>
+      <text class="t-small on-accent" x="718" y="138" text-anchor="middle">64512</text>
+      <path class="wire" d="M670 82 H686 M670 168 H686"/>
+      <text class="t-small" x="20" y="228">The store advertises 10.8.3.0/24. AWS advertises what the VPN attachment's TGW route table may reach: prod and hub.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 13.1</b> One AWS VPN connection is always two tunnels, ending on two AWS devices in different zones. Configure both; AWS takes one down from time to time for maintenance.</figcaption>
+</figure>
+
+<!-- ======================================================== 13.2 -->
+<h2 class="sec" id="s13-2"><span class="n">13.2</span>IPsec in brief</h2>
+
+<p><span class="term">IPsec</span> is the family of protocols almost every site-to-site VPN uses. Two parts matter:</p>
+<ul>
+  <li><strong>IKE</strong> (Internet Key Exchange, UDP port 500, or 4500 when there's NAT in the way) lets the two gateways prove who they are, usually with a pre-shared key or certificates, and agree on encryption keys. It runs in two phases: first a secure channel for the gateways themselves, then keys for your traffic. Keys are renewed regularly.</li>
+  <li><strong>ESP</strong> (Encapsulating Security Payload) carries your traffic. In <strong>tunnel mode</strong>, each of your packets is encrypted whole and wrapped in a new IP packet between the two gateways' public addresses: encapsulation once more (<a href="01-what-happens.html">Chapter 1</a>).</li>
+</ul>
+
+<p>Both ends must agree on the details: IKE version (use IKEv2), encryption and integrity algorithms, key lifetimes, and the pre-shared key. The provider gives you a configuration file for common router brands with all of this filled in; most VPN problems on the first day are a mismatch in one of these settings, and both ends' logs will say which.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Watch out: firewalls in front of the router</p>
+  <p>The customer gateway needs UDP 500 and 4500 (and protocol ESP, if no NAT is involved) open to and from the AWS tunnel addresses. A site firewall that blocks them gives you tunnels that never come up, with nothing obvious in the logs on the AWS side.</p>
+</div>
+
+<!-- ======================================================== 13.3 -->
+<h2 class="sec" id="s13-3"><span class="n">13.3</span>An AWS site-to-site VPN</h2>
+
+<p>Three resources describe one VPN on AWS:</p>
+<div class="table-wrap">
+  <table>
+    <caption>Table 13.1 · The pieces of an AWS VPN</caption>
+    <thead><tr><th>Resource</th><th>What it holds</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Customer gateway</strong></td><td>Your device's public IP address and its BGP ASN (<a href="04-routing.html">Chapter 4</a>). A description, not a device.</td></tr>
+      <tr><td><strong>Virtual private gateway</strong> or <strong>transit gateway</strong></td><td>The AWS end. A VGW serves one VPC; a TGW serves everything attached to it.</td></tr>
+      <tr><td><strong>VPN connection</strong></td><td>Two tunnels between them, each with its own AWS public address, inside addresses (<code>169.254.x.x/30</code>), pre-shared key and options.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Each tunnel carries up to about 1.25 Gbps. With a transit gateway, you can run several VPN connections and use <strong>ECMP</strong> (equal-cost multi-path) to spread traffic across all their tunnels for more bandwidth. A VPN connection costs about $0.05 an hour, plus normal data transfer out. Each Larder store has two VPN connections (13.6), so about $73 a month per store; a few dozen stores come to a couple of thousand dollars a month, still far less than a private line per store.</p>
+
+<!-- ======================================================== 13.4 -->
+<h2 class="sec" id="s13-4"><span class="n">13.4</span>BGP inside the tunnels</h2>
+
+<p>A VPN can use <strong>static routing</strong>, where you type the ranges on each side, or <strong>dynamic routing</strong> with BGP. Use BGP. Inside each tunnel, the two ends open a BGP session over the tunnel's inside addresses and tell each other what they can reach:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 13.2 · What each side of Noord's VPN advertises</caption>
+    <thead><tr><th>Side</th><th>ASN</th><th>Advertises</th><th>Where it comes from</th></tr></thead>
+    <tbody>
+      <tr><td>Noord store router</td><td>65008</td><td><code>10.8.3.0/24</code></td><td>the store LAN, configured on the router</td></tr>
+      <tr><td>AWS (Larder's TGW)</td><td>64512</td><td><code>10.20.0.0/16</code>, <code>10.16.0.0/16</code></td><td>the routes in the TGW route table associated with the VPN attachment (<a href="11-connecting-vpcs.html">Chapter 11</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>BGP buys you three things. <strong>New ranges appear by themselves</strong>: a new store or VPC is learned, not typed, which is how Larder fixed the Rotterdam bug in <a href="04-routing.html">Chapter 4</a>. <strong>Failover is automatic</strong>: if a tunnel goes down, its BGP session drops, its routes are withdrawn and traffic moves to the other tunnel within seconds. And <strong>you can steer traffic</strong>: making a path look longer with <strong>AS path prepending</strong> (repeating your ASN in the advertisement) makes the other side prefer a different path, which is how you make a backup link a backup.</p>
+
+<aside class="side"><b>How fast is failover?</b>AWS detects a dead tunnel with dead peer detection (a few missed keepalives) and BGP's hold timer (30 seconds on AWS). Expect tens of seconds, during which connections through the failed tunnel stall, then continue on the other one.</aside>
+
+<!-- ======================================================== 13.5 -->
+<h2 class="sec" id="s13-5"><span class="n">13.5</span>MTU, MSS and the black hole</h2>
+
+<p>Encryption and the extra IP header add bytes to every packet, typically 50 to 80, depending on the algorithms and on NAT. But the internet path between the two gateways still carries at most 1,500-byte packets. So the largest packet that fits <em>inside</em> the tunnel is smaller, around 1,400 bytes. A full-size 1,500-byte packet from a store handheld can't be sent through as it is.</p>
+
+<figure class="wide" id="fig13-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 200" role="img" aria-labelledby="fig13-2-t fig13-2-d">
+      <title id="fig13-2-t">Why a 1,500-byte packet doesn't fit in a tunnel</title>
+      <desc id="fig13-2-d">A 1,500-byte packet from the store LAN needs about 70 bytes of IPsec overhead added, making 1,570 bytes, which is more than the 1,500 the internet path carries. Either the packet is fragmented, or the sender is told to send smaller packets with an ICMP message. If that message is blocked, large packets simply disappear: a black hole. Clamping TCP's maximum segment size makes packets small enough to fit from the start.</desc>
+      <text class="t-small" x="20" y="24">the internet path carries at most 1,500 bytes per packet</text>
+      <path class="wire-dash" d="M20 34 H680"/>
+      <path class="wire-dash" d="M680 30 V170"/>
+      <text class="t-small" x="684" y="46">1,500</text>
+      <rect class="priv" x="20" y="54" width="660" height="40" rx="3"/>
+      <text class="t-label" x="350" y="79" text-anchor="middle">your packet: 1,500 bytes</text>
+      <rect class="node-accent" x="680" y="54" width="70" height="40" rx="3"/>
+      <text class="t-small on-accent" x="715" y="79" text-anchor="middle">+70 IPsec</text>
+      <text class="t-small t-warn" x="20" y="114">✗ 1,570 bytes: too big. Fragment it, or tell the sender to shrink (ICMP). Block the ICMP → black hole.</text>
+      <rect class="pub" x="20" y="128" width="616" height="40" rx="3"/>
+      <text class="t-label" x="328" y="153" text-anchor="middle">clamped: 1,400 bytes (MSS ≈ 1,360)</text>
+      <rect class="node-accent" x="636" y="128" width="31" height="40" rx="3"/>
+      <text class="t-small on-accent" x="651.5" y="153" text-anchor="middle" font-size="10">+70</text>
+      <text class="t-small t-accent" x="20" y="190">✓ fits: TCP agrees on smaller segments during the handshake, so packets are never too big.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 13.2</b> The tunnel's overhead makes room inside it smaller than 1,500 bytes. Exact numbers depend on the algorithms; use the values in your provider's configuration file.</figcaption>
+</figure>
+
+<p>There are three ways a network can deal with an oversized packet. It can <strong>fragment</strong> it into two pieces, which works but is slow and often blocked. It can drop the packet and send back an ICMP “fragmentation needed” message so the sender lowers its packet size: <strong>path MTU discovery</strong>. Or, if that ICMP message is itself blocked by a firewall along the way, large packets just disappear and nobody is told. That's an <span class="term">MTU black hole</span>: handshakes and small requests work, because their packets are small, and anything large hangs.</p>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>The store routers' firewall blocked all inbound ICMP “for security”, so the “fragmentation needed” messages never reached the handhelds. Scans and lookups use small packets and worked; the 2 MB stock count needed full-size packets and fell into the black hole. Eli confirmed it in two minutes from a laptop in the store: <code>ping -M do -s 1372 10.20.17.8</code> worked and <code>-s 1472</code> got no reply.</p>
+  <p>The fix was one line on every store router: <strong>clamp TCP's MSS</strong> on the tunnel interface to the value in AWS's configuration file. During every TCP handshake the router lowers the <em>maximum segment size</em> both ends agree on, so packets are small enough before they're ever sent. Eli also allowed ICMP “fragmentation needed” through the store firewalls, so path MTU discovery works for anything that isn't TCP.</p>
+</aside>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Small things work, big things hang: suspect MTU. Clamp MSS on every tunnel, and never block ICMP “fragmentation needed”.</p>
+</div>
+
+<!-- ======================================================== 13.6 -->
+<h2 class="sec" id="s13-6"><span class="n">13.6</span>Designing for failure</h2>
+
+<p>Two tunnels protect you from a failure on AWS's side. They don't protect you from your own router, power, or internet line failing. Build redundancy at each level you care about:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 13.3 · VPN redundancy levels</caption>
+    <thead><tr><th>Design</th><th>Survives</th><th>Typical for</th></tr></thead>
+    <tbody>
+      <tr><td>One router, one VPN connection (two tunnels)</td><td>AWS endpoint failure or maintenance</td><td>small offices</td></tr>
+      <tr><td>One router, two internet links, a VPN connection on each</td><td>an ISP or line failure</td><td>Larder's stores (fibre plus 4G)</td></tr>
+      <tr><td>Two routers, two links, two VPN connections</td><td>a router failure as well</td><td>offices and data centres</td></tr>
+      <tr><td>VPN as backup to a dedicated connection</td><td>a private line failure</td><td>data centres (<a href="14-dedicated-links.html">Chapter 14</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Larder's stores have a fibre line and a 4G modem. Each line has its own VPN connection to the transit gateway, both using BGP. On the 4G connection the store router <strong>prepends</strong> its ASN twice, so AWS sees a longer path and prefers fibre; the router itself prefers the fibre tunnels for outbound traffic with a higher local preference. When the fibre drops, the fibre tunnels' BGP sessions go down, those routes disappear, and traffic moves to 4G in under a minute. Nobody has to do anything.</p>
+
+<h3>Remote users</h3>
+<p>Site-to-site VPNs connect networks. For individual people, AWS Client VPN and similar services give each laptop its own tunnel. Many companies now prefer identity-aware access proxies instead, which check who you are and what device you're on for each application rather than putting you on the network (<a href="21-zero-trust.html">Chapter 21</a>).</p>
+
+<!-- ======================================================== 13.7 -->
+<h2 class="sec" id="s13-7"><span class="n">13.7</span>When a VPN isn't enough</h2>
+
+<p>A VPN rides on the public internet, so its latency and throughput vary with the internet's mood, and each tunnel tops out at about 1.25 Gbps. For a few stores and offices that's fine. When you need steady latency, many gigabits, or lower data-transfer prices for large volumes, a dedicated private connection is the next step: <a href="14-dedicated-links.html">Chapter 14</a>. Many companies run both, with the VPN as the cheap backup.</p>
+
+<!-- ======================================================== 13.8 -->
+<h2 class="sec" id="s13-8"><span class="n">13.8</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 13.4 · Site-to-site VPN at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Cloud end</td><td>virtual private gateway, or transit gateway</td><td>VPN gateway in a VNet (or Virtual WAN hub)</td><td>HA VPN gateway</td></tr>
+      <tr><td>Tunnels per connection</td><td>two, always</td><td>one per connection; active-active gateways give two</td><td>two interfaces; four tunnels for the 99.99% design</td></tr>
+      <tr><td>BGP</td><td>built into the VPN connection</td><td>BGP on the VPN gateway</td><td>Cloud Router</td></tr>
+      <tr><td>Your device is called</td><td>customer gateway</td><td>local network gateway</td><td>peer VPN gateway</td></tr>
+      <tr><td>Size</td><td>about 1.25 Gbps per tunnel; ECMP with TGW</td><td>by gateway SKU</td><td>about 3 Gbps per tunnel</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 13.9 -->
+<h2 class="sec" id="s13-9"><span class="n">13.9</span>Lab: find your path MTU, then read a real VPN's settings</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 13 · MTU by hand, and a VPN connection on paper</p>
+  <p><strong>You'll</strong> measure the largest packet your own internet path carries, then create an AWS VPN connection and read its tunnel and BGP settings. The tunnels will stay down, because there's no router at your end; that's fine for reading the configuration. <strong>You need</strong> a terminal, the AWS CLI and Terraform. <strong>Cost:</strong> about $0.05 an hour for the VPN connection.</p>
+</div>
+
+<p><strong>Part A: your path MTU (free).</strong></p>
+<ol class="steps">
+  <li>Send a packet that must not be fragmented, with 1,472 bytes of data (+ 28 bytes of headers = 1,500): <code>ping -M do -s 1472 -c 2 1.1.1.1</code> on Linux, <code>ping -D -s 1472 -c 2 1.1.1.1</code> on macOS, <code>ping -f -l 1472 1.1.1.1</code> on Windows.</li>
+  <li>If it fails (“message too long” or “frag needed”), lower the size by 10 until it works. Your path MTU is the size that works plus 28.</li>
+  <li>If you use a VPN on your laptop, repeat with it on. How much smaller is the path now?</li>
+</ol>
+
+<p><strong>Part B: a VPN connection to read.</strong></p>
+<p class="code-title"><span>main.tf</span><span>Terraform ≥ 1.5, AWS provider 5.x</span></p>
+<pre><code><span class="k">provider</span> <span class="s">"aws"</span> { region = <span class="s">"eu-central-1"</span> }
+
+<span class="k">variable</span> <span class="s">"my_public_ip"</span> {}                  <span class="c"># curl https://checkip.amazonaws.com</span>
+
+<span class="k">resource</span> <span class="s">"aws_vpc"</span> <span class="s">"lab"</span> { cidr_block = <span class="s">"10.60.0.0/16"</span> }
+
+<span class="k">resource</span> <span class="s">"aws_vpn_gateway"</span> <span class="s">"vgw"</span> {
+  vpc_id = aws_vpc.lab.id                       <span class="c"># the AWS end, for one VPC</span>
+}
+<span class="k">resource</span> <span class="s">"aws_customer_gateway"</span> <span class="s">"store"</span> {
+  bgp_asn    = 65008                            <span class="c"># your end's private ASN</span>
+  ip_address = var.my_public_ip
+  type       = <span class="s">"ipsec.1"</span>
+}
+<span class="k">resource</span> <span class="s">"aws_vpn_connection"</span> <span class="s">"store"</span> {
+  vpn_gateway_id      = aws_vpn_gateway.vgw.id
+  customer_gateway_id = aws_customer_gateway.store.id
+  type                = <span class="s">"ipsec.1"</span>
+  static_routes_only  = false                   <span class="c"># BGP</span>
+}
+
+<span class="k">output</span> <span class="s">"tunnels"</span> {
+  value = {
+    tunnel1 = [aws_vpn_connection.store.tunnel1_address, aws_vpn_connection.store.tunnel1_inside_cidr,
+               aws_vpn_connection.store.tunnel1_vgw_inside_address, aws_vpn_connection.store.tunnel1_cgw_inside_address]
+    tunnel2 = [aws_vpn_connection.store.tunnel2_address, aws_vpn_connection.store.tunnel2_inside_cidr,
+               aws_vpn_connection.store.tunnel2_vgw_inside_address, aws_vpn_connection.store.tunnel2_cgw_inside_address]
+  }
+}</code></pre>
+
+<ol class="steps">
+  <li><strong>Create it:</strong> <code>terraform apply -var my_public_ip=$(curl -s https://checkip.amazonaws.com)</code>. It takes a few minutes.</li>
+  <li><strong>Read the tunnels:</strong> <code>terraform output tunnels</code>. For each tunnel: AWS's public address, the <code>/30</code> inside range, and the two inside addresses the BGP session will use.</li>
+  <li><strong>Check their state:</strong> <code>aws ec2 describe-vpn-connections --query 'VpnConnections[0].VgwTelemetry[].[OutsideIpAddress,Status,StatusMessage]' --output table</code>. Both <code>DOWN</code>: no router is answering at your address.</li>
+  <li><strong>Read a router configuration.</strong> In the console, open the VPN connection and download the configuration for any router type (or a “Generic” one). Find the IKE version, the algorithms, the pre-shared keys, the BGP neighbour addresses and ASNs, and the recommended MSS clamp. That's everything a network engineer types into the store router.</li>
+  <li><strong>Clean up:</strong> <code>terraform destroy</code>. The pre-shared keys are stored in your Terraform state; treat state files as secrets.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Bring a tunnel up for real: run a strongSwan or VyOS instance with an Elastic IP in another VPC or region as the “store router”, using the downloaded configuration. Watch the BGP session establish and the store's range appear in the VPC route table as <em>propagated</em> (turn on route propagation for the VGW).</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s13-10"><span class="n">13.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Configuring only one tunnel</td><td>Outage during AWS's routine tunnel maintenance.</td><td>Configure both tunnels, with BGP.</td></tr>
+      <tr><td>No MSS clamping, ICMP blocked</td><td>Small requests work; uploads and large responses hang.</td><td>Clamp MSS on the tunnel; allow “fragmentation needed”.</td></tr>
+      <tr><td>Static routes for many sites</td><td>Every new range is edited by hand in several places.</td><td>BGP.</td></tr>
+      <tr><td>Two links, no path preference</td><td>Traffic flaps between fibre and 4G, or uses 4G by default.</td><td>AS path prepending and local preference.</td></tr>
+      <tr><td>UDP 500/4500 blocked at the site firewall</td><td>Tunnels never come up.</td><td>Allow IKE and NAT-T to the AWS tunnel addresses.</td></tr>
+      <tr><td>Overlapping ranges between site and cloud</td><td>Routes conflict; parts unreachable.</td><td>The company address plan (<a href="10-ip-planning.html">Chapter 10</a>).</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum13">
+  <h2 class="sec" id="sum13"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>A <strong>site-to-site VPN</strong> joins a site's network to the cloud through encrypted tunnels over the internet.</li>
+    <li><strong>IPsec</strong>: IKE (UDP 500/4500) agrees keys; ESP in tunnel mode encrypts and wraps each packet.</li>
+    <li>On AWS, a VPN connection always has <strong>two tunnels</strong>, ending on a virtual private gateway or a transit gateway.</li>
+    <li>Run <strong>BGP</strong> in the tunnels: ranges are learned, failover is automatic, and prepending steers traffic.</li>
+    <li>Tunnels shrink the room for packets. <strong>Clamp MSS</strong> and don't block ICMP, or large transfers vanish into an MTU black hole.</li>
+    <li>Add redundancy at each level that matters: tunnels, internet links, routers.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Site-to-site VPN</dt><dd>An encrypted tunnel connecting two networks over the internet.</dd>
+    <dt>Customer gateway</dt><dd>Your router or firewall at the site end, and AWS's record of it.</dd>
+    <dt>IPsec</dt><dd>The protocol suite for authenticated, encrypted IP tunnels.</dd>
+    <dt>IKE</dt><dd>The protocol that authenticates the gateways and agrees keys.</dd>
+    <dt>ESP</dt><dd>The IPsec protocol that encrypts and carries your packets.</dd>
+    <dt>AS path prepending</dt><dd>Lengthening a route's AS path to make it less preferred.</dd>
+    <dt>MTU</dt><dd>The largest packet a link or path can carry.</dd>
+    <dt>MSS</dt><dd>The largest TCP payload per packet, agreed in the handshake.</dd>
+    <dt>MSS clamping</dt><dd>A router lowering the MSS in passing handshakes so packets fit.</dd>
+    <dt>MTU black hole</dt><dd>Large packets silently dropped because the “too big” message is blocked.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Why does an AWS VPN connection have two tunnels, and what happens if you configure only one? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>The two tunnels end on two separate AWS devices, so one can fail or be taken down for maintenance while the other carries traffic. With only one configured, you lose connectivity whenever that one is down, including during routine AWS maintenance.</p></details>
+    </li>
+    <li>
+      <p>SSH sessions over a new VPN work, but <code>scp</code> of a large file stalls right after starting. What do you suspect, and how do you confirm it? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>An MTU black hole: the interactive session uses small packets, the file transfer full-size ones. Confirm with a do-not-fragment ping across the tunnel at decreasing sizes (<code>ping -M do -s 1472</code>, then smaller) and find where replies start; fix with MSS clamping and by allowing ICMP “fragmentation needed”.</p></details>
+    </li>
+    <li>
+      <p>A store has fibre and 4G, each with a VPN connection. How do you make sure AWS sends traffic over fibre while it's up? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>With BGP on both: have the store router prepend its ASN on the routes it advertises over the 4G connection, so AWS sees a longer AS path there and prefers the fibre path. When the fibre's sessions drop, only the 4G routes remain and traffic moves over.</p></details>
+    </li>
+    <li>
+      <p>What does BGP give you over static routes in a VPN with many sites? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>New ranges are advertised and learned automatically, failed tunnels' routes are withdrawn so traffic fails over without human action, and preferences between paths can be expressed with attributes such as AS path length.</p></details>
+    </li>
+    <li>
+      <p>Your company opens a data centre that will send 5 Gbps to AWS around the clock. Is a site-to-site VPN a good fit? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Not on its own. One tunnel carries about 1.25 Gbps, so you'd need several connections with ECMP through a transit gateway; you'd depend on the internet's variable latency; and internet data transfer prices for that volume add up. A dedicated connection (Direct Connect) is the better primary path, with the VPN as backup.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/vpn/latest/s2svpn/VPC_VPN.html">What is AWS Site-to-Site VPN?</a> and <a href="https://docs.aws.amazon.com/vpn/latest/s2svpn/your-cgw.html">Customer gateway device requirements</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/vpn-gateway/vpn-gateway-about-vpngateways">What is Azure VPN Gateway?</a></li>
+    <li>Google Cloud: <a href="https://cloud.google.com/network-connectivity/docs/vpn/concepts/overview">Cloud VPN overview</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="12-private-access.html">12 · Private access to cloud services</a></div>
+  <div><span>Next</span><a href="14-dedicated-links.html">14 · Dedicated connections</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 1 · Networking in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>
