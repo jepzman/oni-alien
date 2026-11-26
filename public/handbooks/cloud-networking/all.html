@@ -2480,7 +2480,7 @@ Date: Wed, 25 Nov 2026 09:14:03 GMT
 <p>The overlay explains several things that surprise people coming from physical networks:</p>
 <ul>
   <li><strong>No broadcast or multicast</strong> by default. The virtualisation layer delivers each packet to a known host, so there is nothing to broadcast to. ARP requests are answered by the hypervisor (<a href="#chapter-04-routing">Chapter 4</a>). AWS offers multicast only through Transit Gateway, when you specifically turn it on.</li>
-  <li><strong>You can't sniff other servers' traffic</strong>, even in the same subnet. Each interface only receives packets addressed to it. To inspect traffic you use mirroring features or flow logs (<a href="index.html#ch22">Chapter 22</a>).</li>
+  <li><strong>You can't sniff other servers' traffic</strong>, even in the same subnet. Each interface only receives packets addressed to it. To inspect traffic you use mirroring features or flow logs (<a href="#chapter-22-troubleshooting">Chapter 22</a>).</li>
   <li><strong>Firewalls are enforced at every interface.</strong> Security groups run in the virtualisation layer next to each instance, not in a box in the middle (<a href="#chapter-09-firewalls">Chapter 9</a>).</li>
   <li><strong>Packet size limits vary by path.</strong> Inside a VPC, AWS allows 9,001-byte <em>jumbo</em> frames; traffic leaving through internet, VPN or some peering paths is limited to 1,500 bytes or less (<a href="#chapter-13-vpn-bgp">Chapter 13</a>).</li>
   <li><strong>Bandwidth belongs to the instance.</strong> Each instance size has a network allowance, often “up to” a burst figure, plus limits on packets per second and tracked connections. A small instance can be network-limited long before its CPU is busy.</li>
@@ -3041,7 +3041,7 @@ done</code></pre>
   <li><strong>Does DNS work?</strong> <code>dig stockpilot.example</code> failing looks a lot like the network failing (<a href="#chapter-05-dns">Chapter 5</a>).</li>
 </ol>
 
-<p>AWS's <strong>Reachability Analyzer</strong> automates steps 1 to 5: give it a source and a destination and it shows the hop where the path breaks. <strong>VPC flow logs</strong> show which packets were accepted or rejected. Both are in <a href="index.html#ch22">Chapter 22</a>.</p>
+<p>AWS's <strong>Reachability Analyzer</strong> automates steps 1 to 5: give it a source and a destination and it shows the hop where the path breaks. <strong>VPC flow logs</strong> show which packets were accepted or rejected. Both are in <a href="#chapter-22-troubleshooting">Chapter 22</a>.</p>
 
 <aside class="box box-story" aria-label="Larder, solved">
   <p class="label">At Larder: solved</p>
@@ -5700,7 +5700,7 @@ print(<span class="s">"break-even: about"</span>, round(fixed / (net - dx) / 100
 
 <p>Two extras earn their place in most designs:</p>
 <ul>
-  <li><strong>Query logging.</strong> Route 53 Resolver query logs record every name each VPC looks up. They're invaluable in incidents (“what was this server talking to?”) and cheap compared with what they answer. <a href="index.html#ch22">Chapter 22</a> uses them.</li>
+  <li><strong>Query logging.</strong> Route 53 Resolver query logs record every name each VPC looks up. They're invaluable in incidents (“what was this server talking to?”) and cheap compared with what they answer. <a href="#chapter-22-troubleshooting">Chapter 22</a> uses them.</li>
   <li><strong>DNS firewall.</strong> Route 53 Resolver DNS Firewall blocks lookups of domains on lists you choose, including managed lists of known malicious domains. Because almost every connection starts with a lookup, it's one of the cheapest controls on what servers can reach (<a href="#chapter-18-egress">Chapter 18</a>).</li>
 </ul>
 
@@ -6693,7 +6693,7 @@ print(<span class="s">"break-even: about"</span>, round(fixed / (net - dx) / 100
 <p>Block before you know, and you'll break something important on a Friday evening. Start with an <strong>inventory</strong>:</p>
 <ul>
   <li><strong>DNS query logs</strong> show every name each VPC looks up: the closest thing to a list of intended destinations.</li>
-  <li><strong>VPC flow logs</strong> on NAT gateways show where connections actually went, by address and bytes (<a href="index.html#ch22">Chapter 22</a>).</li>
+  <li><strong>VPC flow logs</strong> on NAT gateways show where connections actually went, by address and bytes (<a href="#chapter-22-troubleshooting">Chapter 22</a>).</li>
   <li>Group the results by <strong>workload</strong> and give each destination an owner and a reason: “payment provider, Cho, card payments”.</li>
 </ul>
 
@@ -7989,6 +7989,314 @@ done</code></pre></li>
     <li>NIST: <a href="https://csrc.nist.gov/pubs/sp/800/207/final">SP 800-207, Zero Trust Architecture</a>.</li>
     <li>AWS: <a href="https://docs.aws.amazon.com/verified-access/latest/ug/what-is-verified-access.html">What is AWS Verified Access?</a> and <a href="https://docs.aws.amazon.com/vpc-lattice/latest/ug/what-is-vpc-lattice.html">What is Amazon VPC Lattice?</a></li>
     <li>SPIFFE: <a href="https://spiffe.io/docs/latest/spiffe-about/overview/">SPIFFE overview</a>.</li>
+  </ul>
+</section>
+
+
+
+</article>
+<article class="sheet chapter" id="chapter-22-troubleshooting">
+<header class="opener">
+  <p class="eyebrow">Part VI · Running it</p>
+  <p class="chno">22</p>
+  <h1>Observing and troubleshooting networks</h1>
+  <p class="promise">Every chapter so far ended with “when it doesn't work”. This one is about doing that well, every time: a method that finds network faults in minutes instead of hours, the patterns that point straight at a cause, and the tools that let you see what the network actually did rather than what you think it should have done.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Work through a connectivity problem with a repeatable method.</li>
+      <li>Recognise the common failure patterns and what each points to.</li>
+      <li>Read and query VPC flow logs, and know what they don't show.</li>
+      <li>Choose between configuration analysis, flow logs, packet captures and metrics.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>The whole of Parts I and II; in particular, errors by layer (<a href="#chapter-01-what-happens">Chapter 1</a>) and both directions of a path (<a href="#chapter-04-routing">Chapter 4</a>).</li>
+      <li>Security groups and NACLs (<a href="#chapter-09-firewalls">Chapter 9</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 50 minutes</dd>
+      <dt>Lab</dt><dd>40 minutes, AWS, under $0.10</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 22.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>The orders team launches a new cache cluster to speed up product pages. Within an hour, dashboards show about a third of cache calls timing out after two seconds. Not all of them, not none: about a third, steadily, at every hour of the day. Ben's team suspects the cache client library. The cache's own metrics look healthy.</p>
+  <p>“About a third” is a very specific number in a system that runs in three zones. Section 22.4 shows how Eli confirmed it in ten minutes with one flow-log query.</p>
+</aside>
+
+<!-- ======================================================== 22.1 -->
+<h2 class="sec" id="s22-1"><span class="n">22.1</span>The big picture</h2>
+
+<p class="lead">Network problems feel mysterious because the network is invisible. They stop being mysterious when you replace guessing with three habits: describe the symptom <strong>precisely</strong>, follow the packet's path <strong>hop by hop in both directions</strong>, and <strong>prove</strong> each step with data before changing anything. Tools help, but the method matters more than any tool.</p>
+
+<!-- ======================================================== 22.2 -->
+<h2 class="sec" id="s22-2"><span class="n">22.2</span>A method</h2>
+
+<ol class="steps">
+  <li><strong>Name the exact error.</strong> Timeout, refused, reset, DNS failure, certificate error, or an HTTP status? Each points at a different layer (<a href="#chapter-01-what-happens">Chapter 1</a>, <a href="#chapter-03-tcp-udp-ports">Chapter 3</a>). “It doesn't work” is not a symptom.</li>
+  <li><strong>Find the scope.</strong> All requests or some? From every source or one subnet, one zone, one store? Since when? “Some” is the most useful answer of all: something differs between the working and failing cases.</li>
+  <li><strong>Ask what changed.</strong> Deploys, rule changes, new subnets, certificate renewals, provider maintenance. Most incidents follow a change (Eli's change feed, in Book 5 of the notebooks, exists for this).</li>
+  <li><strong>Walk the path, both ways.</strong> For one failing source and destination: DNS answer, source security group out, source NACL, route table, gateways, destination NACL, destination security group in, and the listening process. Then the same for the reply.</li>
+  <li><strong>Prove it with data.</strong> Configuration analysis (does the path exist?), flow logs (did packets flow, and were they accepted?), and a test from the failing source.</li>
+  <li><strong>Fix one thing, then verify with a new connection.</strong> Existing connections can hide both breakage and fixes (<a href="#chapter-09-firewalls">Chapter 9</a>).</li>
+</ol>
+
+<!-- ======================================================== 22.3 -->
+<h2 class="sec" id="s22-3"><span class="n">22.3</span>Patterns that point at causes</h2>
+
+<p>After a while, symptoms start to look familiar. These patterns cover a large share of real incidents, and every one of them has appeared in this book:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 22.1 · Symptom patterns</caption>
+    <thead><tr><th>Pattern</th><th>Usual cause</th><th>Chapter</th></tr></thead>
+    <tbody>
+      <tr><td>A steady fraction fails (1 in 2, 1 in 3)</td><td>One zone, one target, one tunnel or one replica differs from the others</td><td>9, 13, 16</td></tr>
+      <tr><td>Requests arrive, replies never come back</td><td>Missing return route; stateless filter without ephemeral ports</td><td>4, 9</td></tr>
+      <tr><td>Small requests work, large transfers hang</td><td>MTU black hole</td><td>13</td></tr>
+      <tr><td>The first request after a quiet period fails</td><td>Idle timeout on NAT, load balancer or firewall; keep-alive mismatch</td><td>3, 16</td></tr>
+      <tr><td>Works by IP, fails by name</td><td>DNS: wrong zone, missing association, split horizon, cache</td><td>5, 15</td></tr>
+      <tr><td>Works for existing connections, fails for new ones</td><td>A rule was removed; tracked connections survive</td><td>9</td></tr>
+      <tr><td>Fine in one VPC, broken in another</td><td>Route tables, endpoint DNS, or private zone associations differ</td><td>11, 12, 15</td></tr>
+      <tr><td>Fails at random under load</td><td>Asymmetric routing through a stateful device; connection or bandwidth limits</td><td>4, 7, 18</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 22.4 -->
+<h2 class="sec" id="s22-4"><span class="n">22.4</span>VPC flow logs</h2>
+
+<p><span class="term">VPC flow logs</span> record the traffic through network interfaces: who talked to whom, on which ports, how much, and whether security groups and NACLs <strong>accepted</strong> or <strong>rejected</strong> it. You can turn them on for a VPC, a subnet or one interface, and send them to CloudWatch Logs, S3 or a stream. Each record summarises one flow over an aggregation window of up to a minute or ten:</p>
+
+<pre><code>2 111122223333 eni-0a1b2c3d 10.20.33.18 10.20.64.40 51734 6379 6 4 240 1764151200 1764151260 REJECT OK</code></pre>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 22.2 · Reading a default flow log record</caption>
+    <thead><tr><th>Field</th><th>Here</th></tr></thead>
+    <tbody>
+      <tr><td>version, account, interface</td><td><code>2</code>, the account, the cache node's interface</td></tr>
+      <tr><td>source → destination</td><td><code>10.20.33.18:51734</code> → <code>10.20.64.40:6379</code></td></tr>
+      <tr><td>protocol</td><td><code>6</code> = TCP (17 = UDP, 1 = ICMP)</td></tr>
+      <tr><td>packets, bytes</td><td>4 packets, 240 bytes: SYNs retried, no data</td></tr>
+      <tr><td>start, end</td><td>Unix timestamps of the window</td></tr>
+      <tr><td>action, status</td><td><code>REJECT</code> by a security group or NACL; record is <code>OK</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Eli ran one query over the cache subnets' flow logs: rejected flows to port 6379, grouped by source subnet. Every rejection came from <code>10.20.32.0/20</code> and <code>10.20.48.0/20</code>, zones b and c; none from zone a. The new cache's security group allowed Redis from <code>10.20.16.0/20</code>, zone a's app subnet, written by someone testing from a single pod. Requests are spread evenly over three zones, so two in three should have failed; the client's retry onto another connection rescued some, which is why it looked like a third. The fix, a rule allowing <code>sg-app</code> instead of a range (<a href="#chapter-09-firewalls">Chapter 9</a>), took a minute.</p>
+</aside>
+
+<h3>What flow logs don't show</h3>
+<ul>
+  <li><strong>Packets dropped for lack of a route</strong> are not rejections: you'll see an <code>ACCEPT</code> at the source and nothing at the destination. Silence at the far end is the clue.</li>
+  <li><strong>Some traffic isn't logged at all</strong>: queries to the VPC's DNS resolver (use Resolver query logs, <a href="#chapter-15-hybrid-dns">Chapter 15</a>), the instance metadata service, time sync and DHCP.</li>
+  <li><strong>Contents</strong>: flow logs are metadata. For packets, use captures (22.6).</li>
+  <li><strong>Which rule</strong> rejected a flow: flow logs say <code>REJECT</code>, not why. Configuration analysis does.</li>
+</ul>
+
+<aside class="side"><b>Extra fields</b>Custom formats add useful fields: <code>tcp-flags</code> (see SYNs without replies), <code>flow-direction</code>, <code>pkt-srcaddr</code> (the original address behind a NAT or load balancer) and <code>traffic-path</code> (how traffic left the VPC: NAT, internet gateway, TGW, endpoint).</aside>
+
+<!-- ======================================================== 22.5 -->
+<h2 class="sec" id="s22-5"><span class="n">22.5</span>Configuration analysis</h2>
+
+<p>Flow logs show what <em>happened</em>; configuration analysis shows what <em>could</em> happen.</p>
+<ul>
+  <li><strong>Reachability Analyzer</strong> takes a source, a destination and a port, and works out from route tables, security groups, NACLs, gateways and load balancers whether a path exists. If not, it names the component that blocks it. You've used it since <a href="#chapter-09-firewalls">Chapter 9</a>.</li>
+  <li><strong>Network Access Analyzer</strong> asks the opposite question across a whole account: “find every path from the internet to anything in the data subnets”, or “anything in production reachable from development”. It's how you check segmentation (<a href="#chapter-11-connecting-vpcs">Chapter 11</a>) and catch the accidentally public database before someone else does.</li>
+</ul>
+
+<!-- ======================================================== 22.6 -->
+<h2 class="sec" id="s22-6"><span class="n">22.6</span>Packets, connections and metrics</h2>
+
+<h3>On the machine</h3>
+<div class="table-wrap">
+  <table>
+    <caption>Table 22.3 · Command-line tools worth knowing</caption>
+    <thead><tr><th>Question</th><th>Tool</th></tr></thead>
+    <tbody>
+      <tr><td>Is anything listening, and where?</td><td><code>ss -tlnp</code></td></tr>
+      <tr><td>Can I open a TCP connection?</td><td><code>nc -vz host port</code> (refused vs timeout, <a href="#chapter-03-tcp-udp-ports">Ch. 3</a>)</td></tr>
+      <tr><td>What does DNS say, from here?</td><td><code>dig</code>, <code>getent hosts</code></td></tr>
+      <tr><td>Where does the path go, and where is it slow?</td><td><code>mtr</code> or <code>traceroute</code></td></tr>
+      <tr><td>What exactly is on the wire?</td><td><code>tcpdump -n -i any host 10.20.64.40 and port 6379</code></td></tr>
+      <tr><td>Each step of an HTTPS call</td><td><code>curl -v -w</code> (<a href="#chapter-01-what-happens">Ch. 1</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>When you can't log in to the machine, or need a long capture, <strong>VPC Traffic Mirroring</strong> copies an interface's packets to an analysis instance or appliance.</p>
+
+<h3>Metrics that matter</h3>
+<p>Some network failures only show up as counters. Put these on a dashboard and alarm on them:</p>
+<div class="table-wrap">
+  <table>
+    <caption>Table 22.4 · Network metrics to watch on AWS</caption>
+    <thead><tr><th>Component</th><th>Metric</th><th>Tells you</th></tr></thead>
+    <tbody>
+      <tr><td>NAT gateway</td><td><code>ErrorPortAllocation</code>, <code>PacketsDropCount</code></td><td>Too many connections to one destination; dropped packets</td></tr>
+      <tr><td>Load balancer</td><td><code>HTTPCode_ELB_5XX_Count</code>, <code>UnHealthyHostCount</code>, <code>TargetResponseTime</code></td><td>502/503/504 from the load balancer itself; failing targets</td></tr>
+      <tr><td>VPN</td><td><code>TunnelState</code></td><td>A tunnel is down (<a href="#chapter-13-vpn-bgp">Ch. 13</a>)</td></tr>
+      <tr><td>Transit gateway</td><td><code>PacketDropCountNoRoute</code>, <code>PacketDropCountBlackhole</code></td><td>Traffic with nowhere to go (<a href="#chapter-11-connecting-vpcs">Ch. 11</a>)</td></tr>
+      <tr><td>Instances (ENA driver)</td><td><code>bw_in_allowance_exceeded</code>, <code>pps_allowance_exceeded</code>, <code>conntrack_allowance_exceeded</code></td><td>The instance hit its network limits (<a href="#chapter-07-regions-zones">Ch. 7</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 22.7 -->
+<h2 class="sec" id="s22-7"><span class="n">22.7</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 22.5 · Network observability at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Flow records</td><td>VPC flow logs</td><td>VNet flow logs (Network Watcher)</td><td>VPC Flow Logs; Firewall Rules Logging</td></tr>
+      <tr><td>Path analysis</td><td>Reachability Analyzer</td><td>Connection troubleshoot; IP flow verify; next hop</td><td>Connectivity Tests</td></tr>
+      <tr><td>Exposure analysis</td><td>Network Access Analyzer</td><td>Network Watcher topology; Defender for Cloud</td><td>Network Analyzer; Firewall Insights</td></tr>
+      <tr><td>Packet capture</td><td>Traffic Mirroring</td><td>Network Watcher packet capture</td><td>Packet Mirroring</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 22.8 -->
+<h2 class="sec" id="s22-8"><span class="n">22.8</span>Lab: watch the internet knock</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 22 · Flow logs, a rejection and a query</p>
+  <p><strong>You'll</strong> start a small instance with a public address and no inbound rules, turn on flow logs, knock on it from your laptop, and query the rejections, including the ones from strangers scanning the internet. <strong>You need</strong> the AWS CLI and Terraform; the instance part is <a href="#chapter-18-egress">Lab 18</a>'s. <strong>Cost:</strong> a <code>t4g.nano</code> and a few kilobytes of logs, well under $0.10 for an hour.</p>
+</div>
+
+<p>Start from Lab 18's <code>main.tf</code> without the DNS Firewall resources (or keep them; they don't matter here), and add:</p>
+
+<p class="code-title"><span>flowlogs.tf</span><span>Terraform ≥ 1.5, AWS provider 5.x</span></p>
+<pre><code><span class="k">resource</span> <span class="s">"aws_cloudwatch_log_group"</span> <span class="s">"flow"</span> {
+  name              = <span class="s">"/handbook/lab22/flow"</span>
+  retention_in_days = 1
+}
+<span class="k">resource</span> <span class="s">"aws_iam_role"</span> <span class="s">"flow"</span> {
+  name = <span class="s">"handbook-lab22-flow"</span>
+  assume_role_policy = jsonencode({
+    Version   = <span class="s">"2012-10-17"</span>
+    Statement = [{ Effect = <span class="s">"Allow"</span>, Action = <span class="s">"sts:AssumeRole"</span>,
+                   Principal = { Service = <span class="s">"vpc-flow-logs.amazonaws.com"</span> } }]
+  })
+}
+<span class="k">resource</span> <span class="s">"aws_iam_role_policy"</span> <span class="s">"flow"</span> {
+  role = aws_iam_role.flow.id
+  policy = jsonencode({
+    Version   = <span class="s">"2012-10-17"</span>
+    Statement = [{ Effect = <span class="s">"Allow"</span>, Resource = <span class="s">"*"</span>,
+                   Action = [<span class="s">"logs:CreateLogStream"</span>, <span class="s">"logs:PutLogEvents"</span>, <span class="s">"logs:DescribeLogStreams"</span>] }]
+  })
+}
+<span class="k">resource</span> <span class="s">"aws_flow_log"</span> <span class="s">"vpc"</span> {
+  vpc_id                   = aws_vpc.lab.id
+  traffic_type             = <span class="s">"ALL"</span>
+  log_destination_type     = <span class="s">"cloud-watch-logs"</span>
+  log_destination          = aws_cloudwatch_log_group.flow.arn
+  iam_role_arn             = aws_iam_role.flow.arn
+  max_aggregation_interval = 60
+}
+<span class="k">output</span> <span class="s">"public_ip"</span> { value = aws_instance.vm.public_ip }</code></pre>
+
+<ol class="steps">
+  <li><strong>Create it</strong> with <code>terraform init</code> and <code>terraform apply</code>.</li>
+  <li><strong>Knock.</strong> From your laptop: <code>nc -vz -w 3 $(terraform output -raw public_ip) 22</code> and the same for port 5432. Both time out: the security group has no inbound rules, and it drops silently.</li>
+  <li><strong>Wait a few minutes</strong> for records to arrive, then query in CloudWatch Logs Insights on the log group (or with <code>aws logs start-query</code>):
+<pre><code>fields @timestamp, srcAddr, dstPort, action
+| filter action = "REJECT"
+| stats count(*) as attempts by dstPort
+| sort attempts desc
+| limit 10</code></pre>
+  Find your own attempts on 22 and 5432, and very likely others: strangers' scanners find any new public address within minutes.</li>
+  <li><strong>Find yourself.</strong> Change the filter to <code>srcAddr = "&lt;your public IP&gt;"</code> (from <code>curl https://checkip.amazonaws.com</code>) and match each record to your <code>nc</code> attempts.</li>
+  <li><strong>Clean up</strong> with <code>terraform destroy</code>.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Switch the flow log to a custom format with <code>${tcp-flags}</code> and <code>${flow-direction}</code>, repeat the knock, and find the SYN flag (value 2) on your rejected attempts.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s22-9"><span class="n">22.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Changing things before describing the symptom</td><td>The original evidence is gone; new problems are added.</td><td>Exact error, scope, timeline first.</td></tr>
+      <tr><td>Checking only the request path</td><td>Hours spent on a route that's fine; the reply's is broken.</td><td>Both directions, every time.</td></tr>
+      <tr><td>No flow logs until the incident</td><td>No history to compare with.</td><td>Flow logs on by default, with short, cheap retention.</td></tr>
+      <tr><td>Reading “no REJECT” as “network fine”</td><td>Missed missing routes, which aren't rejections.</td><td>Look for traffic at both ends.</td></tr>
+      <tr><td>Testing a fix with an existing connection</td><td>False confidence, either way.</td><td>Verify with a new connection.</td></tr>
+      <tr><td>Ignoring instance network allowances</td><td>“Random” drops at peak blamed on the app.</td><td>Watch the ENA allowance metrics.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum22">
+  <h2 class="sec" id="sum22"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Method beats tools: exact symptom, scope, what changed, both directions hop by hop, prove with data, fix one thing, verify with a new connection.</li>
+    <li>Patterns such as “a steady fraction fails” or “small works, big hangs” point straight at causes.</li>
+    <li><strong>Flow logs</strong> record accepted and rejected flows per interface; missing routes show as silence, not rejection; DNS isn't in them.</li>
+    <li><strong>Reachability Analyzer</strong> checks one path from configuration; <strong>Network Access Analyzer</strong> finds unintended paths across an account.</li>
+    <li>Use <code>tcpdump</code>, <code>mtr</code> and Traffic Mirroring for packets, and alarm on NAT, load balancer, VPN, TGW and instance allowance metrics.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>VPC flow logs</dt><dd>Records of traffic through network interfaces, with accept or reject.</dd>
+    <dt>Aggregation interval</dt><dd>The window over which a flow log record summarises a flow.</dd>
+    <dt>Reachability Analyzer</dt><dd>Checks whether a specific path exists, from configuration.</dd>
+    <dt>Network Access Analyzer</dt><dd>Finds paths that match a pattern across an account.</dd>
+    <dt>Traffic Mirroring</dt><dd>Copies an interface's packets to an analysis target.</dd>
+    <dt>Network allowance</dt><dd>An instance's limits on bandwidth, packets per second and tracked connections.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>About half of requests from a service to a database time out, steadily. The service runs in two zones. What do you check first? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>What differs between the zones: the database's security group or NACL rules (a range covering only one zone's subnet), each zone's route tables, or a per-zone component such as a NAT gateway or endpoint. Flow logs grouped by source subnet will show it quickly.</p></details>
+    </li>
+    <li>
+      <p>Flow logs show <code>ACCEPT</code> at the source and nothing at the destination. What does that suggest? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The packets left the source but never arrived: usually a missing or wrong route (or a gateway dropping them), not a security group or NACL, which would show as <code>REJECT</code> at the destination.</p></details>
+    </li>
+    <li>
+      <p>Why might a name-resolution problem not show up in flow logs at all? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Queries to the VPC's own resolver aren't captured by flow logs. Use Route 53 Resolver query logs to see DNS activity.</p></details>
+    </li>
+    <li>
+      <p>When would you use Network Access Analyzer instead of Reachability Analyzer? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>When the question is “which paths exist that shouldn't?” across many resources, such as anything reachable from the internet in the data subnets, rather than “does this one path from A to B work?”.</p></details>
+    </li>
+    <li>
+      <p>A busy service drops packets at peak, its CPU is at 40% and nothing is rejected in flow logs. Where do you look? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>At the instance's network allowance metrics (<code>bw_in_allowance_exceeded</code>, <code>pps_allowance_exceeded</code>, <code>conntrack_allowance_exceeded</code>): it may be hitting its bandwidth, packet-rate or tracked-connection limits. Fixes: a larger or network-optimised instance type, more instances, or fewer connections.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html">Logging IP traffic using VPC Flow Logs</a> and <a href="https://docs.aws.amazon.com/vpc/latest/network-access-analyzer/what-is-network-access-analyzer.html">Network Access Analyzer</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/network-watcher/network-watcher-overview">What is Azure Network Watcher?</a></li>
+    <li>Google Cloud: <a href="https://cloud.google.com/network-intelligence-center/docs/connectivity-tests/concepts/overview">Connectivity Tests</a>.</li>
   </ul>
 </section>
 
