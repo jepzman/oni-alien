@@ -101,7 +101,7 @@
 
 <p>Here is the whole trip in eight steps. Don't worry if some words are new; each step gets a chapter of its own.</p>
 <ol class="steps">
-  <li><strong>Find the address.</strong> Computers don't route by names like <code>www.larder.example</code>; they route by IP addresses. The browser asks DNS, the internet's address book, to turn the name into an address (<a href="index.html#ch5">Chapter 5</a>).</li>
+  <li><strong>Find the address.</strong> Computers don't route by names like <code>www.larder.example</code>; they route by IP addresses. The browser asks DNS, the internet's address book, to turn the name into an address (<a href="#chapter-05-dns">Chapter 5</a>).</li>
   <li><strong>Open a connection.</strong> The browser asks the operating system for a TCP connection to that address on port 443. TCP makes sure data arrives complete and in order (<a href="#chapter-03-tcp-udp-ports">Chapter 3</a>).</li>
   <li><strong>Secure it.</strong> Browser and server agree on encryption keys with TLS, and the server proves it really is <code>www.larder.example</code> with a certificate (<a href="index.html#ch6">Chapter 6</a>).</li>
   <li><strong>Ask.</strong> The browser sends an HTTP request: “<code>GET /</code>, please”.</li>
@@ -336,7 +336,7 @@ total:         0.388s</code></pre>
     <caption>Table 1.5 · What the error tells you</caption>
     <thead><tr><th>You see</th><th>It got as far as</th><th>Usual causes</th></tr></thead>
     <tbody>
-      <tr><td><code>Could not resolve host</code></td><td>Nowhere: no address</td><td>DNS: wrong name, missing record, resolver unreachable (<a href="index.html#ch5">Ch. 5</a>)</td></tr>
+      <tr><td><code>Could not resolve host</code></td><td>Nowhere: no address</td><td>DNS: wrong name, missing record, resolver unreachable (<a href="#chapter-05-dns">Ch. 5</a>)</td></tr>
       <tr><td><code>Connection timed out</code></td><td>Packets left, nothing came back</td><td>No route, or a firewall silently dropping packets (<a href="#chapter-08-inside-a-vpc">Ch. 8</a>, <a href="index.html#ch9">9</a>)</td></tr>
       <tr><td><code>Connection refused</code></td><td>The machine answered “no”</td><td>Reached the machine, but nothing listens on that port, or the app is down (<a href="#chapter-03-tcp-udp-ports">Ch. 3</a>)</td></tr>
       <tr><td>Certificate errors</td><td>Connected, but TLS failed</td><td>Wrong or expired certificate, wrong name (<a href="index.html#ch6">Ch. 6</a>)</td></tr>
@@ -1641,6 +1641,337 @@ table = [(<span class="s">"10.1.0.0/24"</span>, <span class="s">"lan"</span>), (
 
 
 </article>
+<article class="sheet chapter" id="chapter-05-dns">
+<header class="opener">
+  <p class="eyebrow">Part I · How networks work</p>
+  <p class="chno">5</p>
+  <h1>DNS: the internet's address book</h1>
+  <p class="promise">Every connection starts with a name, and the Domain Name System turns names into addresses. It's simple to use and surprisingly subtle underneath: answers come from caches, caches keep old answers on purpose, and the same name can mean different things inside and outside your network. “It's always DNS” is a joke engineers tell because it's so often true. After this chapter, you'll know why.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain how a name is resolved, from your laptop to the authoritative server.</li>
+      <li>Choose the right record type: A, AAAA, CNAME, alias, MX, TXT and others.</li>
+      <li>Plan a DNS change with TTLs so it takes effect when you want.</li>
+      <li>Use <code>dig</code> to find out what a resolver actually answers, and why.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>The page-load trip (<a href="#chapter-01-what-happens">Chapter 1</a>).</li>
+      <li>UDP and TCP port 53 (<a href="#chapter-03-tcp-udp-ports">Chapter 3</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, your own computer, free</dd>
+      <dt>Provider</dt><dd>neutral; Route 53 in the examples</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Larder moved its public API, <code>api.larder.example</code>, to a new load balancer on a Tuesday night. Eli changed the DNS record at 22:00, watched traffic shift to the new load balancer within minutes, and deleted the old one at 23:00. On Wednesday morning, StockPilot's stock updates stopped arriving. StockPilot's servers were still sending them to the old load balancer's address, nine hours after the change.</p>
+  <p>DNS did exactly what it was designed to do. Section 5.8 shows what Eli should have done, and what he does now.</p>
+</aside>
+
+<!-- ======================================================== 5.1 -->
+<h2 class="sec" id="s5-1"><span class="n">5.1</span>The big picture</h2>
+
+<p class="lead">Computers connect to IP addresses; people and configuration files use names. The <span class="term">Domain Name System</span> (DNS) maps one to the other. It has to answer billions of questions a day for names owned by millions of organisations, so it's built from three ideas:</p>
+<ul>
+  <li><strong>A hierarchy.</strong> Names are a tree, and each part of the tree is run by whoever owns it.</li>
+  <li><strong>Delegation.</strong> Nobody knows every answer. Each server knows its own part of the tree and where to find the parts below.</li>
+  <li><strong>Caching.</strong> Every answer says how long it may be reused, so most questions never travel far.</li>
+</ul>
+
+<!-- ======================================================== 5.2 -->
+<h2 class="sec" id="s5-2"><span class="n">5.2</span>Names, zones and delegation</h2>
+
+<p>Read a name from right to left. <code>www.larder.example.</code> is the host <code>www</code>, in the domain <code>larder</code>, in the top-level domain <code>example</code>, under the <strong>root</strong>, the trailing dot that's usually left off.</p>
+
+<p>A <span class="term">zone</span> is a part of the tree managed as one unit, with its own set of <span class="term">authoritative name servers</span>: the servers whose answers for that zone are the official ones. The root zone's servers know only where each top-level domain's servers are. The <code>.example</code> servers know only where each domain's servers are. Larder's servers know the actual records in <code>larder.example</code>. Handing a part of the tree to other servers is <span class="term">delegation</span>, done with <code>NS</code> records in the parent zone.</p>
+
+<aside class="side"><b>Registrar vs DNS host</b>You <em>register</em> a domain with a registrar, which puts your name servers into the parent zone. You <em>host</em> the zone with a DNS service, such as Route 53. They're often the same company, but don't have to be.</aside>
+
+<!-- ======================================================== 5.3 -->
+<h2 class="sec" id="s5-3"><span class="n">5.3</span>Records</h2>
+
+<p>A zone is a list of <span class="term">records</span>. Each has a name, a type, a value and a TTL. The types you'll use most:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 5.1 · Record types</caption>
+    <thead><tr><th>Type</th><th>Maps a name to</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td><code>A</code></td><td>an IPv4 address</td><td><code>www → 198.51.100.20</code></td></tr>
+      <tr><td><code>AAAA</code></td><td>an IPv6 address</td><td><code>www → 2001:db8::20</code></td></tr>
+      <tr><td><code>CNAME</code></td><td>another name (“look that up instead”)</td><td><code>shop → www.larder.example</code></td></tr>
+      <tr><td>Alias (Route 53), ALIAS/ANAME (others)</td><td>a cloud resource, resolved by the DNS host to its current addresses</td><td><code>larder.example → my-alb-123.eu-central-1.elb.amazonaws.com</code></td></tr>
+      <tr><td><code>MX</code></td><td>the mail servers for the domain</td><td><code>larder.example → 10 mx1.mailhost.example</code></td></tr>
+      <tr><td><code>TXT</code></td><td>free text: ownership proofs, email policies (SPF, DMARC)</td><td><code>"v=spf1 include:… -all"</code></td></tr>
+      <tr><td><code>NS</code></td><td>the name servers for a zone (delegation)</td><td><code>larder.example → ns-1.awsdns-01.org</code></td></tr>
+      <tr><td><code>CAA</code></td><td>which certificate authorities may issue certificates</td><td><code>0 issue "amazon.com"</code></td></tr>
+      <tr><td><code>PTR</code></td><td>an address back to a name (reverse lookup)</td><td><code>20.100.51.198.in-addr.arpa → www…</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h3>CNAMEs and the zone apex</h3>
+<p>A <code>CNAME</code> says “this name is an alias for that one”. Cloud load balancers and CDNs give you a <em>name</em>, not fixed addresses, because their addresses change, so you point your own names at theirs with a CNAME. There's one catch: a CNAME can't sit at the <strong>zone apex</strong>, the bare domain <code>larder.example</code>, because the apex must also hold <code>NS</code> and <code>SOA</code> records and a CNAME can't share a name with anything else.</p>
+<p>DNS hosts solve this with <strong>alias</strong> records: you point the apex at the cloud resource, and the DNS host looks up its current addresses and answers with plain <code>A</code>/<code>AAAA</code> records. On Route 53, alias records to AWS resources are also free to query and need no TTL of their own.</p>
+
+<!-- ======================================================== 5.4 -->
+<h2 class="sec" id="s5-4"><span class="n">5.4</span>How a name is resolved</h2>
+
+<p>Your laptop doesn't walk the tree itself. Its operating system has a small <strong>stub resolver</strong> that sends the question to a <span class="term">recursive resolver</span>: your ISP's, your company's, a public one like <code>1.1.1.1</code>, or, in a VPC, the provider's. The recursive resolver does the work and caches everything it learns.</p>
+
+<figure class="wide" id="fig5-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig5-1-t fig5-1-d">
+      <title id="fig5-1-t">Resolving www.larder.example</title>
+      <desc id="fig5-1-d">A laptop asks a recursive resolver for www.larder.example. With an empty cache, the resolver asks a root server, which refers it to the .example servers; asks a .example server, which refers it to larder.example's servers; and asks larder.example's authoritative server, which answers A 198.51.100.20 with a TTL of 300 seconds. The resolver caches the answer and returns it to the laptop.</desc>
+      <defs><marker id="c5ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="16" y="102" width="140" height="52" rx="5"/>
+      <text class="t-label" x="86" y="124" text-anchor="middle">your laptop</text>
+      <text class="t-small" x="86" y="142" text-anchor="middle">stub resolver</text>
+      <rect class="node-accent" x="216" y="96" width="170" height="64" rx="5"/>
+      <text class="t-label on-accent" x="301" y="122" text-anchor="middle">recursive resolver</text>
+      <text class="t-small on-accent" x="301" y="142" text-anchor="middle">asks around, caches</text>
+      <path class="wire" d="M158 128 H212" marker-start="url(#c5ah)" marker-end="url(#c5ah)"/>
+      <text class="t-small" x="185" y="92" text-anchor="middle">① ⑤</text>
+
+      <rect class="node" x="450" y="16" width="150" height="46" rx="5"/>
+      <text class="t-label" x="525" y="44" text-anchor="middle">root servers</text>
+      <rect class="node" x="450" y="104" width="150" height="46" rx="5"/>
+      <text class="t-label" x="525" y="132" text-anchor="middle">.example servers</text>
+      <rect class="node" x="450" y="192" width="150" height="46" rx="5"/>
+      <text class="t-label" x="525" y="220" text-anchor="middle">larder.example</text>
+      <path class="wire" d="M388 112 L446 40" marker-start="url(#c5ah)" marker-end="url(#c5ah)"/>
+      <path class="wire" d="M388 128 H446" marker-start="url(#c5ah)" marker-end="url(#c5ah)"/>
+      <path class="wire" d="M388 144 L446 214" marker-start="url(#c5ah)" marker-end="url(#c5ah)"/>
+      <text class="t-small" x="416" y="64" text-anchor="middle">②</text>
+      <text class="t-small" x="420" y="120" text-anchor="middle">③</text>
+      <text class="t-small" x="416" y="196" text-anchor="middle">④</text>
+      <text class="t-small" x="612" y="36">“ask the .example</text>
+      <text class="t-small" x="612" y="52">servers: …”</text>
+      <text class="t-small" x="612" y="124">“ask larder.example's</text>
+      <text class="t-small" x="612" y="140">servers: ns-1…”</text>
+      <text class="t-small t-accent" x="612" y="212">A 198.51.100.20</text>
+      <text class="t-small t-accent" x="612" y="228">TTL 300</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 5.1</b> A lookup with a cold cache. ① the laptop asks; ②–④ the resolver follows referrals down the tree; ⑤ it answers and caches the result for 300 seconds. With a warm cache, steps ② to ④ are skipped, which is most of the time.</figcaption>
+</figure>
+
+<p>Two things are worth noticing. First, the referrals are cached too: a resolver that has looked up any <code>.example</code> name already knows where the <code>.example</code> servers are, so real lookups usually skip straight to step ④ or answer from cache. Second, your laptop trusts its resolver completely. If the resolver is slow, wrong or unreachable, every connection your laptop makes is slow, wrong or broken.</p>
+
+<!-- ======================================================== 5.5 -->
+<h2 class="sec" id="s5-5"><span class="n">5.5</span>TTLs and caching</h2>
+
+<p>Every record has a <span class="term">TTL</span> (time to live) in seconds. A resolver that gets an answer may reuse it for that long without asking again. Caching is what makes DNS fast and resilient, and it's also why DNS changes aren't instant.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">When you change a record, the old answer can live on for up to its <em>old</em> TTL. Lower the TTL well before the change, not at the same time.</p>
+</div>
+
+<p>Some practical TTLs:</p>
+<ul>
+  <li><strong>3,600 seconds (one hour) or more</strong> for records that rarely change: MX, TXT, NS.</li>
+  <li><strong>60–300 seconds</strong> for records you may need to change quickly: endpoints during a migration, failover records.</li>
+  <li>Aliases to cloud load balancers follow the provider's own short TTL (60 seconds for AWS load balancers).</li>
+</ul>
+
+<p>Failed lookups are cached as well. If you query a name before its record exists, resolvers cache the “no such name” answer (<code>NXDOMAIN</code>) for the time set in the zone's <code>SOA</code> record, often 5 to 15 minutes. Creating the record right after won't help those resolvers until that runs out.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Watch out: not everyone respects TTLs</p>
+  <p>Some programs cache DNS answers themselves, longer than the TTL or forever. Older Java runtimes with a security manager cache successful lookups indefinitely; some HTTP clients resolve once at startup and keep the address; long-lived connections never look up again at all. After any change, keep the old endpoint running until its traffic has dropped to zero.</p>
+</div>
+
+<!-- ======================================================== 5.6 -->
+<h2 class="sec" id="s5-6"><span class="n">5.6</span>DNS in the cloud</h2>
+
+<p>Each provider runs a recursive resolver inside every VPC, and a DNS hosting service for your zones.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 5.2 · DNS at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Resolver in the VPC</td><td>Route 53 Resolver, at the VPC range's base + 2 (<code>10.20.0.2</code>) and <code>169.254.169.253</code></td><td>Azure DNS at <code>168.63.129.16</code></td><td>the metadata server, <code>169.254.169.254</code></td></tr>
+      <tr><td>Public zones</td><td>Route 53 public hosted zones</td><td>Azure DNS zones</td><td>Cloud DNS public zones</td></tr>
+      <tr><td>Private zones (only inside your networks)</td><td>Route 53 private hosted zones, attached to VPCs</td><td>Azure Private DNS zones, linked to VNets</td><td>Cloud DNS private zones</td></tr>
+      <tr><td>Hybrid forwarding</td><td>Resolver endpoints and rules</td><td>DNS Private Resolver</td><td>forwarding zones and inbound server policies</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p><strong>Private zones</strong> deserve a word now. A private hosted zone for <code>internal.larder.example</code> is visible only from the VPCs you attach it to, so you can give internal services stable names (<code>db.internal.larder.example</code>) without publishing them. A private zone can even use the <em>same</em> name as a public zone, giving one answer inside and another outside. That's <span class="term">split-horizon DNS</span>, very useful and very confusing, and the subject of <a href="index.html#ch15">Chapter 15</a> together with resolving names between the cloud and your offices.</p>
+
+<aside class="side"><b>Two VPC settings</b>On AWS, a VPC's <em>DNS resolution</em> setting turns the resolver on, and <em>DNS hostnames</em> gives instances names. Both must be on for private hosted zones to work. The <a href="#chapter-08-inside-a-vpc">Chapter 8</a> lab sets them.</aside>
+
+<h3>DNS that makes decisions</h3>
+<p>Cloud DNS services can also choose <em>which</em> answer to give: by weight (send 10% of lookups to a new stack), by latency (the closest region), by the user's location, or by health (stop returning an endpoint whose health check fails). These <strong>routing policies</strong> are a cheap and powerful way to shift traffic between regions. They inherit every caching caveat above, so they shift traffic over minutes, not seconds. You'll use them for failover between regions in the capstone, <a href="index.html#ch25">Chapter 25</a>.</p>
+
+<!-- ======================================================== 5.7 -->
+<h2 class="sec" id="s5-7"><span class="n">5.7</span>Worked example: reading a <code>dig</code> answer</h2>
+
+<p><code>dig</code> is the standard tool for asking DNS questions. Here's what Eli sees when he checks Larder's API name from his laptop:</p>
+
+<pre><code>$ dig api.larder.example
+
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 4127
+;; flags: qr rd ra; QUERY: 1, ANSWER: 3, AUTHORITY: 0, ADDITIONAL: 1
+
+;; ANSWER SECTION:
+api.larder.example.   247   IN  CNAME  api-prod-1234.eu-central-1.elb.amazonaws.com.
+api-prod-1234.eu-central-1.elb.amazonaws.com. 47 IN A 198.51.100.31
+api-prod-1234.eu-central-1.elb.amazonaws.com. 47 IN A 198.51.100.77
+
+;; Query time: 3 msec
+;; SERVER: 192.168.1.1#53(192.168.1.1)</code></pre>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 5.3 · What each part tells you</caption>
+    <thead><tr><th>Part</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>status: NOERROR</code></td><td>The name exists. Other statuses: <code>NXDOMAIN</code> (no such name), <code>SERVFAIL</code> (the resolver couldn't get an answer).</td></tr>
+      <tr><td><code>flags: … ra</code>, no <code>aa</code></td><td>The answer came from a recursive resolver (“recursion available”), not straight from an authoritative server.</td></tr>
+      <tr><td><code>247</code> and <code>47</code></td><td>Seconds left in the resolver's cache. The CNAME was cached 53 seconds ago with a TTL of 300.</td></tr>
+      <tr><td>Two <code>A</code> records</td><td>The load balancer has an address in each of two zones; clients pick one.</td></tr>
+      <tr><td><code>Query time: 3 msec</code></td><td>Answered from cache. An uncached lookup takes tens of milliseconds.</td></tr>
+      <tr><td><code>SERVER: 192.168.1.1</code></td><td>Which resolver answered: here the home router. In a VPC you'd see the VPC resolver.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>To skip caches entirely and ask the source, use <code>dig +trace api.larder.example</code>, which walks the tree like Figure 5.1, or ask an authoritative server directly with <code>dig @ns-1.awsdns-01.org api.larder.example</code>.</p>
+
+<!-- ======================================================== 5.8 -->
+<h2 class="sec" id="s5-8"><span class="n">5.8</span>Changing a record safely</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p><code>api.larder.example</code> had a TTL of one hour, so some resolvers would keep the old answer until 23:00 at the latest, exactly when Eli deleted the old load balancer. That alone was cutting it fine. But StockPilot's integration servers resolve the name once when they start and keep the address until they restart, which they do once a week. No TTL would have helped them.</p>
+  <p>Eli restored the old load balancer from code, pointed it at the new servers, and asked StockPilot to restart their workers. Larder's runbook for endpoint changes now has five steps, below.</p>
+</aside>
+
+<ol class="steps">
+  <li><strong>A day ahead, lower the TTL</strong> to 60 seconds, and wait at least the <em>old</em> TTL so every cache holds the short one.</li>
+  <li><strong>Run old and new side by side.</strong> Both endpoints must serve correctly during the change.</li>
+  <li><strong>Change the record</strong>, then check with <code>dig</code> against several resolvers (<code>@1.1.1.1</code>, <code>@8.8.8.8</code>, the VPC resolver).</li>
+  <li><strong>Watch the old endpoint's traffic</strong> until it reaches zero. Find and contact whoever is still sending.</li>
+  <li><strong>Remove the old endpoint, then raise the TTL</strong> back to its normal value.</li>
+</ol>
+
+<!-- ======================================================== 5.9 -->
+<h2 class="sec" id="s5-9"><span class="n">5.9</span>Lab: ask DNS questions properly</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 5 · dig, from cache to root</p>
+  <p><strong>You'll</strong> look up records, watch a TTL count down, follow a lookup from the root, and compare resolvers. <strong>You need</strong> <code>dig</code> (preinstalled on macOS; <code>apt install dnsutils</code> on Ubuntu; on Windows, use WSL or <code>Resolve-DnsName</code> in PowerShell). <strong>Cost:</strong> nothing.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Basic lookups.</strong> <code>dig www.wikipedia.org</code>, then <code>dig +short www.wikipedia.org AAAA</code>, <code>dig +short wikipedia.org MX</code>, <code>dig +short wikipedia.org NS</code> and <code>dig +short wikipedia.org TXT</code>. Match each answer to a row of Table 5.1.</li>
+  <li><strong>Watch a TTL.</strong> Run <code>dig www.wikipedia.org</code> three times, ten seconds apart, and watch the TTL in the answer count down. That's the cache in your resolver.</li>
+  <li><strong>Follow the tree.</strong> <code>dig +trace www.wikipedia.org</code>. Find the root's referral, the <code>.org</code> referral, and the final answer from Wikipedia's own name servers.</li>
+  <li><strong>Compare resolvers.</strong> <code>dig @1.1.1.1 www.wikipedia.org</code> and <code>dig @8.8.8.8 www.wikipedia.org</code>. Do they give the same addresses? Big sites often answer differently depending on where you ask from.</li>
+  <li><strong>Get an error on purpose.</strong> <code>dig no-such-name-1234.wikipedia.org</code>. Find <code>NXDOMAIN</code> and the <code>SOA</code> record in the authority section: its last number is how long the “no” may be cached.</li>
+  <li><strong>Reverse lookup.</strong> <code>dig -x 1.1.1.1 +short</code>. Which name does the address map back to?</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> If you have an AWS account, create a Route 53 <em>private</em> hosted zone in the <a href="#chapter-08-inside-a-vpc">Chapter 8</a> lab VPC, add a record, and look it up from an instance in that VPC and from your laptop. (Hosted zones cost $0.50 a month; delete it afterwards.)</p>
+
+<!-- ======================================================== 5.10 -->
+<h2 class="sec" id="s5-10"><span class="n">5.10</span>When it doesn't work</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Check</th></tr></thead>
+    <tbody>
+      <tr><td><code>NXDOMAIN</code> for a name you just created</td><td>A cached “no” from before; or a typo in the zone or record</td><td><code>dig @&lt;authoritative server&gt;</code>; wait out the SOA negative TTL</td></tr>
+      <tr><td><code>SERVFAIL</code></td><td>The resolver couldn't reach the authoritative servers, or DNSSEC validation failed</td><td><code>dig +trace</code>; check the delegation's NS records</td></tr>
+      <tr><td>Old answer after a change</td><td>Caches holding the old TTL; apps caching on their own</td><td>TTL in <code>dig</code> output; restart or reconfigure the app</td></tr>
+      <tr><td>Different answer inside and outside the VPC</td><td>A private zone with the same name (split horizon)</td><td>Which zones are attached to the VPC (<a href="index.html#ch15">Ch. 15</a>)</td></tr>
+      <tr><td><code>dig</code> works but the app fails</td><td><code>/etc/hosts</code>, search domains, a different resolver, or the app's own cache</td><td><code>getent hosts name</code> on Linux uses the same path as most apps</td></tr>
+      <tr><td>Every lookup slow</td><td>An unreachable resolver being tried first</td><td><code>/etc/resolv.conf</code>; resolver reachability on UDP and TCP 53</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum5">
+  <h2 class="sec" id="sum5"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>DNS maps names to records through a <strong>hierarchy</strong> of <strong>zones</strong>, each served by its own <strong>authoritative</strong> servers and reached by <strong>delegation</strong>.</li>
+    <li>Your device asks a <strong>recursive resolver</strong>, which follows referrals from the root and caches what it learns.</li>
+    <li>Use <code>A</code>/<code>AAAA</code> for addresses, <code>CNAME</code> to point at other names, and <strong>alias</strong> records at the zone apex and for cloud resources.</li>
+    <li><strong>TTLs</strong> control caching. Lower them a day before a change; old answers live for the old TTL, and some apps ignore TTLs entirely.</li>
+    <li>Every VPC has a provider resolver; <strong>private zones</strong> give internal names, and can create split-horizon answers.</li>
+    <li>Use <code>dig</code> to see the status, the TTL left, and which resolver answered.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Zone</dt><dd>A part of the DNS tree managed as one unit.</dd>
+    <dt>Authoritative server</dt><dd>A server whose answers for a zone are the official ones.</dd>
+    <dt>Delegation</dt><dd>A parent zone pointing to a child zone's servers with NS records.</dd>
+    <dt>Recursive resolver</dt><dd>The server that finds answers for clients and caches them.</dd>
+    <dt>Record</dt><dd>A name, type, value and TTL in a zone.</dd>
+    <dt>CNAME</dt><dd>A record that makes one name an alias of another.</dd>
+    <dt>Alias record</dt><dd>A provider feature that answers with a resource's current addresses, usable at the apex.</dd>
+    <dt>Zone apex</dt><dd>The bare domain itself, like <code>larder.example</code>.</dd>
+    <dt>TTL</dt><dd>How many seconds an answer may be cached.</dd>
+    <dt>NXDOMAIN</dt><dd>“No such name”, itself cached for a while.</dd>
+    <dt>Private hosted zone</dt><dd>A zone visible only inside the networks it's attached to.</dd>
+    <dt>Split-horizon DNS</dt><dd>Different answers for the same name inside and outside a network.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Why can't <code>larder.example</code> itself be a CNAME to a load balancer, and what do you use instead? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>The zone apex must hold NS and SOA records, and a CNAME can't share its name with any other record. Use an alias record (Route 53) or ALIAS/ANAME (other hosts), which answers with the load balancer's current addresses.</p></details>
+    </li>
+    <li>
+      <p>A record has a TTL of 86,400 seconds. You change it at 10:00. When can you be sure every well-behaved resolver sees the new value? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Not until 10:00 the next day: a resolver that cached it just before the change may keep it for a full day. Lowering the TTL to 60 a day ahead would have made it about a minute.</p></details>
+    </li>
+    <li>
+      <p><code>dig</code> on an instance shows the new address, but the application on that instance keeps calling the old one. Name two possible causes. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The application caches DNS itself (for example, resolving once at startup or a runtime that caches indefinitely), or it holds long-lived connections opened before the change. Others: an entry in <code>/etc/hosts</code>, or the app using a different resolver than <code>dig</code>.</p></details>
+    </li>
+    <li>
+      <p>An instance resolves <code>db.internal.larder.example</code> fine, but a new VPC's instances get <code>NXDOMAIN</code>. What's the likely cause? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>The private hosted zone isn't associated with the new VPC (or the VPC's DNS resolution and hostnames settings are off). Private zones answer only inside the VPCs they're attached to.</p></details>
+    </li>
+    <li>
+      <p>You need to fail over a public website from Frankfurt to a standby region. Why is a DNS failover record a reasonable choice, and what's its main limitation? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>It's simple, cheap and works across regions and providers, with health checks deciding the answer. Its limitation is caching: clients switch over only as cached answers expire, so with short TTLs failover takes minutes, and clients that ignore TTLs may not switch at all.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>Julia Evans, <a href="https://jvns.ca/blog/how-updating-dns-works/">What happens when you update your DNS?</a></li>
+    <li>AWS: <a href="https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-choosing-alias-non-alias.html">Choosing between alias and non-alias records</a>.</li>
+    <li>Cloudflare Learning Center: <a href="https://www.cloudflare.com/learning/dns/what-is-dns/">What is DNS?</a></li>
+  </ul>
+</section>
+
+
+
+</article>
 <article class="sheet chapter" id="chapter-08-inside-a-vpc">
 <header class="opener">
   <p class="eyebrow">Part II · Your network in the cloud</p>
@@ -2032,7 +2363,7 @@ table = [(<span class="s">"10.1.0.0/24"</span>, <span class="s">"lan"</span>), (
   <li><strong>Is the NAT gateway healthy and in a public subnet?</strong> Its state should be <em>Available</em>, and <em>its</em> subnet's table must send <code>0.0.0.0/0</code> to the internet gateway.</li>
   <li><strong>Is the internet gateway attached to this VPC?</strong></li>
   <li><strong>Do the firewalls allow it?</strong> Security group outbound rules, and network ACLs in both directions, including the return ports (<a href="index.html#ch9">Chapter 9</a>).</li>
-  <li><strong>Does DNS work?</strong> <code>dig stockpilot.example</code> failing looks a lot like the network failing (<a href="index.html#ch5">Chapter 5</a>).</li>
+  <li><strong>Does DNS work?</strong> <code>dig stockpilot.example</code> failing looks a lot like the network failing (<a href="#chapter-05-dns">Chapter 5</a>).</li>
 </ol>
 
 <p>AWS's <strong>Reachability Analyzer</strong> automates steps 1 to 5: give it a source and a destination and it shows the hop where the path breaks. <strong>VPC flow logs</strong> show which packets were accepted or rejected. Both are in <a href="index.html#ch22">Chapter 22</a>.</p>
