@@ -1168,3 +1168,11 @@ Network facts used by Handbook 1 (details and chapter references in `docs/HANDOF
   profile still worked and reached all of `10.0.0.0/8`; staff tools moved behind AWS Verified Access with SSO and
   device checks, staff VPN off for tools in October, kept for two engineers' incident access; mTLS in the payments
   path, no service mesh yet (about twenty services, three teams; revisit at ~fifty) (ch. 21).
+- Part VI facts: new cache's security group allowed Redis from zone a's subnet only → ~1 in 3 calls failed; found
+  with one flow-log query (ch. 22). Quarterly network bill review with Marco: $9,000 → $5,060 a month (endpoints,
+  per-zone NAT, zone-local Kafka/cache, peering prod → analytics for ~40 TB nightly, CloudFront, released IPv4) (ch. 23).
+  Data team's hand-built account (`10.0.0.0/16`, public subnets) rebuilt from account vending with `10.21.0.0/16`;
+  SCP denies internet gateways in workload accounts; product teams share prod/staging VPCs (ch. 24). Pilot light in
+  Paris (ADR 0026): hub `10.32.0.0/16`, prod `10.36.0.0/16`, TGW peered with Frankfurt, DB replica; NAT, firewall,
+  endpoints, load balancers and store VPNs built on failover from code and pre-generated configs; idle network
+  under €200/month of the €1,200 (ch. 25).
