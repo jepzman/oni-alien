@@ -57,10 +57,12 @@ vertical slices, functional core, four classic GoF notes and a museum of retired
 Also fixed: a related note with the same slug in another volume was silently not linked (`related_items`); three older
 links now work (Ana's Strangler Fig ↔ Vol. 1, Sanne's Risk Register → Ana's).
 
-**Series 5 · On the Client's Floor** (26 Nov 2026, branch `ccr-c1268b0d-silzv3`): Vols. 1 (Winning the Work), 2
-(Signing and Starting), 3 (Digging Up the Legacy) and 4 (Delivery Under Fire), 60 notes in `content/vendor-1/` … `content/vendor-4/`, renderer `scripts/vendor.py`, skin
+**Series 5 · On the Client's Floor** (26 Nov 2026, branch `ccr-c1268b0d-silzv3`): **complete**, six volumes, 90 notes:
+1 Winning the Work, 2 Signing and Starting, 3 Digging Up the Legacy, 4 Delivery Under Fire, 5 Other People's Politics,
+6 The Cost and the Ending, in `content/vendor-1/` … `content/vendor-6/`; renderer `scripts/vendor.py`, skin
 `public/assets/vendor.css`. The vendor side of MetroVolt (same world as Darkside). Plan and build notes:
-`docs/PLAN-vendor-side.md` (sections 13–14); facts: `docs/lodestar-casebook.md`. Next: Vol. 5.
+`docs/PLAN-vendor-side.md` (sections 13–15); facts: `docs/lodestar-casebook.md`. The ending is deliberately open
+(room 27A, 15 Jun 2029): don't resolve it without the owner. Possible extras: the Lodestar file (plan §9).
 
 **Series 1 Vol. 9 · Data Pipelines & Analytics** (25 Nov 2026, branch `ccr-6c2fb384-1vaty7`): 18 notes in `content/pipelines/`
 (four files, one per collection), skin `theme-pipelines` (green-bar printout: bands, sprocket holes, VT323 titles, “RUN COMPLETE”
