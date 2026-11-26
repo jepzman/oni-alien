@@ -591,12 +591,41 @@ and must not contradict, ADR 0021 (staff tools SSO/SCIM, May 2027) and the 11 Oc
   Larder records S3 data events for its production buckets (ch. 23).
 - **Example partner account:** StockPilot's role `stock-sync` in `999988887777` reads `larder-stock-exports` through
   a bucket policy (ch. 10's lab; ch. 21 tells it properly).
+- **Single sign-on (ch. 12):** before: 8 of Larder's 18 engineers had IAM users (prod, most also staging); the other 10
+  had no AWS access. 5 Jan 2027: new account `larder-management` `777788889999` (root secured per ch. 7) creates the
+  AWS Organization; prod and dev+staging invited and joined the same day; no SCPs yet. IAM Identity Center in
+  Frankfurt with its own directory, MFA at every sign-in, FIDO2 only. Permission sets: `ViewOnly` (ViewOnlyAccess,
+  8 h, all engineers in prod), `Developer` (PowerUserAccess + `team-boundary`, 8 h, dev-staging), `ProdOperator` (1 h,
+  on-call), `DbChange` (1 h, db owners Ben and Eli), `PlatformAdmin` (AdministratorAccess, 1 h, platform: Eli),
+  `Billing` (finance: Marco, management account). Pre-launch check found Dee's direct `PlatformAdmin` in staging and
+  standing `PlatformAdmin` in prod (both to ch. 14). Guardrail exceptions rewritten to
+  `role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_DbChange_*`. Move-over week of 11 Jan; IAM users disabled
+  18 Jan, deleted 1 Feb with `ops`, the `prod-operator` role and its authenticator-app MFA devices. Only IAM user
+  left: `deploy-bot` (ch. 17).
+- **Leavers (ch. 13, ADR 0021):** Pim, a support agent, left 30 Apr 2027 and still had helpdesk and billing-tool
+  (refunds) accounts on 21 May (Lena's review); closed that afternoon, unused per the billing tool's log. Noor joined
+  support 17 May; Yara moved support → operations 3 May. ADR 0021 (24 May 2027): the company directory (until then
+  mostly email) becomes the IdP for every staff tool, fed by HR; 11 of 14 tools on SAML/OIDC + SCIM; the other 3 get
+  an automatic same-day leaver ticket for the tool's owner. 7 Jun 2027: Identity Center's identity source switched to
+  the IdP with SCIM (usernames matched); SCIM token expiry in the platform calendar. Quarterly reviews of requested
+  and privileged access; monthly for production admin. Business customers federated; personal picker badges by July.
+- **Privileged access (ch. 14):** 18 Dec 2026 failover near miss: Cho on call (phone at 4 %); both db-change owners
+  unreachable (Ben on a plane, Eli at the office Christmas dinner); `break-glass-*` roles didn't exist; review
+  21 Dec. Feb 2027: TEAM (AWS's open-source temporary elevated access tool) in a small tooling account; no standing
+  `ProdOperator`, `DbChange` or prod `PlatformAdmin`; rules: ProdOperator 1 h, on-call self-approves in incidents
+  (reviewed next morning); DbChange 1 h, approved by a db owner or the incident lead; prod PlatformAdmin 2 h, approved
+  by platform; dev-staging PlatformAdmin 4 h, approved by a tech lead. Break-glass: IAM users `break-glass-1/2` in
+  `larder-management` (console only, hardware keys), role `break-glass-admin` in every account, envelopes in the
+  office safe, keys in a locked drawer in Marco's office, alarm pages every tech lead. 18 Feb 2027 INC-412 (payments,
+  18:07): Cho self-approved ProdOperator; Eli approved his DbChange at 18:15. 26 Feb: first break-glass test,
+  19 minutes; the runbook was in the IdP-protected wiki, so a printed copy now lives in the safe.
 - **Deploy key (ch. 17):** CI deployed with a long-lived access key for IAM user `deploy-bot` with
   `AdministratorAccess`, stored as a repository secret; replaced by GitHub OIDC with one role per environment.
 - **Accounts today (ch. 7):** two standalone accounts in Nov 2026: Jasper's original `111122223333` (production, plus the
   network hub) and `444455556666` (development and staging, opened by Eli in 2025). No organisation yet.
-- **Accounts (ch. 20–21):** the hub, dev, staging and prod accounts (Handbook 1 ch. 10) become OUs in one organisation;
-  Jasper's original account becomes the management account and runs no workloads.
+- **Accounts (ch. 12, 20–21):** Jan 2027 (ch. 12): a new, empty management account `777788889999`
+  (`larder-management`) creates the organisation; prod `111122223333` and dev+staging `444455556666` join as members.
+  Ch. 20 adds OUs, SCPs and more accounts (hub, dev, staging, prod split per Handbook 1 ch. 10).
 - **People (ch. 12–14):** IAM Identity Center with the company IdP; permission sets `ReadOnly`, `Developer`,
   `ProdOperator` (just in time, approved by a tech lead); two break-glass users whose credentials are kept in a safe.
 - **Partners (ch. 19, 21):** StockPilot and the payment provider use cross-account roles with external IDs or signed

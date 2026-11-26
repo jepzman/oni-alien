@@ -121,7 +121,7 @@ NAT Elastic IP `198.51.100.7` (StockPilot allow-lists it). Chapter 9 should rete
 ## 6. Handbook 2 · Identity and Access in the Cloud (approved 2026-11-26)
 
 **Approved by the owner on 2026-11-26** (all six decisions below: yes; sample = Chapter 9; on the shelf now as a
-placeholder). **Parts I and II (1–11) written 2026-11-26; next Chapter 12.** Status and briefs: **`docs/HANDOFF-handbook-2-identity.md`**.
+placeholder). **Parts I–III (1–14) written 2026-11-26; next Chapter 15.** Status and briefs: **`docs/HANDOFF-handbook-2-identity.md`**.
 
 Outline: `content/handbooks/cloud-identity/book.py` (same format as Handbook 1). Listed in `BOOKS`; until a chapter
 is written, only its contents page is built (no PDF, not in `journals.json`).
@@ -155,8 +155,8 @@ Must not contradict the casebook: ADR 0021 (24 May 2027, staff tools SSO/SCIM) a
   for people who have left; engineers share an `ops` user for production fixes.
 - **The deploy key (ch. 17):** CI deploys with a long-lived access key for `deploy-bot` with `AdministratorAccess`,
   stored as a repository secret; replaced by GitHub OIDC with one role per environment.
-- **Accounts (ch. 20–21):** the hub/dev/staging/prod accounts from Handbook 1 ch. 10 become OUs in one
-  organisation; Jasper's account becomes the management account and runs no workloads.
+- **Accounts (ch. 12, 20–21):** a fresh management account creates the organisation in ch. 12 (superseding the
+  earlier idea of making Jasper's account the management account); ch. 20 adds OUs, SCPs and more accounts.
 - **People (ch. 12–14):** Identity Center with the company IdP; permission sets `ReadOnly`, `Developer`,
   `ProdOperator` (just-in-time, approved by a tech lead); two break-glass users in a safe. Ch. 13 links to ADR 0021.
 - **Partners (ch. 19, 21):** StockPilot and the PSP use cross-account roles with external IDs or signed requests;

@@ -1,8 +1,8 @@
 # Handoff: Handbook 2 · Identity and Access in the Cloud
 
-Status as of **2026-11-26**: **in progress, 11 of 25 chapters written: Parts I and II (1–11).** The owner approved
-everything in `docs/HANDOFF-handbooks.md` §6 and picked Chapter 9 as the sample. **Next: Chapter 12** (Part III),
-then Parts IV–VI in order (`BOOK["next"]` in `book.py` is 12).
+Status as of **2026-11-26**: **in progress, 14 of 25 chapters written: Parts I–III (1–14).** The owner approved
+everything in `docs/HANDOFF-handbooks.md` §6 and picked Chapter 9 as the sample. **Next: Chapter 15** (Part IV),
+then Parts V–VI in order (`BOOK["next"]` in `book.py` is 15).
 
 Read first: `docs/HANDOFF-handbooks.md` §1–2 (what a handbook is, the voice, the building blocks, the look). This
 book uses exactly the same style, blocks, CSS (`public/assets/book.css`) and build as Handbook 1. The best model to copy
@@ -13,7 +13,7 @@ from is `content/handbooks/cloud-networking/09-firewalls.html` (a chapter about 
 | What | Where |
 | --- | --- |
 | Outline (parts, chapters, summaries, topics, appendices) | `content/handbooks/cloud-identity/book.py` |
-| Chapter bodies | `content/handbooks/cloud-identity/<nn>-<slug>.html`; written: 01–11 |
+| Chapter bodies | `content/handbooks/cloud-identity/<nn>-<slug>.html`; written: 01–14 |
 | Built contents page | `public/handbooks/cloud-identity/index.html` |
 | Build | `python3 scripts/build_notes.py` (builds everything, including both handbooks and the landing shelf) |
 | Preview | `npm run serve`, then http://localhost:8080/handbooks/cloud-identity/ |
@@ -189,8 +189,31 @@ Facts worth knowing for later chapters: Larder has **two standalone accounts** (
 `444455556666`) and no organisation yet (ch. 7). FIDO2 keys don't work for MFA-protected CLI/API calls; Larder's
 on-call engineers use an authenticator app for the CLI (ch. 8) until SSO (ch. 12). Ch. 12 must delete `ops` and the
 remaining IAM users; ch. 14 defines `break-glass-*`; ch. 17 replaces `deploy-bot`; ch. 18 decides on customer managed
-KMS keys; ch. 20 moves `protect-orders-db` into an SCP and makes `111122223333` the management account (which means
-moving production out of it); ch. 23 covers root-sign-in alerts and the S3 data-event trail.
+KMS keys; ch. 20 moves `protect-orders-db` into an SCP (the organisation itself, with a fresh management account
+`777788889999`, is created in ch. 12; `111122223333` stays a member running production); ch. 23 covers root-sign-in alerts and the S3 data-event trail.
+
+## 3c. Part III (chapters 12–14): written 2026-11-26
+
+| Ch. | Story (all in the casebook) | Lab | Run here? |
+| --- | --- | --- | --- |
+| 12 | Jan 2027: new management account + organisation; Identity Center; IAM users gone by 1 Feb | `assignments.py` (access matrix + risky assignments) + sandbox-org CLI walkthrough | Python **run**; CLI not |
+| 13 | May 2027: Pim kept helpdesk/billing 3 weeks; ADR 0021; Identity Center → IdP + SCIM on 7 Jun | `jml.py` (HR vs apps → SCIM-shaped actions) | **run** |
+| 14 | 18 Dec 2026 near miss; TEAM elevation and break-glass in Feb 2027 | `jit.py` (elevation broker) + EventBridge break-glass alarm | Python **run**; AWS part not |
+
+Every “change it” and “break it” step was run against the scripts; all 14 lab scripts printed in chapters 1–14 are
+byte-identical to the executed files; JSON snippets (SCIM body, EventBridge pattern, topic policy) parse.
+
+Decisions made in this batch (now in the casebook): the organisation is created in **ch. 12** from a **new, empty
+management account `777788889999`**; Jasper's `111122223333` stays a member running production (ch. 7's forward
+reference was updated). Identity Center can't revoke already-issued role credentials by itself: ch. 13 uses AWS's
+documented `identitystore:UserId` deny method (the `AWSReservedSSO_` roles can't be edited). Dates: Christmas 2026 has
+**no** change freeze (the 13 Dec–3 Jan freeze in the casebook is Christmas 2027, Ana Vol. 5); the 18 Dec 2026 outage's
+cause is Ana's (slow DB failover) and ch. 14 adds only an access near miss to that evening.
+
+For Part IV: ch. 15 workloads (Dispatch on ECS, Larder Core on 3 VMs → instance profiles + IMDSv2, SSM instead of
+SSH), ch. 16 (Larder runs no Kubernetes as of early 2027; Handbook 1 ch. 19 mentions pods in `100.64.0.0/10` as a
+plan; decide before writing), ch. 17 replaces `deploy-bot` with GitHub OIDC, ch. 18 decides customer managed KMS keys
+(staging's leftover CMK from ch. 11), ch. 19 retells the Oct 2027 security review (move forward in time).
 
 ## 4. Order of work after Chapter 9
 
@@ -206,4 +229,5 @@ moving production out of it); ch. 23 covers root-sign-in alerts and the S3 data-
 - [x] Part I (1–6) written and checked.
 - [x] Rest of Part II (7, 8, 10, 11) written and checked.
 - [ ] AWS labs (ch. 7–11) run once in a real sandbox account; none could be run here.
-- [ ] Chapter 12 next.
+- [x] Part III (12–14) written and checked.
+- [ ] Chapter 15 next.

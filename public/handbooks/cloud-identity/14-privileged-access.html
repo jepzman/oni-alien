@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Privileged access and break-glass · Identity and Access in the Cloud</title>
+<meta name="description" content="Admin rights only when needed, with approval and an audit trail, and a safe way in when SSO itself is down.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=86bdfe1bff">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 2</a> · <a href="index.html">Identity and Access in the Cloud</a></span><span>Part III · Chapter 14</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part III · Access for people</p>
+  <p class="chno">14</p>
+  <h1>Privileged access and break-glass</h1>
+  <p class="promise">The most dangerous permissions in any company are also the ones its best people need, at the worst moments: during an outage, at night, in a hurry. This chapter shows how to give admin and production-change rights only when they're needed, for as long as they're needed, with someone else's say-so; and how to keep an emergency way in that still works when single sign-on itself is broken.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain standing versus just-in-time access, and why the difference is about exposure, not trust.</li>
+      <li>Design an elevation process: eligibility, approval, duration, incident rules and review.</li>
+      <li>Implement time-limited elevation on AWS with IAM Identity Center.</li>
+      <li>Design, store, monitor and test break-glass access.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Identity Center and permission sets (<a href="12-sso.html">Chapter 12</a>); guardrails (<a href="10-evaluation.html">Chapter 10</a>); the root user (<a href="07-account-root.html">Chapter 7</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, Python 3; optional AWS step, pennies</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 14.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>On Friday 18 December 2026, at 18:05, in the middle of the Christmas peak, the orders database failed over and checkout was down for 38 minutes. Cho was on call. He assumed <code>prod-operator</code> with an authenticator code from a phone at 4 % battery, and watched the failover complete on its own.</p>
+  <p>The post-incident review on 21 December found nothing wrong with access that night, and a lot that could have been. Had the database needed a change, only the <code>db-change</code> role could make one (<a href="10-evaluation.html">Chapter 10</a>), and both of its owners were unreachable: Ben on a plane, Eli at the office Christmas dinner without a laptop. Had Cho's phone died, nobody else on the rota was awake. And the <code>break-glass-*</code> roles in the guardrail's exception didn't exist yet. Section 14.8 shows what Larder built.</p>
+</aside>
+
+<!-- ======================================================== 14.1 -->
+<h2 class="sec" id="s14-1"><span class="n">14.1</span>Standing access and just-in-time access</h2>
+
+<p class="lead"><span class="term">Standing access</span> is privilege you hold all the time, whether you're using it or not. <span class="term">Just-in-time (JIT) access</span> is privilege you're <em>eligible</em> for, but activate only when needed, for a limited time, usually with a reason and an approval. The difference isn't about trusting people less. It's about <strong>exposure</strong>: how much of the year a powerful credential exists that a phishing page, a stolen laptop or a malicious browser extension could use.</p>
+
+<figure class="wide" id="fig14-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 200" role="img" aria-labelledby="fig14-1-t fig14-1-d">
+      <title id="fig14-1-t">Standing access compared with just-in-time access over a month</title>
+      <desc id="fig14-1-d">A month drawn as a timeline. With standing access, the admin permission exists for the whole month, all day and night. With just-in-time access, it exists only in four short blocks when it was actually used, each with a reason and an approval, and expires by itself. The area of exposure shrinks from the whole month to a few hours.</desc>
+      <text class="t-small" x="140" y="22">1 Feb</text><text class="t-small" x="740" y="22" text-anchor="end">28 Feb</text>
+      <path class="wire" d="M140 30 H740"/>
+      <text class="t-label" x="12" y="66">standing</text>
+      <rect class="node-accent" x="140" y="48" width="600" height="28" rx="3"/>
+      <text class="t-small on-accent" x="440" y="67" text-anchor="middle">admin, every hour of every day</text>
+      <text class="t-label" x="12" y="126">just-in-time</text>
+      <rect class="priv" x="140" y="108" width="600" height="28" rx="3"/>
+      <rect class="node-accent" x="212" y="108" width="14" height="28" rx="2"/>
+      <rect class="node-accent" x="380" y="108" width="22" height="28" rx="2"/>
+      <rect class="node-accent" x="530" y="108" width="10" height="28" rx="2"/>
+      <rect class="node-accent" x="664" y="108" width="16" height="28" rx="2"/>
+      <text class="t-small" x="219" y="156" text-anchor="middle">INC-409</text>
+      <text class="t-small" x="391" y="156" text-anchor="middle">migration</text>
+      <text class="t-small" x="535" y="156" text-anchor="middle">INC-412</text>
+      <text class="t-small" x="672" y="156" text-anchor="middle">release</text>
+      <text class="t-small" x="440" y="186" text-anchor="middle">each block: a reason, an approval or an incident, an end time, a log entry</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 14.1</b> The same person, the same permissions, a month of exposure versus a few hours of it.</figcaption>
+</figure>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Nobody should hold production admin rights while they sleep. Be eligible, not permanently entitled.</p>
+</div>
+
+<!-- ======================================================== 14.2 -->
+<h2 class="sec" id="s14-2"><span class="n">14.2</span>What counts as privileged</h2>
+
+<p>Privileged access is anything that could cause serious, hard-to-reverse harm, or that could be used to grant more access. In an AWS estate, that's at least:</p>
+<ul>
+  <li><strong>Administrator access</strong> in any account, and anything at all in the management account.</li>
+  <li><strong>Changing production</strong>: deployments outside the pipeline, database changes, network and firewall rules.</li>
+  <li><strong>IAM and Identity Center</strong>: creating roles, editing policies, changing assignments, <code>iam:PassRole</code> on powerful roles (<a href="08-users-roles.html">Chapter 8</a>).</li>
+  <li><strong>Reading sensitive data in bulk</strong>: customer exports, secrets, backups.</li>
+  <li><strong>Security tooling and logs</strong>: anything that could switch off CloudTrail or an alarm.</li>
+</ul>
+<p>Everything else, viewing configuration, working in development, reading logs, can usually be standing access through birthright groups (<a href="13-lifecycle.html">Chapter 13</a>).</p>
+
+<!-- ======================================================== 14.3 -->
+<h2 class="sec" id="s14-3"><span class="n">14.3</span>Designing elevation</h2>
+
+<p>An elevation process answers five questions for each privileged permission set:</p>
+<div class="table-wrap">
+  <table>
+    <caption>Table 14.1 · Larder's elevation rules</caption>
+    <thead><tr><th>Permission set</th><th>Who may ask</th><th>Who approves</th><th>Longest grant</th><th>In an incident</th></tr></thead>
+    <tbody>
+      <tr><td><code>ProdOperator</code></td><td>on-call rota</td><td>any tech lead</td><td>1 h</td><td>on-call self-approves, citing the incident; reviewed next morning</td></tr>
+      <tr><td><code>DbChange</code></td><td>on-call rota and database owners</td><td>a database owner (not yourself)</td><td>1 h</td><td>the incident lead may approve</td></tr>
+      <tr><td><code>PlatformAdmin</code> (prod)</td><td>platform team and tech leads</td><td>platform team (not yourself)</td><td>2 h</td><td>break-glass if nobody can approve (14.5)</td></tr>
+      <tr><td><code>PlatformAdmin</code> (dev-staging)</td><td>any engineer</td><td>their tech lead</td><td>4 h</td><td>n/a</td></tr>
+    </tbody>
+  </table>
+</div>
+<p>Principles behind the table:</p>
+<ul>
+  <li><strong>Never approve your own request</strong>, except in a declared incident, and then always with review afterwards. An approval nobody can bypass at 3 a.m. becomes a reason to keep standing access.</li>
+  <li><strong>A reason, every time.</strong> “INC-412: checkout errors” or a ticket number. It's what the reviewer reads, and what an auditor asks for.</li>
+  <li><strong>Short by default.</strong> An hour, renewable. Long grants become standing access with extra steps.</li>
+  <li><strong>Everyone on call can elevate.</strong> Larder's near miss came from <em>too few</em> people being able to act, not too many.</li>
+</ul>
+
+<h3>On AWS</h3>
+<p>Identity Center has no built-in “eligible” state, so elevation is built from what it has: account assignments can be created and deleted by API. An elevation tool creates the assignment when a request is approved and deletes it when the time is up, logging both. AWS publishes an open-source solution that does exactly this, <strong>TEAM</strong> (Temporary Elevated Access Management for IAM Identity Center); identity providers offer the same idea one level up, with time-limited group memberships that SCIM then pushes into Identity Center. Either way:</p>
+<ul>
+  <li>Keep the permission set's <strong>session duration</strong> no longer than the grant, so a session can't outlive its approval by much.</li>
+  <li>Remember that deleting the assignment stops <em>new</em> sessions; a session already started runs to its end (<a href="13-lifecycle.html">Chapter 13</a>, 13.4).</li>
+  <li>Run the tool in a locked-down account of its own: whoever controls it can grant anything.</li>
+</ul>
+
+<!-- ======================================================== 14.4 -->
+<h2 class="sec" id="s14-4"><span class="n">14.4</span>Two people for the worst actions</h2>
+
+<p>A few actions are too dangerous even for a well-approved individual session: changing SCPs, editing Identity Center assignments wholesale, deleting a whole account, turning off organisation-wide logging. For these, require two people at the moment of action, not just at approval: changes made through code with a mandatory second reviewer (<a href="index.html#ch24">Chapter 24</a>), and an explicit deny for everyone else (<a href="10-evaluation.html">Chapter 10</a>). Deleting backups, at Larder, is denied to everyone.</p>
+
+<!-- ======================================================== 14.5 -->
+<h2 class="sec" id="s14-5"><span class="n">14.5</span>Break-glass</h2>
+
+<p><span class="term">Break-glass access</span> is a way in that doesn't depend on the things that usually let people in: the identity provider, Identity Center, a phone, the approval tool. It exists for the day those fail, or are misconfigured, or are the very thing under attack. It should be strong, rare, loud and tested.</p>
+
+<figure class="wide" id="fig14-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 270" role="img" aria-labelledby="fig14-2-t fig14-2-d">
+      <title id="fig14-2-t">The normal way in, and the break-glass way in</title>
+      <desc id="fig14-2-d">Normally, people sign in at the identity provider, then IAM Identity Center, which gives them a permission set session in an account, after elevation if needed. If the identity provider or Identity Center is unavailable, two people open the safe, take a sealed password and a hardware security key, sign in to the AWS console as an IAM user called break-glass-1 in the management account, and switch to the break-glass-admin role in the account they need. Every sign-in and role switch by these users triggers an alarm that pages every tech lead.</desc>
+      <defs><marker id="c14ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c14ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <text class="t-small" x="12" y="22">every day</text>
+      <rect class="node" x="12" y="30" width="150" height="48" rx="5"/><text class="t-label" x="87" y="59" text-anchor="middle">identity provider</text>
+      <rect class="node" x="200" y="30" width="150" height="48" rx="5"/><text class="t-label" x="275" y="59" text-anchor="middle">Identity Center</text>
+      <rect class="node" x="388" y="30" width="150" height="48" rx="5"/><text class="t-label" x="463" y="51" text-anchor="middle">elevation</text><text class="t-small" x="463" y="69" text-anchor="middle">(if privileged)</text>
+      <rect class="pub" x="576" y="30" width="172" height="48" rx="5"/><text class="t-label" x="662" y="59" text-anchor="middle">session in an account</text>
+      <path class="wire" d="M164 54 H196" marker-end="url(#c14ah)"/><path class="wire" d="M352 54 H384" marker-end="url(#c14ah)"/><path class="wire" d="M540 54 H572" marker-end="url(#c14ah)"/>
+      <text class="t-small t-warn" x="12" y="104">✗ if any of these is down or broken…</text>
+      <text class="t-small" x="12" y="134">break-glass</text>
+      <rect class="ext" x="12" y="142" width="150" height="64" rx="5"/><text class="t-label" x="87" y="168" text-anchor="middle">the safe</text><text class="t-small" x="87" y="188" text-anchor="middle">password + security key</text>
+      <rect class="node-accent" x="200" y="142" width="200" height="64" rx="5"/><text class="t-label on-accent" x="300" y="168" text-anchor="middle">IAM user break-glass-1</text><text class="t-small on-accent" x="300" y="188" text-anchor="middle">management account, console only</text>
+      <rect class="pub" x="438" y="142" width="310" height="64" rx="5"/><text class="t-label" x="593" y="168" text-anchor="middle">role break-glass-admin</text><text class="t-small" x="593" y="188" text-anchor="middle">in each account, trusts only break-glass-1/2 with MFA</text>
+      <path class="wire" d="M164 174 H196" marker-end="url(#c14ah)"/><path class="wire" d="M402 174 H434" marker-end="url(#c14ah)"/>
+      <path class="wire-accent" d="M300 208 V236 H593 V210" marker-end="url(#c14ah2)"/>
+      <rect class="node" x="232" y="226" width="300" height="34" rx="5"/>
+      <text class="t-label t-warn" x="382" y="248" text-anchor="middle">alarm: page every tech lead</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 14.2</b> Break-glass shares nothing with the everyday path: different identities, different credentials, no phone, no approval tool. What it adds is noise.</figcaption>
+</figure>
+
+<p>A design that works for most AWS estates:</p>
+<ol class="steps">
+  <li><strong>Two IAM users</strong>, <code>break-glass-1</code> and <code>break-glass-2</code>, in the management account: console passwords, no access keys, each with two hardware security keys. These are the only IAM users for people in the whole organisation.</li>
+  <li><strong>A role in every account</strong>, <code>break-glass-admin</code>, with administrator permissions, trusting only those two users and only with MFA (<a href="08-users-roles.html">Chapter 8</a>). Guardrails list it as an exception (<a href="10-evaluation.html">Chapter 10</a>).</li>
+  <li><strong>Stored apart.</strong> Each password is sealed in an envelope in the office safe, and its security keys are in a second place, so using break-glass takes two people.</li>
+  <li><strong>Loud.</strong> Any sign-in by those users, and any assumption of <code>break-glass-admin</code>, pages every tech lead and posts to the incident channel (the lab builds this alarm).</li>
+  <li><strong>Tested every quarter.</strong> Two people follow the runbook, sign in, switch role into production, make a harmless change, check the alarm fired, then change the password and reseal it. An untested break-glass procedure fails on the day you need it.</li>
+</ol>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: break-glass that depends on what broke</p>
+  <p>Break-glass accounts federated through the same IdP, protected by MFA on the same phones, or alerting through the same SSO-protected chat tool fail together with the everyday path. Check every dependency, including where the runbook itself is stored.</p>
+</div>
+
+<!-- ======================================================== 14.6 -->
+<h2 class="sec" id="s14-6"><span class="n">14.6</span>Watching privileged sessions</h2>
+
+<ul>
+  <li><strong>Every elevation produces a record</strong>: who, which permission set, why, approved by whom, from when to when. Review self-approved incident elevations the next working day.</li>
+  <li><strong>CloudTrail ties actions to the session</strong> (<a href="12-sso.html">Chapter 12</a>, 12.7), so “what did Cho do between 18:07 and 19:07?” is one query.</li>
+  <li><strong>Shell access to servers</strong> goes through AWS Systems Manager Session Manager rather than SSH keys: sessions are authorised by IAM and can be logged, keystrokes and all, to S3 or CloudWatch Logs.</li>
+  <li><strong>Alerts on the rare things</strong>: break-glass use, root sign-in (<a href="07-account-root.html">Chapter 7</a>), changes to Identity Center assignments outside the elevation tool (<a href="index.html#ch23">Chapter 23</a>).</li>
+</ul>
+
+<!-- ======================================================== 14.7 -->
+<h2 class="sec" id="s14-7"><span class="n">14.7</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 14.2 · Just-in-time and emergency access at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Just-in-time elevation</td><td>temporary account assignments (TEAM, or time-limited IdP groups)</td><td>Privileged Identity Management: eligible roles, activation with MFA, justification, approval, maximum duration</td><td>Privileged Access Manager: entitlements with approval and maximum duration</td></tr>
+      <tr><td>Emergency access</td><td>break-glass IAM users and roles; the root user as a last resort</td><td>two cloud-only emergency access accounts, excluded from Conditional Access policies that could lock them out</td><td>a backup super administrator; break-glass accounts outside federation</td></tr>
+      <tr><td>Session control</td><td>Session Manager for shells</td><td>Bastion, PIM activation history</td><td>IAP for SSH/RDP; audit logs</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p><strong>Privileged Identity Management</strong> is built in: assign people as <em>eligible</em> for a role (on Entra ID or on Azure resources), and they activate it for a set time, with MFA, a justification and optionally an approver. PIM for groups extends the same to group membership. PIM also schedules access reviews of who is eligible.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p><strong>Privileged Access Manager</strong> defines <em>entitlements</em>: which roles, on which resource, for whom, for how long, with which approvers. Principals request a grant, it's approved or not, and the binding is added and later removed automatically, with every step in the audit logs.</p>
+</div>
+
+<!-- ======================================================== 14.8 -->
+<h2 class="sec" id="s14-8"><span class="n">14.8</span>At Larder: eligible, not entitled</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>With single sign-on in place (<a href="12-sso.html">Chapter 12</a>), Eli spent February 2027 on the review's three actions. First, no more standing production privilege: <code>ProdOperator</code>, <code>DbChange</code> and production <code>PlatformAdmin</code> stopped being permanently assigned, and became requests through TEAM, deployed in a small tooling account, with the rules in Table 14.1. Everyone on the rota can now get <code>DbChange</code> during an incident with the incident lead's approval, which closes the gap from 18 December. Dee's leftover staging admin became a four-hour request.</p>
+  <p>Second, break-glass, as in 14.5: two IAM users in <code>larder-management</code>, a <code>break-glass-admin</code> role in all three accounts, envelopes in the office safe and security keys in a locked drawer in Marco's office, and an alarm that pages every tech lead.</p>
+  <p>The new process had its first real use on 18 February: a payments incident (INC-412) at 18:07, Cho on call again. He self-approved <code>ProdOperator</code> in one click, and Eli approved a <code>DbChange</code> request from his phone three minutes later; the review the next morning took two minutes. Third, practice: the first break-glass test, on 26 February, took 19 minutes and found one problem: the runbook lived in the wiki, which signs in through the IdP. A printed copy now lives in the safe with the envelopes.</p>
+</aside>
+
+<!-- ======================================================== 14.9 -->
+<h2 class="sec" id="s14-9"><span class="n">14.9</span>Lab: an elevation broker, and a break-glass alarm</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 14 · Just-in-time rules in code; an alarm in AWS</p>
+  <p><strong>You'll</strong> run a small elevation broker with Larder's rules on the evening of INC-412, then, optionally, build the alarm that fires when a break-glass user signs in. <strong>You need</strong> Python 3; for the AWS part, the AWS CLI v2 as an administrator of a sandbox account that has a CloudTrail trail recording management events (Appendix C). <strong>Cost:</strong> the Python part is free; the alarm costs nothing at this volume beyond the trail's S3 storage, which is pennies. The broker ignores accounts to stay short.</p>
+</div>
+
+<p class="code-title"><span>jit.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># jit.py · just-in-time elevation: request, approve, grant for a while, expire, and log it all</span>
+<span class="k">from</span> datetime <span class="k">import</span> datetime, timedelta
+
+GROUPS = {<span class="s">"on-call"</span>: {<span class="s">"ben"</span>, <span class="s">"cho"</span>, <span class="s">"eli"</span>}, <span class="s">"db-owners"</span>: {<span class="s">"ben"</span>, <span class="s">"eli"</span>},
+          <span class="s">"platform"</span>: {<span class="s">"eli"</span>}, <span class="s">"tech-leads"</span>: {<span class="s">"ben"</span>, <span class="s">"cho"</span>, <span class="s">"dee"</span>, <span class="s">"eli"</span>}}
+
+RULES = {   <span class="c"># permission set → who may ask, who may approve, longest grant</span>
+    <span class="s">"ProdOperator"</span>:  {<span class="s">"eligible"</span>: <span class="s">"on-call"</span>,    <span class="s">"approvers"</span>: <span class="s">"tech-leads"</span>, <span class="s">"max_min"</span>: 60,  <span class="s">"on_call_self"</span>: True},
+    <span class="s">"DbChange"</span>:      {<span class="s">"eligible"</span>: <span class="s">"on-call"</span>,    <span class="s">"approvers"</span>: <span class="s">"db-owners"</span>,  <span class="s">"max_min"</span>: 60,  <span class="s">"on_call_self"</span>: False},
+    <span class="s">"PlatformAdmin"</span>: {<span class="s">"eligible"</span>: <span class="s">"tech-leads"</span>, <span class="s">"approvers"</span>: <span class="s">"platform"</span>,   <span class="s">"max_min"</span>: 120, <span class="s">"on_call_self"</span>: False},
+}
+
+LOG, GRANTS, PENDING = [], [], {}
+
+<span class="k">def</span> log(at, text):
+    LOG.append(f<span class="s">"{at:%H:%M}  {text}"</span>)
+
+<span class="k">def</span> request(rid, who, pset, minutes, reason, at, incident=None):
+    rule = RULES[pset]
+    <span class="k">if</span> who <span class="k">not in</span> GROUPS[rule[<span class="s">"eligible"</span>]]:
+        <span class="k">return</span> log(at, f<span class="s">"{rid} REFUSED  {who} isn't eligible for {pset}"</span>)
+    minutes = min(minutes, rule[<span class="s">"max_min"</span>])
+    <span class="k">if</span> incident <span class="k">and</span> rule[<span class="s">"on_call_self"</span>]:
+        <span class="k">return</span> grant(rid, who, pset, minutes, at, f<span class="s">"self-approved during {incident}, review tomorrow"</span>)
+    PENDING[rid] = (who, pset, minutes, reason)
+    log(at, f<span class="s">"{rid} PENDING  {who} asks for {pset} {minutes} min: {reason}"</span>)
+
+<span class="k">def</span> approve(rid, approver, at):
+    who, pset, minutes, _ = PENDING[rid]
+    <span class="k">if</span> approver == who:
+        <span class="k">return</span> log(at, f<span class="s">"{rid} REFUSED  {approver} can't approve their own request"</span>)
+    <span class="k">if</span> approver <span class="k">not in</span> GROUPS[RULES[pset][<span class="s">"approvers"</span>]]:
+        <span class="k">return</span> log(at, f<span class="s">"{rid} REFUSED  {approver} isn't an approver for {pset}"</span>)
+    <span class="k">del</span> PENDING[rid]
+    grant(rid, who, pset, minutes, at, f<span class="s">"approved by {approver}"</span>)
+
+<span class="k">def</span> grant(rid, who, pset, minutes, at, how):
+    GRANTS.append((who, pset, at, at + timedelta(minutes=minutes)))
+    log(at, f<span class="s">"{rid} GRANTED  {who} → {pset} until {at + timedelta(minutes=minutes):%H:%M} ({how})"</span>)
+
+<span class="k">def</span> has(who, pset, at):
+    <span class="k">return</span> any(w == who <span class="k">and</span> p == pset <span class="k">and</span> start &lt;= at &lt; end <span class="k">for</span> w, p, start, end <span class="k">in</span> GRANTS)
+
+<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:
+    t = <span class="k">lambda</span> hhmm: datetime(2027, 2, 18, *map(int, hhmm.split(<span class="s">":"</span>)))
+    request(<span class="s">"R1"</span>, <span class="s">"cho"</span>, <span class="s">"ProdOperator"</span>, 60, <span class="s">"checkout errors"</span>, t(<span class="s">"18:07"</span>), incident=<span class="s">"INC-412"</span>)
+    request(<span class="s">"R2"</span>, <span class="s">"cho"</span>, <span class="s">"DbChange"</span>, 90, <span class="s">"raise max_connections"</span>, t(<span class="s">"18:12"</span>))
+    approve(<span class="s">"R2"</span>, <span class="s">"cho"</span>, t(<span class="s">"18:13"</span>))
+    approve(<span class="s">"R2"</span>, <span class="s">"eli"</span>, t(<span class="s">"18:15"</span>))
+    request(<span class="s">"R3"</span>, <span class="s">"dee"</span>, <span class="s">"PlatformAdmin"</span>, 240, <span class="s">"set up a sandbox"</span>, t(<span class="s">"18:20"</span>))
+    request(<span class="s">"R4"</span>, <span class="s">"marco"</span>, <span class="s">"DbChange"</span>, 30, <span class="s">"curious"</span>, t(<span class="s">"18:21"</span>))
+    print(<span class="s">"\n"</span>.join(LOG), <span class="s">"\n"</span>)
+    <span class="k">for</span> when <span class="k">in</span> (<span class="s">"18:30"</span>, <span class="s">"19:20"</span>):
+        print(f<span class="s">"at {when}: cho ProdOperator {has('cho', 'ProdOperator', t(when))}, "</span>
+              f<span class="s">"cho DbChange {has('cho', 'DbChange', t(when))}"</span>)</code></pre>
+
+<ol class="steps">
+  <li><strong>Run it</strong> with <code>python3 jit.py</code>:
+<pre><code>18:07  R1 GRANTED  cho → ProdOperator until 19:07 (self-approved during INC-412, review tomorrow)
+18:12  R2 PENDING  cho asks for DbChange 60 min: raise max_connections
+18:13  R2 REFUSED  cho can't approve their own request
+18:15  R2 GRANTED  cho → DbChange until 19:15 (approved by eli)
+18:20  R3 PENDING  dee asks for PlatformAdmin 120 min: set up a sandbox
+18:21  R4 REFUSED  marco isn't eligible for DbChange
+
+at 18:30: cho ProdOperator True, cho DbChange True
+at 19:20: cho ProdOperator False, cho DbChange False</code></pre>
+  Every line is something a reviewer can read: the 90 minutes asked for became 60, Dee's 240 became 120 and is still waiting, and at 19:20 nothing is left. Nobody removed anything.</li>
+  <li><strong>Change the rules.</strong> Let the incident lead approve <code>DbChange</code>: add an <code>incident-leads</code> group and accept approvers from either group. Then re-run 18 December 2026: remove Ben and Eli from every group (one on a plane, one at dinner) and see who could still have approved.</li>
+  <li><strong>Break it on purpose.</strong> Set <code>"on_call_self": True</code> for <code>PlatformAdmin</code> and add a request from Cho (a tech lead, so eligible) with <code>incident="INC-999"</code>: anyone on call who is also a tech lead can now give themselves administrator rights by naming any incident. That's why self-approval is limited to the narrowest permission set, and reviewed.</li>
+  <li><strong>Optional: the break-glass alarm.</strong> Create an email topic and a rule that matches console sign-ins by IAM users whose names start with <code>break-glass</code>:
+<pre><code>REGION=us-east-1      <span class="c"># console sign-ins usually arrive here; add the rule to your main region too</span>
+TOPIC=$(aws sns create-topic --name break-glass-alerts --region $REGION --query TopicArn --output text)
+aws sns subscribe --topic-arn $TOPIC --protocol email --notification-endpoint you@example.com --region $REGION
+cat &gt; pattern.json &lt;&lt;'EOF'
+{ "detail-type": ["AWS Console Sign In via CloudTrail"],
+  "detail": { "userIdentity": { "type": ["IAMUser"], "userName": [{ "prefix": "break-glass" }] } } }
+EOF
+RULE=$(aws events put-rule --name break-glass-sign-in --event-pattern file://pattern.json \
+  --region $REGION --query RuleArn --output text)
+cat &gt; topic-policy.json &lt;&lt;EOF
+{ "Version": "2012-10-17",
+  "Statement": [{ "Effect": "Allow", "Principal": { "Service": "events.amazonaws.com" },
+                  "Action": "sns:Publish", "Resource": "$TOPIC",
+                  "Condition": { "ArnEquals": { "aws:SourceArn": "$RULE" } } }] }
+EOF
+aws sns set-topic-attributes --topic-arn $TOPIC --attribute-name Policy \
+  --attribute-value file://topic-policy.json --region $REGION
+aws events put-targets --rule break-glass-sign-in --targets "Id=email,Arn=$TOPIC" --region $REGION</code></pre>
+  Confirm the subscription email. Then create an IAM user <code>break-glass-lab</code> with a console password, sign in as it in a private browser window, and wait a few minutes for the email. If nothing arrives, find the sign-in in CloudTrail and check which region recorded it.</li>
+  <li><strong>Clean up</strong>: delete the IAM user, <code>aws events remove-targets --rule break-glass-sign-in --ids email</code>, <code>aws events delete-rule --name break-glass-sign-in</code>, and <code>aws sns delete-topic --topic-arn $TOPIC</code> (all with <code>--region $REGION</code>).</li>
+</ol>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s14-10"><span class="n">14.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Standing admin for “the people who need it”</td><td>Months of exposure for minutes of use.</td><td>Eligibility plus time-limited elevation.</td></tr>
+      <tr><td>Approval nobody can get at night</td><td>People keep standing access “for emergencies”.</td><td>Incident self-approval for narrow sets, reviewed next day.</td></tr>
+      <tr><td>Self-approval for broad permission sets</td><td>Anyone on call can make themselves admin.</td><td>Self-approval only for operator-level access.</td></tr>
+      <tr><td>Session longer than the grant</td><td>Access outlives its approval.</td><td>Permission set session duration ≤ grant length.</td></tr>
+      <tr><td>Break-glass through the same IdP or phones</td><td>It fails with the thing it's meant to replace.</td><td>Separate identities, hardware keys, printed runbook.</td></tr>
+      <tr><td>Never testing break-glass</td><td>Expired passwords, lost keys, wrong runbook on the worst day.</td><td>Quarterly test, with the alarm checked.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum14">
+  <h2 class="sec" id="sum14"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li><strong>Standing</strong> privilege is exposed all the time; <strong>just-in-time</strong> privilege only while it's used.</li>
+    <li>Privileged means admin, production change, IAM, bulk sensitive data and security tooling, and anything in the management account.</li>
+    <li>Elevation rules say who may ask, who approves (never yourself, except in an incident, reviewed), for how long, and why.</li>
+    <li>On AWS, an elevation tool creates and deletes Identity Center assignments; keep session durations short.</li>
+    <li>The worst actions need two people at the moment of action, through code review and explicit denies.</li>
+    <li><strong>Break-glass</strong>: separate IAM users with hardware keys, a role in every account, stored apart, alarmed, and tested quarterly.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Privileged access</dt><dd>Permissions that can cause serious harm or grant more access.</dd>
+    <dt>Standing access</dt><dd>Privilege held permanently, whether used or not.</dd>
+    <dt>Just-in-time access</dt><dd>Privilege activated for a limited time when needed.</dd>
+    <dt>Eligibility</dt><dd>Being allowed to request a privilege, without holding it.</dd>
+    <dt>Elevation</dt><dd>Activating eligible privilege, with justification and often approval.</dd>
+    <dt>Break-glass access</dt><dd>Emergency access that works when normal sign-in doesn't.</dd>
+    <dt>Two-person rule</dt><dd>Requiring two people for an action, not just for its approval.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>An administrator says, “I'm trustworthy, so I don't need just-in-time access.” What's the answer? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>It isn't about their trustworthiness: it's about how long a powerful credential exists that an attacker could steal or misuse through their browser, laptop or session. Just-in-time access shrinks that exposure from all the time to the few hours it's used.</p></details>
+    </li>
+    <li>
+      <p>Why should a permission set used for elevation have a session duration no longer than the grant? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Removing the assignment stops new sessions but not ones already started. A twelve-hour session started near the end of a one-hour grant would keep the privilege for eleven more hours.</p></details>
+    </li>
+    <li>
+      <p>Larder's first break-glass test found the runbook was in the wiki. Why is that a problem, and what else would you check? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>The wiki signs in through the IdP, which might be the thing that's down. Also check: alarm delivery doesn't depend on SSO-protected tools, the security keys aren't registered only on IdP-managed devices, passwords haven't expired, and the people who know the safe's combination aren't all the same two people.</p></details>
+    </li>
+    <li>
+      <p>Design elevation for a team of four engineers where everyone is on call and the CTO is usually unreachable. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>All four eligible for an operator set, self-approved during incidents with next-day review; database and admin sets approved by any other engineer, never yourself; one-hour grants and sessions; break-glass with two people for when nobody else is reachable; the CTO reviews the weekly elevation log rather than approving each one.</p></details>
+    </li>
+    <li>
+      <p>What makes an action deserve a two-person rule rather than just an approval? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Approval happens before; the approved person then acts alone and could do more than approved. For actions that are catastrophic or could disable oversight (SCPs, logging, account deletion), the second person must see and accept the exact change, as in a mandatory code review, with direct changes denied to everyone.</p></details>
+    </li>
+    <li>
+      <p>Compare just-in-time elevation on Azure and on AWS. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Azure has it built in: Privileged Identity Management makes people eligible for roles, which they activate with MFA, justification and optional approval for a limited time. AWS Identity Center has no eligible state, so a tool (such as TEAM) or time-limited IdP groups create and remove account assignments.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/singlesignon/latest/userguide/temporary-elevated-access.html">Temporary elevated access with IAM Identity Center</a>, <a href="https://aws-samples.github.io/iam-identity-center-team/">TEAM</a>, <a href="https://docs.aws.amazon.com/whitepapers/latest/organizing-your-aws-environment/break-glass-access.html">Break glass access</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/entra/id-governance/privileged-identity-management/pim-configure">Privileged Identity Management</a>. Google Cloud: <a href="https://cloud.google.com/iam/docs/pam-overview">Privileged Access Manager</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="13-lifecycle.html">13 · Joiners, movers and leavers</a></div>
+  <div><span>Next</span><a href="index.html#ch15">15 · Identities for workloads</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 2 · Identity and Access in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>
