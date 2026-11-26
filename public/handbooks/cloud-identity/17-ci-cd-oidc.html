@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>CI/CD without long-lived keys · Identity and Access in the Cloud</title>
+<meta name="description" content="Letting GitHub Actions deploy through OIDC federation, and the trust-policy conditions that stop other repositories doing the same. Larder deletes its deploy key.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=86bdfe1bff">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 2</a> · <a href="index.html">Identity and Access in the Cloud</a></span><span>Part IV · Chapter 17</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part IV · Access for software</p>
+  <p class="chno">17</p>
+  <h1>CI/CD without long-lived keys</h1>
+  <p class="promise">A deployment pipeline needs to change production, which makes its credentials some of the most powerful in the company, and they usually sit in a CI system's secret store, readable by every workflow and every third-party action it runs. This chapter replaces that stored key with OpenID Connect federation: each job proves who it is with a short-lived token from the CI system, and AWS gives it a role session for exactly that repository, branch and environment.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain how a CI job's OIDC token becomes an AWS role session.</li>
+      <li>Read the claims in a GitHub Actions token, and choose which to trust.</li>
+      <li>Write a trust policy that admits one repository and environment, and no others.</li>
+      <li>Split deployment into per-environment roles with deploy-time least privilege.</li>
+      <li>Reduce what a compromised workflow or third-party action can do.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>OIDC and ID tokens (<a href="04-oauth-oidc.html">Chapter 4</a>); trust policies and conditions (<a href="08-users-roles.html">Chapter 8</a>, <a href="09-policies.html">Chapter 9</a>).</li>
+      <li>Workload identity (<a href="15-workload-identity.html">Chapter 15</a>). Basic GitHub Actions workflows.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, Python 3; optional AWS + GitHub step, free</dd>
+      <dt>Main provider</dt><dd>AWS and GitHub Actions, with Azure and Google Cloud in 17.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>On Sunday 21 March 2027, the maintainers of a popular third-party GitHub Action announced that its version tags had been quietly pointed at malicious code for nineteen hours. The new code printed every secret available to the workflow into the job's log, encoded to slip past log masking. Larder's main repository used that action in its deployment workflow, which ran three times in the window.</p>
+  <p>Among the secrets in those logs: the access key of <code>deploy-bot</code>, the IAM user Larder had deployed with since 2024, with <code>AdministratorAccess</code> in production (<a href="07-account-root.html">Chapter 7</a>, <a href="10-evaluation.html">Chapter 10</a>). The logs were private to Larder's GitHub organisation, but nobody could say where else the action had sent them. Eli rotated the key within two hours. Section 17.9 shows why there's no longer a key to rotate.</p>
+</aside>
+
+<!-- ======================================================== 17.1 -->
+<h2 class="sec" id="s17-1"><span class="n">17.1</span>The deploy key problem</h2>
+
+<p class="lead">A stored deploy key combines every weakness from Part I: it's long-lived, it's shared by every job that can read the secret, it usually has broad permissions because deployments touch many things, and it's exposed to every piece of code the pipeline runs, including third-party actions, build tools and test dependencies. Rotating it is a chore that breaks deploys, so it rarely happens: Larder's was two and a half years old.</p>
+
+<p>The fix is the same idea as workload identity (<a href="15-workload-identity.html">Chapter 15</a>), across a boundary: the CI system already knows exactly which repository, branch and environment a job belongs to, and can vouch for it with a signed token. AWS can be configured to trust that token, and nothing secret needs to be stored at all.</p>
+
+<!-- ======================================================== 17.2 -->
+<h2 class="sec" id="s17-2"><span class="n">17.2</span>How OIDC federation works</h2>
+
+<figure class="wide" id="fig17-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig17-1-t fig17-1-d">
+      <title id="fig17-1-t">A GitHub Actions job getting an AWS role session through OIDC</title>
+      <desc id="fig17-1-d">Step 1: the job, allowed to request an ID token, asks GitHub's OIDC provider for a token with audience sts.amazonaws.com. Step 2: GitHub returns a signed JWT whose subject names the repository and environment, such as repo:larder/larder-core:environment:production. Step 3: the job calls AWS STS AssumeRoleWithWebIdentity with the token and the role's ARN. STS checks the signature against the IAM OIDC provider for token.actions.githubusercontent.com, and the role's trust policy conditions on aud and sub. Step 4: STS returns temporary credentials for one hour. Step 5: the job deploys with them. Nothing secret was stored in GitHub.</desc>
+      <defs><marker id="c17ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c17ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="12" y="20" width="180" height="70" rx="5"/><text class="t-label" x="102" y="46" text-anchor="middle">GitHub OIDC provider</text><text class="t-mono" x="102" y="68" text-anchor="middle">token.actions…</text>
+      <rect class="node" x="12" y="160" width="180" height="70" rx="5"/><text class="t-label" x="102" y="186" text-anchor="middle">workflow job</text><text class="t-small" x="102" y="206" text-anchor="middle">permissions: id-token: write</text>
+      <rect class="node-accent" x="300" y="160" width="210" height="70" rx="5"/><text class="t-label on-accent" x="405" y="186" text-anchor="middle">AWS STS</text><text class="t-small on-accent" x="405" y="206" text-anchor="middle">AssumeRoleWithWebIdentity</text>
+      <rect class="pub" x="300" y="20" width="210" height="100" rx="5"/>
+      <text class="t-label" x="405" y="42" text-anchor="middle">role github-deploy-prod</text>
+      <text class="t-small" x="312" y="64">trusts the IAM OIDC provider for</text>
+      <text class="t-small" x="312" y="80">token.actions.githubusercontent.com</text>
+      <text class="t-small" x="312" y="100">if aud and sub match exactly</text>
+      <rect class="node" x="580" y="160" width="168" height="70" rx="5"/><text class="t-label" x="664" y="186" text-anchor="middle">deploy</text><text class="t-small" x="664" y="206" text-anchor="middle">ECS, ECR, …</text>
+      <path class="wire" d="M80 158 V94" marker-end="url(#c17ah)"/><text class="t-small" x="20" y="130">① ask</text>
+      <path class="wire" d="M124 94 V156" marker-end="url(#c17ah)"/><text class="t-small" x="132" y="130">② signed JWT</text>
+      <path class="wire-accent" d="M194 195 H296" marker-end="url(#c17ah2)"/><text class="t-small" x="245" y="187" text-anchor="middle">③ token + role</text>
+      <path class="wire-dash" d="M405 158 V124" marker-end="url(#c17ah)"/><text class="t-small" x="412" y="146">checks</text>
+      <path class="wire-accent" d="M300 222 H196" marker-end="url(#c17ah2)"/><text class="t-small" x="248" y="242" text-anchor="middle">④ 1-hour credentials</text>
+      <path class="wire" d="M512 195 H576" marker-end="url(#c17ah)"/><text class="t-small" x="544" y="187" text-anchor="middle">⑤</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 17.1</b> The job proves who it is with a token GitHub signs for that one run; the role's trust policy decides which jobs it believes.</figcaption>
+</figure>
+
+<p>Two things are configured once in AWS: an <strong>IAM OIDC identity provider</strong> for <code>https://token.actions.githubusercontent.com</code>, with <code>sts.amazonaws.com</code> as its allowed audience; and, per role, a <strong>trust policy</strong> that names that provider and says which tokens to accept (17.4). In the workflow, the job must be allowed to request a token (<code>permissions: id-token: write</code>), and the official <code>aws-actions/configure-aws-credentials</code> action does the exchange.</p>
+
+<!-- ======================================================== 17.3 -->
+<h2 class="sec" id="s17-3"><span class="n">17.3</span>What's in the token</h2>
+
+<p>GitHub's token is a JWT (<a href="03-tokens-sessions.html">Chapter 3</a>) with standard claims and many about the run. The ones that matter for trust:</p>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 17.1 · GitHub Actions OIDC claims worth knowing</caption>
+    <thead><tr><th>Claim</th><th>Example</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>iss</code></td><td><code>https://token.actions.githubusercontent.com</code></td><td>checked by the IAM OIDC provider</td></tr>
+      <tr><td><code>aud</code></td><td><code>sts.amazonaws.com</code></td><td>who the token is for; always check it</td></tr>
+      <tr><td><code>sub</code></td><td><code>repo:larder/larder-core:environment:production</code></td><td>the main claim to trust; its form depends on the trigger (below)</td></tr>
+      <tr><td><code>repository</code>, <code>repository_owner</code></td><td><code>larder/larder-core</code>, <code>larder</code></td><td>names, which can be renamed and reused</td></tr>
+      <tr><td><code>repository_id</code>, <code>repository_owner_id</code></td><td>numbers</td><td>stable IDs; never reused</td></tr>
+      <tr><td><code>ref</code>, <code>environment</code>, <code>event_name</code></td><td><code>refs/heads/main</code>, <code>production</code>, <code>push</code></td><td>what ran, where, why</td></tr>
+      <tr><td><code>job_workflow_ref</code></td><td><code>larder/larder-core/.github/workflows/deploy.yml@refs/heads/main</code></td><td>which workflow file; useful for reusable workflows</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>By default, <code>sub</code> takes one of these forms: <code>repo:<i>owner</i>/<i>repo</i>:environment:<i>name</i></code> when the job uses an environment; <code>repo:…:ref:refs/heads/<i>branch</i></code> (or a tag) for other pushes; and <code>repo:…:pull_request</code> for pull requests. You can customise it per repository or organisation, for example to include the stable owner and repository IDs.</p>
+
+<!-- ======================================================== 17.4 -->
+<h2 class="sec" id="s17-4"><span class="n">17.4</span>Writing the trust policy</h2>
+
+<p class="code-title"><span>github-deploy-prod trust policy</span><span>production account</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [{
+    <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+    <span class="k">"Principal"</span>: { <span class="k">"Federated"</span>: <span class="s">"arn:aws:iam::111122223333:oidc-provider/token.actions.githubusercontent.com"</span> },
+    <span class="k">"Action"</span>: <span class="s">"sts:AssumeRoleWithWebIdentity"</span>,
+    <span class="k">"Condition"</span>: {
+      <span class="k">"StringEquals"</span>: {
+        <span class="s">"token.actions.githubusercontent.com:aud"</span>: <span class="s">"sts.amazonaws.com"</span>,
+        <span class="s">"token.actions.githubusercontent.com:sub"</span>: <span class="s">"repo:larder/larder-core:environment:production"</span>
+      }
+    }
+  }]
+}</code></pre>
+
+<p>Read aloud: “Allow a session for any GitHub Actions token meant for AWS whose subject is exactly the <code>production</code> environment of <code>larder/larder-core</code>.” Everything else, including other branches, pull requests, other Larder repositories and the rest of GitHub, is refused.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">The OIDC provider says “GitHub signed this”. Only the <code>sub</code> condition says “and it's <em>our</em> repository”. A trust policy without it trusts every repository on GitHub.</p>
+</div>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: three ways to trust too much</p>
+  <p><strong>No <code>sub</code> condition</strong>: anyone with a GitHub account can create a repository, request a token with your audience, and assume the role; this misconfiguration has been found in real companies. <strong>Wide wildcards</strong> such as <code>repo:larder/*</code>: every repository in the organisation, and every branch and pull request in them, gets the role. <strong>Names alone</strong>: if an organisation or repository is deleted and its name re-registered by someone else, name-based conditions trust them; include the stable <code>repository_owner_id</code> in a customised <code>sub</code> when that risk matters.</p>
+</div>
+
+<!-- ======================================================== 17.5 -->
+<h2 class="sec" id="s17-5"><span class="n">17.5</span>One role per environment</h2>
+
+<p>Don't give one role every environment. Map GitHub's controls onto AWS's:</p>
+<ul>
+  <li><strong>Staging</strong>: a role in the staging account trusting pushes to <code>main</code> (<code>repo:larder/larder-core:ref:refs/heads/main</code>). Every merge deploys to staging.</li>
+  <li><strong>Production</strong>: a role in the production account trusting only the <code>production</code> <em>environment</em>, which in GitHub has protection rules: required reviewers, deployment branches limited to <code>main</code>. The approval in GitHub becomes the only way to get production credentials.</li>
+  <li><strong>Pull requests</strong>: no deploy role at all. If tests need AWS, a separate role with read-only access to test fixtures, in a sandbox account. Pull request code is untrusted until reviewed.</li>
+</ul>
+
+<!-- ======================================================== 17.6 -->
+<h2 class="sec" id="s17-6"><span class="n">17.6</span>Deploy-time least privilege</h2>
+
+<p>“The pipeline deploys” sounds like it needs administrator rights. It rarely does. List what a deploy actually does (<a href="09-policies.html">Chapter 9</a>, 9.9). For a container service, that's typically: push an image to one ECR repository, register a new task definition, update one ECS service, and pass two specific roles to ECS:</p>
+<pre><code>{ <span class="k">"Sid"</span>: <span class="s">"PassOnlyDispatchRoles"</span>, <span class="k">"Effect"</span>: <span class="s">"Allow"</span>, <span class="k">"Action"</span>: <span class="s">"iam:PassRole"</span>,
+  <span class="k">"Resource"</span>: [<span class="s">"arn:aws:iam::111122223333:role/dispatch-task"</span>,
+               <span class="s">"arn:aws:iam::111122223333:role/dispatch-task-execution"</span>],
+  <span class="k">"Condition"</span>: { <span class="k">"StringEquals"</span>: { <span class="s">"iam:PassedToService"</span>: <span class="s">"ecs-tasks.amazonaws.com"</span> } } }</code></pre>
+<p>Infrastructure changes (Terraform plans and applies) are a different job with different risks; give them their own roles, with plan read-only and apply behind its own protected environment (<a href="index.html#ch24">Chapter 24</a>). Keep sessions at one hour, give the roles the permissions boundary from <a href="10-evaluation.html">Chapter 10</a>, and let the guardrails apply to them like to anyone.</p>
+
+<!-- ======================================================== 17.7 -->
+<h2 class="sec" id="s17-7"><span class="n">17.7</span>Shrinking what a bad workflow can do</h2>
+
+<p>OIDC removes the stored secret, but a malicious action running inside your deploy job can still use the job's token while the job runs. Defence in depth:</p>
+<ul>
+  <li><strong>Pin third-party actions to a full commit SHA</strong>, not a tag. Tags can be moved, which is exactly what happened at Larder; a SHA can't.</li>
+  <li><strong>Set <code>permissions:</code> explicitly</strong> in every workflow, with <code>id-token: write</code> only on jobs that deploy, and <code>contents: read</code> by default.</li>
+  <li><strong>Keep deploy jobs small</strong>: no third-party actions you don't need in the job that holds production credentials.</li>
+  <li><strong>Watch CloudTrail</strong> for the deploy roles: what they did, and from which job (<code>sourceIdentity</code> and the session name record the run).</li>
+</ul>
+
+<!-- ======================================================== 17.8 -->
+<h2 class="sec" id="s17-8"><span class="n">17.8</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 17.2 · CI/CD federation at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Trust set up as</td><td>IAM OIDC provider + role trust policy</td><td>a federated identity credential on an app registration or user-assigned managed identity</td><td>a workload identity pool and provider</td></tr>
+      <tr><td>Which jobs are trusted</td><td>conditions on <code>sub</code> and <code>aud</code></td><td>exact issuer, subject and audience in the credential</td><td>an attribute condition (e.g. on <code>assertion.repository_owner_id</code>) and attribute mapping</td></tr>
+      <tr><td>GitHub action</td><td><code>aws-actions/configure-aws-credentials</code></td><td><code>azure/login</code> with client, tenant and subscription IDs, no secret</td><td><code>google-github-actions/auth</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>A <strong>federated identity credential</strong> says “trust tokens from this issuer with exactly this subject”, such as <code>repo:larder/larder-core:environment:production</code>. Matching is exact, which avoids the wildcard trap, but means one credential per environment or branch. The workflow logs in with the identity's client ID and tenant ID, and no client secret exists.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>A <strong>workload identity pool</strong> with an OIDC provider for GitHub maps token claims to attributes; an <strong>attribute condition</strong> on the provider rejects everything else up front. Google requires a condition for GitHub providers, precisely because of the “any repository” mistake. Roles are then granted to principals in the pool, such as all jobs from one repository.</p>
+</div>
+
+<!-- ======================================================== 17.9 -->
+<h2 class="sec" id="s17-9"><span class="n">17.9</span>At Larder: the last IAM user goes</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>The rotated key was a stopgap. In the two weeks after 21 March, Eli added the GitHub OIDC provider to the staging and production accounts and created two roles: <code>github-deploy-staging</code>, trusting pushes to <code>main</code> of <code>larder/larder-core</code>, and <code>github-deploy-prod</code>, trusting only its <code>production</code> environment, which requires one tech lead's approval in GitHub. Their policies were written from what a deploy actually does: ECR push for the service's repository, task definitions, one ECS service per deploy, and <code>iam:PassRole</code> for the service's two roles only. Both carry <code>team-boundary</code>, so the backup guardrail applies to them as well.</p>
+  <p>The same change pinned every third-party action to a commit SHA and set <code>permissions:</code> in every workflow. CloudTrail showed no use of the leaked key from outside GitHub's runners before it was rotated. On 9 April 2027, <code>deploy-bot</code> was deleted: the last IAM user in either account that wasn't a break-glass account. Larder now stores no AWS secret anywhere.</p>
+</aside>
+
+<!-- ======================================================== 17.10 -->
+<h2 class="sec" id="s17-10"><span class="n">17.10</span>Lab: who could assume this role?</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 17 · Trust conditions against token claims</p>
+  <p><strong>You'll</strong> test four trust policies against five kinds of GitHub job, including a stranger's, then optionally set up a real OIDC role for a repository of your own. <strong>You need</strong> Python 3; for the optional part, the AWS CLI as an administrator of a sandbox account and a GitHub repository you control. <strong>Cost:</strong> free.</p>
+</div>
+
+<p class="code-title"><span>oidc_trust.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># oidc_trust.py · which GitHub Actions jobs could assume your role? Trust conditions vs token claims</span>
+<span class="k">from</span> fnmatch <span class="k">import</span> fnmatchcase
+
+P = <span class="s">"token.actions.githubusercontent.com"</span>
+JOBS = {   <span class="c"># the claims GitHub puts in each job's OIDC token (the ones trust policies use)</span>
+    <span class="s">"push to main"</span>:         {<span class="s">"aud"</span>: <span class="s">"sts.amazonaws.com"</span>, <span class="s">"sub"</span>: <span class="s">"repo:larder/larder-core:ref:refs/heads/main"</span>},
+    <span class="s">"deploy, production"</span>:   {<span class="s">"aud"</span>: <span class="s">"sts.amazonaws.com"</span>, <span class="s">"sub"</span>: <span class="s">"repo:larder/larder-core:environment:production"</span>},
+    <span class="s">"pull request"</span>:         {<span class="s">"aud"</span>: <span class="s">"sts.amazonaws.com"</span>, <span class="s">"sub"</span>: <span class="s">"repo:larder/larder-core:pull_request"</span>},
+    <span class="s">"another Larder repo"</span>:  {<span class="s">"aud"</span>: <span class="s">"sts.amazonaws.com"</span>, <span class="s">"sub"</span>: <span class="s">"repo:larder/website:ref:refs/heads/main"</span>},
+    <span class="s">"a stranger's repo"</span>:    {<span class="s">"aud"</span>: <span class="s">"sts.amazonaws.com"</span>, <span class="s">"sub"</span>: <span class="s">"repo:mallory/anything:ref:refs/heads/main"</span>},
+}
+TRUSTS = {   <span class="c"># role → its trust policy's Condition block</span>
+    <span class="s">"aud only"</span>:           {<span class="s">"StringEquals"</span>: {f<span class="s">"{P}:aud"</span>: <span class="s">"sts.amazonaws.com"</span>}},
+    <span class="s">"any Larder repo"</span>:    {<span class="s">"StringEquals"</span>: {f<span class="s">"{P}:aud"</span>: <span class="s">"sts.amazonaws.com"</span>},
+                           <span class="s">"StringLike"</span>:   {f<span class="s">"{P}:sub"</span>: <span class="s">"repo:larder/*"</span>}},
+    <span class="s">"staging: main only"</span>: {<span class="s">"StringEquals"</span>: {f<span class="s">"{P}:aud"</span>: <span class="s">"sts.amazonaws.com"</span>,
+                                            f<span class="s">"{P}:sub"</span>: <span class="s">"repo:larder/larder-core:ref:refs/heads/main"</span>}},
+    <span class="s">"prod: environment"</span>:  {<span class="s">"StringEquals"</span>: {f<span class="s">"{P}:aud"</span>: <span class="s">"sts.amazonaws.com"</span>,
+                                            f<span class="s">"{P}:sub"</span>: <span class="s">"repo:larder/larder-core:environment:production"</span>}},
+}
+
+<span class="k">def</span> allowed(condition, claims):
+    <span class="k">for</span> op, tests <span class="k">in</span> condition.items():
+        <span class="k">for</span> key, want <span class="k">in</span> tests.items():
+            have = claims[key.split(<span class="s">":"</span>)[-1]]
+            <span class="k">if</span> op == <span class="s">"StringEquals"</span> <span class="k">and</span> have != want:
+                <span class="k">return</span> False
+            <span class="k">if</span> op == <span class="s">"StringLike"</span> <span class="k">and not</span> fnmatchcase(have, want):
+                <span class="k">return</span> False
+    <span class="k">return</span> True
+
+print(f<span class="s">"{'':&lt;22}"</span> + <span class="s">""</span>.join(f<span class="s">"{role:&lt;20}"</span> <span class="k">for</span> role <span class="k">in</span> TRUSTS))
+<span class="k">for</span> job, claims <span class="k">in</span> JOBS.items():
+    print(f<span class="s">"{job:&lt;22}"</span> + <span class="s">""</span>.join(f<span class="s">"{'ASSUMES' if allowed(c, claims) else '-':&lt;20}"</span> <span class="k">for</span> c <span class="k">in</span> TRUSTS.values()))</code></pre>
+
+<ol class="steps">
+  <li><strong>Run it</strong> with <code>python3 oidc_trust.py</code>:
+<pre><code>                      aud only            any Larder repo     staging: main only  prod: environment
+push to main          ASSUMES             ASSUMES             ASSUMES             -
+deploy, production    ASSUMES             ASSUMES             -                   ASSUMES
+pull request          ASSUMES             ASSUMES             -                   -
+another Larder repo   ASSUMES             ASSUMES             -                   -
+a stranger's repo     ASSUMES             -                   -                   -</code></pre>
+  The first column is the misconfiguration from 17.4: a stranger's repository can deploy to you. The second lets every Larder repository and every pull request in. Only the last two columns are what each role was meant to allow.</li>
+  <li><strong>Try a tempting shortcut.</strong> Change the staging role's condition to <code>StringLike</code> with <code>repo:larder/larder-core:*</code>, “so tags work too”. Which jobs can now deploy to staging? (Pull requests, and production-environment jobs.)</li>
+  <li><strong>Optional: set it up for real.</strong> In a sandbox account, create the provider and a role trusted by one of your repositories' <code>main</code> branch (replace <code>YOU/REPO</code>):
+<pre><code>ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+aws iam create-open-id-connect-provider --url https://token.actions.githubusercontent.com \
+  --client-id-list sts.amazonaws.com
+cat &gt; trust.json &lt;&lt;EOF
+{ "Version": "2012-10-17",
+  "Statement": [{ "Effect": "Allow",
+    "Principal": { "Federated": "arn:aws:iam::$ACCOUNT:oidc-provider/token.actions.githubusercontent.com" },
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": { "StringEquals": {
+      "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+      "token.actions.githubusercontent.com:sub": "repo:YOU/REPO:ref:refs/heads/main" } } }] }
+EOF
+aws iam create-role --role-name github-lab --assume-role-policy-document file://trust.json
+aws iam attach-role-policy --role-name github-lab \
+  --policy-arn arn:aws:iam::aws:policy/job-function/ViewOnlyAccess</code></pre>
+  (Older CLI versions also ask for <code>--thumbprint-list</code>; current ones don't need it.) Then add a workflow to the repository, with the action pinned to a commit SHA you look up on its releases page:
+<pre><code>name: whoami
+on: { push: { branches: [main] } }
+permissions: { id-token: write, contents: read }
+jobs:
+  whoami:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@&lt;full commit SHA&gt;   # v4
+        with:
+          role-to-assume: arn:aws:iam::&lt;ACCOUNT&gt;:role/github-lab
+          aws-region: eu-central-1
+      - run: aws sts get-caller-identity</code></pre>
+  Push to <code>main</code>: the job prints <code>assumed-role/github-lab/…</code>. Push the same workflow on another branch (adjust <code>on:</code>): it fails with “Not authorized to perform sts:AssumeRoleWithWebIdentity”. Clean up by deleting the role, the provider and the workflow.</li>
+</ol>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s17-11"><span class="n">17.11</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Access keys in CI secrets</td><td>Every workflow and action can read a long-lived key.</td><td>OIDC federation; no stored AWS secret.</td></tr>
+      <tr><td>Trust policy without a <code>sub</code> condition</td><td>Any repository on GitHub can assume the role.</td><td>Exact <code>sub</code> and <code>aud</code> with <code>StringEquals</code>.</td></tr>
+      <tr><td>Wildcards over the organisation or branches</td><td>Pull requests and unrelated repositories get deploy rights.</td><td>One role per environment, exact subjects.</td></tr>
+      <tr><td>Administrator rights for deploys</td><td>A compromised job owns the account.</td><td>Deploy-time least privilege; narrow <code>PassRole</code>.</td></tr>
+      <tr><td>Production without an approval gate</td><td>Any merge, or any branch, can deploy to production.</td><td>A protected environment trusted only by the production role.</td></tr>
+      <tr><td>Third-party actions by tag</td><td>A moved tag runs new code with your credentials.</td><td>Pin to commit SHAs; explicit, minimal <code>permissions:</code>.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum17">
+  <h2 class="sec" id="sum17"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>A stored deploy key is long-lived, shared and exposed to everything the pipeline runs.</li>
+    <li>With <strong>OIDC federation</strong>, each job gets a signed token from the CI system and exchanges it with <code>AssumeRoleWithWebIdentity</code> for a one-hour session.</li>
+    <li>The <strong><code>sub</code> claim</strong> names the repository and branch, environment or pull request; trust it exactly, with <code>aud</code>.</li>
+    <li>One role per environment; production trusts only a protected environment with required approval.</li>
+    <li>Deploy roles get what deploys do, not administrator rights; boundaries and guardrails still apply.</li>
+    <li>Pin actions to SHAs and set minimal workflow permissions.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>OIDC federation</dt><dd>Trusting tokens from an external OpenID Connect issuer to grant role sessions.</dd>
+    <dt>IAM OIDC identity provider</dt><dd>The IAM resource that tells AWS to trust an issuer's tokens.</dd>
+    <dt><code>AssumeRoleWithWebIdentity</code></dt><dd>The STS call that exchanges an OIDC token for role credentials.</dd>
+    <dt><code>sub</code> claim</dt><dd>The token's subject; for GitHub, the repository plus branch, environment or pull request.</dd>
+    <dt>Protected environment</dt><dd>A GitHub environment with deployment rules such as required reviewers.</dd>
+    <dt>Deploy-time least privilege</dt><dd>Giving a pipeline only the permissions a deployment needs.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>What's in GitHub's OIDC token that tells AWS which repository and environment a job belongs to? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>The <code>sub</code> claim, such as <code>repo:larder/larder-core:environment:production</code>, plus claims like <code>repository</code>, <code>ref</code> and <code>environment</code>.</p></details>
+    </li>
+    <li>
+      <p>A role trusts the GitHub OIDC provider with only an <code>aud</code> condition. Describe the attack. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>An attacker creates any GitHub repository, writes a workflow that requests a token with audience <code>sts.amazonaws.com</code>, and calls <code>AssumeRoleWithWebIdentity</code> on your role's ARN. The token is genuinely signed by GitHub, and nothing checks which repository it came from.</p></details>
+    </li>
+    <li>
+      <p>Why should production trust an <em>environment</em> rather than the <code>main</code> branch? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>An environment can carry protection rules, such as required reviewers and allowed branches, so the approval in GitHub is the only path to production credentials. Trusting <code>main</code> gives every push to <code>main</code> production access, approved or not.</p></details>
+    </li>
+    <li>
+      <p>Write the <code>iam:PassRole</code> statement for a pipeline that deploys one ECS service with a task role and an execution role. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Allow <code>iam:PassRole</code> on exactly those two role ARNs, with <code>StringEquals</code> <code>iam:PassedToService</code> = <code>ecs-tasks.amazonaws.com</code>, as in 17.6.</p></details>
+    </li>
+    <li>
+      <p>Design CI access for a monorepo that deploys three services to staging and production, with Terraform for infrastructure. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Per environment: a deploy role per service (or one with per-service resources) trusted by the matching protected environment; a Terraform plan role (read-only, trusted by pull requests from the same repository, in a sandbox or with read-only access); a Terraform apply role behind its own environment with approval. All exact <code>sub</code> conditions, one-hour sessions, boundaries, pinned actions.</p></details>
+    </li>
+    <li>
+      <p>Compare how you'd restrict which GitHub repositories can use your cloud identity on AWS and on Google Cloud. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>AWS: conditions on the <code>sub</code> (and <code>aud</code>) claims in each role's trust policy. Google Cloud: an attribute condition on the workload identity pool provider (for example on <code>repository_owner_id</code>), which Google requires for GitHub, plus role grants to specific mapped principals.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>GitHub: <a href="https://docs.github.com/actions/security-for-github-actions/security-hardening-your-deployments/about-security-hardening-with-openid-connect">About security hardening with OpenID Connect</a> and <a href="https://docs.github.com/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions">security hardening for GitHub Actions</a>.</li>
+    <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-idp_oidc.html">Create a role for OIDC federation</a> and <a href="https://github.com/aws-actions/configure-aws-credentials">configure-aws-credentials</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/entra/workload-id/workload-identity-federation">Workload identity federation</a>. Google Cloud: <a href="https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines">Federation with deployment pipelines</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="16-kubernetes-identity.html">16 · Kubernetes and workload identity</a></div>
+  <div><span>Next</span><a href="18-secrets-keys.html">18 · Secrets and encryption keys</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 2 · Identity and Access in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

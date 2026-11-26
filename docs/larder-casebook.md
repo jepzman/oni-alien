@@ -619,6 +619,41 @@ and must not contradict, ADR 0021 (staff tools SSO/SCIM, May 2027) and the 11 Oc
   office safe, keys in a locked drawer in Marco's office, alarm pages every tech lead. 18 Feb 2027 INC-412 (payments,
   18:07): Cho self-approved ProdOperator; Eli approved his DbChange at 18:15. 26 Feb: first break-glass test,
   19 minutes; the runbook was in the IdP-protected wiki, so a printed copy now lives in the safe.
+- **SSRF and IMDS (ch. 15):** Mon 15 Mar 2027, a researcher emailed `security@larder.example`: Larder Core's image
+  endpoint `/img?url=…` fetched any URL and returned the instance role name `larder-core` from IMDSv1. Role had
+  `AmazonS3FullAccess` + full email-sending access. Same day: proxy limited to Larder's image hosts, private and
+  link-local addresses refused; IMDSv2 required (hop limit 1) on the 3 VMs; IMDSv2 default for new instances in both
+  accounts; CloudTrail: no use of the role's credentials from outside Larder's network in 90 days; a vulnerability
+  disclosure page started. Next week: `larder-core` narrowed (two buckets, one sending identity, one queue); the SSH
+  key shared since 2024 and the office port-22 rule removed; shells via Session Manager. Dispatch's execution role:
+  `dispatch-task-execution`.
+- **EKS experiment (ch. 16):** Mar–Apr 2027, Eli and Dee, staging account, namespace `dispatch-poc` running Engine A.
+  Dee's debug pod could read route plans (S3 read had been added to the node role; pods could reach IMDS) and every
+  secret (a `cluster-admin` ClusterRoleBinding to `system:serviceaccounts:dispatch-poc` from the Helm chart's docs).
+  Fixed in a morning (Pod Identity, minimal node role, IMDS blocked, a Role for two config maps, access entries).
+  30 Apr 2027: recommendation to stay on ECS; identity rules written down; cluster deleted. Larder does not run
+  Kubernetes (Handbook 1's pod range is a reservation).
+- **CI/CD (ch. 17):** Sun 21 Mar 2027, a popular third-party GitHub Action's tags pointed at malicious code for 19 hours
+  (printed secrets into logs); `larder/larder-core`'s deploy workflow ran 3 times; `deploy-bot`'s key rotated within
+  2 hours; no use of the old key from outside GitHub's runners. Next two weeks: GitHub OIDC provider in staging and
+  prod; roles `github-deploy-staging` (pushes to `main` of `larder/larder-core`) and `github-deploy-prod` (only the
+  `production` environment, one tech lead's approval); deploy-only policies (ECR push, task definitions, one ECS
+  service, PassRole for the service's two roles); `team-boundary` on both; actions pinned to SHAs; explicit
+  `permissions:`. 9 Apr 2027: `deploy-bot` deleted. Larder stores no AWS secret anywhere. GitHub org `larder`.
+- **Secrets and keys (ch. 18):** Thu 6 May 2027, secret scanning found `.env.production` (committed by Jasper in June
+  2024, deleted a day later) with the orders DB application user's password, never changed and also in
+  `/etc/larder/env` on the 3 VMs. Rotated within the hour; no logins from elsewhere. Now: Secrets Manager, rotation
+  every 30 days with two alternating DB users; Larder Core fetches via the SDK (5-minute cache, refetch on auth
+  failure); push protection on every repository. 14 May key decision (Eli): S3-managed keys by default; customer
+  managed keys for the order exports bucket (key policy: PlatformAdmin manages but can't use; roles
+  `order-export-job` and `finance-reports` decrypt only via S3) and for DB snapshots copied to a separate backup
+  account (ch. 20); staging's 2025 key unused since Dec 2026, scheduled for deletion with a 30-day window.
+- **Security review details (ch. 19, canon in Ana Vol. 5):** Business API `/business/v1`; reissued keys: 90-day
+  expiry, two active per client, created and shown only in the portal by the client's admin, hashed, prefix
+  `lb_live_` registered with GitHub secret scanning; new integrations steered to OAuth. The order-detail call that
+  skipped the office check was added in summer 2027; fix: one load-order-for-principal function used by every portal
+  and API endpoint, plus a per-endpoint test. Billing webhooks: header `Billing-Signature`, secret in Secrets
+  Manager, unsigned rejected, `invoice.paid` confirmed with the provider's API.
 - **Deploy key (ch. 17):** CI deployed with a long-lived access key for IAM user `deploy-bot` with
   `AdministratorAccess`, stored as a repository secret; replaced by GitHub OIDC with one role per environment.
 - **Accounts today (ch. 7):** two standalone accounts in Nov 2026: Jasper's original `111122223333` (production, plus the
@@ -663,5 +698,6 @@ and must not contradict, ADR 0021 (staff tools SSO/SCIM, May 2027) and the 11 Oc
   operations × Noord, Zuid, Rotterdam, plus 7 others), assigned from a spreadsheet. Tomás covered Zuid for two weeks in
   July 2026 and kept store-manager@zuid until December. Rewritten (Eli + Joost): four jobs; job and home store from
   the HR system; covering another store is a temporary assignment with an end date, approved by that store's manager;
-  the 7 other roles became 3. The business portal (spring 2027) checks orders by relationship (office manager → own
-  office; customer admin such as Hanna → all offices). Aylin: a picker at Zuid.
+  the 7 other roles became 3. The business portal (spring 2027) is designed to check orders by relationship (office
+  manager → own office; customer admin such as Hanna → all offices); one order-detail call skipped it until the
+  11 Oct 2027 review (ch. 19, Ana Vol. 5). Aylin: a picker at Zuid.

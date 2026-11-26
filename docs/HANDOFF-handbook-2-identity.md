@@ -1,8 +1,8 @@
 # Handoff: Handbook 2 · Identity and Access in the Cloud
 
-Status as of **2026-11-26**: **in progress, 14 of 25 chapters written: Parts I–III (1–14).** The owner approved
-everything in `docs/HANDOFF-handbooks.md` §6 and picked Chapter 9 as the sample. **Next: Chapter 15** (Part IV),
-then Parts V–VI in order (`BOOK["next"]` in `book.py` is 15).
+Status as of **2026-11-26**: **in progress, 19 of 25 chapters written: Parts I–IV (1–19).** The owner approved
+everything in `docs/HANDOFF-handbooks.md` §6 and picked Chapter 9 as the sample. **Next: Chapter 20** (Part V),
+then Part VI and the appendices (`BOOK["next"]` in `book.py` is 20).
 
 Read first: `docs/HANDOFF-handbooks.md` §1–2 (what a handbook is, the voice, the building blocks, the look). This
 book uses exactly the same style, blocks, CSS (`public/assets/book.css`) and build as Handbook 1. The best model to copy
@@ -13,7 +13,7 @@ from is `content/handbooks/cloud-networking/09-firewalls.html` (a chapter about 
 | What | Where |
 | --- | --- |
 | Outline (parts, chapters, summaries, topics, appendices) | `content/handbooks/cloud-identity/book.py` |
-| Chapter bodies | `content/handbooks/cloud-identity/<nn>-<slug>.html`; written: 01–14 |
+| Chapter bodies | `content/handbooks/cloud-identity/<nn>-<slug>.html`; written: 01–19 |
 | Built contents page | `public/handbooks/cloud-identity/index.html` |
 | Build | `python3 scripts/build_notes.py` (builds everything, including both handbooks and the landing shelf) |
 | Preview | `npm run serve`, then http://localhost:8080/handbooks/cloud-identity/ |
@@ -215,6 +215,31 @@ SSH), ch. 16 (Larder runs no Kubernetes as of early 2027; Handbook 1 ch. 19 ment
 plan; decide before writing), ch. 17 replaces `deploy-bot` with GitHub OIDC, ch. 18 decides customer managed KMS keys
 (staging's leftover CMK from ch. 11), ch. 19 retells the Oct 2027 security review (move forward in time).
 
+## 3d. Part IV (chapters 15–19): written 2026-11-26
+
+| Ch. | Story (all in the casebook) | Lab | Run here? |
+| --- | --- | --- | --- |
+| 15 | Mar 2027 SSRF report; IMDSv1 → v2; `larder-core` narrowed; SSH → Session Manager | `imds.py` (local fake IMDS, v1 vs v2) | **run**; optional CLI not |
+| 16 | Mar–Apr 2027 EKS experiment; node-role and cluster-admin traps; stay on ECS | `kube_rbac.py` (can-i evaluator) + optional kind | Python **run**; kind not |
+| 17 | Mar 2027 compromised action; GitHub OIDC roles; `deploy-bot` deleted 9 Apr | `oidc_trust.py` (claims vs trust) + real setup | Python **run**; setup not |
+| 18 | May 2027 password in Git history; Secrets Manager rotation; CMK decision | `envelope.py` (needs `cryptography`) + KMS CLI | Python **run**; CLI not |
+| 19 | 11 Oct 2027 security review (canon: Ana Vol. 5) | `sigv4.py` (matches AWS's get-vanilla vector; also checked against botocore) + `webhooks.py` | **run** |
+
+All 20 lab scripts in chapters 1–19 are byte-identical to the executed files; every “break it” claim was run (one in
+ch. 19 was wrong and was reworded after testing). **Canon fix:** ch. 6 claimed the spring 2027 portal checked orders by
+relationship; Ana's Vol. 5 review found an endpoint that didn't, so ch. 6 now says “designed to” and ch. 19 explains
+the gap.
+
+For Part V (decisions already made that it must honour): the organisation exists since ch. 12 (management
+`777788889999`, prod `111122223333`, dev-staging `444455556666`, plus a small **tooling** account for TEAM from ch. 14
+and a **backup** account for snapshot copies promised in ch. 18 — create both in ch. 20). Ch. 20 must move
+`protect-orders-db` into an SCP, add an IMDSv2 SCP (`ec2:MetadataHttpTokens`, promised in ch. 15), region limits,
+and turn on centralised root access for members (ch. 7). Ch. 21: StockPilot's cross-account access only until it is
+switched off on 15 Sep 2027 (casebook); the PSP and external IDs; confused deputy. Ch. 22: data perimeter
+(`aws:PrincipalOrgID`, endpoint policies, `aws:EC2InstanceSourceVPC` from ch. 15). Ch. 23: root sign-in alerts,
+S3 data-event trail, the medium review finding “no alert on new federation trust” (Eli, 30 Nov 2027), Identity Center
+assignment changes outside TEAM, key-policy changes (ch. 18). Ch. 24: identity as code, policy generation, tests.
+
 ## 4. Order of work after Chapter 9
 
 1. Chapter 9 (above). Update this file and `docs/HANDOFF-handbooks.md`.
@@ -230,4 +255,5 @@ plan; decide before writing), ch. 17 replaces `deploy-bot` with GitHub OIDC, ch.
 - [x] Rest of Part II (7, 8, 10, 11) written and checked.
 - [ ] AWS labs (ch. 7–11) run once in a real sandbox account; none could be run here.
 - [x] Part III (12–14) written and checked.
-- [ ] Chapter 15 next.
+- [x] Part IV (15–19) written and checked.
+- [ ] Chapter 20 next.

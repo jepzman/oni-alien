@@ -7,7 +7,7 @@ Read in this order:
 1. This file: state, next steps, how to build/verify/deploy, gotchas.
 2. `docs/larder-casebook.md`: the story's facts (source of truth for every Series 2 note).
 3. The plan for the book you're writing (Series 3, the handbooks: `docs/HANDOFF-handbooks.md`):
-   - Handbook 2 (Identity and Access in the Cloud; Parts I–III written, next: Chapter 15): `docs/HANDOFF-handbook-2-identity.md`
+   - Handbook 2 (Identity and Access in the Cloud; Parts I–IV written, next: Chapter 20): `docs/HANDOFF-handbook-2-identity.md`
    - Book 1 (Ana, architect): `docs/HANDOFF-solution-architect.md`
    - Book 2 (Grace, product owner): `docs/HANDOFF-product-owner.md`
 

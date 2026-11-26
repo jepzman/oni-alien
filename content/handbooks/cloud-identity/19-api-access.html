@@ -1,0 +1,388 @@
+<!-- Handbook 2 · Identity and Access in the Cloud · Chapter 19. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part IV · Access for software</p>
+  <p class="chno">19</p>
+  <h1>Service-to-service and API access</h1>
+  <p class="promise">Software calls software: your services call AWS, call each other, and call partners; partners call your APIs and send you webhooks. Each call has to say who's calling and prove it, without a person typing anything. This chapter shows how AWS signs its own API calls, how to put authentication in front of your own APIs, how to give partners keys that expire, and how to trust a webhook. It ends with the security review where Larder found three of these going wrong.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain what Signature Version 4 signs, and why it's stronger than a bearer token.</li>
+      <li>Choose an authoriser for an API on AWS: IAM, JWT, Lambda or mutual TLS.</li>
+      <li>Design partner API keys that expire, rotate and can be traced.</li>
+      <li>Verify webhooks: signature, freshness and replay.</li>
+      <li>Check object-level access on every endpoint, not just most of them.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>HMAC (<a href="#ch2">Chapter 2</a>), bearer tokens and JWT checks (<a href="#ch3">Chapter 3</a>), OAuth client credentials (<a href="#ch4">Chapter 4</a>).</li>
+      <li>Relationship-based checks (<a href="#ch6">Chapter 6</a>); workload roles (<a href="#ch15">Chapter 15</a>); secrets (<a href="#ch18">Chapter 18</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, Python 3, no cloud account</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 19.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>This chapter moves forward in time. By October 2027, Larder for Business has a portal for office managers, a Business API that some customers' procurement systems call directly, federated sign-in for clients' staff, and a billing provider that tells Larder about payments by webhook. Each piece was built and reviewed by its own team, feature by feature, and three more office clients were about to start.</p>
+  <p>On 11 October, Ana, Larder's solution architect, ran a security architecture review of the whole design with Cho, Ben, Eli and an external reviewer: two half-days, with the trust boundaries marked on the diagram. Eleven findings, three of them high. Every one of the three was about software calling software. Section 19.8 has them, and their fixes.</p>
+</aside>
+
+<!-- ======================================================== 19.1 -->
+<h2 class="sec" id="s19-1"><span class="n">19.1</span>How AWS authenticates every API call</h2>
+
+<p class="lead">When the SDK calls an AWS service, it doesn't send your secret access key. It sends a <span class="term">signature</span>: <strong>Signature Version 4</strong> (SigV4), an HMAC (<a href="#ch2">Chapter 2</a>) computed over the request itself. AWS recomputes it with its copy of the key and compares. The signature covers:</p>
+<ul>
+  <li>the method, path, query string and chosen headers (always <code>host</code> and the date);</li>
+  <li>a SHA-256 hash of the body;</li>
+  <li>the date, region and service, as a <em>credential scope</em>.</li>
+</ul>
+
+<figure class="wide" id="fig19-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 210" role="img" aria-labelledby="fig19-1-t fig19-1-d">
+      <title id="fig19-1-t">How a SigV4 signing key is derived and used</title>
+      <desc id="fig19-1-d">The secret access key, prefixed with AWS4, is used to HMAC the date; that result HMACs the region; that HMACs the service; that HMACs the string aws4_request. The final key is specific to one day, one region and one service. It signs a string that contains the algorithm, the timestamp, the credential scope and a hash of the canonical request, which is the method, path, query, headers and body hash. The resulting signature goes in the Authorization header with the access key ID and the list of signed headers.</desc>
+      <defs><marker id="c19ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c19ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="12" y="20" width="130" height="44" rx="4"/><text class="t-mono" x="77" y="47" text-anchor="middle">"AWS4"+secret</text>
+      <rect class="node" x="168" y="20" width="100" height="44" rx="4"/><text class="t-mono" x="218" y="47" text-anchor="middle">20150830</text>
+      <rect class="node" x="294" y="20" width="100" height="44" rx="4"/><text class="t-mono" x="344" y="47" text-anchor="middle">us-east-1</text>
+      <rect class="node" x="420" y="20" width="100" height="44" rx="4"/><text class="t-mono" x="470" y="47" text-anchor="middle">service</text>
+      <rect class="node-accent" x="546" y="20" width="202" height="44" rx="4"/><text class="t-mono on-accent" x="647" y="47" text-anchor="middle">aws4_request → key</text>
+      <path class="wire" d="M144 42 H164" marker-end="url(#c19ah)"/><path class="wire" d="M270 42 H290" marker-end="url(#c19ah)"/>
+      <path class="wire" d="M396 42 H416" marker-end="url(#c19ah)"/><path class="wire" d="M522 42 H542" marker-end="url(#c19ah)"/>
+      <text class="t-small" x="380" y="84" text-anchor="middle">each arrow is one HMAC-SHA256: a key for one day, one region, one service</text>
+      <rect class="pub" x="12" y="104" width="420" height="88" rx="5"/>
+      <text class="t-label" x="24" y="126">canonical request (hashed)</text>
+      <text class="t-mono" x="24" y="148">GET  /  query  host:… x-amz-date:…</text>
+      <text class="t-mono" x="24" y="168">signed headers  SHA-256(body)</text>
+      <rect class="node" x="500" y="104" width="248" height="88" rx="5"/>
+      <text class="t-label" x="512" y="126">Authorization header</text>
+      <text class="t-small" x="512" y="148">access key ID + scope,</text>
+      <text class="t-small" x="512" y="166">signed headers, signature</text>
+      <path class="wire-accent" d="M647 66 V100" marker-end="url(#c19ah2)"/>
+      <path class="wire-accent" d="M434 148 H496" marker-end="url(#c19ah2)"/>
+      <text class="t-small t-accent" x="465" y="140" text-anchor="middle">sign</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 19.1</b> SigV4 never sends the secret. It derives a narrow signing key, signs the exact request, and AWS repeats the calculation.</figcaption>
+</figure>
+
+<p>Compared with a bearer token (<a href="#ch3">Chapter 3</a>), this buys three things. A captured request can't be altered, because any change breaks the signature. It can't be replayed much later, because AWS rejects signatures more than a few minutes from its own clock. And the long-term secret never crosses the network. With temporary credentials, the session token travels as a signed header, and the session itself expires (<a href="#ch8">Chapter 8</a>).</p>
+
+<p>Your own services can use SigV4 too: API Gateway (with IAM authorisation), Lambda function URLs and VPC Lattice can accept SigV4-signed calls and evaluate them against IAM, so a service calls another with nothing but its own role.</p>
+
+<!-- ======================================================== 19.2 -->
+<h2 class="sec" id="s19-2"><span class="n">19.2</span>Authorising your own APIs on AWS</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 19.1 · API Gateway authorisation options</caption>
+    <thead><tr><th>Option</th><th>Caller proves itself with</th><th>Use it for</th></tr></thead>
+    <tbody>
+      <tr><td><strong>IAM</strong> (SigV4)</td><td>an AWS identity's signature; decided by IAM policies and the API's resource policy</td><td>your own services and accounts calling each other</td></tr>
+      <tr><td><strong>JWT / Cognito authoriser</strong></td><td>an OAuth access token from a trusted issuer, checked for issuer, audience, expiry and scopes</td><td>apps and partners using OAuth (<a href="#ch4">Chapter 4</a>)</td></tr>
+      <tr><td><strong>Lambda authoriser</strong></td><td>whatever your function checks (custom tokens, hashed API keys)</td><td>schemes the built-ins don't cover</td></tr>
+      <tr><td><strong>Mutual TLS</strong></td><td>a client certificate from a CA you trust (on a custom domain)</td><td>B2B links where both sides manage certificates</td></tr>
+      <tr><td><strong>Resource policy</strong></td><td>source account, VPC endpoint or IP range</td><td>private APIs reachable only from your networks, combined with one of the above</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: API Gateway's “API keys” aren't authentication</p>
+  <p>API Gateway has a feature called API keys, used with usage plans for throttling and quotas. AWS says plainly not to rely on them for authorisation: they identify a customer's quota, they're sent in the clear in a header, and they don't expire. Authenticate with one of the options in Table 19.1, and use usage-plan keys only for metering.</p>
+</div>
+
+<p>Whatever authenticates the call, the API must still authorise it, per request and per object. A valid token says who's calling and what kind of thing they may do; only your code knows whether this office manager may see order 1043.</p>
+
+<!-- ======================================================== 19.3 -->
+<h2 class="sec" id="s19-3"><span class="n">19.3</span>Inside: services calling services</h2>
+
+<p>For calls between your own services, prefer identities the platform already gives you over secrets you have to manage:</p>
+<ul>
+  <li><strong>IAM-authenticated calls</strong> (SigV4 with each service's role) where the target supports them: API Gateway with IAM authorisation, function URLs, VPC Lattice. The callee's resource policy names exactly which roles may call it.</li>
+  <li><strong>OAuth client credentials</strong> (<a href="#ch4">Chapter 4</a>) where services already speak OAuth: each service gets a client identity and asks for tokens with narrow scopes.</li>
+  <li><strong>Mutual TLS</strong> with short-lived certificates, typically from a service mesh (Handbook 1, Chapter 21).</li>
+</ul>
+<p>Avoid the pattern most systems start with: one shared “internal API key” in every service's configuration. It's every problem from <a href="#ch1">Chapter 1</a>, inside your own walls.</p>
+
+<!-- ======================================================== 19.4 -->
+<h2 class="sec" id="s19-4"><span class="n">19.4</span>Partners calling you: keys that expire</h2>
+
+<p>The best credential for a partner's system is OAuth client credentials or a federated token: short-lived, scoped, revocable. But many partners' systems can only send a static key, and you'll issue API keys anyway. Issue them properly:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 19.2 · An API key done properly</caption>
+    <thead><tr><th>Property</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Long and random (32+ bytes), with a recognisable prefix such as <code>lb_live_</code></td><td>unguessable; the prefix lets secret scanners find leaked keys (<a href="#ch18">Chapter 18</a>)</td></tr>
+      <tr><td>Stored hashed, shown once</td><td>a database leak doesn't leak keys (<a href="#ch1">Chapter 1</a>'s lab does this)</td></tr>
+      <tr><td>Expires (for example after 90 days)</td><td>a forgotten key stops working by itself</td></tr>
+      <tr><td>Two active keys per client</td><td>rotation without downtime: add the new one, switch, revoke the old</td></tr>
+      <tr><td>Scoped to one customer account and specific operations</td><td>least privilege, and object-level checks have something to check against</td></tr>
+      <tr><td>Created and revealed only in your portal, by the customer's admin</td><td>no keys in email; you know who created each</td></tr>
+      <tr><td>Last-used time, source and revocation visible</td><td>customers and you can spot misuse and retire unused keys</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 19.5 -->
+<h2 class="sec" id="s19-5"><span class="n">19.5</span>Webhooks: trusting a call nobody logged in for</h2>
+
+<p>A <span class="term">webhook</span> is a partner calling an endpoint of yours to say something happened: an invoice was paid, a payment failed. There's no session and no user; the endpoint is public, so anyone who learns its URL can post to it. The standard protection is a <strong>signature</strong>: the sender and you share a secret, and the sender attaches an HMAC of the timestamp and the exact body.</p>
+
+<ol class="steps">
+  <li><strong>Verify the signature</strong> over the <em>raw</em> body bytes, before parsing them, comparing in constant time.</li>
+  <li><strong>Check freshness</strong>: reject timestamps more than a few minutes old, so a captured request can't be replayed next week.</li>
+  <li><strong>Reject duplicates</strong> by event ID, since senders retry and attackers replay within the window.</li>
+  <li><strong>Treat the content as a hint</strong> for important events: “invoice paid” can trigger a call back to the provider's API to confirm, rather than marking the invoice paid on the webhook's word alone.</li>
+  <li><strong>Keep the secret in Secrets Manager</strong>, and support two at once during rotation.</li>
+</ol>
+
+<p>When <em>you</em> send webhooks to customers, do the same for them: sign every delivery, document how to verify, and include a timestamp and event ID.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Sign the request, not just the sender: a signature over the exact request, with a timestamp, proves who sent it, that nobody changed it, and that it's new.</p>
+</div>
+
+<!-- ======================================================== 19.6 -->
+<h2 class="sec" id="s19-6"><span class="n">19.6</span>Every endpoint checks the object</h2>
+
+<p><a href="#ch6">Chapter 6</a> warned about broken object-level authorisation: checking that a caller may “view orders” but not whether they may view <em>this</em> order. It's worth repeating here because APIs grow: a list endpoint that filters by the caller's office is written carefully, and six months later a detail, export or receipt endpoint takes an ID from the path and passes it straight to the backend, which only checks the role. Make the object check structural, not a habit: a single function that loads an object <em>for a principal</em> and refuses if they aren't related, which every endpoint must use, and a test for each endpoint that tries another customer's ID.</p>
+
+<!-- ======================================================== 19.7 -->
+<h2 class="sec" id="s19-7"><span class="n">19.7</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 19.3 · API authentication at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Cloud API calls</td><td>SigV4 signatures</td><td>bearer tokens from Entra ID</td><td>OAuth bearer tokens</td></tr>
+      <tr><td>Gateway for your APIs</td><td>API Gateway: IAM, JWT, Lambda authorisers, mTLS</td><td>API Management: <code>validate-jwt</code>, client certificates, managed identity to back ends</td><td>API Gateway / Apigee: JWT, API keys for metering</td></tr>
+      <tr><td>Service to service</td><td>IAM roles + SigV4; VPC Lattice auth policies</td><td>managed identity tokens for app registrations with app roles</td><td>ID tokens with the target's URL as audience (Cloud Run, Cloud Functions)</td></tr>
+      <tr><td>“API keys” in the gateway</td><td>usage plans, not authentication</td><td>subscription keys: identify a subscriber; pair with real auth</td><td>API keys identify a project; pair with real auth</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>A calling service uses its <strong>managed identity</strong> (<a href="#ch15">Chapter 15</a>) to get an Entra ID token for the target's app registration; the target checks the token's audience and an <strong>app role</strong> assigned to the caller's identity. No secret exists on either side. API Management can enforce the same checks at the gateway with its <code>validate-jwt</code> policy.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>To call a private Cloud Run service, the caller fetches an <strong>ID token</strong> from its metadata server with the service's URL as the audience, and the platform checks it against IAM (<code>roles/run.invoker</code>) before the request reaches your code: service-to-service authentication with nothing to store.</p>
+</div>
+
+<!-- ======================================================== 19.8 -->
+<h2 class="sec" id="s19-8"><span class="n">19.8</span>At Larder: three high findings, fixed in two weeks</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p><strong>Business API keys never expired</strong> (internet → Business API). Some had been created when a client first integrated in early 2027, and sent to them by email. Ben's team reissued every key under the rules in Table 19.2: 90-day expiry with reminders, two active keys per client, created and revealed only in the portal by the client's own administrator, hashed at rest, with an <code>lb_live_</code> prefix registered with GitHub's secret scanning. New integrations are steered to OAuth (<a href="#ch4">Chapter 4</a>). Done 22 October.</p>
+  <p><strong>Another office's orders by ID</strong> (portal → Larder Core). The portal had been designed to check orders by relationship (<a href="#ch6">Chapter 6</a>), and its list and search screens did. But an order-detail call added in the summer passed the order number from the address straight to Larder Core, which only checked that the caller was an office manager. Changing the number showed another office's order. The fix, done 18 October: one function that loads an order <em>for a principal</em> and checks the office relationship, used by every portal and Business API endpoint, with a test per endpoint that tries someone else's order.</p>
+  <p><strong>Billing webhooks weren't signature-checked</strong> (billing provider → Larder). The endpoint accepted any well-formed request, so anyone who found its address could have marked an invoice paid. Cho's team added verification as in 19.5, with the signing secret in Secrets Manager, rejected unsigned deliveries, and made “invoice paid” confirm with the provider's API before changing anything. Done 20 October. One of the medium findings went to Eli: no alert when a new client identity provider is trusted (<a href="#ch5">Chapter 5</a>); that one is <a href="#ch23">Chapter 23</a>'s.</p>
+</aside>
+
+<!-- ======================================================== 19.9 -->
+<h2 class="sec" id="s19-9"><span class="n">19.9</span>Lab: sign a request, verify a webhook</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 19 · SigV4 by hand, and a webhook receiver</p>
+  <p><strong>You'll</strong> implement AWS's request signing and check it against a case from AWS's published test suite, then write the verification Larder's billing webhooks were missing and attack it four ways. <strong>You need</strong> Python 3. <strong>Cost:</strong> nothing. (In real code, let the SDK sign; this shows what it does.)</p>
+</div>
+
+<p class="code-title"><span>sigv4.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># sigv4.py · sign an AWS request by hand (Signature Version 4), checked against AWS's test suite</span>
+<span class="k">import</span> hashlib, hmac
+
+<span class="k">def</span> h(data):
+    <span class="k">return</span> hashlib.sha256(data.encode()).hexdigest()
+
+<span class="k">def</span> hm(key, msg):
+    <span class="k">return</span> hmac.new(key, msg.encode(), hashlib.sha256).digest()
+
+<span class="k">def</span> sign(method, host, path, query, headers, body, access_key, secret_key, amz_date, region, service):
+    date = amz_date[:8]
+    headers = {k.lower(): v.strip() <span class="k">for</span> k, v <span class="k">in</span> {**headers, <span class="s">"host"</span>: host, <span class="s">"x-amz-date"</span>: amz_date}.items()}
+    signed = <span class="s">";"</span>.join(sorted(headers))
+    canonical = <span class="s">"\n"</span>.join([method, path, query,
+                           <span class="s">""</span>.join(f<span class="s">"{k}:{headers[k]}\n"</span> <span class="k">for</span> k <span class="k">in</span> sorted(headers)),
+                           signed, h(body)])
+    scope = f<span class="s">"{date}/{region}/{service}/aws4_request"</span>
+    to_sign = <span class="s">"\n"</span>.join([<span class="s">"AWS4-HMAC-SHA256"</span>, amz_date, scope, h(canonical)])
+    key = hm(hm(hm(hm((<span class="s">"AWS4"</span> + secret_key).encode(), date), region), service), <span class="s">"aws4_request"</span>)
+    signature = hmac.new(key, to_sign.encode(), hashlib.sha256).hexdigest()
+    <span class="k">return</span> f<span class="s">"AWS4-HMAC-SHA256 Credential={access_key}/{scope}, SignedHeaders={signed}, Signature={signature}"</span>
+
+<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:
+    <span class="c"># The "get-vanilla" case from AWS's Signature Version 4 test suite (example credentials)</span>
+    auth = sign(<span class="s">"GET"</span>, <span class="s">"example.amazonaws.com"</span>, <span class="s">"/"</span>, <span class="s">""</span>, {}, <span class="s">""</span>,
+                <span class="s">"AKIDEXAMPLE"</span>, <span class="s">"wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"</span>,
+                <span class="s">"20150830T123600Z"</span>, <span class="s">"us-east-1"</span>, <span class="s">"service"</span>)
+    print(auth)
+    print(<span class="s">"matches the test suite:"</span>, auth.endswith(<span class="s">"5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31"</span>))
+    tampered = sign(<span class="s">"GET"</span>, <span class="s">"example.amazonaws.com"</span>, <span class="s">"/admin"</span>, <span class="s">""</span>, {}, <span class="s">""</span>,
+                    <span class="s">"AKIDEXAMPLE"</span>, <span class="s">"wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"</span>,
+                    <span class="s">"20150830T123600Z"</span>, <span class="s">"us-east-1"</span>, <span class="s">"service"</span>)
+    print(<span class="s">"same signature for another path:"</span>, tampered == auth)</code></pre>
+
+<ol class="steps">
+  <li><strong>Run it</strong> with <code>python3 sigv4.py</code>:
+<pre><code>AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/service/aws4_request, SignedHeaders=host;x-amz-date, Signature=5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31
+matches the test suite: True
+same signature for another path: False</code></pre>
+  Twenty lines reproduce AWS's own result, which the AWS SDK for Python (botocore) produces too for the same request and time. Change one character of the path and the signature is completely different.</li>
+</ol>
+
+<p class="code-title"><span>webhooks.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># webhooks.py · verify signed webhooks: HMAC over timestamp + raw body, a time window, and no replays</span>
+<span class="k">import</span> hashlib, hmac, json
+
+SECRET = b<span class="s">"whsec_lab_only_printed_in_a_book"</span>     <span class="c"># shared with the billing provider, kept in Secrets Manager</span>
+TOLERANCE = 300                                <span class="c"># seconds</span>
+SEEN = set()                                   <span class="c"># event IDs already processed</span>
+
+<span class="k">def</span> signature(timestamp, raw_body):
+    <span class="k">return</span> hmac.new(SECRET, f<span class="s">"{timestamp}."</span>.encode() + raw_body, hashlib.sha256).hexdigest()
+
+<span class="k">def</span> verify(headers, raw_body, now):
+    <span class="k">try</span>:
+        parts = dict(p.split(<span class="s">"="</span>, 1) <span class="k">for</span> p <span class="k">in</span> headers[<span class="s">"Billing-Signature"</span>].split(<span class="s">","</span>))
+        timestamp, sig = int(parts[<span class="s">"t"</span>]), parts[<span class="s">"v1"</span>]
+    <span class="k">except</span> (KeyError, ValueError):
+        <span class="k">return</span> <span class="s">"rejected: missing or malformed signature"</span>
+    <span class="k">if not</span> hmac.compare_digest(sig, signature(timestamp, raw_body)):
+        <span class="k">return</span> <span class="s">"rejected: bad signature"</span>
+    <span class="k">if</span> abs(now - timestamp) &gt; TOLERANCE:
+        <span class="k">return</span> <span class="s">"rejected: too old"</span>
+    event = json.loads(raw_body)
+    <span class="k">if</span> event[<span class="s">"id"</span>] <span class="k">in</span> SEEN:
+        <span class="k">return</span> <span class="s">"rejected: already processed"</span>
+    SEEN.add(event[<span class="s">"id"</span>])
+    <span class="k">return</span> f<span class="s">"accepted: {event['type']} for {event['account']}"</span>
+
+<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:
+    NOW = 1823148000                                                <span class="c"># 10 Oct 2027, 06:00 UTC</span>
+    body = b<span class="s">'{"id": "evt_81", "type": "invoice.paid", "account": "korenwolf", "amount": 12480.00}'</span>
+    good = {<span class="s">"Billing-Signature"</span>: f<span class="s">"t={NOW},v1={signature(NOW, body)}"</span>}
+    forged_body = body.replace(b<span class="s">"korenwolf"</span>, b<span class="s">"someone-else"</span>)
+    tests = [
+        (<span class="s">"as sent by the provider"</span>,    good, body,        NOW + 2),
+        (<span class="s">"the same delivery again"</span>,    good, body,        NOW + 9),
+        (<span class="s">"no signature header"</span>,        {},   body,        NOW + 2),
+        (<span class="s">"body changed in transit"</span>,    good, forged_body, NOW + 2),
+        (<span class="s">"captured, replayed later"</span>,   good, body,        NOW + 3600),
+    ]
+    <span class="k">for</span> name, headers, raw, at <span class="k">in</span> tests:
+        print(f<span class="s">"{name:&lt;28} {verify(headers, raw, at)}"</span>)</code></pre>
+
+<ol class="steps" start="2">
+  <li><strong>Run it</strong> with <code>python3 webhooks.py</code>:
+<pre><code>as sent by the provider      accepted: invoice.paid for korenwolf
+the same delivery again      rejected: already processed
+no signature header          rejected: missing or malformed signature
+body changed in transit      rejected: bad signature
+captured, replayed later     rejected: too old</code></pre>
+  Before the October fix, Larder's endpoint would have accepted all five.</li>
+  <li><strong>Break it on purpose.</strong> Move the duplicate check <em>and</em> the <code>SEEN.add</code> line to the top of <code>verify</code>, before the signature check, then send a forged, unsigned body carrying the genuine event's ID before the real delivery arrives: the forgery is rejected, but the genuine event is then refused as “already processed”. Record an event as seen only after it has passed every other check. Then parse the JSON first and sign <code>json.dumps(event)</code> instead of the raw bytes: harmless re-encoding (spacing, key order) now breaks genuine signatures. Verify the exact bytes you received, first.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Make <code>verify</code> accept two secrets at once, so the provider can rotate without a moment where deliveries fail.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s19-10"><span class="n">19.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Gateway usage-plan keys as authentication</td><td>Static, unexpiring, easily shared credentials.</td><td>IAM, JWT, Lambda authorisers or mTLS; usage keys for metering only.</td></tr>
+      <tr><td>Partner keys that never expire, sent by email</td><td>Forgotten keys work forever; nobody knows who has them.</td><td>Table 19.2: expiry, two keys, portal-only, hashed, prefixed.</td></tr>
+      <tr><td>One shared internal API key</td><td>Every service can impersonate every other.</td><td>Roles with SigV4, client credentials or mTLS per service.</td></tr>
+      <tr><td>Unsigned or unverified webhooks</td><td>Anyone who finds the URL can fake events.</td><td>Verify HMAC over raw body, timestamp and event ID; confirm important events.</td></tr>
+      <tr><td>Object checks on most endpoints</td><td>The one that forgot leaks other customers' data.</td><td>One “load for principal” function every endpoint uses; per-endpoint tests.</td></tr>
+      <tr><td>Hand-written signing in production</td><td>Subtle canonicalisation bugs.</td><td>The SDK, or a maintained library.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum19">
+  <h2 class="sec" id="sum19"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li><strong>SigV4</strong> signs each request with a key derived for one day, region and service; the secret never travels, and requests can't be changed or replayed later.</li>
+    <li>API Gateway authorises with <strong>IAM, JWTs, Lambda authorisers or mTLS</strong>; its API keys are for usage plans only.</li>
+    <li>Between your services, use roles, client credentials or mTLS, never a shared key.</li>
+    <li>Partner <strong>API keys</strong> must expire, rotate with two active keys, be stored hashed and be issued only through your portal.</li>
+    <li><strong>Webhooks</strong>: verify an HMAC over the raw body and timestamp, reject old and repeated events, confirm important ones.</li>
+    <li>Every endpoint checks the <strong>object</strong>, through one shared function.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>SigV4</dt><dd>AWS Signature Version 4: HMAC signing of API requests with derived keys.</dd>
+    <dt>Canonical request</dt><dd>The normalised form of a request that gets hashed and signed.</dd>
+    <dt>Credential scope</dt><dd>Date, region and service that a SigV4 signature is valid for.</dd>
+    <dt>Authoriser</dt><dd>The component that authenticates callers in front of an API.</dd>
+    <dt>Mutual TLS</dt><dd>TLS where the client also presents a certificate.</dd>
+    <dt>Webhook</dt><dd>An HTTP callback a partner sends to report an event.</dd>
+    <dt>Replay</dt><dd>Re-sending a captured, valid request.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Name two things SigV4 protects against that a bearer token doesn't. <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Altering a captured request (the signature covers it) and replaying it later (signatures expire within minutes). Also, the long-term secret never crosses the network.</p></details>
+    </li>
+    <li>
+      <p>Your team proposes API Gateway API keys to authenticate partners. What do you say? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>They're meant for usage plans and metering; AWS advises against using them for authorisation. Use a JWT authoriser with OAuth client credentials, mTLS, or a Lambda authoriser with properly managed keys, and keep usage-plan keys for quotas.</p></details>
+    </li>
+    <li>
+      <p>Why must a webhook signature be checked against the raw body rather than parsed and re-encoded JSON? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The sender signed specific bytes. Parsing and re-encoding can change spacing, key order or number formatting, which breaks genuine signatures; and code that parses first may act on unverified data.</p></details>
+    </li>
+    <li>
+      <p>An API's list endpoint filters by the caller's office, but the detail endpoint doesn't check. Design a fix that stays fixed. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>One shared function that loads an object for a principal and refuses unrelated callers; all endpoints must use it (enforced by review or a lint rule); and a test per endpoint that requests another customer's object and expects a refusal.</p></details>
+    </li>
+    <li>
+      <p>Design credentials for a partner whose system can only send a static header. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>An API key per partner integration, from the portal, with a prefix, stored hashed, expiring after 90 days with reminders, two active at once for rotation, scoped to the partner's account and needed operations, with last-used shown; mTLS in addition if the partner can manage certificates.</p></details>
+    </li>
+    <li>
+      <p>Compare how one service calls another privately on Google Cloud and on AWS. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Google Cloud: the caller fetches an ID token with the target's URL as audience from its metadata server; the platform checks it and <code>roles/run.invoker</code>. AWS: the caller signs with SigV4 using its role; API Gateway (IAM auth), a function URL or VPC Lattice checks IAM and the target's resource policy.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv.html">Signature Version 4</a>, <a href="https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-control-access-to-api.html">controlling access to API Gateway</a>, <a href="https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-api-usage-plans.html">usage plans and API keys</a>.</li>
+    <li>OWASP <a href="https://owasp.org/API-Security/editions/2023/en/0x11-t10/">API Security Top 10</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/api-management/validate-jwt-policy">validate-jwt policy</a>. Google Cloud: <a href="https://cloud.google.com/run/docs/authenticating/service-to-service">Cloud Run service-to-service authentication</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="#ch18">18 · Secrets and encryption keys</a></div>
+  <div><span>Next</span><a href="#ch20">20 · AWS Organizations and guardrails</a></div>
+</nav>
