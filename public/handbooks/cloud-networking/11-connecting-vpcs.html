@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Connecting VPCs: peering, transit gateways and hubs · Networking in the Cloud</title>
+<meta name="description" content="Why peering stops scaling, hub-and-spoke designs, and route propagation.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=d919b2d2a4">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 1</a> · <a href="index.html">Networking in the Cloud</a></span><span>Part III · Chapter 11</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part III · Connecting networks</p>
+  <p class="chno">11</p>
+  <h1>Connecting VPCs: peering, transit gateways and hubs</h1>
+  <p class="promise">Sooner or later one VPC becomes several: production, staging, development, a shared tooling network, a team's own account. They need to talk to each other, and to the offices and stores, but not all of them to all of the others. This chapter compares the two ways to join VPCs, direct peering and a central hub, and shows how a hub's route tables keep development away from production.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain VPC peering and why it isn't transitive.</li>
+      <li>Explain a transit gateway's attachments, route tables, associations and propagations.</li>
+      <li>Design segmentation so that some VPCs can talk and others can't.</li>
+      <li>Choose between peering and a hub on scale, cost and control.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Route tables and both directions of a path (<a href="04-routing.html">Chapter 4</a>).</li>
+      <li>VPC route tables (<a href="08-inside-a-vpc.html">Chapter 8</a>) and the address plan (<a href="10-ip-planning.html">Chapter 10</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 50 minutes</dd>
+      <dt>Lab</dt><dd>45 minutes, AWS, about $0.50</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 11.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Larder's first multi-VPC design was simple: a hub VPC (<code>10.16.0.0/16</code>) for the store VPNs and the CI runners, peered to production and to development. The CI runners could deploy to both. Then a store handheld needed to call an API in production, and nothing worked. The VPN ended in the hub, the hub was peered with production, and Eli added a route in the hub for <code>10.20.0.0/16</code> through the peering. The packets still went nowhere.</p>
+  <p>Eli's routes were correct. Peering simply doesn't do what he was asking it to. Section 11.2 explains why.</p>
+</aside>
+
+<!-- ======================================================== 11.1 -->
+<h2 class="sec" id="s11-1"><span class="n">11.1</span>The big picture</h2>
+
+<p class="lead">There are two shapes for joining networks. In a <strong>mesh</strong>, every pair that needs to talk gets its own direct connection: <span class="term">VPC peering</span>. In a <strong>hub and spoke</strong> design, every network connects once to a central router, which decides who may reach whom: on AWS, a <span class="term">transit gateway</span>.</p>
+
+<figure class="wide" id="fig11-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 270" role="img" aria-labelledby="fig11-1-t fig11-1-d">
+      <title id="fig11-1-t">A mesh of peerings and a hub</title>
+      <desc id="fig11-1-d">Left: five VPCs connected by peering, each pair with its own connection, ten connections in total. Right: the same five VPCs each attached once to a transit gateway in the middle, five attachments in total.</desc>
+      <g>
+        <path class="wire-dash" d="M190 40 L275.6 102.2 L242.9 202.8 L137.1 202.8 L104.4 102.2 Z M190 40 L242.9 202.8 M190 40 L137.1 202.8 M275.6 102.2 L137.1 202.8 M275.6 102.2 L104.4 102.2 M242.9 202.8 L104.4 102.2"/>
+        <circle class="node" cx="190" cy="40" r="24"/><text class="t-label" x="190" y="45" text-anchor="middle">hub</text>
+        <circle class="node" cx="275.6" cy="102.2" r="24"/><text class="t-label" x="275.6" y="107" text-anchor="middle">prod</text>
+        <circle class="node" cx="242.9" cy="202.8" r="24"/><text class="t-label" x="242.9" y="208" text-anchor="middle">stg</text>
+        <circle class="node" cx="137.1" cy="202.8" r="24"/><text class="t-label" x="137.1" y="208" text-anchor="middle">dev</text>
+        <circle class="node" cx="104.4" cy="102.2" r="24"/><text class="t-label" x="104.4" y="107" text-anchor="middle">data</text>
+        <text class="t-small" x="190" y="252" text-anchor="middle">peering mesh: 5 VPCs, 10 connections</text>
+      </g>
+      <g>
+        <path class="wire" d="M570 64 V118 M651 108 L612 124 M610 182 L594 148 M530 182 L546 148 M489 108 L528 124"/>
+        <rect class="node-accent" x="526" y="118" width="88" height="32" rx="5"/><text class="t-label on-accent" x="570" y="139" text-anchor="middle">TGW</text>
+        <circle class="node" cx="570" cy="40" r="24"/><text class="t-label" x="570" y="45" text-anchor="middle">hub</text>
+        <circle class="node" cx="655.6" cy="102.2" r="24"/><text class="t-label" x="655.6" y="107" text-anchor="middle">prod</text>
+        <circle class="node" cx="622.9" cy="202.8" r="24"/><text class="t-label" x="622.9" y="208" text-anchor="middle">stg</text>
+        <circle class="node" cx="517.1" cy="202.8" r="24"/><text class="t-label" x="517.1" y="208" text-anchor="middle">dev</text>
+        <circle class="node" cx="484.4" cy="102.2" r="24"/><text class="t-label" x="484.4" y="107" text-anchor="middle">data</text>
+        <text class="t-small" x="570" y="252" text-anchor="middle">hub and spoke: 5 VPCs, 5 attachments</text>
+      </g>
+      <path class="wire-dash" d="M380 30 V240"/>
+    </svg>
+  </div>
+  <figcaption><b>Figure 11.1</b> A full mesh of <em>n</em> VPCs needs <em>n</em>(<em>n</em> − 1) / 2 connections: 10 for five, 45 for ten, 190 for twenty. A hub needs <em>n</em>, and puts the decisions about who reaches whom in one place.</figcaption>
+</figure>
+
+<p>Neither is always right. Peering is simple, fast and has no hourly cost, and for two or three VPCs that rarely change it's the better choice. A hub costs money per attachment and per gigabyte, but it scales, it allows <strong>transitive</strong> routing, and it lets you segment networks from one set of route tables.</p>
+
+<!-- ======================================================== 11.2 -->
+<h2 class="sec" id="s11-2"><span class="n">11.2</span>VPC peering</h2>
+
+<p>A <strong>peering connection</strong> joins two VPCs so that instances in each can reach the other using private addresses, as if they were one network. Traffic stays on the provider's backbone, with no gateway in the middle and no bandwidth limit beyond the instances' own. Peering works across accounts and across regions.</p>
+
+<p>Setting one up takes three steps: one side requests it, the other accepts, and <strong>both</strong> sides add routes to the other's range with the peering connection as the target. Then security groups must allow the traffic, which, within one region, can refer to security groups in the peer VPC (<a href="09-firewalls.html">Chapter 9</a>).</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Peering isn't transitive. A peering connection carries only traffic that starts in one of its two VPCs and ends in the other.</p>
+</div>
+
+<p>If A is peered with B and B with C, A can't reach C through B, whatever routes you add. The same applies to everything attached to B: a VPN, a Direct Connect link, an internet gateway or a NAT gateway in B can't be used by A through the peering. AWS drops such traffic on purpose, so that peering one VPC never silently exposes a third.</p>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>That's the handheld problem. The packets came from the store VPN, entered the hub, and asked to leave through the hub's peering with production. They didn't start in the hub, so the peering refused them, and Eli's route in the hub was never going to help. The options were a direct VPN to every VPC that stores need (multiplying tunnels by VPCs), or a hub that routes transitively. Larder moved to a transit gateway, and that's the design the rest of this book uses.</p>
+</aside>
+
+<p>Peering's other limits are worth knowing: the two VPCs' ranges must not overlap (<a href="10-ip-planning.html">Chapter 10</a>), there's a quota on peerings per VPC, and with many VPCs nobody can see the whole picture in one place.</p>
+
+<!-- ======================================================== 11.3 -->
+<h2 class="sec" id="s11-3"><span class="n">11.3</span>Transit gateways</h2>
+
+<p>A <span class="term">transit gateway</span> (TGW) is a regional router that the provider runs for you. Networks connect to it through <strong>attachments</strong>: VPCs, site-to-site VPNs (<a href="13-vpn-bgp.html">Chapter 13</a>), Direct Connect gateways (<a href="14-dedicated-links.html">Chapter 14</a>), and peering with transit gateways in other regions. Everything that's attached can, if its route tables allow, reach everything else: routing through a transit gateway is transitive.</p>
+
+<p>Four words describe how it routes, and they're worth learning precisely:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 11.1 · Transit gateway vocabulary</caption>
+    <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Attachment</strong></td><td>One connection to the TGW: a VPC (through one subnet per zone), a VPN, a Direct Connect gateway, a peering.</td></tr>
+      <tr><td><strong>TGW route table</strong></td><td>The TGW's own route tables, separate from your VPC route tables. A TGW can have several.</td></tr>
+      <tr><td><strong>Association</strong></td><td>Each attachment is associated with exactly one TGW route table. Traffic <em>arriving from</em> that attachment is looked up in that table.</td></tr>
+      <tr><td><strong>Propagation</strong></td><td>An attachment can propagate its ranges into one or more TGW route tables, so those tables learn how to reach it. You can also add static routes.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Association decides where an attachment's traffic is looked up. Propagation decides which tables know how to reach it.</p>
+</div>
+
+<p>Remember that a path needs routes in four places, two in each direction (<a href="04-routing.html">Chapter 4</a>): the source VPC's subnet route table must send the destination's range to the TGW; the TGW route table associated with the source must know the destination; and on the way back, the destination's subnet route table and its associated TGW route table must know the source.</p>
+
+<aside class="side"><b>Default tables</b>A new TGW has one default route table, and by default every attachment is associated with it and propagates into it, so everything reaches everything. Fine for a lab; turn those defaults off for production and design the tables yourself.</aside>
+
+<!-- ======================================================== 11.4 -->
+<h2 class="sec" id="s11-4"><span class="n">11.4</span>Segmentation with route tables</h2>
+
+<p>The reason to design TGW route tables yourself is <span class="term">segmentation</span>: deciding which networks can reach which, in one place. Larder's rules are short: production and development must never reach each other; both may reach the shared hub (CI runners, monitoring); the stores reach production and the hub, but not development.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 11.2 · Larder's transit gateway route tables</caption>
+    <thead><tr><th>TGW route table</th><th>Associated attachments</th><th>Propagated routes it holds</th><th>So these can reach…</th></tr></thead>
+    <tbody>
+      <tr><td><code>tgw-rt-prod</code></td><td>prod VPC</td><td>hub <code>10.16.0.0/16</code>, stores <code>10.8.0.0/13</code> (from the VPNs)</td><td>hub, stores</td></tr>
+      <tr><td><code>tgw-rt-nonprod</code></td><td>dev, staging VPCs</td><td>hub <code>10.16.0.0/16</code></td><td>hub only</td></tr>
+      <tr><td><code>tgw-rt-shared</code></td><td>hub VPC, store VPNs</td><td>prod <code>10.20</code>, staging <code>10.18</code>, dev <code>10.17</code>, hub, stores</td><td>everything (but see below)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Read it from the source's side. A packet from development is looked up in <code>tgw-rt-nonprod</code>, which has no route to <code>10.20.0.0/16</code>, so it's dropped at the TGW, no matter what development's own VPC route tables say. A packet from a store is looked up in <code>tgw-rt-shared</code>, which knows production, so it gets through, and the reply is looked up in <code>tgw-rt-prod</code>, which knows the stores.</p>
+
+<p>One subtlety: <code>tgw-rt-shared</code> knows development, so stores could reach development's addresses, and development's replies would come back through <code>tgw-rt-nonprod</code>, which doesn't know the stores. The connection fails, which is what Larder wants, but only by accident. Cleaner: give the store VPNs their own table that propagates prod and hub only. Segmentation designs are worth writing down as a matrix of “from → to: allowed?” and checking every cell.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Watch out: routing isn't a firewall</p>
+  <p>Route-table segmentation stops traffic from flowing, but it's a coarse tool and one wrong propagation opens a path. Keep security groups strict as well. For inspection of traffic between segments, send it through a firewall VPC (<a href="18-egress.html">Chapter 18</a>), and turn on the TGW's <strong>appliance mode</strong> for that attachment so both directions of a connection use the same firewall (<a href="04-routing.html">Chapter 4</a>, asymmetric routing).</p>
+</div>
+
+<!-- ======================================================== 11.5 -->
+<h2 class="sec" id="s11-5"><span class="n">11.5</span>Across accounts and regions</h2>
+
+<ul>
+  <li><strong>Accounts.</strong> A network team usually owns the TGW in a central networking account and <strong>shares</strong> it with other accounts through AWS Resource Access Manager (RAM). Each team then attaches its own VPCs, and the network team accepts the attachments and associates them with the right route table.</li>
+  <li><strong>Regions.</strong> A TGW is regional. To connect regions, <strong>peer</strong> two transit gateways and add static routes for each region's summary (<code>10.32.0.0/12</code> for Larder's second region; <a href="10-ip-planning.html">Chapter 10</a> made sure it summarises). Inter-region traffic stays on AWS's backbone and is charged as inter-region transfer.</li>
+  <li><strong>Many regions.</strong> AWS Cloud WAN builds a global network of transit routers from a single policy, with segments defined once for every region. It's the managed answer when you'd otherwise peer many TGWs by hand.</li>
+</ul>
+
+<!-- ======================================================== 11.6 -->
+<h2 class="sec" id="s11-6"><span class="n">11.6</span>Choosing, and what it costs</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 11.3 · Peering or a transit gateway?</caption>
+    <thead><tr><th></th><th>VPC peering</th><th>Transit gateway</th></tr></thead>
+    <tbody>
+      <tr><td>Transitive routing</td><td>no</td><td>yes</td></tr>
+      <tr><td>Connections for <em>n</em> VPCs</td><td><em>n</em>(<em>n</em>−1)/2</td><td><em>n</em></td></tr>
+      <tr><td>Segmentation</td><td>by which pairs you peer</td><td>central route tables</td></tr>
+      <tr><td>VPN and Direct Connect sharing</td><td>no (one per VPC)</td><td>yes: attach once, reach all</td></tr>
+      <tr><td>Hourly cost</td><td>none</td><td>per attachment (about $0.05–0.07 an hour at the time of writing)</td></tr>
+      <tr><td>Data cost</td><td>normal zone/region transfer only</td><td>plus a processing charge (about $0.02 per GB)</td></tr>
+      <tr><td>Extra latency</td><td>none</td><td>a small hop, usually well under a millisecond</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Larder's TGW has five attachments (hub, prod, staging, dev, and the VPNs), which comes to roughly $200 a month before data. That's the price of transitive routing and one place to see and control everything, and it was an easy decision once stores needed to reach production. A busy pair of VPCs that exchanges terabytes can still be peered directly <em>as well</em>: the peering route is more specific, so longest prefix match sends that traffic over the free path.</p>
+
+<!-- ======================================================== 11.7 -->
+<h2 class="sec" id="s11-7"><span class="n">11.7</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 11.4 · Joining networks at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Direct pairing</td><td>VPC peering (not transitive)</td><td>VNet peering (not transitive by default)</td><td>VPC Network Peering (not transitive)</td></tr>
+      <tr><td>Managed hub</td><td>Transit Gateway; Cloud WAN</td><td>Virtual WAN hubs</td><td>Network Connectivity Center</td></tr>
+      <tr><td>Do-it-yourself hub</td><td>(rare) a VPC with routing appliances</td><td>a hub VNet with Azure Firewall or a router, and “use remote gateway” peering</td><td>a hub VPC with appliances</td></tr>
+      <tr><td>One network shared by many teams</td><td>VPC sharing</td><td>subnets in a shared VNet</td><td>Shared VPC (host and service projects)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>The classic design is a <strong>hub VNet</strong> that holds the VPN gateway and Azure Firewall, peered to spoke VNets. Spokes use the hub's gateway through the peering setting <em>use remote gateways</em>, and spoke-to-spoke traffic is sent through the firewall with user-defined routes. <strong>Virtual WAN</strong> is the managed version of the same idea, with route tables much like a TGW's.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>Because a VPC network is global, many companies need fewer networks to begin with, and <strong>Shared VPC</strong> lets one network serve many projects. To join separate networks, use VPC Network Peering, or <strong>Network Connectivity Center</strong> as a hub for VPC spokes and hybrid connections.</p>
+</div>
+
+<!-- ======================================================== 11.8 -->
+<h2 class="sec" id="s11-8"><span class="n">11.8</span>Lab: two VPCs through a transit gateway</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 11 · Attach, route, and find the missing return route</p>
+  <p><strong>You'll build</strong> two VPCs attached to one transit gateway, with network interfaces standing in for an app and a database, and check the path with Reachability Analyzer. <strong>You need</strong> the AWS CLI and Terraform. <strong>Cost:</strong> two attachments at about $0.06 an hour each plus $0.10 per analysis: about $0.50 if you finish within an hour. Run step 5.</p>
+</div>
+
+<p class="code-title"><span>main.tf</span><span>Terraform ≥ 1.5, AWS provider 5.x</span></p>
+<pre><code><span class="k">provider</span> <span class="s">"aws"</span> { region = <span class="s">"eu-central-1"</span> }
+
+<span class="k">data</span> <span class="s">"aws_availability_zones"</span> <span class="s">"z"</span> { state = <span class="s">"available"</span> }
+
+<span class="k">resource</span> <span class="s">"aws_vpc"</span> <span class="s">"a"</span> { cidr_block = <span class="s">"10.40.0.0/16"</span> }
+<span class="k">resource</span> <span class="s">"aws_vpc"</span> <span class="s">"b"</span> { cidr_block = <span class="s">"10.41.0.0/16"</span> }
+
+<span class="k">resource</span> <span class="s">"aws_subnet"</span> <span class="s">"a"</span> {
+  vpc_id            = aws_vpc.a.id
+  cidr_block        = <span class="s">"10.40.1.0/24"</span>
+  availability_zone = data.aws_availability_zones.z.names[0]
+}
+<span class="k">resource</span> <span class="s">"aws_subnet"</span> <span class="s">"b"</span> {
+  vpc_id            = aws_vpc.b.id
+  cidr_block        = <span class="s">"10.41.1.0/24"</span>
+  availability_zone = data.aws_availability_zones.z.names[0]
+}
+
+<span class="c"># 11.3 · the hub; defaults: associate and propagate everything to one table</span>
+<span class="k">resource</span> <span class="s">"aws_ec2_transit_gateway"</span> <span class="s">"tgw"</span> {
+  description = <span class="s">"handbook lab 11"</span>
+}
+<span class="k">resource</span> <span class="s">"aws_ec2_transit_gateway_vpc_attachment"</span> <span class="s">"a"</span> {
+  transit_gateway_id = aws_ec2_transit_gateway.tgw.id
+  vpc_id             = aws_vpc.a.id
+  subnet_ids         = [aws_subnet.a.id]
+}
+<span class="k">resource</span> <span class="s">"aws_ec2_transit_gateway_vpc_attachment"</span> <span class="s">"b"</span> {
+  transit_gateway_id = aws_ec2_transit_gateway.tgw.id
+  vpc_id             = aws_vpc.b.id
+  subnet_ids         = [aws_subnet.b.id]
+}
+
+<span class="c"># routes in BOTH VPCs: there and back (Chapter 4)</span>
+<span class="k">resource</span> <span class="s">"aws_route"</span> <span class="s">"a_to_b"</span> {
+  route_table_id         = aws_vpc.a.main_route_table_id
+  destination_cidr_block = aws_vpc.b.cidr_block
+  transit_gateway_id     = aws_ec2_transit_gateway.tgw.id
+  depends_on             = [aws_ec2_transit_gateway_vpc_attachment.a]
+}
+<span class="k">resource</span> <span class="s">"aws_route"</span> <span class="s">"b_to_a"</span> {
+  route_table_id         = aws_vpc.b.main_route_table_id
+  destination_cidr_block = aws_vpc.a.cidr_block
+  transit_gateway_id     = aws_ec2_transit_gateway.tgw.id
+  depends_on             = [aws_ec2_transit_gateway_vpc_attachment.b]
+}
+
+<span class="c"># the database allows 5432 from VPC a's range (group references need an extra TGW option)</span>
+<span class="k">resource</span> <span class="s">"aws_security_group"</span> <span class="s">"db"</span> { vpc_id = aws_vpc.b.id }
+<span class="k">resource</span> <span class="s">"aws_vpc_security_group_ingress_rule"</span> <span class="s">"db"</span> {
+  security_group_id = aws_security_group.db.id
+  cidr_ipv4         = aws_vpc.a.cidr_block
+  ip_protocol       = <span class="s">"tcp"</span>
+  from_port         = 5432
+  to_port           = 5432
+}
+<span class="k">resource</span> <span class="s">"aws_security_group"</span> <span class="s">"app"</span> { vpc_id = aws_vpc.a.id }
+<span class="k">resource</span> <span class="s">"aws_vpc_security_group_egress_rule"</span> <span class="s">"app"</span> {
+  security_group_id = aws_security_group.app.id
+  cidr_ipv4         = <span class="s">"0.0.0.0/0"</span>
+  ip_protocol       = <span class="s">"-1"</span>
+}
+
+<span class="k">resource</span> <span class="s">"aws_network_interface"</span> <span class="s">"app"</span> {
+  subnet_id       = aws_subnet.a.id
+  security_groups = [aws_security_group.app.id]
+}
+<span class="k">resource</span> <span class="s">"aws_network_interface"</span> <span class="s">"db"</span> {
+  subnet_id       = aws_subnet.b.id
+  security_groups = [aws_security_group.db.id]
+}
+
+<span class="k">output</span> <span class="s">"app_eni"</span> { value = aws_network_interface.app.id }
+<span class="k">output</span> <span class="s">"db_eni"</span>  { value = aws_network_interface.db.id }</code></pre>
+
+<ol class="steps">
+  <li><strong>Create it.</strong> <code>terraform init</code>, then <code>terraform apply</code>. The transit gateway and attachments take a few minutes.</li>
+  <li><strong>Look at the TGW's routes.</strong> Find the default route table and list its routes:
+<pre><code>RT=$(aws ec2 describe-transit-gateways --query 'TransitGateways[0].Options.AssociationDefaultRouteTableId' --output text)
+aws ec2 search-transit-gateway-routes --transit-gateway-route-table-id $RT \
+  --filters Name=state,Values=active --query 'Routes[].[DestinationCidrBlock,Type]' --output table</code></pre>
+  Two <em>propagated</em> routes, one per VPC. You didn't write them. (If you have other transit gateways in the region, pick the lab's by its description.)</li>
+  <li><strong>Check the path.</strong> Use the <code>check</code> function from <a href="09-firewalls.html">Lab 9</a> with a new path from <code>app_eni</code> to <code>db_eni</code> on TCP 5432. Expect <code>true</code>; the analysis lists the transit gateway and its route table as hops.</li>
+  <li><strong>Break the return path.</strong> Delete the <code>b_to_a</code> resource, apply, and analyse again. The explanation points at VPC b's route table: the reply has no route back, exactly the Rotterdam bug from <a href="04-routing.html">Chapter 4</a>. Restore it.</li>
+  <li><strong>Clean up.</strong> Delete the insights path, then <code>terraform destroy</code>. Check that the transit gateway is gone; it's the part that keeps billing.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Turn off the defaults (<code>default_route_table_association = "disable"</code> and <code>default_route_table_propagation = "disable"</code>), create two TGW route tables, and build the segmentation from Table 11.2 for three VPCs.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s11-9"><span class="n">11.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Expecting peering to be transitive</td><td>Traffic through a middle VPC is silently dropped.</td><td>A transit gateway, or direct connections per pair.</td></tr>
+      <tr><td>Adding the route on one side only</td><td>Requests leave, replies don't return.</td><td>Routes in both VPCs (and both TGW tables).</td></tr>
+      <tr><td>Leaving TGW defaults on in production</td><td>Every attachment reaches every other one.</td><td>Your own route tables, associations and propagations.</td></tr>
+      <tr><td>Treating route tables as the only security</td><td>One propagation opens a whole segment.</td><td>Keep strict security groups; inspect between segments.</td></tr>
+      <tr><td>No appliance mode with a firewall VPC</td><td>Asymmetric paths through different firewall instances; random timeouts.</td><td>Turn on appliance mode for the firewall attachment.</td></tr>
+      <tr><td>Peering everything as you grow</td><td>A mesh nobody can draw.</td><td>Move to a hub at around four or five VPCs.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum11">
+  <h2 class="sec" id="sum11"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li><strong>Peering</strong> joins two VPCs directly: simple and free per hour, but not transitive and <em>n</em>(<em>n</em>−1)/2 connections for a full mesh.</li>
+    <li>A <strong>transit gateway</strong> is a managed regional hub: one attachment per network, transitive routing, shared VPNs and Direct Connect.</li>
+    <li>Each attachment is <strong>associated</strong> with one TGW route table (where its traffic is looked up) and <strong>propagates</strong> into others (who can reach it).</li>
+    <li>Segment with route tables, check every “from → to” cell, and keep security groups strict too.</li>
+    <li>Share a TGW across accounts with RAM; peer TGWs across regions; Cloud WAN for many regions.</li>
+    <li>A hub costs per attachment and per GB; peer busy pairs directly as well if it saves money.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>VPC peering</dt><dd>A direct, non-transitive private connection between two VPCs.</dd>
+    <dt>Transitive routing</dt><dd>Traffic passing through one network to reach another.</dd>
+    <dt>Transit gateway</dt><dd>AWS's managed regional router for VPCs, VPNs and Direct Connect.</dd>
+    <dt>Attachment</dt><dd>One network's connection to a transit gateway.</dd>
+    <dt>Association</dt><dd>The TGW route table an attachment's traffic is looked up in.</dd>
+    <dt>Propagation</dt><dd>An attachment adding its routes to a TGW route table.</dd>
+    <dt>Segmentation</dt><dd>Controlling which networks can reach which.</dd>
+    <dt>Appliance mode</dt><dd>Keeps both directions of a flow on the same appliance.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>VPC A is peered with B, and B has a NAT gateway. Can A's private instances use B's NAT gateway to reach the internet? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>No. Peering only carries traffic between the two VPCs themselves; it can't be used to reach B's gateways, VPNs or other peers.</p></details>
+    </li>
+    <li>
+      <p>How many peering connections would a full mesh of 12 VPCs need, and how many TGW attachments? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>12 × 11 / 2 = 66 peerings; 12 attachments.</p></details>
+    </li>
+    <li>
+      <p>Using Table 11.2, can development reach a store's handheld? Trace both directions. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>No. Development's attachment is associated with <code>tgw-rt-nonprod</code>, which only knows the hub, so packets to <code>10.8.0.0/13</code> are dropped at the TGW.</p></details>
+    </li>
+    <li>
+      <p>Explain the difference between association and propagation in one sentence each. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Association: the one TGW route table used to look up traffic arriving from an attachment. Propagation: the attachment automatically adds routes to itself into one or more TGW route tables.</p></details>
+    </li>
+    <li>
+      <p>Two VPCs attached to the same TGW exchange 40 TB a month. What could you change to cut cost, and why does routing still work? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Peer them directly as well. In each VPC's route table, keep a summary route such as <code>10.0.0.0/8 → tgw</code> (as Larder's tables have) and add the other VPC's exact <code>/16</code> with the peering as its target. Longest prefix match sends their traffic over the peering, which has no per-GB processing charge, while everything else still uses the TGW.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/vpc/latest/peering/what-is-vpc-peering.html">VPC peering</a> and <a href="https://docs.aws.amazon.com/vpc/latest/tgw/how-transit-gateways-work.html">How transit gateways work</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/architecture/networking/architecture/hub-spoke">Hub-spoke network topology</a>.</li>
+    <li>Google Cloud: <a href="https://cloud.google.com/network-connectivity/docs/network-connectivity-center/concepts/overview">Network Connectivity Center</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="10-ip-planning.html">10 · Planning your IP address space</a></div>
+  <div><span>Next</span><a href="12-private-access.html">12 · Private access to cloud services</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 1 · Networking in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

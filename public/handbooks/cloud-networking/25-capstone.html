@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Capstone: design Larder&#x27;s network end to end · Networking in the Cloud</title>
+<meta name="description" content="Put it all together: a multi-account, hybrid network for six cities, then a second region.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=d919b2d2a4">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 1</a> · <a href="index.html">Networking in the Cloud</a></span><span>Part VI · Chapter 25</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part VI · Running it</p>
+  <p class="chno">25</p>
+  <h1>Capstone: design Larder's network end to end</h1>
+  <p class="promise">Twenty-four chapters built Larder's network one decision at a time. This chapter puts them together: the requirements, the whole design on one page, a second region for disasters, a review checklist you can use on any network, and a game day to test it. Work through each step yourself before reading Larder's answer; that's where the competence this book promised turns into something you can show.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Turn business requirements into network decisions, and justify each one.</li>
+      <li>Present a complete cloud network on one page.</li>
+      <li>Design a cost-conscious standby region.</li>
+      <li>Review any network design against a checklist, and test it with failure drills.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>The rest of the book. Each step below names the chapters it draws on.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 60 minutes</dd>
+      <dt>Exercises</dt><dd>2–4 hours for your own design</dd>
+      <dt>Main provider</dt><dd>AWS; the method works anywhere</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>In January 2028 Larder decides, in ADR 0026, to stay in one region but keep a <strong>pilot light</strong> in Paris: a minimal standby that can take over within four hours, for about €1,200 a month, instead of a full second region at around €300,000 a year. The ADR names four triggers for going further: 60,000 orders a day, a regional outage longer than an hour, a contract that requires it, or a city outside the EU. Ana asks Eli for two things: the network design for the pilot light, and one page that shows the whole network, for the review board and for whoever joins the team next.</p>
+</aside>
+
+<!-- ======================================================== 25.1 -->
+<h2 class="sec" id="s25-1"><span class="n">25.1</span>How to use this chapter</h2>
+
+<p class="lead">Each section starts with a <strong>“your turn”</strong> task. Do it on paper first, for Larder or for a system you know, then read Larder's answer and compare. Disagreeing with Larder's choice is fine, as long as you can say why: every decision in a network trades one thing for another, and the reasoning is the skill.</p>
+
+<!-- ======================================================== 25.2 -->
+<h2 class="sec" id="s25-2"><span class="n">25.2</span>Requirements</h2>
+
+<div class="box box-lab">
+  <p class="label">Your turn</p>
+  <p>List the requirements that shape Larder's network. For each, name the network decisions it drives. Use the casebook facts you've met in this book.</p>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 25.1 · Larder's requirements and what they drive</caption>
+    <thead><tr><th>Requirement</th><th>Network consequences</th><th>Chapters</th></tr></thead>
+    <tbody>
+      <tr><td>Six cities by end 2027; a new city in 8 weeks, by configuration</td><td>Address plan with a block per city; stores join by template and BGP, no route edits</td><td>10, 13</td></tr>
+      <tr><td>Checkout p95 under 800 ms at 5× peak</td><td>One region near customers; CDN for everything cacheable; zone-local chatty paths; tuned load balancers</td><td>7, 16, 17</td></tr>
+      <tr><td>Customer data stays in the EU</td><td>EU regions only; standby in Paris; no data replicated outside the EU</td><td>7, 25</td></tr>
+      <tr><td>Never lose an order or charge twice</td><td>Three zones; failure-tolerant connections (timeouts, retries with idempotency keys)</td><td>3, 7</td></tr>
+      <tr><td>Stores keep working through line failures</td><td>Fibre plus 4G per store, two VPNs, BGP failover; app works 30 minutes offline</td><td>13</td></tr>
+      <tr><td>Partners connect privately (Korenwolf, WMS B, the payment provider)</td><td>PrivateLink for inbound partners; allow-listed egress for outbound</td><td>12, 18</td></tr>
+      <tr><td>Cost per order falling</td><td>Endpoints, per-zone NAT, CDN, peering for heavy pairs; costs reviewed quarterly</td><td>23</td></tr>
+      <tr><td>Region-level recovery within 4 hours for about €1,200 a month (ADR 0026)</td><td>Pilot-light network in Paris, mostly pre-built, cheap while idle</td><td>25.4</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 25.3 -->
+<h2 class="sec" id="s25-3"><span class="n">25.3</span>The whole network on one page</h2>
+
+<div class="box box-lab">
+  <p class="label">Your turn</p>
+  <p>Draw Larder's network on one page: users, stores and partners on the left; the Frankfurt region in the middle; Paris on the right. Mark every path traffic takes, and which chapter's decision governs it.</p>
+</div>
+
+<figure class="wide" id="fig25-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 380" role="img" aria-labelledby="fig25-1-t fig25-1-d">
+      <title id="fig25-1-t">Larder's network on one page</title>
+      <desc id="fig25-1-d">Customers reach CloudFront with WAF, which forwards to the Application Load Balancer in the production VPC, 10.20.0.0/16, in Frankfurt. Stores connect through VPNs with BGP to the transit gateway. Korenwolf reaches the ordering API through PrivateLink. In Frankfurt, the transit gateway joins the production VPC, the non-production VPCs, the hub VPC with Resolver endpoints, CI runners and interface endpoints, and the egress VPC with the network firewall and NAT gateways, which is the only way out to the internet. The transit gateway is peered with a transit gateway in Paris, where the pilot-light VPCs in 10.32.0.0/12 hold a database replica and pre-built networking.</desc>
+      <rect class="ext" x="12" y="30" width="120" height="44" rx="22"/><text class="t-label" x="72" y="57" text-anchor="middle">customers</text>
+      <rect class="node" x="12" y="168" width="120" height="56" rx="4"/><text class="t-label" x="72" y="192" text-anchor="middle">stores</text><text class="t-small" x="72" y="210" text-anchor="middle">fibre + 4G · BGP</text>
+      <rect class="node" x="12" y="296" width="120" height="56" rx="4"/><text class="t-label" x="72" y="320" text-anchor="middle">Korenwolf</text><text class="t-small" x="72" y="338" text-anchor="middle">PrivateLink</text>
+      <rect class="pub" x="160" y="26" width="128" height="52" rx="5"/><text class="t-label" x="224" y="48" text-anchor="middle">CloudFront</text><text class="t-small" x="224" y="66" text-anchor="middle">cache · WAF · DDoS</text>
+      <path class="wire" d="M134 52 H158"/>
+
+      <rect class="region" x="306" y="10" width="330" height="360" rx="8"/>
+      <text class="t-small" x="318" y="28">Frankfurt · 3 zones · 10.16.0.0/12</text>
+      <path class="wire-dash" d="M393 158 L440 288 M393 256 L430 288 M552 112 L510 288 M552 200 L520 288"/>
+      <path class="wire" d="M134 196 C 260 196, 300 314, 398 314"/>
+      <path class="wire" d="M134 324 C 220 324, 260 140, 316 120"/>
+      <rect class="vpc" x="318" y="38" width="150" height="120" rx="6"/>
+      <text class="t-label t-accent" x="330" y="58">prod 10.20.0.0/16</text>
+      <text class="t-small" x="330" y="78">ALB · EKS (pods 100.64)</text>
+      <text class="t-small" x="330" y="96">Postgres · Kafka</text>
+      <text class="t-small" x="330" y="114">NLB endpoint service</text>
+      <text class="t-small" x="330" y="132">gateway endpoints</text>
+      <rect class="priv" x="480" y="38" width="144" height="74" rx="6"/>
+      <text class="t-label" x="492" y="58">egress VPC</text>
+      <text class="t-small" x="492" y="78">firewall · NAT</text>
+      <text class="t-small" x="492" y="96">→ internet allow-list</text>
+      <rect class="priv" x="318" y="176" width="150" height="80" rx="6"/>
+      <text class="t-label" x="330" y="196">hub 10.16.0.0/16</text>
+      <text class="t-small" x="330" y="216">Resolver endpoints</text>
+      <text class="t-small" x="330" y="234">interface endpoints · CI</text>
+      <rect class="priv" x="480" y="130" width="144" height="70" rx="6"/>
+      <text class="t-label" x="492" y="150">non-prod</text>
+      <text class="t-small" x="492" y="170">dev 10.17 · stg 10.18</text>
+      <text class="t-small" x="492" y="188">data 10.21</text>
+      <rect class="node-accent" x="400" y="290" width="140" height="48" rx="5"/>
+      <text class="t-label on-accent" x="470" y="312" text-anchor="middle">transit gateway</text>
+      <text class="t-small on-accent" x="470" y="328" text-anchor="middle">segmented tables</text>
+      <path class="wire" d="M288 52 H316"/>
+
+      <rect class="region" x="652" y="10" width="96" height="360" rx="8"/>
+      <text class="t-small" x="662" y="28">Paris</text>
+      <text class="t-small" x="662" y="44">pilot light</text>
+      <rect class="priv" x="662" y="58" width="78" height="120" rx="5"/>
+      <text class="t-small" x="670" y="78">10.32/12</text>
+      <text class="t-small" x="670" y="98">hub 10.32</text>
+      <text class="t-small" x="670" y="116">prod 10.36</text>
+      <text class="t-small" x="670" y="134">DB replica</text>
+      <text class="t-small" x="670" y="152">no app</text>
+      <text class="t-small" x="670" y="168">running</text>
+      <rect class="node" x="662" y="290" width="78" height="48" rx="5"/>
+      <text class="t-small" x="701" y="312" text-anchor="middle">TGW</text>
+      <text class="t-small" x="701" y="328" text-anchor="middle">Paris</text>
+      <path class="wire-accent" d="M542 314 H660"/>
+      <text class="t-small t-accent" x="600" y="306" text-anchor="middle">peering</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 25.1</b> Larder's network on one page. Solid lines carry customer, store and partner traffic; dashed lines are VPC attachments to the transit gateway; the blue line is the inter-region peering to the pilot light.</figcaption>
+</figure>
+
+<p>Behind the picture, one sentence per layer, each a decision from earlier in the book:</p>
+<div class="table-wrap">
+  <table>
+    <caption>Table 25.2 · Larder's network, layer by layer</caption>
+    <thead><tr><th>Layer</th><th>Decision</th><th>Ch.</th></tr></thead>
+    <tbody>
+      <tr><td>Addresses</td><td>Hierarchical plan in <code>10.0.0.0/8</code>: sites, Frankfurt, Paris; pods in <code>100.64</code>; enforced by IPAM</td><td>2, 10</td></tr>
+      <tr><td>Accounts</td><td>Landing zone: network, log archive, security, workloads, sandbox; vending with the VPC module</td><td>24</td></tr>
+      <tr><td>VPCs</td><td>Three tiers × three zones; explicit route tables; isolated data tier; shared VPCs for product teams</td><td>8, 24</td></tr>
+      <tr><td>Firewalls</td><td>Security groups by role; NACL guardrail on data subnets; network policies on EKS</td><td>9, 19</td></tr>
+      <tr><td>Joining networks</td><td>Transit gateway with prod, non-prod and shared tables; peering for heavy pairs</td><td>11, 23</td></tr>
+      <tr><td>Hybrid</td><td>Two VPNs per store with BGP and MSS clamping; no Direct Connect (revisit at ~1 Gbps / 20 TB)</td><td>13, 14</td></tr>
+      <tr><td>Services</td><td>Gateway and centralised interface endpoints; PrivateLink for partners</td><td>12</td></tr>
+      <tr><td>DNS</td><td><code>internal.larder.example</code> private zone; Resolver endpoints in the hub; query logging; DNS Firewall</td><td>5, 15</td></tr>
+      <tr><td>Edge and entry</td><td>CloudFront with micro-caching, WAF rate rules, private origin; ALB with shallow health checks</td><td>16, 17</td></tr>
+      <tr><td>Egress</td><td>Centralised through a firewall VPC with a domain allow-list; no internet gateways in workload accounts</td><td>18, 24</td></tr>
+      <tr><td>Identity</td><td>Staff tools behind Verified Access; mTLS in the payments path; no mesh yet</td><td>21</td></tr>
+      <tr><td>Observability</td><td>Flow logs, query logs, metrics with alarms; Reachability checks in the pipeline</td><td>22</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 25.4 -->
+<h2 class="sec" id="s25-4"><span class="n">25.4</span>The pilot light in Paris</h2>
+
+<div class="box box-lab">
+  <p class="label">Your turn</p>
+  <p>Design the network for a standby region that must be able to take over within four hours, while costing very little when idle. Decide what's built in advance, what's built during a failover, and how customers, stores and partners get moved.</p>
+</div>
+
+<p>A pilot light keeps the parts that are <em>slow to create</em> running, and builds the parts that are <em>quick to create</em> only when needed. For networks, that sorts nicely:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 25.3 · What exists in Paris, and when</caption>
+    <thead><tr><th>Component</th><th>Always on</th><th>Built during failover</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Address plan, VPCs, subnets, route tables, security groups</td><td>✓</td><td></td><td>Free while idle; built from the same module as Frankfurt, so it can't drift</td></tr>
+      <tr><td>Transit gateway and peering with Frankfurt</td><td>✓</td><td></td><td>Carries database replication; small monthly cost</td></tr>
+      <tr><td>Database replica</td><td>✓</td><td></td><td>Data is the slowest thing to move; replication within the EU</td></tr>
+      <tr><td>Gateway endpoints, private zone associations</td><td>✓</td><td></td><td>Free</td></tr>
+      <tr><td>NAT gateways, egress firewall, interface endpoints, Resolver endpoints</td><td></td><td>✓</td><td>Charged by the hour; minutes to create from code</td></tr>
+      <tr><td>EKS nodes, load balancers</td><td></td><td>✓</td><td>Charged by the hour; scaled up from code and images</td></tr>
+      <tr><td>Store VPNs to Paris</td><td></td><td>✓</td><td>About $36 a month per connection would exceed the budget; configs pre-generated, created by runbook</td></tr>
+      <tr><td>CloudFront origin and DNS</td><td>✓ (records ready)</td><td>switch</td><td>Origin switched once Paris is serving; TTLs already short</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>The idle network costs well under €200 a month: the transit gateway and its attachments, the peering, and replication traffic between regions at about two cents per gigabyte (<a href="23-network-cost.html">Chapter 23</a>). The rest of the €1,200 goes to the database replica and stored images.</p>
+
+<h3>The failover, in network terms</h3>
+<ol class="steps">
+  <li><strong>Decide.</strong> The ADR's trigger: Frankfurt down for more than an hour. Failover is a deliberate decision, not automatic; a pilot light can't take traffic until it's scaled up, and a false failover is expensive.</li>
+  <li><strong>Build the hourly parts</strong> from code: NAT gateways and egress firewall, interface and Resolver endpoints, load balancers, nodes. About 20–40 minutes.</li>
+  <li><strong>Promote the database replica</strong> in Paris.</li>
+  <li><strong>Reconnect stores.</strong> The runbook creates each store's Paris VPN connection from the pre-generated configs; store routers already hold the Paris tunnel settings, disabled, and are switched by the same management template as the MSS clamp. BGP does the rest (<a href="13-vpn-bgp.html">Chapter 13</a>).</li>
+  <li><strong>Move customers and partners.</strong> Point CloudFront's origin at the Paris ALB; switch DNS for <code>api.larder.example</code> (TTL 60, <a href="05-dns.html">Chapter 5</a>); publish the Paris endpoint service to Korenwolf, who creates a new endpoint (agreed in advance, in their runbook too).</li>
+  <li><strong>Check from outside</strong>: synthetic checks for checkout, stores, partners; flow logs and load balancer metrics in Paris.</li>
+</ol>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: a standby you never test doesn't work</p>
+  <p>Every untested step above hides a surprise: a quota that's lower in Paris, an endpoint service not yet allowed for a partner's account, a store router template with a typo. Rehearse the failover at least twice a year, end to end, during a quiet morning.</p>
+</div>
+
+<!-- ======================================================== 25.5 -->
+<h2 class="sec" id="s25-5"><span class="n">25.5</span>A review checklist for any network</h2>
+
+<p>Every chapter's lessons, compressed into questions you can ask of any design, including your own:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 25.4 · Network design review</caption>
+    <thead><tr><th>Area</th><th>Questions</th></tr></thead>
+    <tbody>
+      <tr><td>Addresses</td><td>Do ranges come from a plan or IPAM? Do they overlap anything that might connect? Is there room for 2× growth and for pods?</td></tr>
+      <tr><td>Resilience</td><td>Does losing any one zone leave a working system? Are NAT gateways, endpoints and subnets per zone? Are there two tunnels and two links where it matters?</td></tr>
+      <tr><td>Routing</td><td>Are subnets associated explicitly? Does every path have a route in both directions? Is the main table local-only? Is segmentation written as a from → to matrix?</td></tr>
+      <tr><td>Filtering</td><td>Are rules written between roles? Do stateless rules allow return traffic? Is anything reachable from the internet that shouldn't be?</td></tr>
+      <tr><td>Names</td><td>Do private zones reach every VPC and site that needs them? Any split-horizon zones hiding public records? Short TTLs where changes are planned?</td></tr>
+      <tr><td>Edge</td><td>Does every public request pass the edge? Is the origin locked? Is anything personal cacheable? Are WAF rules in count mode first?</td></tr>
+      <tr><td>Egress</td><td>Is there an inventory of destinations? Can workloads bypass the checkpoint? Do AWS services go through endpoints?</td></tr>
+      <tr><td>Timeouts</td><td>Are app keep-alives longer than load balancer idle timeouts? Do pools close idle connections before NAT does? Are MSS values clamped on tunnels?</td></tr>
+      <tr><td>Identity</td><td>Do internal tools trust network location? Is access tied to HR through SSO? Are workload identities short-lived?</td></tr>
+      <tr><td>Operations</td><td>Are flow and query logs on? Are network metrics alarmed? Are critical paths checked after every change?</td></tr>
+      <tr><td>Cost</td><td>Which paths charge per GB, and how much traffic takes them? Any public IPv4 addresses without a reason?</td></tr>
+      <tr><td>Code</td><td>Is everything in code, with plans reviewed? Are lessons in the module? Are absolute rules enforced as guardrails?</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 25.6 -->
+<h2 class="sec" id="s25-6"><span class="n">25.6</span>Game day: break it on purpose</h2>
+
+<p>A <strong>game day</strong> is a planned exercise in which a team causes a failure, in staging or carefully in production, and practises finding and fixing it. For networks, these drills test both the design and the people:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 25.5 · Network game-day scenarios</caption>
+    <thead><tr><th>Scenario</th><th>Expected outcome</th><th>Tests</th></tr></thead>
+    <tbody>
+      <tr><td>Block one zone's subnets with a NACL</td><td>Load balancers and services shift to other zones; no customer impact</td><td>Zone resilience (<a href="07-regions-zones.html">Ch. 7</a>)</td></tr>
+      <tr><td>Disable a store's fibre port</td><td>4G tunnel takes over in under a minute</td><td>BGP failover (<a href="13-vpn-bgp.html">Ch. 13</a>)</td></tr>
+      <tr><td>Delete a TGW route in staging</td><td>Alarm on dropped packets; found with Reachability Analyzer in minutes</td><td>Monitoring and method (<a href="22-troubleshooting.html">Ch. 22</a>)</td></tr>
+      <tr><td>Remove a security group rule a service needs</td><td>Pipeline reachability check fails before deploy</td><td>Guardrails (<a href="09-firewalls.html">Ch. 9</a>, <a href="24-network-as-code.html">24</a>)</td></tr>
+      <tr><td>Point a test client at an unlisted domain</td><td>Egress firewall drops it and alerts</td><td>Egress control (<a href="18-egress.html">Ch. 18</a>)</td></tr>
+      <tr><td>Fail over staging to Paris</td><td>Serving within four hours; every runbook step works</td><td>The pilot light (25.4)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 25.7 -->
+<h2 class="sec" id="s25-7"><span class="n">25.7</span>Your capstone</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Capstone · Design a network for a new company</p>
+  <p><strong>The company:</strong> a chain of 25 physiotherapy clinics across Belgium and the Netherlands. Each clinic has a small office network, appointment tablets and a treatment-notes system. Patients book online and through an app. Health data must stay in the EU, and a partner insurer wants to submit claims through a private API. The team is six engineers. <strong>Cost:</strong> paper only; building parts of it costs what the matching labs cost.</p>
+</div>
+
+<p>Produce, in a few pages:</p>
+<ol class="steps">
+  <li><strong>Requirements</strong> and the network decisions each drives (Table 25.1's format).</li>
+  <li><strong>An address plan</strong> for clinics, the cloud, a possible second region and pods, tested with Lab 10's script.</li>
+  <li><strong>A one-page diagram</strong> like Figure 25.1.</li>
+  <li><strong>A layer-by-layer table</strong> like Table 25.2, with a chapter reference for each choice.</li>
+  <li><strong>A cost estimate</strong> for the network, using Lab 23's model.</li>
+  <li><strong>A review</strong> of your own design against Table 25.4, with at least three things you'd change after reviewing it.</li>
+  <li><strong>Optional build</strong>: combine Labs 8, 11, 12, 15 and 16 into a small version of your design in a sandbox account, check its critical paths with Reachability Analyzer, and destroy it.</li>
+</ol>
+
+<p>If you can do this, and explain every choice to someone who disagrees, you're competent in cloud networking, which is what this book set out to make you.</p>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum25">
+  <h2 class="sec" id="sum25"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Start from requirements, and trace each to the network decisions it drives.</li>
+    <li>A whole network fits on one page, with a one-line decision per layer behind it.</li>
+    <li>A <strong>pilot light</strong> keeps slow-to-create parts running (network layout, peering, data) and builds hourly-charged parts on failover.</li>
+    <li>Failover is a rehearsed runbook: build, promote, reconnect sites, move customers and partners, check from outside.</li>
+    <li>Review every design against the checklist, and test it with game days.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Pilot light</dt><dd>A minimal standby environment that can be scaled up to take over.</dd>
+    <dt>RTO</dt><dd>Recovery time objective: how quickly service must be restored.</dd>
+    <dt>Runbook</dt><dd>Written, tested steps for a specific operation, such as a failover.</dd>
+    <dt>Game day</dt><dd>A planned exercise that causes failures to test systems and people.</dd>
+    <dt>Design review</dt><dd>A structured check of a design against requirements and known pitfalls.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Why are store VPN connections to Paris created during failover rather than kept running? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Each VPN connection is charged by the hour; one per store would exceed the pilot light's budget. With pre-generated configurations and router settings in place, creating them takes minutes, well within the four-hour RTO.</p></details>
+    </li>
+    <li>
+      <p>Why isn't the failover to Paris automatic, with health-checked DNS? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>A pilot light can't serve traffic until it's scaled up and the database is promoted, and an unnecessary failover is costly and risky. The ADR sets a trigger (an outage longer than an hour), and people decide; automatic DNS failover suits warm standbys that are already serving.</p></details>
+    </li>
+    <li>
+      <p>Pick three items from the review checklist that would have prevented incidents told in this book, and name the incidents. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>For example: explicit subnet associations (the reporting subnet on the main table, Ch. 8); routes in both directions (Rotterdam's missing return route, Ch. 4); rules between roles (the Dispatch outage, Ch. 9); keep-alives longer than idle timeouts (the 502s, Ch. 16); an inventory of egress destinations (the poisoned package, Ch. 18).</p></details>
+    </li>
+    <li>
+      <p>In the game day where one zone is blocked, what would a failure tell you? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>That something is still single-zone: a NAT gateway or endpoint used by all zones, a subnet group or function config with one zone, uneven targets without cross-zone balancing, or a client pinned to one replica. Fix the design, then repeat the drill.</p></details>
+    </li>
+    <li>
+      <p>Which of Larder's decisions would you revisit first if it hit the ADR's “60,000 orders a day” trigger, and why? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>The pilot light itself: at that scale an outage's cost grows, so a warm standby or active-active second region may now be cheaper than the expected loss. Close behind: Direct Connect thresholds if a central warehouse appears, and service-to-service identity if service count grows past the mesh threshold.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/whitepapers/latest/disaster-recovery-workloads-on-aws/disaster-recovery-options-in-the-cloud.html">Disaster recovery options in the cloud</a> (backup, pilot light, warm standby, active-active).</li>
+    <li>AWS Well-Architected: <a href="https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/welcome.html">Reliability pillar</a>.</li>
+    <li>The appendices of this book: the CIDR cheat sheet, the provider translation table and the glossary.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="24-network-as-code.html">24 · Networks as code and landing zones</a></div>
+  <div><span>Contents</span><a href="index.html">Networking in the Cloud</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 1 · Networking in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

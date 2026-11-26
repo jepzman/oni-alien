@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>The cost of moving bytes · Networking in the Cloud</title>
+<meta name="description" content="Data transfer pricing, NAT and cross-zone charges, and designs that keep the bill small.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=d919b2d2a4">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 1</a> · <a href="index.html">Networking in the Cloud</a></span><span>Part VI · Chapter 23</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part VI · Running it</p>
+  <p class="chno">23</p>
+  <h1>The cost of moving bytes</h1>
+  <p class="promise">Compute and storage costs are easy to see: you choose an instance size or a disk. Network costs hide in the design: which zone talks to which, which path data takes out of the cloud, which gateway it passes through on the way. This chapter is a map of what moving data costs, where the surprises come from, and how to design networks that stay cheap as traffic grows.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Say which network paths are free and which are charged, and roughly how much.</li>
+      <li>Find the biggest network costs in a bill and trace them to traffic.</li>
+      <li>Apply the common fixes: endpoints, zone-local traffic, caching, peering.</li>
+      <li>Estimate a design's network cost before building it.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Zones and cross-zone traffic (<a href="07-regions-zones.html">Chapter 7</a>), NAT (<a href="08-inside-a-vpc.html">Chapter 8</a>).</li>
+      <li>Transit gateways (<a href="11-connecting-vpcs.html">Chapter 11</a>), endpoints (<a href="12-private-access.html">Chapter 12</a>), CDNs (<a href="17-edge.html">Chapter 17</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, Python and AWS CLI, a few cents</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 23.6</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Marco, the CFO, does his quarterly review of the cloud bill with Eli. Compute and databases have grown roughly in line with orders. The network lines have grown three times as fast and now come to about $9,000 a month across five usage types with names like <code>NatGateway-Bytes</code> and <code>DataTransfer-Regional-Bytes</code>. “I don't need to understand every line,” Marco says. “I need to know which ones we chose, and which ones just happened to us.”</p>
+  <p>Section 23.4 goes through them one by one.</p>
+</aside>
+
+<!-- ======================================================== 23.1 -->
+<h2 class="sec" id="s23-1"><span class="n">23.1</span>The big picture</h2>
+
+<p class="lead">Cloud providers charge for data by <strong>path</strong>. Some paths are free, some cost a cent or two per gigabyte, and a few cost much more. Data coming <em>in</em> from the internet is almost always free; data going <em>out</em> to the internet is the most expensive. In between, you pay for crossing zones, crossing regions, and for passing through certain managed gateways. Your design decides which paths your traffic takes.</p>
+
+<figure class="wide" id="fig23-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 290" role="img" aria-labelledby="fig23-1-t fig23-1-d">
+      <title id="fig23-1-t">What each path costs</title>
+      <desc id="fig23-1-d">Inside a zone, traffic on private addresses is free. Between zones in a region, it costs about a cent per gigabyte in each direction. Through a NAT gateway, there is an hourly charge plus a processing charge per gigabyte. To S3 through a gateway endpoint is free. Out to the internet costs most, about nine cents per gigabyte in the first tiers; in from the internet is free. Between regions costs about two cents per gigabyte. Data from AWS origins to CloudFront is free, and CloudFront's own delivery price is usually a little below direct internet egress.</desc>
+      <rect class="region" x="12" y="20" width="460" height="258" rx="8"/>
+      <text class="t-small" x="24" y="38">one region</text>
+      <rect class="az" x="24" y="48" width="170" height="96" rx="5"/><text class="t-small" x="34" y="64">zone a</text>
+      <rect class="node" x="40" y="74" width="140" height="56" rx="4"/><text class="t-label" x="110" y="98" text-anchor="middle">app a</text><text class="t-small" x="110" y="116" text-anchor="middle">same zone: free</text>
+      <rect class="az" x="24" y="172" width="170" height="96" rx="5"/><text class="t-small" x="34" y="188">zone b</text>
+      <rect class="node" x="40" y="198" width="140" height="56" rx="4"/><text class="t-label" x="110" y="232" text-anchor="middle">app b</text>
+      <path class="wire" d="M110 132 V196"/>
+      <text class="t-small t-warn" x="118" y="160">≈ $0.01/GB each way</text>
+      <rect class="node" x="266" y="64" width="190" height="56" rx="4"/><text class="t-label" x="361" y="88" text-anchor="middle">NAT gateway</text><text class="t-small t-warn" x="361" y="106" text-anchor="middle">$/hour + ≈ $0.045–0.05/GB</text>
+      <path class="wire" d="M182 100 H262"/>
+      <rect class="pub" x="266" y="190" width="190" height="56" rx="4"/><text class="t-label" x="361" y="214" text-anchor="middle">S3 via gateway endpoint</text><text class="t-small t-accent" x="361" y="232" text-anchor="middle">free</text>
+      <path class="wire" d="M182 222 H262"/>
+      <rect class="ext" x="530" y="40" width="218" height="50" rx="25"/><text class="t-label" x="639" y="60" text-anchor="middle">internet</text><text class="t-small" x="639" y="78" text-anchor="middle">out ≈ $0.09/GB · in free</text>
+      <path class="wire" d="M458 90 L528 68"/>
+      <rect class="ext" x="530" y="120" width="218" height="50" rx="25"/><text class="t-label" x="639" y="140" text-anchor="middle">CloudFront → users</text><text class="t-small" x="639" y="158" text-anchor="middle">origin fetch free · delivery ≈ egress</text>
+      <path class="wire" d="M472 140 H528"/>
+      <rect class="ext" x="530" y="210" width="218" height="50" rx="25"/><text class="t-label" x="639" y="230" text-anchor="middle">another region</text><text class="t-small" x="639" y="248" text-anchor="middle">≈ $0.02/GB</text>
+      <path class="wire" d="M472 235 H528"/>
+    </svg>
+  </div>
+  <figcaption><b>Figure 23.1</b> Approximate AWS prices in European regions at the time of writing. Exact prices change and vary by region and volume; the shape, which paths are free and which are expensive, is what to remember.</figcaption>
+</figure>
+
+<!-- ======================================================== 23.2 -->
+<h2 class="sec" id="s23-2"><span class="n">23.2</span>The charges, one by one</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 23.1 · Network charges on AWS (approximate)</caption>
+    <thead><tr><th>Path or component</th><th>Charge</th><th>Chapter</th></tr></thead>
+    <tbody>
+      <tr><td>Within a zone, private addresses</td><td>free</td><td>7</td></tr>
+      <tr><td>Between zones in a region</td><td>≈ $0.01/GB each direction</td><td>7</td></tr>
+      <tr><td>Between regions</td><td>≈ $0.02/GB (varies by pair)</td><td>11</td></tr>
+      <tr><td>To the internet</td><td>≈ $0.09/GB, lower in higher tiers; first 100 GB a month free</td><td>17</td></tr>
+      <tr><td>From the internet</td><td>free</td><td></td></tr>
+      <tr><td>NAT gateway</td><td>per hour (≈ $35–40/month) + ≈ $0.045–0.05 per GB processed</td><td>8</td></tr>
+      <tr><td>Transit gateway</td><td>per attachment hour + ≈ $0.02 per GB processed</td><td>11</td></tr>
+      <tr><td>Interface endpoint</td><td>per zone hour (≈ $7/month) + ≈ $0.01/GB</td><td>12</td></tr>
+      <tr><td>Gateway endpoint (S3, DynamoDB)</td><td>free</td><td>8, 12</td></tr>
+      <tr><td>Public IPv4 address</td><td>≈ $0.005/hour each, in use or not</td><td>2</td></tr>
+      <tr><td>Direct Connect, data out</td><td>≈ $0.02/GB plus port hours</td><td>14</td></tr>
+      <tr><td>Network Firewall</td><td>per endpoint hour + ≈ $0.065/GB</td><td>18</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Notice that some charges <strong>stack</strong>. A gigabyte from a server in zone b, through a NAT gateway in zone a, out to the internet pays three times: cross-zone, NAT processing, and internet egress. A gigabyte from a spoke VPC through a transit gateway to a firewall and NAT pays TGW processing, firewall processing, NAT processing and egress.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Every hop that processes data charges for it. The cheapest byte is one that stays in its zone, or never travels at all.</p>
+</div>
+
+<!-- ======================================================== 23.3 -->
+<h2 class="sec" id="s23-3"><span class="n">23.3</span>Finding where the money goes</h2>
+
+<p>A bill tells you <em>which charge</em>, not <em>which traffic</em>. To connect the two:</p>
+<ol class="steps">
+  <li><strong>Group the bill by usage type.</strong> In Cost Explorer (or the Cost and Usage Report), group by usage type and look for names containing <code>DataTransfer</code>, <code>NatGateway-Bytes</code>, <code>TransitGateway-Bytes</code>, <code>VpcEndpoint-Bytes</code> and <code>PublicIPv4</code>.</li>
+  <li><strong>Find the talkers.</strong> Query flow logs (<a href="22-troubleshooting.html">Chapter 22</a>) for the biggest byte counts by source and destination, especially through NAT gateways (the <code>traffic-path</code> field helps) and across zones.</li>
+  <li><strong>Name each flow.</strong> “Backups from the data subnets to S3 through NAT, 14 TB a month.” A named flow can be fixed; a usage type can't.</li>
+  <li><strong>Tag and allocate.</strong> Tag resources by team so each team sees its own share; costs that belong to nobody grow fastest.</li>
+</ol>
+
+<!-- ======================================================== 23.4 -->
+<h2 class="sec" id="s23-4"><span class="n">23.4</span>Worked example: Larder's network bill</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 23.2 · Larder's network costs, traced to traffic and fixed</caption>
+    <thead><tr><th>Usage type</th><th class="num">Before</th><th>What it was</th><th>Fix</th><th class="num">After</th></tr></thead>
+    <tbody>
+      <tr><td><code>NatGateway-Bytes</code></td><td class="num">$1,900</td><td>60% was S3 and ECR traffic: backups, image pulls, data exports</td><td>S3 gateway endpoint; ECR interface endpoints (<a href="12-private-access.html">Ch. 12</a>)</td><td class="num">$800</td></tr>
+      <tr><td><code>DataTransfer-Regional-Bytes</code></td><td class="num">$1,600</td><td>Cross-zone: Kafka consumers, one NAT gateway used by all zones, a shared cache</td><td>Zone-local consumers and caches (<a href="07-regions-zones.html">Ch. 7</a>); one NAT per zone</td><td class="num">$550</td></tr>
+      <tr><td><code>TransitGateway-Bytes</code></td><td class="num">$900</td><td>Nightly copy from production to the analytics VPC, about 40 TB</td><td>Direct peering for that pair, more specific routes (<a href="11-connecting-vpcs.html">Ch. 11</a>)</td><td class="num">$150</td></tr>
+      <tr><td><code>DataTransfer-Out-Bytes</code></td><td class="num">$4,300</td><td>Product images and the web shop served from the ALB</td><td>CloudFront with long-cached, versioned images (<a href="17-edge.html">Ch. 17</a>)</td><td class="num">$3,500</td></tr>
+      <tr><td><code>PublicIPv4</code></td><td class="num">$300</td><td>Public addresses on instances that didn't need them; forgotten Elastic IPs</td><td>Removed; private subnets; IPv6 where possible</td><td class="num">$60</td></tr>
+      <tr><td colspan="1"><strong>Total</strong></td><td class="num"><strong>$9,000</strong></td><td colspan="2"></td><td class="num"><strong>$5,060</strong></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Marco's question had a clear answer. Internet egress, the biggest line, was “chosen”: it's the cost of serving customers, and the CDN trimmed it and took load off the servers. Nearly everything else “just happened”: traffic that took an expensive path because nobody had decided otherwise. Eli's changes took four weeks and cut network costs by more than 40%. Two of them, endpoints and per-zone NAT, now go into every new VPC by default through the network module (<a href="24-network-as-code.html">Chapter 24</a>), so they can't “just happen” again.</p>
+</aside>
+
+<!-- ======================================================== 23.5 -->
+<h2 class="sec" id="s23-5"><span class="n">23.5</span>Design rules for cheap networks</h2>
+
+<ul>
+  <li><strong>Gateway endpoints for S3 and DynamoDB in every VPC.</strong> Free, and they remove a big NAT line.</li>
+  <li><strong>Keep chatty traffic in its zone.</strong> Zone-aware routing, same-zone replicas, one NAT gateway per zone.</li>
+  <li><strong>Interface endpoints where the volume justifies them</strong>, and centralise them when you have many VPCs (<a href="12-private-access.html">Chapter 12</a>).</li>
+  <li><strong>Serve the public through a CDN.</strong> Lower origin load, fewer servers, and usually a slightly lower price per gigabyte.</li>
+  <li><strong>Peer high-volume pairs</strong> alongside the transit gateway.</li>
+  <li><strong>Don't send what you don't need to</strong>: compress responses, avoid chatty polling, ship logs in batches.</li>
+  <li><strong>Release public IPv4 addresses</strong> you don't use; prefer private subnets and load balancers.</li>
+  <li><strong>Estimate before you build.</strong> Traffic × path price is simple arithmetic; do it during design reviews.</li>
+</ul>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: don't trade resilience for pennies</p>
+  <p>Putting everything in one zone makes cross-zone charges disappear, and makes a zone failure an outage (<a href="07-regions-zones.html">Chapter 7</a>). Replication between zones is the point of having zones; pay for it. Cut the cross-zone traffic that has no resilience value, like a consumer reading from a far replica.</p>
+</div>
+
+<!-- ======================================================== 23.6 -->
+<h2 class="sec" id="s23-6"><span class="n">23.6</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 23.3 · The same shape, different details</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Within a zone</td><td>free</td><td>free</td><td>free</td></tr>
+      <tr><td>Between zones</td><td>charged each way</td><td>charged (inter-zone data transfer)</td><td>charged</td></tr>
+      <tr><td>Internet egress</td><td>tiered per GB</td><td>tiered per GB; routing preference option</td><td>Premium or Standard network tier, priced differently</td></tr>
+      <tr><td>Managed NAT</td><td>NAT gateway: hour + GB</td><td>NAT Gateway: hour + GB</td><td>Cloud NAT: per gateway hour + GB</td></tr>
+      <tr><td>Peering</td><td>normal zone/region rates</td><td>VNet peering charged per GB in and out</td><td>normal rates</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Google Cloud's <strong>network tiers</strong> are a design choice of their own: Premium sends traffic over Google's backbone to the edge nearest each user; Standard hands it to the internet near the region, for less money and more variable performance.</p>
+
+<!-- ======================================================== 23.7 -->
+<h2 class="sec" id="s23-7"><span class="n">23.7</span>Lab: price a design, then read your bill</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 23 · A network cost model in twenty lines</p>
+  <p><strong>You'll</strong> model a design's monthly network cost in Python, test two changes, and pull your own account's network costs by usage type. <strong>You need</strong> Python 3 and, for step 4, the AWS CLI. <strong>Cost:</strong> the Cost Explorer API charges $0.01 per request; this lab makes one or two.</p>
+</div>
+
+<p class="code-title"><span>netcost.py</span><span>Python 3</span></p>
+<pre><code>PRICE = {                     <span class="c"># $ per GB, approximate; check your region's prices</span>
+    <span class="s">"cross_zone"</span>: 0.02,       <span class="c"># 0.01 out + 0.01 in</span>
+    <span class="s">"nat"</span>: 0.048, <span class="s">"internet"</span>: 0.09, <span class="s">"tgw"</span>: 0.02, <span class="s">"endpoint"</span>: 0.01,
+}
+HOURLY = {<span class="s">"nat"</span>: 0.052, <span class="s">"endpoint_az"</span>: 0.011}   <span class="c"># $ per hour</span>
+HOURS = 730
+
+<span class="k">def</span> monthly(flows, nat_gateways, endpoint_azs=0):
+    data = sum(gb * sum(PRICE[p] <span class="k">for</span> p <span class="k">in</span> path) <span class="k">for</span> gb, path <span class="k">in</span> flows)
+    fixed = (nat_gateways * HOURLY[<span class="s">"nat"</span>] + endpoint_azs * HOURLY[<span class="s">"endpoint_az"</span>]) * HOURS
+    <span class="k">return</span> round(data + fixed)
+
+before = [(14_000, [<span class="s">"nat"</span>]),                       <span class="c"># backups to S3 through NAT</span>
+          (3_000, [<span class="s">"cross_zone"</span>, <span class="s">"nat"</span>, <span class="s">"internet"</span>]), <span class="c"># zone b and c out through zone a's NAT</span>
+          (40_000, [<span class="s">"tgw"</span>])]                       <span class="c"># prod → analytics</span>
+after  = [(14_000, []),                             <span class="c"># S3 gateway endpoint: free</span>
+          (3_000, [<span class="s">"nat"</span>, <span class="s">"internet"</span>]),             <span class="c"># NAT in each zone</span>
+          (40_000, [])]                             <span class="c"># peering, same zone pairs: free</span>
+
+print(<span class="s">"before:"</span>, monthly(before, nat_gateways=1))
+print(<span class="s">"after: "</span>, monthly(after, nat_gateways=3))</code></pre>
+
+<ol class="steps">
+  <li><strong>Run it.</strong> <code>python3 netcost.py</code>. How much do the two changes save? Which single flow mattered most?</li>
+  <li><strong>Find the break-even.</strong> Adding two NAT gateways costs about $76 a month. Below how many GB of cross-zone NAT traffic is one NAT gateway cheaper, ignoring resilience? (Then remember why you'd still pay for three.)</li>
+  <li><strong>Model your own system.</strong> Replace the flows with three of yours, guessed from what you know. Rough numbers are fine; this is a design tool.</li>
+  <li><strong>Read your bill</strong> (if you have an account with some history):
+<pre><code>aws ce get-cost-and-usage --time-period Start=2026-10-01,End=2026-11-01 \
+  --granularity MONTHLY --metrics UnblendedCost --group-by Type=DIMENSION,Key=USAGE_TYPE \
+  --query 'ResultsByTime[0].Groups[?contains(Keys[0], `Bytes`) || contains(Keys[0], `PublicIPv4`)].[Keys[0], Metrics.UnblendedCost.Amount]' \
+  --output table</code></pre>
+  Change the dates to last month. Which of your lines are “chosen” and which “just happened”?</li>
+</ol>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s23-8"><span class="n">23.8</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>S3 traffic through NAT</td><td>A large processing charge for traffic that never left AWS.</td><td>S3 gateway endpoint in every VPC.</td></tr>
+      <tr><td>One NAT gateway for all zones</td><td>Cross-zone charges on every outbound byte, plus a single point of failure.</td><td>One per zone.</td></tr>
+      <tr><td>All VPC traffic through the transit gateway</td><td>Per-GB processing on bulk transfers.</td><td>Peer heavy pairs directly.</td></tr>
+      <tr><td>Serving static content from servers</td><td>Egress at full price and servers doing a CDN's work.</td><td>CDN with long-cached assets.</td></tr>
+      <tr><td>Nobody owns network costs</td><td>Lines grow unnoticed for months.</td><td>Tags, per-team views, a quarterly review.</td></tr>
+      <tr><td>Optimising cost by removing zones</td><td>Savings until the first zone outage.</td><td>Cut wasteful cross-zone traffic, not resilience.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum23">
+  <h2 class="sec" id="sum23"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Data is charged by <strong>path</strong>: free within a zone, cents per GB between zones and regions, most to the internet; incoming is free.</li>
+    <li>Gateways that process data (NAT, transit gateway, interface endpoints, firewalls) charge per GB, and charges stack along a path.</li>
+    <li>Trace bill lines to named flows with usage types and flow logs.</li>
+    <li>Common fixes: gateway endpoints, zone-local traffic, per-zone NAT, CDNs, direct peering for heavy pairs, fewer public IPv4 addresses.</li>
+    <li>Estimate traffic × path price during design; don't cut resilience to save pennies.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Data transfer out</dt><dd>Data leaving the provider to the internet; the most expensive path.</dd>
+    <dt>Regional data transfer</dt><dd>Data between zones in the same region.</dd>
+    <dt>Processing charge</dt><dd>A per-GB fee for data passing through a managed gateway.</dd>
+    <dt>Usage type</dt><dd>The bill's label for a kind of charge, such as <code>NatGateway-Bytes</code>.</dd>
+    <dt>Network tier</dt><dd>Google Cloud's choice between Premium and Standard internet routing.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Which of these are free on AWS: data in from the internet, S3 via a gateway endpoint, traffic between two zones, traffic inside one zone on private addresses? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Free: data in from the internet, S3 via a gateway endpoint, and traffic within a zone on private addresses. Charged: traffic between zones, in each direction.</p></details>
+    </li>
+    <li>
+      <p>A server in zone b sends 1 TB a month to the internet through a NAT gateway in zone a. List the charges. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Cross-zone transfer (both directions, roughly $20 for 1 TB), NAT processing (about $45–50), and internet egress (about $90), plus the NAT gateway's hourly charge. A NAT gateway in zone b would remove the cross-zone part.</p></details>
+    </li>
+    <li>
+      <p>Why might peering two VPCs that already share a transit gateway save money, and why does routing still work? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Peering has no per-GB processing charge, unlike the TGW. With a summary route to the TGW and the peer's exact range to the peering, longest prefix match sends their traffic over the peering (<a href="11-connecting-vpcs.html">Chapter 11</a>).</p></details>
+    </li>
+    <li>
+      <p>Why is putting everything in one zone a bad way to cut cross-zone costs? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>A zone failure would then take the whole service down. Replication and load balancing across zones are the reason zones exist; cut cross-zone traffic that adds no resilience instead.</p></details>
+    </li>
+    <li>
+      <p>Your bill shows <code>NatGateway-Bytes</code> growing fast. How do you find out what's behind it? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Query flow logs on the NAT gateways' interfaces (or with <code>traffic-path</code>) for the largest byte counts by source and destination, name the flows, and check whether they go to AWS services that endpoints could serve, or to destinations that shouldn't be contacted at all.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://aws.amazon.com/blogs/architecture/overview-of-data-transfer-costs-for-common-architectures/">Overview of data transfer costs for common architectures</a>.</li>
+    <li>AWS: <a href="https://aws.amazon.com/vpc/pricing/">Amazon VPC pricing</a> (NAT gateways, endpoints, public IPv4).</li>
+    <li>Google Cloud: <a href="https://cloud.google.com/network-tiers/docs/overview">Network Service Tiers</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="22-troubleshooting.html">22 · Observing and troubleshooting networks</a></div>
+  <div><span>Next</span><a href="24-network-as-code.html">24 · Networks as code and landing zones</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 1 · Networking in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Networks as code and landing zones · Networking in the Cloud</title>
+<meta name="description" content="Terraform modules for networks, multi-account guardrails and letting teams self-serve safely.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=d919b2d2a4">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 1</a> · <a href="index.html">Networking in the Cloud</a></span><span>Part VI · Chapter 24</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part VI · Running it</p>
+  <p class="chno">24</p>
+  <h1>Networks as code and landing zones</h1>
+  <p class="promise">Every good decision in this book, from the address plan to endpoints in every VPC, only matters if it's applied every time, by everyone, including the team that creates an account on a Friday afternoon. This chapter shows how to turn those decisions into code and guardrails: a network module that does the right things by default, a central network that teams plug into, policies that stop the wrong things before they happen, and the multi-account foundation, the landing zone, that holds it all together.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Design a reusable network module with safe defaults.</li>
+      <li>Split network code and state between a central team and application teams.</li>
+      <li>Enforce network rules with checks before deployment and guardrails in the cloud.</li>
+      <li>Explain a landing zone, and choose between shared VPCs and per-team VPCs.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Terraform basics from the earlier labs.</li>
+      <li>The address plan (<a href="10-ip-planning.html">Chapter 10</a>), transit gateways (<a href="11-connecting-vpcs.html">Chapter 11</a>), egress (<a href="18-egress.html">Chapter 18</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>40 minutes, Terraform plan and Python, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 24.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Larder's new data team gets its own AWS account and builds its network by hand in an afternoon, following a blog post: a VPC of <code>10.0.0.0/16</code>, public subnets “to make things easier”, one NAT gateway, no flow logs, no endpoints. Three weeks later they ask Eli to connect it to the transit gateway so their jobs can read from production. The request fails on the first line: <code>10.0.0.0/16</code> overlaps Larder's office range (<a href="10-ip-planning.html">Chapter 10</a>), and the network has nearly every gap this book has warned about.</p>
+  <p>Nobody on the data team did anything unreasonable. The company had decisions but no defaults. Section 24.5 shows what changed.</p>
+</aside>
+
+<!-- ======================================================== 24.1 -->
+<h2 class="sec" id="s24-1"><span class="n">24.1</span>The big picture</h2>
+
+<p class="lead">Networks built by hand drift apart and forget lessons. Networks built from <strong>code</strong> are reviewed, repeatable and recorded: a pull request shows exactly what will change (<a href="09-firewalls.html">Chapter 9</a> showed what happens without one), and a module can carry every lesson into every new VPC. Around the code sits a <span class="term">landing zone</span>: the multi-account structure, shared services and guardrails that new accounts land in, so that the safe way is also the default way.</p>
+
+<!-- ======================================================== 24.2 -->
+<h2 class="sec" id="s24-2"><span class="n">24.2</span>A network module with good defaults</h2>
+
+<p>A <strong>module</strong> is a reusable piece of infrastructure code with inputs and outputs. A good VPC module asks for little and decides a lot:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 24.1 · What Larder's VPC module asks for, and what it decides</caption>
+    <thead><tr><th>Asks for (inputs)</th><th>Decides for you (built in)</th></tr></thead>
+    <tbody>
+      <tr><td>name, environment, owner team</td><td>Range allocated from IPAM, never typed (<a href="10-ip-planning.html">Ch. 10</a>)</td></tr>
+      <tr><td>size (<code>/16</code>, <code>/18</code>, <code>/20</code>)</td><td>Tiered subnets per zone, aligned (<a href="02-ip-and-cidr.html">Ch. 2</a>, <a href="08-inside-a-vpc.html">Ch. 8</a>)</td></tr>
+      <tr><td>zones (default: three)</td><td>Route table per tier and zone; main table local-only; every subnet associated explicitly (<a href="08-inside-a-vpc.html">Ch. 8</a>)</td></tr>
+      <tr><td>tiers wanted (public? data?)</td><td>S3 and DynamoDB gateway endpoints; no internet gateway unless public is asked for</td></tr>
+      <tr><td></td><td>Default route to the transit gateway (centralised egress, <a href="18-egress.html">Ch. 18</a>) and attachment to the right TGW route table (<a href="11-connecting-vpcs.html">Ch. 11</a>)</td></tr>
+      <tr><td></td><td>Flow logs on, to the central log account (<a href="22-troubleshooting.html">Ch. 22</a>); Resolver query logging; DNS Firewall rule groups (<a href="15-hybrid-dns.html">Ch. 15</a>)</td></tr>
+      <tr><td></td><td>Association with the company's private hosted zones and forwarding rules (<a href="15-hybrid-dns.html">Ch. 15</a>)</td></tr>
+      <tr><td>Outputs: VPC ID, subnet IDs by tier, route table IDs</td><td>Tags for cost and ownership (<a href="23-network-cost.html">Ch. 23</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">A module is where lessons go to stay learned. Every incident in this book should end with a default in the module, not just a fix in one VPC.</p>
+</div>
+
+<!-- ======================================================== 24.3 -->
+<h2 class="sec" id="s24-3"><span class="n">24.3</span>Who owns which code</h2>
+
+<p>Network code splits naturally into two layers with different owners and different rates of change:</p>
+<ul>
+  <li><strong>The central network</strong>, owned by the platform team in a dedicated network account: IPAM pools, transit gateways and their route tables, the egress and inspection VPC, hybrid connections, Resolver endpoints and shared private zones. Changes are rare and reviewed carefully.</li>
+  <li><strong>Workload networks</strong>, created by the module in each team's account: VPCs and subnets, security groups for their own services. Changes are frequent and owned by the team.</li>
+</ul>
+<p>Keep their Terraform <strong>state</strong> separate, so a team's change can never accidentally plan to touch the transit gateway, and pass values between them through published outputs (SSM parameters or remote state that teams can read but not write). Apply only from CI with short-lived credentials, never from laptops, and post every plan in its pull request.</p>
+
+<!-- ======================================================== 24.4 -->
+<h2 class="sec" id="s24-4"><span class="n">24.4</span>Policy as code and guardrails</h2>
+
+<p>Defaults help people do the right thing. Policies stop the wrong things. Use three kinds, at three moments:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 24.2 · Where network rules are enforced</caption>
+    <thead><tr><th>When</th><th>Tool</th><th>Example rules</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Before deploy</strong>: checks on the plan in CI</td><td>Checkov, tfsec/Trivy, OPA/Conftest, custom scripts</td><td>No security group allows <code>0.0.0.0/0</code> inbound except on load balancers; every VPC has flow logs; no internet gateway outside public tiers</td></tr>
+      <tr><td><strong>At the API</strong>: preventive guardrails</td><td>Service control policies (SCPs) in AWS Organizations</td><td>Workload accounts can't create internet gateways or VPC peerings; nobody can delete flow logs or disable GuardDuty; VPCs only in approved regions</td></tr>
+      <tr><td><strong>After deploy</strong>: detective controls</td><td>AWS Config rules, Network Access Analyzer, Security Hub</td><td>No databases reachable from the internet; no unused Elastic IPs; no VPCs outside IPAM</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Preventive guardrails are blunt and powerful: an SCP denying <code>ec2:CreateInternetGateway</code> in workload accounts makes centralised egress (<a href="18-egress.html">Chapter 18</a>) impossible to bypass, whatever anyone types. Use them for the few rules that must never be broken, and checks and detective controls for the rest, so teams aren't blocked by rules with exceptions.</p>
+
+<!-- ======================================================== 24.5 -->
+<h2 class="sec" id="s24-5"><span class="n">24.5</span>Landing zones</h2>
+
+<p>A <span class="term">landing zone</span> is the multi-account setup that every workload lands in: an account structure, shared services, baseline configuration and guardrails, built and maintained as code. On AWS it's usually built with AWS Control Tower or a custom equivalent, with accounts grouped into <strong>organisational units</strong> (OUs):</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 24.3 · A typical account structure, as Larder uses it</caption>
+    <thead><tr><th>OU / account</th><th>Holds</th></tr></thead>
+    <tbody>
+      <tr><td>Security: log archive, security tooling</td><td>Flow logs, query logs and audit logs from every account; GuardDuty and Security Hub administration</td></tr>
+      <tr><td>Infrastructure: network</td><td>IPAM, transit gateways, egress VPC, VPN and Direct Connect, Resolver endpoints, shared private zones</td></tr>
+      <tr><td>Workloads: production, non-production</td><td>One or more accounts per team and environment, with networks from the module</td></tr>
+      <tr><td>Sandbox</td><td>Experiments, isolated from the company network, with budgets and automatic cleanup</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>New accounts come from an <strong>account vending</strong> process (Control Tower's Account Factory, or a pipeline of your own) that creates the account in the right OU and applies the baseline: SCPs, logging, and, for workload accounts, a network from the module with a range from IPAM.</p>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>The data team's account was rebuilt in a day, from the vending pipeline. It got <code>10.21.0.0/16</code> from the Frankfurt IPAM pool, three zones of private subnets, gateway endpoints, flow logs to the log archive, the company's private zones, and an attachment to the non-production TGW route table, with no internet gateway allowed by SCP. Its heavy nightly copy from production got a direct peering (<a href="23-network-cost.html">Chapter 23</a>). Since then, a new team account takes about an hour from request to first deploy, and every one of them has the same network as the last.</p>
+</aside>
+
+<!-- ======================================================== 24.6 -->
+<h2 class="sec" id="s24-6"><span class="n">24.6</span>Shared VPCs or a VPC per team?</h2>
+
+<p>There are two ways to give teams networks. In <strong>VPC per account</strong>, each team account gets its own VPC from the module and attaches to the transit gateway. In <strong>VPC sharing</strong>, the network team owns a VPC per environment and shares specific subnets with team accounts through Resource Access Manager; teams launch resources into subnets they don't own and can't change.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 24.4 · Comparing the two models</caption>
+    <thead><tr><th></th><th>VPC per account</th><th>Shared VPC</th></tr></thead>
+    <tbody>
+      <tr><td>Team autonomy</td><td>high: own routes, endpoints, attachments</td><td>lower: network fixed by the central team</td></tr>
+      <tr><td>Address use</td><td>a block per VPC, some unused</td><td>dense: one VPC per environment</td></tr>
+      <tr><td>Cost</td><td>NAT, endpoints and attachments in every VPC (or centralised)</td><td>shared once per environment</td></tr>
+      <tr><td>Traffic between teams</td><td>through the TGW (charged)</td><td>inside the VPC (free within a zone)</td></tr>
+      <tr><td>Blast radius</td><td>a team's mistake stays in its VPC</td><td>subnet and route mistakes affect all sharers</td></tr>
+      <tr><td>Fits</td><td>many independent teams, strong isolation needs</td><td>a few closely related teams, cost and simplicity first</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Larder uses both: the product teams share the production and staging VPCs, which keeps their heavy traffic to each other free and simple, and teams with different needs, like the data team, get their own VPC from the module.</p>
+
+<!-- ======================================================== 24.7 -->
+<h2 class="sec" id="s24-7"><span class="n">24.7</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 24.5 · Foundations at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Landing zone guidance</td><td>Control Tower; Landing Zone Accelerator</td><td>Azure landing zones (Cloud Adoption Framework)</td><td>landing zone blueprints; Cloud Foundation Fabric</td></tr>
+      <tr><td>Grouping</td><td>organisational units</td><td>management groups and subscriptions</td><td>folders and projects</td></tr>
+      <tr><td>Preventive guardrails</td><td>service control policies</td><td>Azure Policy (deny effects)</td><td>Organization Policy constraints</td></tr>
+      <tr><td>Shared network</td><td>VPC sharing</td><td>hub-spoke with peering; Virtual WAN</td><td>Shared VPC</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 24.8 -->
+<h2 class="sec" id="s24-8"><span class="n">24.8</span>Lab: a module, two networks and a policy check</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 24 · Plan only, then let a script review it</p>
+  <p><strong>You'll</strong> write a small VPC module, use it for a good network and a bad one, produce a Terraform plan without creating anything, and check the plan with a Python policy script. <strong>You need</strong> Terraform, Python 3 and AWS credentials (the plan reads your account but changes nothing). <strong>Cost:</strong> nothing.</p>
+</div>
+
+<p class="code-title"><span>modules/vpc/main.tf</span><span>Terraform ≥ 1.5, AWS provider 5.x</span></p>
+<pre><code><span class="k">variable</span> <span class="s">"name"</span>   {}
+<span class="k">variable</span> <span class="s">"cidr"</span>   {}
+<span class="k">variable</span> <span class="s">"azs"</span>    { type = list(string) }
+<span class="k">variable</span> <span class="s">"public"</span> { default = false }
+<span class="k">variable</span> <span class="s">"flow_log_bucket_arn"</span> {}
+
+<span class="k">data</span> <span class="s">"aws_region"</span> <span class="s">"current"</span> {}
+
+<span class="k">resource</span> <span class="s">"aws_vpc"</span> <span class="s">"this"</span> {
+  cidr_block = var.cidr
+  tags       = { Name = var.name }
+}
+<span class="k">resource</span> <span class="s">"aws_subnet"</span> <span class="s">"app"</span> {
+  count             = length(var.azs)
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = cidrsubnet(var.cidr, 4, count.index + 1)
+  availability_zone = var.azs[count.index]
+}
+<span class="k">resource</span> <span class="s">"aws_route_table"</span> <span class="s">"app"</span> {
+  count  = length(var.azs)
+  vpc_id = aws_vpc.this.id
+}
+<span class="k">resource</span> <span class="s">"aws_route_table_association"</span> <span class="s">"app"</span> {   <span class="c"># never the main table</span>
+  count          = length(var.azs)
+  subnet_id      = aws_subnet.app[count.index].id
+  route_table_id = aws_route_table.app[count.index].id
+}
+<span class="k">resource</span> <span class="s">"aws_vpc_endpoint"</span> <span class="s">"s3"</span> {                   <span class="c"># free, always</span>
+  vpc_id          = aws_vpc.this.id
+  service_name    = <span class="s">"com.amazonaws.${data.aws_region.current.name}.s3"</span>
+  route_table_ids = aws_route_table.app[*].id
+}
+<span class="k">resource</span> <span class="s">"aws_flow_log"</span> <span class="s">"this"</span> {                   <span class="c"># always on</span>
+  vpc_id               = aws_vpc.this.id
+  traffic_type         = <span class="s">"ALL"</span>
+  log_destination_type = <span class="s">"s3"</span>
+  log_destination      = var.flow_log_bucket_arn
+}
+<span class="k">resource</span> <span class="s">"aws_internet_gateway"</span> <span class="s">"this"</span> {           <span class="c"># only if asked for</span>
+  count  = var.public ? 1 : 0
+  vpc_id = aws_vpc.this.id
+}
+
+<span class="k">output</span> <span class="s">"vpc_id"</span> { value = aws_vpc.this.id }</code></pre>
+
+<p class="code-title"><span>main.tf</span><span>two networks, one of them wrong</span></p>
+<pre><code><span class="k">provider</span> <span class="s">"aws"</span> { region = <span class="s">"eu-central-1"</span> }
+
+<span class="k">locals</span> {
+  azs    = [<span class="s">"eu-central-1a"</span>, <span class="s">"eu-central-1b"</span>, <span class="s">"eu-central-1c"</span>]
+  bucket = <span class="s">"arn:aws:s3:::example-central-flow-logs"</span>
+}
+<span class="k">module</span> <span class="s">"orders_dev"</span> {
+  source              = <span class="s">"./modules/vpc"</span>
+  name                = <span class="s">"orders-dev"</span>
+  cidr                = <span class="s">"10.17.0.0/16"</span>
+  azs                 = local.azs
+  flow_log_bucket_arn = local.bucket
+}
+<span class="k">module</span> <span class="s">"data_team"</span> {                             <span class="c"># the Friday-afternoon network</span>
+  source              = <span class="s">"./modules/vpc"</span>
+  name                = <span class="s">"data"</span>
+  cidr                = <span class="s">"10.0.0.0/16"</span>
+  azs                 = local.azs
+  public              = true
+  flow_log_bucket_arn = local.bucket
+}</code></pre>
+
+<p class="code-title"><span>check_plan.py</span><span>Python 3</span></p>
+<pre><code><span class="k">import</span> ipaddress <span class="k">as</span> ip, json, sys
+
+RESERVED = [ip.ip_network(<span class="s">"10.0.0.0/13"</span>), ip.ip_network(<span class="s">"10.8.0.0/13"</span>)]  <span class="c"># offices, stores (Ch. 10)</span>
+plan = json.load(open(sys.argv[1]))
+problems = []
+<span class="k">for</span> rc <span class="k">in</span> plan[<span class="s">"resource_changes"</span>]:
+    after = (rc[<span class="s">"change"</span>].get(<span class="s">"after"</span>) <span class="k">or</span> {})
+    <span class="k">if</span> rc[<span class="s">"type"</span>] == <span class="s">"aws_internet_gateway"</span>:
+        problems.append(f<span class="s">"{rc['address']}: internet gateways are not allowed in workload VPCs"</span>)
+    <span class="k">if</span> rc[<span class="s">"type"</span>] == <span class="s">"aws_vpc"</span>:
+        net = ip.ip_network(after[<span class="s">"cidr_block"</span>])
+        <span class="k">for</span> r <span class="k">in</span> RESERVED:
+            <span class="k">if</span> net.overlaps(r):
+                problems.append(f<span class="s">"{rc['address']}: {net} overlaps reserved {r}"</span>)
+print(<span class="s">"\n"</span>.join(problems) <span class="k">or</span> <span class="s">"plan OK"</span>)
+sys.exit(1 <span class="k">if</span> problems <span class="k">else</span> 0)</code></pre>
+
+<ol class="steps">
+  <li><strong>Plan, don't apply.</strong> <code>terraform init</code>, then <code>terraform plan -out tf.plan</code> and <code>terraform show -json tf.plan &gt; plan.json</code>. Nothing is created.</li>
+  <li><strong>Review it with code.</strong> <code>python3 check_plan.py plan.json</code>. It reports the data team's internet gateway and its overlap with the office range, and exits with an error, which would fail a CI pipeline.</li>
+  <li><strong>Fix it the right way.</strong> Give <code>data_team</code> the range <code>10.21.0.0/16</code> and remove <code>public = true</code>; plan and check again: <code>plan OK</code>.</li>
+  <li><strong>Add a rule.</strong> Extend the script so every <code>aws_vpc</code> in the plan has a matching <code>aws_flow_log</code> in the same module. (Hint: compare the module part of each resource's <code>address</code>.)</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Run <a href="https://www.checkov.io/">Checkov</a> on the same folder (<code>checkov -d .</code>) and compare its findings with your script's. Which of your rules are company-specific, and which are general good practice?</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s24-9"><span class="n">24.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Decisions without defaults</td><td>Every new team relearns every lesson.</td><td>A module with safe defaults; vending that uses it.</td></tr>
+      <tr><td>One state for the whole network</td><td>Every team's change risks the transit gateway; plans take ages.</td><td>Separate central and workload state.</td></tr>
+      <tr><td>Applying from laptops</td><td>Unreviewed changes, conflicting state.</td><td>Plans in pull requests; applies from CI.</td></tr>
+      <tr><td>SCPs for everything</td><td>Teams blocked by rules with legitimate exceptions.</td><td>SCPs for the few absolute rules; checks and detection for the rest.</td></tr>
+      <tr><td>Console changes to networks</td><td>Drift between code and reality.</td><td>Read-only consoles for networks; scheduled drift plans.</td></tr>
+      <tr><td>Fixing incidents only in the affected VPC</td><td>The same incident in the next VPC.</td><td>Every fix becomes a module default or a policy.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum24">
+  <h2 class="sec" id="sum24"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Networks in code are reviewed, repeatable and recorded; <strong>modules</strong> carry lessons into every new VPC.</li>
+    <li>Split ownership: a central network (IPAM, TGW, egress, DNS, hybrid) and workload networks per team, with separate state.</li>
+    <li>Enforce with <strong>checks</strong> before deploy, <strong>guardrails</strong> (SCPs) at the API, and <strong>detection</strong> after.</li>
+    <li>A <strong>landing zone</strong> is the account structure, shared services and baseline that new accounts land in; account vending applies it.</li>
+    <li>Choose <strong>shared VPCs</strong> for closely related teams and cost, <strong>VPC per account</strong> for autonomy and isolation; many companies use both.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Module</dt><dd>Reusable infrastructure code with inputs and outputs.</dd>
+    <dt>State</dt><dd>Terraform's record of what it manages; keep it separate per owner.</dd>
+    <dt>Policy as code</dt><dd>Rules checked automatically against plans or resources.</dd>
+    <dt>Service control policy</dt><dd>An AWS Organizations policy that limits what accounts may do.</dd>
+    <dt>Landing zone</dt><dd>The multi-account foundation that workloads are deployed into.</dd>
+    <dt>Account vending</dt><dd>An automated process that creates accounts with the baseline applied.</dd>
+    <dt>VPC sharing</dt><dd>One account's subnets shared with other accounts.</dd>
+    <dt>Drift</dt><dd>Real infrastructure differing from its code.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Name four things a good VPC module should do without being asked. <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Any four of: take its range from IPAM; create aligned tiered subnets per zone; associate every subnet with an explicit route table and keep the main table local-only; add S3/DynamoDB gateway endpoints; turn on flow logs and query logging; attach to the transit gateway's correct route table; associate the company's private zones; tag for cost and ownership.</p></details>
+    </li>
+    <li>
+      <p>Why keep the transit gateway's code and state separate from teams' VPC code? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>So a team's change can never plan to modify the shared hub, plans stay fast and small, and the central network changes only through its own careful review.</p></details>
+    </li>
+    <li>
+      <p>Which rule would you enforce with an SCP, and which with a CI check: “no internet gateways in workload accounts” and “every security group rule has a description”? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>The internet gateway rule is absolute and security-critical: an SCP. Descriptions are good hygiene with occasional exceptions and no security impact by themselves: a CI check.</p></details>
+    </li>
+    <li>
+      <p>Two product teams exchange a lot of traffic and share releases. Shared VPC or a VPC each? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>A shared VPC fits: their traffic stays inside one VPC (free within a zone, no TGW charges), and they gain little from separate network autonomy. Isolation between them still comes from security groups.</p></details>
+    </li>
+    <li>
+      <p>An incident is caused by a subnet left on the main route table. What's the full fix? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Fix the subnet's association now; then make the module always associate subnets explicitly and keep the main table local-only, and add a check (CI or Config rule) that flags any subnet on a main table, so it can't happen in any VPC again.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/controltower/latest/userguide/what-is-control-tower.html">What is AWS Control Tower?</a> and <a href="https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_scps.html">Service control policies</a>.</li>
+    <li>AWS whitepaper: <a href="https://docs.aws.amazon.com/whitepapers/latest/organizing-your-aws-environment/organizing-your-aws-environment.html">Organizing your AWS environment using multiple accounts</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/cloud-adoption-framework/ready/landing-zone/">What is an Azure landing zone?</a></li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="23-network-cost.html">23 · The cost of moving bytes</a></div>
+  <div><span>Next</span><a href="25-capstone.html">25 · Capstone: Larder's network end to end</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 1 · Networking in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>
