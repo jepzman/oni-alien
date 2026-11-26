@@ -22,7 +22,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from doodle import ICONS, Doodle, esc, highlight  # noqa: E402
 import cheatsheet  # noqa: E402
 import dive  # noqa: E402
-import grimoire  # noqa: E402
+import grimoire
+import vendor  # noqa: E402
 import build_handbooks  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -177,6 +178,21 @@ PIPELINE_ATTRS = [
     ("Observability", "know when it's wrong?", "Failures, delays and bad data are seen before the report is read."),
     ("Evolvability", "easy to change?", "New sources, columns and definitions without rebuilding everything."),
 ]
+
+# Series 5 · On the Client's Floor (the vendor side, at MetroVolt): nine ratings for the note's main move.
+VENDOR_ATTRS = [
+    ("Client trust", "do they believe us?", "The client believes what we say, and can check it."),
+    ("Team health", "can people sleep?", "The vendor team's load and stress stay bearable."),
+    ("Margin protected", "do we still make money?", "The firm is paid for the work it actually does."),
+    ("Scope clarity", "do we agree what's in?", "Both sides could write down the same list of what's in and out."),
+    ("Technical integrity", "is the design honest?", "The solution isn't bent to fit a promise or a politics."),
+    ("Risk control", "do we see it coming?", "Risks are found early, owned and tested."),
+    ("Political cover", "is there a paper trail?", "Decisions and warnings are written down where they'll be found."),
+    ("Speed", "how quick to do?", "Time it takes before it starts paying off. High = quick."),
+    ("Low overhead", "light to keep up?", "Ceremony and upkeep it needs afterwards. High = light."),
+]
+VENDOR_NOTE = ("A story about fictional companies: MetroVolt, Wrenfield Digital, Vexmoor Consulting and Halvorsen Systems are invented. "
+               "Contract wording is illustrative, not legal advice; real contracts and procurement rules differ by country.")
 
 # “Then & now” verdicts (code-design volumes): how a classic idea from the 2000s holds up today.
 VERDICTS = {
@@ -1427,6 +1443,163 @@ JOURNALS = [
             (15, "making-it-yours", "Making It Yours", "leading", "Look back at the whole book, pick what fits your place, and start where you are."),
         ],
     ),
+    # ------------------------------------------------------------ Series 5 · On the Client's Floor (docs/PLAN-vendor-side.md)
+    dict(
+        key="vendor-1", vol=1, title="Winning the Work", short="winning the work",
+        series=5, book="On the Client's Floor", narrator="Ines", brand="on the client's floor", book_no=1,
+        title_block=True, vendor=True, css=("vendor.css",),
+        theme="theme-vendor", fonts="Archivo+Narrow:wght@500;700&family=IM+Fell+English+SC", subject="the vendor side",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On Lodestar",
+        attrs=VENDOR_ATTRS, attrs_title="The nine vendor ratings", attrs_side="what a move on the vendor side is judged on", ratings_h2="Vendor ratings",
+        disclaimer=VENDOR_NOTE, handmade=set(),
+        term="Spring 2027 · the bid", weekdays=(0,), start=date(2027, 2, 1),
+        kicker="on the client's floor · notes from the vendor side · vol. 1",
+        story="<b>February 2027.</b> MetroVolt, the city's electricity distributor, has just cancelled <b>Project Orion</b>: three years, three lost project leads, £2.4m over budget, and nothing live. Its customers still live in <b>MAVIS</b>, a system written in 1997. On <b>3 February</b> MetroVolt publishes a tender for <b>Lodestar</b>, Orion's replacement. At <b>Wrenfield Digital</b>, an 80-person consultancy in Leeds, Ines Duarte is the lead architect. She has never bid for anything this big. Neither has Wrenfield. This volume follows the bid from the day the tender lands to the day MetroVolt picks a winner: <b>3 February to 6 May 2027</b>.",
+        lead="Volume 1 of <span class=\"hl\">On the Client's Floor</span>: winning the work, seen from the vendor's side of the table. {n} notes in {c} collections: reading the tender, shaping the answer, competing, and closing. Each note is a <b>question a vendor's architect has to answer</b>, with <b>both sides of the table</b>, <b>what the contract says</b>, an <b>account health</b> dial, a <b>pressure gauge</b> and a <b>template to copy</b>. Every note follows <b>Ines</b> and the Wrenfield team at <b>MetroVolt</b>, the same company as in <i>The Darkside of the Corporation</i>, seen from outside.",
+        blurb="Reading a tender, bid or no bid, clarification questions, a solution on two pages, assumptions, estimating, pricing models, the incumbent, a big rival, a sales promise, the orals, references, the final offer and the handover to delivery.",
+        first_law="On the vendor side, everything you don't write down, you've agreed to carry. Everything you write down, you'll be held to. Write carefully.",
+        collections=[
+            ("reading", "Reading the tender", "what they asked for, what they meant, and whether to try"),
+            ("shaping", "Shaping the answer", "a design, its assumptions, an estimate and a price"),
+            ("competing", "Up against the others", "the incumbent, the big rival, our own sales team, and the room"),
+            ("closing", "Closing the deal", "references, the final offer, and handing the promises to delivery"),
+        ],
+        catalogue=[
+            (1, "reading-a-tender", "How Do I Read a Tender?", "reading", "Read it three times: for how it's scored, for the work hidden in every “will”, and for the history nobody wrote down."),
+            (2, "bid-no-bid", "Should We Even Bid?", "reading", "A bid costs real money. Decide with a scorecard, a reason to win and your conditions, before anyone falls in love with it."),
+            (3, "who-wrote-the-tender", "Who Wrote This Tender?", "reading", "Requirements copied from someone else's design tell you who the client has been talking to. Ask openly, then decide if you can still win."),
+            (4, "clarification-questions", "What Do We Ask Before We Answer?", "reading", "Every bidder sees every answer: ask what shrinks your risk, word it so it gives nothing away, and read the other bidders' questions."),
+            (5, "solution-on-two-pages", "How Do I Design on Two Pages of Facts?", "shaping", "Compare three honest options, pick one you can draw on a page, and say what you must learn before you commit."),
+            (6, "assumptions", "What Are We Assuming?", "shaping", "Write down the world your price assumes: assumptions, dependencies and exclusions, each with a number, an owner, a test and a consequence."),
+            (7, "estimating-in-fog", "How Long Will It Really Take?", "shaping", "Estimate in ranges, check them against what similar projects really took (including the client's own failure), and price the range, not the hope."),
+            (8, "pricing-models", "Fixed Price, or Time and Materials?", "shaping", "Match the model to what you know: paid discovery while it's foggy, a fixed price once you can see, a rate card for the rest."),
+            (9, "the-incumbent", "What About the Vendor Already Here?", "competing", "The incumbent knows the systems and the people, and you'll need their interfaces. Treat them as a future partner, not an enemy."),
+            (10, "big-consultancy", "How Do We Compete with a Big Consultancy?", "competing", "Don't fight a famous name on size. Win on named people, specific knowledge and a plan the client can check, and never attack their past."),
+            (11, "sales-already-promised", "What If Sales Already Promised?", "competing", "When someone has already promised a date, re-anchor it in public with a smaller first delivery, before the promise becomes the plan."),
+            (12, "the-orals", "How Do We Win the Room?", "competing", "Bring the people who'll do the work, show your thinking on the client's own data, and answer the hardest question before it's asked."),
+            (13, "references", "Who Will Vouch for Us?", "closing", "References win on specifics. Brief your referees on the client's real worries, and let them be honest."),
+            (14, "best-and-final-offer", "What Do We Give Away in the Final Offer?", "closing", "Trade, don't cut: every pound off the price buys back scope, risk or time, and the contingency goes last."),
+            (15, "bid-to-delivery", "Who Remembers What We Promised?", "closing", "Hand the bid to the delivery team with a promises register, named people and the assumptions, so nobody discovers the deal in month six."),
+        ],
+    ),
+    dict(
+        key="vendor-2", vol=2, title="Signing and Starting", short="signing and starting",
+        series=5, book="On the Client's Floor", narrator="Ines", brand="on the client's floor", book_no=1,
+        title_block=True, vendor=True, css=("vendor.css",),
+        theme="theme-vendor", fonts="Archivo+Narrow:wght@500;700&family=IM+Fell+English+SC", subject="the vendor side",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On Lodestar",
+        attrs=VENDOR_ATTRS, attrs_title="The nine vendor ratings", attrs_side="what a move on the vendor side is judged on", ratings_h2="Vendor ratings",
+        disclaimer=VENDOR_NOTE, handmade=set(),
+        term="Summer 2027 · the start", weekdays=(0,), start=date(2027, 5, 10),
+        kicker="on the client's floor · notes from the vendor side · vol. 2",
+        story="<b>May 2027.</b> On <b>6 May</b> MetroVolt names Wrenfield preferred bidder for Lodestar. The same morning, MetroVolt announces <b>Project Horizon</b>: a 15 % cost cut, about 600 roles, led by Rupert Thorne with <b>Vexmoor Consulting</b>, the firm Wrenfield has just beaten, as his advisers. Lodestar moves under Horizon's transformation office, and the contract has to be approved all over again. This volume follows Ines and the team from <b>May to September 2027</b>: the contract, the six weeks it stalls, the first day on floor 19, the laptops that take 23 days, the kick-off, and the baseline everything will be measured against.",
+        lead="Volume 2 of <span class=\"hl\">On the Client's Floor</span>: signing the contract and starting the work. {n} notes in {c} collections: the paper, arriving on the client's floor, and working as one team across three firms. Each note is a <b>question a vendor's architect has to answer</b>, with <b>both sides of the table</b>, <b>what the contract says</b>, an <b>account health</b> dial, a <b>pressure gauge</b> and a <b>template to copy</b>. Every note follows <b>Ines</b> and the Wrenfield team at <b>MetroVolt</b>.",
+        blurb="The statement of work, acceptance criteria, change control, a stalled signature, working at risk, day one on site, access, the client's real power map, the kick-off, governance, a multi-vendor RACI, the client's programme director, one team, the first status report and the baseline.",
+        first_law="The contract is what you'll argue about. The relationship is what decides whether you have to. Build both in the first ninety days.",
+        collections=[
+            ("paper", "The paper", "what we signed, how it changes, and what to do while it isn't signed"),
+            ("arriving", "Arriving", "day one, access, the real power map, the kick-off and who decides"),
+            ("together", "Two firms, one team", "other vendors, the client's people, honest reporting and the baseline"),
+        ],
+        catalogue=[
+            (1, "statement-of-work", "What Does the Contract Actually Say?", "paper", "Read the statement of work clause by clause, with the delivery team, and fix the five clauses that decide every future argument."),
+            (2, "acceptance-criteria", "How Will We Know It's Done?", "paper", "Acceptance criteria both sides can test: what is checked, by whom, how long they have, and what happens if they say nothing."),
+            (3, "change-control", "How Do We Change the Deal Without a War?", "paper", "A change process that's quick for small things and fair for big ones, so changes are raised early instead of fought over late."),
+            (4, "contract-stalls", "What If the Signature Stalls?", "paper", "When a reorg freezes your contract, find the new decision path, give the new people what they need, and keep the team together."),
+            (5, "working-at-risk", "Should We Start Before It's Signed?", "paper", "Work at risk only with a written letter of intent, a cap, a scope and a date you stop; otherwise you're lending money to a client."),
+            (6, "day-one", "What Do We Do on Day One?", "arriving", "Arrive with a first-week plan, meet the people who'll judge you, and learn the building before you try to change anything."),
+            (7, "access-purgatory", "Why Can't We Log In?", "arriving", "Treat laptops, accounts and badges as a dependency with dates, track the cost of every idle day, and work around it in public."),
+            (8, "mapping-the-client", "Who Really Decides Here?", "arriving", "Draw the client's real power map from outside: who decides, who blocks, who's listened to, and what each of them needs."),
+            (9, "the-kick-off", "How Do We Set the Rules at Kick-off?", "arriving", "Use the kick-off to agree how you'll work, decide and disagree, and walk through the assumptions in front of everyone."),
+            (10, "governance", "Who Decides What, and Where?", "arriving", "One steering group, one design authority, working groups and a decision log, with clear rights and an escalation path."),
+            (11, "multi-vendor-raci", "Who Does What When Three Firms Share a Project?", "together", "A responsibility chart for every shared interface, written with the other vendors, so a failure has an owner and not a blame war."),
+            (12, "client-counterpart", "How Do We Earn the Programme Director's Trust?", "together", "No surprises, early bad news, kept small promises and a weekly hour together turn a wary client into a working partner."),
+            (13, "one-team", "How Do Two Companies Work as One Team?", "together", "Mixed teams, shared tools and one set of rituals, while staying honest about who is paid by whom."),
+            (14, "first-status-report", "What Goes in the First Status Report?", "together", "The first report sets the tone: honest colours, facts before adjectives, and the bad news in the first line."),
+            (15, "the-baseline", "What Are We Measured Against?", "together", "Agree the baseline in writing: scope, plan, price, risks and assumptions, signed, so every later change is measured against the same thing."),
+        ],
+    ),
+    dict(
+        key="vendor-3", vol=3, title="Digging Up the Legacy", short="digging up the legacy",
+        series=5, book="On the Client's Floor", narrator="Ines", brand="on the client's floor", book_no=1,
+        title_block=True, vendor=True, css=("vendor.css",),
+        theme="theme-vendor", fonts="Archivo+Narrow:wght@500;700&family=IM+Fell+English+SC", subject="the vendor side",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On Lodestar",
+        attrs=VENDOR_ATTRS, attrs_title="The nine vendor ratings", attrs_side="what a move on the vendor side is judged on", ratings_h2="Vendor ratings",
+        disclaimer=VENDOR_NOTE, handmade=set(),
+        term="Autumn 2027 · discovery", weekdays=(0,), start=date(2027, 9, 6),
+        kicker="on the client's floor · notes from the vendor side · vol. 3",
+        story="<b>September 2027.</b> The baseline is signed: pilot on 6 March 2028, wave 1 on 24 June. Wrenfield finally has access to <b>MAVIS</b>, MetroVolt's 1997 customer system, and fourteen weeks of discovery to find out what's really inside it. The bid assumed no more than <b>5 %</b> of customer records would fail the address check; MetroVolt's sample showed 7.8 %. Vexmoor's assurance note has already called the migration plan “optimistic”. This volume follows Ines and the team from <b>September 2027 to February 2028</b>: four million lines of COBOL, the man who knows them, a batch job that does more than anyone said, the real data, a plan to strangle MAVIS, and the change request nobody wanted.",
+        lead="Volume 3 of <span class=\"hl\">On the Client's Floor</span>: discovery in a legacy estate, and telling the client what you found. {n} notes in {c} collections: inside MAVIS, the data and its seams, bad news told honestly, and a plan that survives it. Each note is a <b>question a vendor's architect has to answer</b>, with <b>both sides of the table</b>, <b>what the contract says</b>, an <b>account health</b> dial, a <b>pressure gauge</b> and a <b>template to copy</b>.",
+        blurb="Software archaeology, the person who knows, reading code nobody owns, the 02:10 job, data profiling, mainframe integration, the billing interface, a strangler plan, the discovery report, bad news, the honest change request, security reviews, migration waves, being overruled and design authority day.",
+        first_law="Discovery is paid for so that bad news arrives early, in writing, with a price. A discovery that finds nothing either didn't look or didn't say.",
+        collections=[
+            ("inside", "Inside MAVIS", "what's really there, who knows it, and what the night batch does"),
+            ("seams", "The data and its seams", "the real data, getting it out, the billing boundary and the plan"),
+            ("news", "Bad news, honestly", "the report, the telling, the change request and the security review"),
+            ("plan", "A plan that survives", "moving customers in waves, being overruled, and getting the design approved"),
+        ],
+        catalogue=[
+            (1, "software-archaeology", "What Is Actually in There?", "inside", "Map a legacy system from what it does (logs, schedules, data), not from what its documents say, and colour it by what's used."),
+            (2, "the-person-who-knows", "Who Knows How It Really Works?", "inside", "Capture the expert's knowledge without draining them: pair, record, write answers once, and plan their succession with them."),
+            (3, "reading-legacy-code", "How Do We Read Code Nobody Owns?", "inside", "Pin down what old code does with characterisation tests on real inputs before you trust any explanation of it."),
+            (4, "the-0210-job", "What Does the 02:10 Job Really Do?", "inside", "Trace a batch job step by step, by its inputs and outputs, and find the side effects everyone relies on and nobody wrote down."),
+            (5, "profiling-the-data", "How Bad Is the Data, Really?", "seams", "Profile all the data, not a sample: completeness, validity, duplicates and consistency, with numbers per district and per field."),
+            (6, "mainframe-integration", "How Do We Get Data Out of a Mainframe?", "seams", "Choose change capture by testing it: database logs, timestamps or snapshots, and the copybooks, encodings and packed numbers in between."),
+            (7, "billing-interface", "What Does the Billing System Really Need?", "seams", "Treat another vendor's interface as a contract: test it, version it, and put a translation layer between their model and yours."),
+            (8, "strangler-plan", "How Do We Strangle a Customer System?", "seams", "Move customers district by district, with one system of record per account, a way back, and reconciliation every night."),
+            (9, "discovery-report", "What Do We Say When Discovery Changes Everything?", "news", "A discovery report that leads with findings and numbers, explains what they mean, and offers priced options with a recommendation."),
+            (10, "delivering-bad-news", "How Do We Tell Them It's Worse Than They Think?", "news", "Tell bad news in person, in the right order, to the people who own the problem, with evidence and without blame."),
+            (11, "honest-change-request", "How Do We Ask for More Money Honestly?", "news", "A change request built from the contract's own assumptions and rates, line by line, with options, and room to negotiate in the open."),
+            (12, "security-review", "Why Does Security Take Twelve Weeks?", "news", "Start the security and data-protection reviews early, bring evidence in their format, and treat the reviewers as designers, not gatekeepers."),
+            (13, "migration-waves", "How Do We Move 380,000 Customers?", "plan", "A pilot, rehearsals, an exception queue and a reconciliation for every wave, so each move is boring because it was practised."),
+            (14, "overruled", "What If the Client Overrules Our Design?", "plan", "Disagree in writing, with the cost, then commit to the client's decision and make it work; record the dissent, not a grudge."),
+            (15, "design-authority", "How Do We Get the Design Approved?", "plan", "Pre-wire each member, send a decision paper, not a deck, and leave the meeting with conditions you can meet."),
+        ],
+    ),
+    dict(
+        key="vendor-4", vol=4, title="Delivery Under Fire", short="delivery under fire",
+        series=5, book="On the Client's Floor", narrator="Ines", brand="on the client's floor", book_no=1,
+        title_block=True, vendor=True, css=("vendor.css",),
+        theme="theme-vendor", fonts="Archivo+Narrow:wght@500;700&family=IM+Fell+English+SC", subject="the vendor side",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On Lodestar",
+        attrs=VENDOR_ATTRS, attrs_title="The nine vendor ratings", attrs_side="what a move on the vendor side is judged on", ratings_h2="Vendor ratings",
+        disclaimer=VENDOR_NOTE, handmade=set(),
+        term="2028 · the build and the night", weekdays=(0,), start=date(2028, 3, 6),
+        kicker="on the client's floor · notes from the vendor side · vol. 4",
+        story="<b>March 2028.</b> The change request is agreed: £700k and three months more, with MetroVolt's own team cleaning a third of the bad addresses. The new baseline: the pilot (20,000 customers) on <b>5 June 2028</b>, wave 1 (380,000) on the night of <b>Saturday 23 September</b>. The design is approved. Now Wrenfield has to build it, test it in environments it doesn't control, connect it to Halvorsen, and survive a steering committee where Vexmoor's assurance has become something closer to a rival bid. This volume follows the team from <b>March to September 2028</b>, ending on wave 1 night.",
+        lead="Volume 4 of <span class=\"hl\">On the Client's Floor</span>: delivering under pressure, from the build to the cutover night. {n} notes in {c} collections: telling the truth about progress, other people's moves, holding the line, and the night itself. Each note is a <b>question a vendor's architect has to answer</b>, with <b>both sides of the table</b>, <b>what the contract says</b>, an <b>account health</b> dial, a <b>pressure gauge</b> and a <b>template to copy</b>.",
+        blurb="The watermelon report, a RAID log people read, scope through the side door, multi-vendor blame, the rival as adviser, the steering ambush, escalation, re-planning, test environments, defect triage, quoting the contract, protecting margin, cutover planning, go / no-go and wave 1 night.",
+        first_law="Under pressure, every shortcut looks reasonable on the day you take it. Write down which corners you won't cut before the pressure arrives.",
+        collections=[
+            ("truth", "Telling the truth", "status that isn't a watermelon, a risk log people read, and scope that creeps"),
+            ("moves", "Other people's moves", "a vendor's blame, a rival's review, an ambush, and going over heads"),
+            ("line", "Holding the line", "re-planning, environments, defects, the contract and the margin"),
+            ("night", "The night", "the cutover plan, the go / no-go and wave 1"),
+        ],
+        catalogue=[
+            (1, "watermelon-report", "Why Is Everything Green Except the Truth?", "truth", "Status from measures, not moods: burn-up, test pass rates and reconciliation, so the colour can't be green outside and red inside."),
+            (2, "raid-log", "Is Anyone Reading the RAID Log?", "truth", "A short log of risks, assumptions, issues and dependencies, each with an owner, a date and a next step, reviewed every week in fifteen minutes."),
+            (3, "side-door-scope", "Where Did This Extra Work Come From?", "truth", "Catch the small requests that arrive by chat and corridor, count them, and route them through the change pool before they eat the plan."),
+            (4, "vendor-blame", "Whose Fault Is the Billing Failure?", "moves", "When another vendor blames you, go to the evidence together, under the interface agreement, and fix the cause before the blame."),
+            (5, "rival-adviser", "What Do We Do When Our Rival Advises the Client?", "moves", "Be transparent within the contract, ask the sponsor to define the reviewer's scope, protect your IP, and let the evidence answer."),
+            (6, "steering-ambush", "What Happens When Steering Turns on Us?", "moves", "Don't fight a surprise slide in the room: ask for the data, promise an answer in 48 hours, and pre-wire every steering after that."),
+            (7, "escalation", "When Do We Go Over Their Heads?", "moves", "Escalate up a ladder agreed in advance, tell the person first, bring a proposal not a complaint, and come back down quickly."),
+            (8, "re-planning", "How Do We Re-plan Without Lying?", "line", "Re-plan from the critical path and real velocity, show the options (scope, date, people), and never hide the slip in the buffer."),
+            (9, "test-environments", "Why Do the Test Environments Never Work?", "line", "Count the test days lost, book shared environments like a resource, and test what you can without them."),
+            (10, "defect-triage", "Is It a Defect or a Change?", "line", "A triage board with agreed definitions: a defect breaks the agreed criteria; a wish is a change, however it's labelled."),
+            (11, "quoting-the-contract", "When Do We Quote the Contract?", "line", "Read the contract aloud rarely: calmly, with an offer, and only when the relationship can't settle it."),
+            (12, "protecting-margin", "How Do We Protect the Margin?", "line", "Protect the margin by managing scope, staffing and change, never by cutting testing, quality or honesty."),
+            (13, "cutover-plan", "What Happens on the Night?", "night", "A minute-by-minute cutover runbook, rehearsed three times, with named roles, checkpoints and a point of no return."),
+            (14, "go-no-go", "Do We Go?", "night", "Go / no-go against criteria agreed weeks before, decided by the sponsor, with the dissent recorded."),
+            (15, "wave-one-night", "What Did the Night Teach Us?", "night", "Run the night by the book, fix what the book didn't foresee, and write down what happened before anyone sleeps."),
+        ],
+    ),
+]
+# Planned volumes of Series 5 (see docs/PLAN-vendor-side.md).
+PLANNED_VENDOR = [
+    (5, "Other People's Politics", "Reading the client from outside, losing a sponsor, saying no, liked or trusted, protecting your team, and being asked to change the numbers."),
+    (6, "The Cost and the Ending", "Stress on a vendor team, sustainable pace, hypercare, knowledge transfer, the phase 2 bid, and the last day on floor 19."),
 ]
 
 # Planned journals and other work, shown on the landing page.
@@ -1450,6 +1623,7 @@ FUTURE_LOG = [
     ("Mar 2027", [("•", "Cheat sheets for Book 3: PMBOK 8 on one page, earned value, critical path"), ("•", "Vol. 10 · AI App Patterns"), ("•", "A dimensional modelling cheat sheet for Vol. 9")]),
     ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations")]),
     ("Mid 2027", [("↓", "More deep dives: Observability &amp; SLOs, Multitenancy, History in the Warehouse"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
+    ("Early 2027", [("★", "<b>On the Client's Floor</b>, vols. 5–6: other people's politics, and the ending")]),
     ("Someday", [("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
 
@@ -1624,9 +1798,11 @@ def stamp_handmade(path, j=None):
         path.write_text(new, encoding="utf-8")
 
 
-def head(title, desc, depth, fonts=None):
-    """fonts: an optional extra Google Fonts family query for a journal's own heading font."""
+def head(title, desc, depth, fonts=None, css=()):
+    """fonts: an optional extra Google Fonts family query for a journal's own heading font. css: extra stylesheets
+    from assets/ loaded after the base ones (a journal's `css`, e.g. vendor.css)."""
     a = "../" * depth
+    more = "".join(f'\n<link rel="stylesheet" href="{a}{asset(c)}">' for c in css)
     extra = (f'\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={fonts}&display=swap">' if fonts else "")
     return f'''<!doctype html>
 <html lang="en">
@@ -1638,7 +1814,7 @@ def head(title, desc, depth, fonts=None):
 <meta name="theme-color" content="#E6E3DC">
 {FONTS}{extra}
 <link rel="stylesheet" href="{a}{asset("notebook.css")}">
-<link rel="stylesheet" href="{a}{asset("bujo.css")}">
+<link rel="stylesheet" href="{a}{asset("bujo.css")}">{more}
 <link rel="icon" href="{a}assets/favicon.svg" type="image/svg+xml">
 <script src="{a}{asset("notebook.js")}" defer></script>
 </head>'''
@@ -1923,8 +2099,8 @@ def resolve_related(j, item):
         filters.append(lambda o: (o.get("narrator") or "").lower() in who)
     if "patterns" in ctx or (j.get("series", 1) == 1 and not who):
         filters.append(lambda o: o.get("series", 1) == 1)
-    elif j.get("series") == 2 and not who:
-        filters.append(lambda o: o.get("series") == 2 and o.get("book_no", 1) == j.get("book_no", 1))
+    elif j.get("series") in (2, 5) and not who:
+        filters.append(lambda o: o.get("series") == j["series"] and o.get("book_no", 1) == j.get("book_no", 1))
     if vol:
         filters.append(lambda o: o["vol"] == int(vol.group(1)))
     if not vol and not who and "patterns" not in ctx:
@@ -2008,6 +2184,8 @@ def then_now_block(n):
 
 
 def render_note(j, n, back=()):
+    if j.get("vendor"):
+        return vendor.render_note(j, n, back, globals())
     num, slug, title, ckey, summary = entry(j, n["slug"])
     cname = coll(j, ckey)[1]
     vocab = "\n".join(f"    <div><dt>{t}</dt><dd>{d}</dd></div>" for t, d in n["vocab"])
@@ -2021,7 +2199,7 @@ def render_note(j, n, back=()):
     code = n["code"]
     figs = lambda key: "\n".join(f.html() for f in n.get(key, []))
     parts = [
-        head(f"{title} · Jef’s Notes", summary, 2, j.get("fonts")),
+        head(f"{title} · Jef’s Notes", summary, 2, j.get("fonts"), j.get("css", ())),
         body_open(j),
         '<a class="skip-link" href="#main">Skip to the notes</a>',
         bar(j, 2),
@@ -2162,8 +2340,9 @@ def story_box(j):
     if not j.get("story"):
         return ""
     return (f'  <aside class="story" aria-label="The story so far">\n    <span class="tag">the story so far</span>\n'
-            f'    <p>{j["story"]}</p>\n    <p class="story-link"><a href="../larder/index.html">Meet Larder: the case file, the cast '
-            f'and the timeline →</a></p>\n  </aside>')
+            f'    <p>{j["story"]}</p>\n    <p class="story-link">' + (
+                '<a href="../darkside/index.html">MetroVolt from the inside: The Darkside of the Corporation →</a>' if j.get("vendor")
+                else '<a href="../larder/index.html">Meet Larder: the case file, the cast and the timeline →</a>') + '</p>\n  </aside>')
 
 
 def counts(j):
@@ -2172,7 +2351,7 @@ def counts(j):
 
 def render_index(j):
     return "\n".join(x for x in [
-        head(f"{j['title']} · Jef’s Notes", j["blurb"], 1, j.get("fonts")),
+        head(f"{j['title']} · Jef’s Notes", j["blurb"], 1, j.get("fonts"), j.get("css", ())),
         body_open(j),
         '<a class="skip-link" href="#main">Skip to the index</a>',
         bar(j, 1, "index", print_button=False),
@@ -2196,14 +2375,15 @@ def render_index(j):
     <li><b>{j.get("problem_h2", "The problem")}</b>: {"a scene from the case study where it goes wrong" if j.get("book") else "what breaks without the pattern"}, with a doodle.</li>
     <li><b>Real-life analogy</b>: an everyday version, plus a “{j.get("map_caption", "translate to code").lower()}” table.</li>
     <li><b>How it solves it</b>: diagrams, steps, vocabulary and a {"template" if j.get("book") else "code"} card{". Key notes add a <b>going deeper</b> chapter here" if j.get("deep_dives") else ""}{". Then a <b>then &amp; now</b> box: what the original book said, what changed, and a verdict" if j.get("then_now") else ""}.</li>
-    <li>{"<b>The maturity ladder</b>: four rungs, from by hand to automatic, and where Larder stands." if j.get("ops") else "<b>Light, standard, heavy</b>: how much of it a small, a typical and a heavy project needs." if j.get("pmbok") else "<b>Gains vs losses</b>: the trade-off spread."}</li>
+    <li>{"<b>Both sides of the table</b>, <b>what the contract says</b>, an <b>account health</b> dial (green, amber, red) and a <b>pressure gauge</b>: the same move seen by the client and the vendor, the clause that applies, and what it costs the team." if j.get("vendor") else "<b>The maturity ladder</b>: four rungs, from by hand to automatic, and where Larder stands." if j.get("ops") else "<b>Light, standard, heavy</b>: how much of it a small, a typical and a heavy project needs." if j.get("pmbok") else "<b>Gains vs losses</b>: the trade-off spread."}</li>
     <li><b>Ratings</b>: nine qualities, before → after.</li>
     <li><b>Common pitfalls</b>: each with its fix.</li>
     <li><b>When to use it</b>: and when to skip it.</li>
-    <li><b>Self-check quiz</b>: tap a question to see the answer.</li>
+    <li><b>Self-check quiz</b>: tap a question to see the answer.{" Then a <b>try it</b>, and <b>the 23:00 note</b>: Ines's own notebook at the end of the day." if j.get("vendor") else ""}</li>
   </ol>''',
         f'  <h2 id="ratings-key"><span class="num">★</span>{j["attrs_title"]} <span class="side">{j["attrs_side"]}</span></h2>',
-        '  <p>Every note scores the pattern from 1 (poor) to 5 (great) on the same nine things, comparing an app <b>without</b> the pattern to the same app <b>with</b> it.</p>',
+        ('  <p>Every note scores its main move from 1 (poor) to 5 (great) on the same nine things, comparing the situation <b>before</b> with the same situation <b>after</b> the move.</p>' if j.get("vendor") else
+         '  <p>Every note scores the pattern from 1 (poor) to 5 (great) on the same nine things, comparing an app <b>without</b> the pattern to the same app <b>with</b> it.</p>'),
         attrs_block(j),
         verdicts_block(j),
         '''  <div class="remember">
@@ -2228,7 +2408,7 @@ def render_index(j):
 def render_all(j):
     collect = " ".join(f"notes/{c[1]}.html" for c in j["catalogue"])
     return "\n".join([
-        head(f"{j['title']} · Whole journal", "Every note on one page, ready to export as PDF.", 1, j.get("fonts")),
+        head(f"{j['title']} · Whole journal", "Every note on one page, ready to export as PDF.", 1, j.get("fonts"), j.get("css", ())),
         body_open(j),
         '<a class="skip-link" href="#main">Skip to the notes</a>',
         bar(j, 1, "all", print_button=True, disabled=True),
@@ -2375,6 +2555,8 @@ SPINE_TITLES = {
     "product-4": "Measuring", "product-5": "Stakeholders", "product-6": "Growing",
     "pmbok": "PMBOK Map", "ops-1": "Lights On", "ops-2": "Things Break", "ops-3": "Safe Change", "ops-4": "Promises", "ops-5": "The Worst", "ops-6": "Reliability Team", "Changing Things Safely": "Safe Change", "Promises &amp; Measures": "Promises", "Ready for the Worst": "The Worst", "Building the Reliability Team": "Reliability Team", "project-1": "Lay of the Land", "project-2": "Start, Steer, Close", "project-3": "What, By When", "project-4": "Money and People", "project-5": "People Outside", "project-6": "Making It Yours",
     "People Outside, and Surprises": "People &amp; Surprises",
+    "vendor-1": "Winning the Work", "vendor-2": "Signing &amp; Starting", "vendor-3": "The Legacy", "vendor-4": "Under Fire", "Digging Up the Legacy": "The Legacy",
+    "Delivery Under Fire": "Under Fire", "Other People's Politics": "Politics", "The Cost and the Ending": "The Ending",
     "Docker &amp; Kubernetes": "Docker &amp; K8s",   # cheat sheets are looked up by their full title
     # the darkside Acts drop their article on the spine, so even the longest fits
     "The Court of Whispers": "Court of Whispers",
@@ -2469,7 +2651,7 @@ def render_landing(sheets=(), dives=(), darkside=None, books=()):
     total = sum(len(j["catalogue"]) for j in shelf())
     n1 = sum(len(j["catalogue"]) for j in series1)
     return "\n".join([
-        head("Jef’s Notes", "Software design in sizes that fit a working day: ten-minute pattern notes with doodles and trade-offs, thirty-minute deep dives, two practitioner notebooks that follow one start-up, and printable cheat sheets.", 0, "Architects+Daughter&family=Permanent+Marker&family=IBM+Plex+Sans+Condensed:wght@700&family=Pirata+One&family=IM+Fell+English+SC&family=Archivo:wght@800"),
+        head("Jef’s Notes", "Software design in sizes that fit a working day: ten-minute pattern notes with doodles and trade-offs, thirty-minute deep dives, two practitioner notebooks that follow one start-up, and printable cheat sheets.", 0, "Architects+Daughter&family=Permanent+Marker&family=IBM+Plex+Sans+Condensed:wght@700&family=Pirata+One&family=IM+Fell+English+SC&family=Archivo:wght@800&family=Archivo+Narrow:wght@700"),
         body_open(),
         '<a class="skip-link" href="#main">Skip to the shelf</a>',
         bar(None, 0, "shelf"),
@@ -2511,6 +2693,10 @@ def render_landing(sheets=(), dives=(), darkside=None, books=()):
             f'  <p>A survival grimoire for <b>MetroVolt Electric</b>, in {NUMBER_WORDS[len(darkside)]} Acts and {sum(len(a["entries"]) for a in darkside.values())} entries, each with a painted plate, its origin story, counter-spells, a mirror and a rehearsal. Tap a spine to pull an Act off the shelf, or <a href="darkside/index.html">open the whole grimoire</a>.</p>',
             darkside_shelf(darkside),
         ] if darkside else []),
+        '  <h2 id="vendor-side"><span class="num">⚑</span>On the Client\'s Floor <span class="side">notes from the vendor side</span></h2>',
+        '  <p class="hook">The same MetroVolt as the grimoire, seen through the glass by the people it hires. Visitor pass, fixed price, one rival who never leaves.</p>',
+        '  <p>A practitioner\'s notebook told by <b>Ines</b>, lead architect at <b>Wrenfield Digital</b>, an 80-person consultancy that wins MetroVolt\'s <b>Lodestar</b> programme: tenders, contracts, legacy systems, other vendors, office politics you can see but not touch, and the stress of a fixed price. Every note shows <b>both sides of the table</b>, the clause that applies, a template to copy and a <b>try it</b>.</p>',
+        spine_shelf(book_items([j for j in shelf() if j.get("series") == 5], PLANNED_VENDOR), "ines", "On the Client's Floor volumes"),
         '  <h2 id="future"><span class="num">→</span>Future log <span class="side">plans, not promises</span></h2>',
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
         '  <p class="aside">the architect\'s, product owner\'s, project manager\'s and IT operations notebooks are complete, six volumes each. Next (★): the client manager. The deep dives get a second season too.</p>',
