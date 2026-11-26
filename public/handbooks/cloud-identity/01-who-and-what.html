@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Who are you, and what may you do? · Identity and Access in the Cloud</title>
+<meta name="description" content="Authentication and authorisation, principals and resources, and the life of one request from login to “allowed”. The mental model the book uses throughout.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=86bdfe1bff">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 2</a> · <a href="index.html">Identity and Access in the Cloud</a></span><span>Part I · Chapter 1</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part I · How access works</p>
+  <p class="chno">1</p>
+  <h1>Who are you, and what may you do?</h1>
+  <p class="promise">Every login screen, API key, IAM policy and “access denied” in this book is an answer to two questions: who is asking, and are they allowed to do this? This chapter separates those questions, names the parts of every request, and follows one request from sign-in to the audit log. It's the mental model the rest of the book hangs on.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Tell identification, authentication, authorisation and accountability apart, and say which one failed.</li>
+      <li>Name the principal, action, resource and context of any request.</li>
+      <li>Trace a request through sign-in, token, policy check and audit log.</li>
+      <li>Explain why a shared account breaks all four questions at once.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Nothing from this book. You've signed in to websites and used a cloud console or CLI.</li>
+      <li>HTTP requests and TLS help (Handbook 1, Chapter 6), but aren't required.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 35 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, Python 3, no cloud account</dd>
+      <dt>Main provider</dt><dd>provider-neutral, with AWS, Azure and Google Cloud in 1.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>On Monday 16 November 2026, a database migration from Ben's orders team went wrong and quietly damaged three days of substitution records. The plan was simple: restore the orders database to Friday night and replay from there. It failed. The database kept automated backups for one day, not the fourteen everyone assumed.</p>
+  <p>The audit log showed the change: on Thursday 12 November at 22:14, someone set backup retention to one day, probably to save money. The log named who: <code>ops</code>. That's the IAM user engineers share for production fixes. Six people know its password, including Jasper, who left the company fifteen months ago. Nobody remembers doing it. Rebuilding the records from the order events took Ben's team two days.</p>
+  <p>Eli, the platform tech lead, is asked to find out who did it. Section 1.7 explains why that's the wrong question.</p>
+</aside>
+
+<!-- ======================================================== 1.1 -->
+<h2 class="sec" id="s1-1"><span class="n">1.1</span>Four questions</h2>
+
+<p class="lead">“Access control” sounds like one thing. It's really four questions, asked in order, and most confusion about identity comes from mixing them up:</p>
+
+<ol class="steps">
+  <li><strong><span class="term">Identification</span>: who do you say you are?</strong> A name: <code>tomas@larder.example</code>, an access key ID, a service account. Claiming a name proves nothing.</li>
+  <li><strong><span class="term">Authentication</span>: prove it.</strong> Something only the real owner of that name can show: a password, a passkey, a signed token, a private key. Authentication turns a claim into an identity you can rely on.</li>
+  <li><strong><span class="term">Authorisation</span>: may you do this?</strong> Given who you are, is this action on this resource allowed, right now? This is where policies live.</li>
+  <li><strong><span class="term">Accountability</span>: who did what, and when?</strong> A record, written as the request happens, that ties the action to the identity. Without it, you can't investigate, prove compliance or learn from mistakes.</li>
+</ol>
+
+<figure class="wide" id="fig1-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 210" role="img" aria-labelledby="fig1-1-t fig1-1-d">
+      <title id="fig1-1-t">The four questions of access control, in order</title>
+      <desc id="fig1-1-d">Four gates from left to right. Identify: who do you say you are? Example: tomas@larder.example. Authenticate: prove it. Example: password and passkey. Authorise: may you do this? Example: store managers may edit their own store's stock. Record: who did what, when? Example: a log line saying Tomás set bananas to 40 at Noord at 06:12. A request that fails at any gate goes no further.</desc>
+      <defs><marker id="c1ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="12" y="20" width="164" height="70" rx="5"/>
+      <text class="t-title" x="94" y="48" text-anchor="middle">Identify</text>
+      <text class="t-small" x="94" y="72" text-anchor="middle">who do you say you are?</text>
+      <rect class="node" x="204" y="20" width="164" height="70" rx="5"/>
+      <text class="t-title" x="286" y="48" text-anchor="middle">Authenticate</text>
+      <text class="t-small" x="286" y="72" text-anchor="middle">prove it</text>
+      <rect class="node-accent" x="396" y="20" width="164" height="70" rx="5"/>
+      <text class="t-title on-accent" x="478" y="48" text-anchor="middle">Authorise</text>
+      <text class="t-small on-accent" x="478" y="72" text-anchor="middle">may you do this?</text>
+      <rect class="node" x="588" y="20" width="160" height="70" rx="5"/>
+      <text class="t-title" x="668" y="48" text-anchor="middle">Record</text>
+      <text class="t-small" x="668" y="72" text-anchor="middle">who did what, when?</text>
+      <path class="wire" d="M178 55 H200" marker-end="url(#c1ah)"/>
+      <path class="wire" d="M370 55 H392" marker-end="url(#c1ah)"/>
+      <path class="wire" d="M562 55 H584" marker-end="url(#c1ah)"/>
+      <rect class="priv" x="12" y="110" width="736" height="86" rx="6"/>
+      <text class="t-small" x="24" y="130">At Larder, Tomás changes stock in the Noord store:</text>
+      <text class="t-mono" x="94" y="160" text-anchor="middle">tomas@larder.example</text>
+      <text class="t-mono" x="286" y="160" text-anchor="middle">password + passkey</text>
+      <text class="t-mono" x="478" y="160" text-anchor="middle">store managers may</text>
+      <text class="t-mono" x="478" y="178" text-anchor="middle">edit their store's stock</text>
+      <text class="t-mono" x="668" y="160" text-anchor="middle">06:12 tomas set</text>
+      <text class="t-mono" x="668" y="178" text-anchor="middle">bananas=40 @noord</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 1.1</b> The four questions. A request that fails one goes no further, and the record is written whatever the answer, because failed attempts matter too.</figcaption>
+</figure>
+
+<p>When something goes wrong, the first job is to work out <em>which</em> question failed. “I can't log in” is authentication. “I logged in but the button is greyed out” is authorisation. “We don't know who changed it” is accountability. They have different causes and different owners.</p>
+
+<aside class="side"><b>401 vs 403</b>HTTP mixes the words up. Status <code>401 Unauthorized</code> actually means <em>unauthenticated</em>: you didn't prove who you are. <code>403 Forbidden</code> means you did, and you're not allowed.</aside>
+
+<p>You'll often see the first three shortened to <strong>AuthN</strong> (authentication) and <strong>AuthZ</strong> (authorisation), and the whole field called <strong>IAM</strong>, identity and access management. AWS also uses IAM as the name of one specific service. This book says “AWS IAM” when it means the service.</p>
+
+<!-- ======================================================== 1.2 -->
+<h2 class="sec" id="s1-2"><span class="n">1.2</span>Principals: who can ask</h2>
+
+<p>A <span class="term">principal</span> is anything that can make a request and be granted access: a person, or a piece of software acting on its own behalf. A principal has an <strong>identity</strong> (who it is), one or more <strong>credentials</strong> (how it proves it), and <strong>permissions</strong> (what it may do). These are three different things, and good designs keep them separate: you can rotate a credential without changing the identity, or move a person to a new team without issuing new credentials.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 1.1 · Kinds of principal, at Larder</caption>
+    <thead><tr><th>Kind</th><th>Example</th><th>Typical credential</th><th>Book</th></tr></thead>
+    <tbody>
+      <tr><td>Employee</td><td>Tomás, store manager at Noord</td><td>password + second factor, through single sign-on</td><td>Chapters 2, 12</td></tr>
+      <tr><td>Customer</td><td>someone ordering groceries in the app</td><td>password or passkey; then a session token</td><td>Chapters 2, 3</td></tr>
+      <tr><td>Partner's user</td><td>an office manager at Korenwolf</td><td>their own company's sign-in, trusted by Larder</td><td>Chapter 5</td></tr>
+      <tr><td>Workload</td><td>Dispatch, running in containers</td><td>short-lived credentials from the platform</td><td>Chapter 15</td></tr>
+      <tr><td>Pipeline</td><td>the deploy job in CI</td><td>a token from the CI system, exchanged for cloud credentials</td><td>Chapter 17</td></tr>
+      <tr><td>Partner system</td><td>the payment provider calling Larder's webhook</td><td>a signature or API key</td><td>Chapter 19</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Software principals, often called <strong>non-human</strong> or <strong>machine identities</strong>, usually outnumber people many times over, and they're where most leaked credentials come from. Half of this book is about them.</p>
+
+<!-- ======================================================== 1.3 -->
+<h2 class="sec" id="s1-3"><span class="n">1.3</span>Credentials: how a principal proves it</h2>
+
+<p>A <span class="term">credential</span> is whatever a principal shows to authenticate. For people, the classic categories are called <strong>factors</strong>:</p>
+<ul>
+  <li><strong>Something you know:</strong> a password or PIN.</li>
+  <li><strong>Something you have:</strong> a phone with an authenticator app, a security key, a passkey stored on a device.</li>
+  <li><strong>Something you are:</strong> a fingerprint or face, usually unlocking something you have, rather than sent anywhere.</li>
+</ul>
+<p>Combining two different kinds is <strong>multi-factor authentication</strong> (MFA). <a href="02-proving-identity.html">Chapter 2</a> takes these apart, including which second factors actually stop phishing.</p>
+
+<p>For software, credentials are keys and tokens: an API key, an access key pair, a signed token, a client certificate. The property that matters most is <strong>how long it lives</strong>:</p>
+<ul>
+  <li>A <strong>long-lived</strong> credential (an access key, an API key, a password) works until someone remembers to revoke it. If it leaks into a log, a laptop backup or a Git history, it keeps working for whoever finds it.</li>
+  <li>A <strong>short-lived</strong> credential (a session token valid for an hour) is issued after authenticating with something stronger, and expires by itself. A leak is a problem for minutes, not years.</li>
+</ul>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Prefer credentials that expire by themselves. Most of the work in this book is replacing long-lived secrets with short-lived ones.</p>
+</div>
+
+<!-- ======================================================== 1.4 -->
+<h2 class="sec" id="s1-4"><span class="n">1.4</span>Resources, actions and context</h2>
+
+<p>Authorisation needs more than “who”. Every request carries four things, and every access rule you'll ever write is about some combination of them:</p>
+<ul>
+  <li><strong>Principal:</strong> who is asking (after authentication).</li>
+  <li><strong>Action:</strong> what they want to do: read, update stock, delete, change backup retention.</li>
+  <li><strong>Resource:</strong> what they want to do it to: the Noord store's stock, the orders database, one S3 bucket.</li>
+  <li><strong>Context:</strong> everything else known about the request: the time, the network it came from, whether MFA was used, the device, the tags on the principal and the resource.</li>
+</ul>
+
+<p>Write a request as one sentence and the four parts fall out: “<em>Tomás</em> wants to <em>set stock</em> on <em>Noord's bananas</em>, at <em>06:12, from the store's tablet, signed in with a passkey</em>.” A rule is a sentence of the same shape with blanks: “Store managers may set stock on their own store's items.” <a href="09-policies.html">Chapter 9</a> writes these as AWS policies, and <a href="06-access-models.html">Chapter 6</a> compares the ways of filling the blanks (roles, attributes, relationships).</p>
+
+<p>One more rule underpins all of them. Unless a rule allows a request, it's denied. This is <span class="term">default deny</span>, and it means that a forgotten rule fails safe: something someone needs doesn't work, and they ask. The opposite, default allow, fails silently: something nobody intended works, and nobody notices.</p>
+
+<!-- ======================================================== 1.5 -->
+<h2 class="sec" id="s1-5"><span class="n">1.5</span>The life of a request</h2>
+
+<p>Put the pieces together. At 06:12, before the morning rush, Tomás corrects the banana count in Larder's stock tool. Here is everything that happens:</p>
+
+<figure class="wide" id="fig1-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 380" role="img" aria-labelledby="fig1-2-t fig1-2-d">
+      <title id="fig1-2-t">One request, from sign-in to the audit log</title>
+      <desc id="fig1-2-d">Six participants: Tomás's browser, the identity provider, the stock tool, the policy check, the database and the audit log. Step 1: the browser signs in to the identity provider with a password and passkey. Step 2: the identity provider returns a token saying tomas, store noord, valid 30 minutes. Step 3: the browser sends the stock change to the stock tool with the token. Step 4: the stock tool asks the policy check whether tomas may set stock in noord. Step 5: the policy check answers allow. Step 6: the stock tool updates the database. Step 7: the stock tool writes a line to the audit log.</desc>
+      <defs><marker id="c1ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c1ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="14" y="12" width="104" height="40" rx="4"/><text class="t-label" x="66" y="37" text-anchor="middle">browser</text>
+      <rect class="node" x="140" y="12" width="104" height="40" rx="4"/><text class="t-label" x="192" y="37" text-anchor="middle">identity provider</text>
+      <rect class="node" x="266" y="12" width="104" height="40" rx="4"/><text class="t-label" x="318" y="37" text-anchor="middle">stock tool</text>
+      <rect class="node-accent" x="392" y="12" width="104" height="40" rx="4"/><text class="t-label on-accent" x="444" y="37" text-anchor="middle">policy check</text>
+      <rect class="node" x="518" y="12" width="104" height="40" rx="4"/><text class="t-label" x="570" y="37" text-anchor="middle">database</text>
+      <rect class="node" x="644" y="12" width="104" height="40" rx="4"/><text class="t-label" x="696" y="37" text-anchor="middle">audit log</text>
+      <path class="wire-dash" d="M66 52 V366 M192 52 V366 M318 52 V366 M444 52 V366 M570 52 V366 M696 52 V366"/>
+      <path class="wire" d="M66 84 H188" marker-end="url(#c1ah2)"/>
+      <text class="t-small halo-priv" x="72" y="76">① sign in: password + passkey</text>
+      <path class="wire" d="M192 126 H70" marker-end="url(#c1ah2)"/>
+      <text class="t-small halo-priv" x="72" y="118">② token: tomas, store=noord, 30 min</text>
+      <path class="wire" d="M66 168 H314" marker-end="url(#c1ah2)"/>
+      <text class="t-small halo-priv" x="200" y="160">③ set bananas = 40, with token</text>
+      <path class="wire-accent" d="M318 210 H440" marker-end="url(#c1ah3)"/>
+      <text class="t-small halo-priv" x="324" y="202">④ may tomas set stock @noord?</text>
+      <path class="wire-accent" d="M444 252 H322" marker-end="url(#c1ah3)"/>
+      <text class="t-small halo-priv" x="382" y="244" text-anchor="middle">⑤ allow</text>
+      <path class="wire" d="M318 294 H566" marker-end="url(#c1ah2)"/>
+      <text class="t-small halo-priv" x="442" y="286" text-anchor="middle">⑥ UPDATE stock …</text>
+      <path class="wire" d="M318 336 H692" marker-end="url(#c1ah2)"/>
+      <text class="t-small halo-priv" x="566" y="328" text-anchor="middle">⑦ 06:12 tomas set bananas=40 @noord allowed</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 1.2</b> Authentication happens once, at the identity provider (①–②). Authorisation happens on every request (④–⑤), using what the token says. The record (⑦) is written by the system that did the work.</figcaption>
+</figure>
+
+<p>Three roles in that picture have names you'll meet everywhere:</p>
+<ul>
+  <li>The <span class="term">identity provider</span> (IdP) authenticates people and issues tokens that describe them. Larder's staff will sign in through one (<a href="index.html#ch12">Chapter 12</a>).</li>
+  <li>The <span class="term">policy enforcement point</span> (PEP) is the code that stops a request until it has an answer. Here it's the stock tool; on AWS, it's every service's API endpoint.</li>
+  <li>The <span class="term">policy decision point</span> (PDP) holds the rules and answers allow or deny. In a small app it's a function; on AWS, it's the IAM policy engine, which evaluates every API call.</li>
+</ul>
+
+<p>Notice what the token in step ② does. Tomás authenticates once; for the next 30 minutes, the stock tool trusts the token instead of asking for his password again. That's convenient, and it's also why a stolen token is as good as a stolen password while it lasts. <a href="03-tokens-sessions.html">Chapter 3</a> is about tokens.</p>
+
+<!-- ======================================================== 1.6 -->
+<h2 class="sec" id="s1-6"><span class="n">1.6</span>Trust: whose word are you taking?</h2>
+
+<p>In step ③, the stock tool doesn't check Tomás's passkey. It checks the <em>token</em>, and believes what the token says because it was signed by an identity provider it's configured to trust. Every access decision rests on a chain like this: the database trusts the stock tool, the stock tool trusts the identity provider, the identity provider trusts Tomás's passkey.</p>
+
+<p>Trust isn't a feeling; it's configuration you can read. Somewhere there's a setting that says “accept tokens signed by this key, issued by this provider, meant for this app”. When that setting is too broad (any issuer, any audience), anyone who can get a token from <em>somewhere</em> gets in. Two places you'll meet this soon:</p>
+<ul>
+  <li><strong>Federation</strong>: Larder trusts Korenwolf's identity provider to vouch for Korenwolf's office managers, so they don't need Larder passwords (<a href="05-saml-federation.html">Chapter 5</a>).</li>
+  <li><strong>Role trust policies</strong> on AWS, which say who may assume a role (<a href="index.html#ch8">Chapter 8</a>). A trust policy that's too broad is one of the most serious IAM mistakes there is.</li>
+</ul>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">For every access decision, you should be able to say whose word it takes, and where that trust is written down.</p>
+</div>
+
+<!-- ======================================================== 1.7 -->
+<h2 class="sec" id="s1-7"><span class="n">1.7</span>Why shared identities break everything</h2>
+
+<p>A shared account, such as Larder's <code>ops</code> user, one login for a whole team, or one API key used by three services, looks like a convenience. Run it past the four questions and every one of them fails:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 1.2 · The <code>ops</code> user against the four questions</caption>
+    <thead><tr><th>Question</th><th>With <code>ops</code></th><th>With one identity per person</th></tr></thead>
+    <tbody>
+      <tr><td>Identification</td><td>The name says <code>ops</code>, which is six people.</td><td>The name is one person.</td></tr>
+      <tr><td>Authentication</td><td>A shared password can't have a personal second factor; it's in a chat history and a former employee's memory.</td><td>Each person has their own factors; a leaver's are switched off.</td></tr>
+      <tr><td>Authorisation</td><td>Everyone gets the union of what anyone needed: admin.</td><td>Each person gets their own job's access.</td></tr>
+      <tr><td>Accountability</td><td>The log says <code>ops</code>. Investigation stops there.</td><td>The log names the person, so you can ask them what they were trying to do.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>And removing access, for one leaver, means changing the password for everyone, so it rarely happens. That's how a co-founder who left in 2025 still knew the production password in 2026.</p>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: what Eli does instead</p>
+  <p>Eli can't find out who changed the backups, and he stops trying: there's no answer in the data, and asking six people to accuse each other helps nobody. The useful question is how to make the next log line name a person, and make the change impossible without deliberate effort. His plan, which the rest of this book carries out: an identity for every engineer through single sign-on (<a href="index.html#ch12">Chapter 12</a>); admin access only when needed, with approval (<a href="index.html#ch14">Chapter 14</a>); and a guardrail that denies shortening backup retention in production, whoever asks (<a href="index.html#ch10">Chapter 10</a> and <a href="index.html#ch20">Chapter 20</a>). The <code>ops</code> user's password is changed that afternoon, and the user is deleted in Chapter 12.</p>
+</aside>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: shared machine credentials</p>
+  <p>The same applies to software. One API key used by three services means you can't tell which one made a call, can't give each one only what it needs, and can't revoke one without breaking the others. Give each workload its own identity (<a href="index.html#ch15">Chapter 15</a>).</p>
+</div>
+
+<!-- ======================================================== 1.8 -->
+<h2 class="sec" id="s1-8"><span class="n">1.8</span>Across providers</h2>
+
+<p>Every cloud splits identity into the same two halves: a <strong>directory</strong> of who exists and how they authenticate, and a <strong>permission system</strong> that decides what they may do with the cloud's resources. The providers draw the line in different places:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 1.3 · Where identity lives at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Directory of people</td><td>IAM Identity Center (its own, or connected to your IdP); IAM users are legacy</td><td>Microsoft Entra ID</td><td>Cloud Identity or Google Workspace, or federated from your IdP</td></tr>
+      <tr><td>Software identities</td><td>IAM roles</td><td>managed identities and service principals in Entra ID</td><td>service accounts</td></tr>
+      <tr><td>Permission system</td><td>IAM policies</td><td>Azure RBAC role assignments</td><td>IAM allow and deny policies</td></tr>
+      <tr><td>Boundary</td><td>the account</td><td>the tenant (directory), with subscriptions inside it</td><td>the organisation, with projects inside it</td></tr>
+      <tr><td>Audit log</td><td>CloudTrail</td><td>Entra sign-in and audit logs, Azure activity log</td><td>Cloud Audit Logs</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>Entra ID (formerly Azure Active Directory) is the centre of everything: people, groups, apps and managed identities all live in one tenant, and the same directory signs people in to Microsoft 365. Azure RBAC then grants those identities roles on subscriptions and resources. Many companies already have Entra ID from Microsoft 365 before they use Azure at all.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>People are Google accounts managed by Cloud Identity or Workspace, usually synced or federated from the company's IdP; software runs as <strong>service accounts</strong>, which are both identities and resources (you can grant someone permission to act as one). IAM policies attach to the organisation, folders, projects and individual resources.</p>
+</div>
+
+<!-- ======================================================== 1.9 -->
+<h2 class="sec" id="s1-9"><span class="n">1.9</span>Lab: the four questions in forty lines</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 1 · Authenticate, authorise, record</p>
+  <p><strong>You'll</strong> build a tiny access system with a shared identity, see what its log can and can't tell you, then give everyone their own identity and remove a leaver. <strong>You need</strong> Python 3, nothing else. <strong>Cost:</strong> nothing.</p>
+</div>
+
+<p class="code-title"><span>access.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># access.py · authenticate → authorise → record, in one small file</span>
+<span class="k">import</span> hashlib, hmac
+
+<span class="k">def</span> h(secret):
+    <span class="k">return</span> hashlib.sha256(secret.encode()).hexdigest()
+
+<span class="c"># Who exists, the hash of the key each one proves itself with, and their groups</span>
+PRINCIPALS = {
+    <span class="s">"ops"</span>: {<span class="s">"key_hash"</span>: h(<span class="s">"ops-key-known-by-six-people"</span>), <span class="s">"groups"</span>: [<span class="s">"admins"</span>]},
+}
+
+<span class="c"># What each group may do: (action, resource prefix); "*" matches anything</span>
+POLICIES = {
+    <span class="s">"admins"</span>:     [(<span class="s">"*"</span>, <span class="s">"*"</span>)],
+    <span class="s">"developers"</span>: [(<span class="s">"db:Describe"</span>, <span class="s">"db/"</span>), (<span class="s">"logs:Read"</span>, <span class="s">"logs/"</span>)],
+}
+
+AUDIT = []
+
+<span class="k">def</span> authenticate(name, key):
+    p = PRINCIPALS.get(name)
+    <span class="k">return</span> p <span class="k">is not</span> None <span class="k">and</span> hmac.compare_digest(p[<span class="s">"key_hash"</span>], h(key))
+
+<span class="k">def</span> authorise(name, action, resource):
+    <span class="k">for</span> group <span class="k">in</span> PRINCIPALS[name][<span class="s">"groups"</span>]:
+        <span class="k">for</span> act, prefix <span class="k">in</span> POLICIES[group]:
+            <span class="k">if</span> act <span class="k">in</span> (<span class="s">"*"</span>, action) <span class="k">and</span> (prefix == <span class="s">"*"</span> <span class="k">or</span> resource.startswith(prefix)):
+                <span class="k">return</span> True
+    <span class="k">return</span> False                      <span class="c"># default deny</span>
+
+<span class="k">def</span> request(name, key, action, resource):
+    <span class="k">if not</span> authenticate(name, key):
+        decision = <span class="s">"unauthenticated"</span>
+    <span class="k">elif not</span> authorise(name, action, resource):
+        decision = <span class="s">"denied"</span>
+    <span class="k">else</span>:
+        decision = <span class="s">"allowed"</span>
+    AUDIT.append(f<span class="s">"{name:&lt;6} {action:&lt;15} {resource:&lt;14} {decision}"</span>)
+    <span class="k">return</span> decision
+
+<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:
+    shared = <span class="s">"ops-key-known-by-six-people"</span>
+    request(<span class="s">"ops"</span>, shared, <span class="s">"db:Describe"</span>, <span class="s">"db/orders"</span>)              <span class="c"># Ben looks</span>
+    request(<span class="s">"ops"</span>, shared, <span class="s">"db:SetBackups"</span>, <span class="s">"db/orders"</span>)            <span class="c"># someone changes backups</span>
+    request(<span class="s">"ops"</span>, <span class="s">"a-guess"</span>, <span class="s">"db:Delete"</span>, <span class="s">"db/orders"</span>)             <span class="c"># a stranger tries</span>
+    print(<span class="s">"\n"</span>.join(AUDIT))</code></pre>
+
+<ol class="steps">
+  <li><strong>Run it</strong> with <code>python3 access.py</code>. You should see:
+<pre><code>ops    db:Describe     db/orders      allowed
+ops    db:SetBackups   db/orders      allowed
+ops    db:Delete       db/orders      unauthenticated</code></pre>
+  Find each of the four questions in the code: the name is identification; <code>authenticate</code> compares the key's hash (so the system never stores the key itself); <code>authorise</code> checks rules and falls through to default deny; <code>AUDIT</code> is the record. Now try to answer the Larder question from the log: who changed the backups?</li>
+  <li><strong>Give everyone their own identity.</strong> Save this next to <code>access.py</code> as <code>access_personal.py</code> and run it:
+<pre><code><span class="c"># access_personal.py · the same system, one identity per person</span>
+<span class="k">from</span> access <span class="k">import</span> PRINCIPALS, AUDIT, h, request
+
+PRINCIPALS.clear()
+PRINCIPALS.update({
+    <span class="s">"ben"</span>:    {<span class="s">"key_hash"</span>: h(<span class="s">"ben-key"</span>),    <span class="s">"groups"</span>: [<span class="s">"developers"</span>]},
+    <span class="s">"eli"</span>:    {<span class="s">"key_hash"</span>: h(<span class="s">"eli-key"</span>),    <span class="s">"groups"</span>: [<span class="s">"admins"</span>]},
+    <span class="s">"jasper"</span>: {<span class="s">"key_hash"</span>: h(<span class="s">"jasper-key"</span>), <span class="s">"groups"</span>: [<span class="s">"admins"</span>]},
+})
+
+request(<span class="s">"ben"</span>, <span class="s">"ben-key"</span>, <span class="s">"db:Describe"</span>, <span class="s">"db/orders"</span>)
+request(<span class="s">"ben"</span>, <span class="s">"ben-key"</span>, <span class="s">"db:SetBackups"</span>, <span class="s">"db/orders"</span>)
+request(<span class="s">"eli"</span>, <span class="s">"eli-key"</span>, <span class="s">"db:SetBackups"</span>, <span class="s">"db/orders"</span>)
+<span class="k">del</span> PRINCIPALS[<span class="s">"jasper"</span>]                     <span class="c"># a leaver: remove one entry, nobody else changes</span>
+request(<span class="s">"jasper"</span>, <span class="s">"jasper-key"</span>, <span class="s">"logs:Read"</span>, <span class="s">"logs/dispatch"</span>)
+print(<span class="s">"\n"</span>.join(AUDIT))</code></pre>
+  Output:
+<pre><code>ben    db:Describe     db/orders      allowed
+ben    db:SetBackups   db/orders      denied
+eli    db:SetBackups   db/orders      allowed
+jasper logs:Read       logs/dispatch  unauthenticated</code></pre>
+  Every line names a person; Ben, as a developer, can look but not change backups; and removing a leaver touched nobody else's key.</li>
+  <li><strong>Break it on purpose.</strong> In <code>POLICIES</code>, add <code>("*", "*")</code> to <code>developers</code>, “just for this week”. Run <code>access_personal.py</code> again: Ben can now change backups. Then delete the line <code>return False</code> at the end of <code>authorise</code>. The function now returns <code>None</code> when no rule matches, which happens to be falsy, so nothing changes; replace it with <code>return True</code> and every <em>authenticated</em> request succeeds, whatever it asks for. That's default allow.</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Add a <code>context</code> argument to <code>request</code> with an <code>mfa</code> flag, and a rule that <code>db:SetBackups</code> needs <code>mfa=True</code>. (2) Make the audit line include a timestamp and the request's source address. Which of the four questions does each new field help with?</p>
+
+<aside class="side"><b>Why SHA-256 is fine here</b>The lab hashes keys with plain SHA-256 because they're long and random, so guessing is hopeless. Human passwords are short and guessable, and need a slow hash instead (<a href="02-proving-identity.html">Chapter 2</a>).</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s1-10"><span class="n">1.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Shared accounts and shared keys</td><td>No accountability, no personal MFA, leavers keep access.</td><td>One identity per person and per workload.</td></tr>
+      <tr><td>Treating “logged in” as “allowed”</td><td>Any authenticated user can reach admin pages or other people's data.</td><td>Check authorisation on every request, for every resource.</td></tr>
+      <tr><td>Default allow</td><td>A missing rule silently grants access.</td><td>Default deny; add rules for what's needed.</td></tr>
+      <tr><td>Long-lived credentials everywhere</td><td>A leak works until someone notices, often years.</td><td>Short-lived credentials issued after strong authentication.</td></tr>
+      <tr><td>Logging only successes</td><td>Attacks and broken access go unseen.</td><td>Record every decision, allowed or not.</td></tr>
+      <tr><td>Trusting any token that looks valid</td><td>Tokens from the wrong issuer or for another app get accepted.</td><td>Configure exactly which issuer, key and audience you trust (Chapters 3–5).</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum1">
+  <h2 class="sec" id="sum1"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Access control is four questions: <strong>identify</strong>, <strong>authenticate</strong>, <strong>authorise</strong>, <strong>record</strong>. When something fails, find which one.</li>
+    <li>A <strong>principal</strong> (a person or a workload) has an identity, credentials and permissions; keep the three separate.</li>
+    <li>Every request has a principal, an action, a resource and context. Rules are sentences about those four.</li>
+    <li>Default deny: nothing is allowed unless a rule allows it.</li>
+    <li>Authentication happens once, at an identity provider; tokens carry the result; authorisation happens on every request.</li>
+    <li>Every decision rests on trust that's written down somewhere. Know where.</li>
+    <li>Shared identities fail all four questions at once. Prefer short-lived credentials to long-lived ones.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Identification</dt><dd>Claiming an identity, such as a user name.</dd>
+    <dt>Authentication</dt><dd>Proving a claimed identity with a credential.</dd>
+    <dt>Authorisation</dt><dd>Deciding whether an authenticated principal may perform an action on a resource.</dd>
+    <dt>Accountability</dt><dd>Recording who did what, when, so actions can be traced to identities.</dd>
+    <dt>Principal</dt><dd>A person or workload that can make requests and be granted access.</dd>
+    <dt>Credential</dt><dd>What a principal shows to authenticate: a password, key, token or certificate.</dd>
+    <dt>Default deny</dt><dd>The rule that anything not explicitly allowed is denied.</dd>
+    <dt>Identity provider (IdP)</dt><dd>A system that authenticates principals and issues tokens describing them.</dd>
+    <dt>PEP / PDP</dt><dd>Policy enforcement point (blocks the request) and policy decision point (decides).</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>A user enters the right password but gets “You don't have permission to view this page”. Which of the four questions failed? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Authorisation. Authentication succeeded (the password was right); the system then decided this identity may not do this action on this resource.</p></details>
+    </li>
+    <li>
+      <p>Split this request into principal, action, resource and context: “At 23:40, from a hotel Wi-Fi, Eli signed in with his security key and tried to delete the staging database.” <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Principal: Eli. Action: delete. Resource: the staging database. Context: 23:40, the hotel network's address, MFA with a security key.</p></details>
+    </li>
+    <li>
+      <p>Why is a short-lived token safer than a long-lived API key, even if both are stored equally carefully? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Storage fails eventually: logs, backups, screenshots, laptops. When a short-lived token leaks, it stops working by itself within minutes or hours. A long-lived key keeps working until someone notices and revokes it.</p></details>
+    </li>
+    <li>
+      <p>Your team shares one admin login for a SaaS tool, and someone leaves. List what you have to do, and what you can't do. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>You must change the password and tell everyone who still needs it, and re-enrol any MFA tied to it. You can't tell what the leaver did with it, or prove they no longer have access through a saved session or copied password. With personal accounts you'd just disable theirs.</p></details>
+    </li>
+    <li>
+      <p>Design the access for Larder's stock tool: who are the principals, and what context would you check before allowing a stock change? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Principals: store managers, pickers, operations staff, and the sync service from the picker app. Context worth checking: that the user's store matches the item's store, that they signed in with MFA, and (for large changes) the device. Every decision is logged with the person's identity.</p></details>
+    </li>
+    <li>
+      <p>Compare where people's identities live on AWS and on Azure. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>On AWS, people should come from IAM Identity Center, connected to an external IdP or its own directory; IAM users exist but are legacy. On Azure, people live in Entra ID, the same directory used for Microsoft 365, and Azure RBAC grants them roles.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>NIST <a href="https://pages.nist.gov/800-63-4/">SP 800-63, Digital Identity Guidelines</a>: the standard vocabulary for identity and authentication.</li>
+    <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/intro-structure.html">How IAM works</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/entra/fundamentals/whatis">What is Microsoft Entra ID?</a></li>
+    <li>Google Cloud: <a href="https://cloud.google.com/iam/docs/overview">IAM overview</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Identity and Access in the Cloud</a></div>
+  <div><span>Next</span><a href="02-proving-identity.html">2 · Passwords, MFA and passkeys</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 2 · Identity and Access in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

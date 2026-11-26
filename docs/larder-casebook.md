@@ -553,7 +553,7 @@ Network facts used by Handbook 1 (details and chapter references in `docs/HANDOF
 ## Series 3 · Identity and Access in the Cloud (handbook facts)
 
 Identity facts used by Handbook 2 (approved 2026-11-26; plan in `docs/HANDOFF-handbook-2-identity.md`). They extend,
-and must not contradict, ADR 0021 (staff tools SSO/SCIM, May 2027) and the 11 Oct 2026 security review.
+and must not contradict, ADR 0021 (staff tools SSO/SCIM, May 2027) and the 11 Oct 2027 security review (Ana, Vol. 5; later chapters move forward in time to tell it).
 
 - **Account audit (Nov 2026, led by Eli, platform tech lead):** the original AWS account Jasper opened in 2024 still
   has a root access key from 2024, and root MFA is on a phone nobody can find; 11 IAM users with console passwords,
@@ -573,4 +573,39 @@ and must not contradict, ADR 0021 (staff tools SSO/SCIM, May 2027) and the 11 Oc
 - **People (ch. 12–14):** IAM Identity Center with the company IdP; permission sets `ReadOnly`, `Developer`,
   `ProdOperator` (just in time, approved by a tech lead); two break-glass users whose credentials are kept in a safe.
 - **Partners (ch. 19, 21):** StockPilot and the payment provider use cross-account roles with external IDs or signed
-  requests; Korenwolf's business API keys expire after 90 days (a fix from the Oct 2026 review).
+  requests; Korenwolf's business API keys expire after 90 days (a fix from the Oct 2027 review).
+- **Backups and the `ops` user (ch. 1):** Thu 12 Nov 2026, 22:14, someone using the shared IAM user `ops` set the orders
+  database's automated backup retention from 14 days to 1 day. Found Mon 16 Nov, when a migration from Ben's team
+  damaged three days of substitution records and a point-in-time restore to Friday was impossible; rebuilt from the
+  order events in two days. Six people knew the `ops` password, including Jasper. Eli stops looking for who; the
+  password is changed that afternoon; plan: SSO (ch. 12), just-in-time admin (ch. 14), deny on shortening backups
+  (ch. 10, 20); `ops` deleted in ch. 12.
+- **Credential stuffing (ch. 2):** Sat 21 Nov 2026 night: ~40,000 sign-in attempts in 4 hours from ~2,000 addresses;
+  310 accounts taken over (reused passwords; Larder's hashes, bcrypt since Jasper, were never stolen); 41 orders sent
+  to other addresses with saved cards; refunded; Lena reported to the Dutch DPA within 72 hours. Within two weeks
+  (Dee's team + Eli): per-account and per-address limits with failure-rate alerts; breached-password checks at
+  sign-up, login and change; step-up (email code) before a saved card pays for a new address; passkeys on app and web
+  (18 % of active customers within a month). Eli ordered two hardware security keys each for the nine people with
+  production access.
+- **Stolen phone (ch. 3):** Tue 24 Nov 2026; customer changed her password on the web that evening; two orders from
+  the stolen phone next morning. App tokens were: access 24 h, refresh 1 year, untouched by password change. Live
+  10 Dec: access 10 min; refresh rotation with reuse detection, 30-day idle expiry; password change, “sign out
+  everywhere” (Account → Devices) and account lock revoke all refresh tokens; saved-card payments check a per-customer
+  “sessions valid after” time. Issuer `https://login.larder.example`; API audience `larder-api`.
+- **Spendwise (ch. 4):** Tue 1 Dec 2026 Korenwolf finance asked Mo to give their SaaS expense tool, Spendwise
+  (fictional), an office manager's password. Instead (second week of Dec): Spendwise registered as a confidential
+  OAuth client, one exact redirect URI, new scope `invoices:read` checked by the invoices API; “Connect Larder” with
+  consent; disconnect per user. Larder's own app had used the deprecated password grant since 2024; moved to the
+  system browser with code + PKCE in the same release (which made passkeys work in the app).
+- **Korenwolf SSO (ch. 5):** Korenwolf IT requires SAML 2.0 from its Entra ID. Metadata exchanged 7 Dec 2026; group
+  “Larder office managers” (nine people, three offices, e.g. J. de Vries, Rotterdam; M. Bakker, Amsterdam); persistent
+  NameID + email, office, groups; connection bound to Korenwolf's business account and `korenwolf.example`; accounts
+  keyed on issuer + NameID; JIT accounts, 8-hour sessions; SCIM planned with the spring portal. First test failed
+  (audience with a trailing slash); live 18 Dec 2026. Korenwolf's signing certificate expires Dec 2029 (on Larder's
+  on-call calendar for Nov 2029).
+- **Stock tool roles (ch. 6):** Dec 2026, before Utrecht staff were added: 19 roles (picker, stock clerk, store manager,
+  operations × Noord, Zuid, Rotterdam, plus 7 others), assigned from a spreadsheet. Tomás covered Zuid for two weeks in
+  July 2026 and kept store-manager@zuid until December. Rewritten (Eli + Joost): four jobs; job and home store from
+  the HR system; covering another store is a temporary assignment with an end date, approved by that store's manager;
+  the 7 other roles became 3. The business portal (spring 2027) checks orders by relationship (office manager → own
+  office; customer admin such as Hanna → all offices). Aylin: a picker at Zuid.

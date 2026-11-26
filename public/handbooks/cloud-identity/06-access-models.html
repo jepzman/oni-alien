@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Access models: roles, attributes and relationships · Identity and Access in the Cloud</title>
+<meta name="description" content="Ways to write down who may do what, and the principles that keep them safe: least privilege and separation of duties.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=86bdfe1bff">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 2</a> · <a href="index.html">Identity and Access in the Cloud</a></span><span>Part I · Chapter 6</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part I · How access works</p>
+  <p class="chno">6</p>
+  <h1>Access models: roles, attributes and relationships</h1>
+  <p class="promise">Once you know who's asking, something has to decide what they may do. There are only a few ways to write that down: lists on each resource, roles, rules about attributes, and relationships between things. Each one fits some problems well and others badly. This chapter compares them on one company's real questions, and sets out the principles that keep any of them safe.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Describe access as a matrix, and explain ACLs and capabilities as its columns and rows.</li>
+      <li>Design roles, and recognise role explosion and privilege creep.</li>
+      <li>Write attribute-based rules, and say what they cost in auditability.</li>
+      <li>Model ownership and sharing as relationships.</li>
+      <li>Apply least privilege, separation of duties and object-level checks to any model.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Principals, actions, resources and context; default deny (<a href="01-who-and-what.html">Chapter 1</a>, 1.4).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, Python 3, no cloud account</dd>
+      <dt>Main provider</dt><dd>provider-neutral, with AWS, Azure and Google Cloud in 6.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>In December 2026, Joost's operations team starts planning the Utrecht store, and Eli is asked to set up its staff in the stock tool. The tool has 19 roles: a picker, stock clerk, store manager and operations role for each of the three stores, plus seven others that grew over two years. Roles are handed out from a spreadsheet. Adding Utrecht means four more, and the six-city plan means dozens.</p>
+  <p>While copying the spreadsheet, Eli notices that Tomás, who manages Noord, is also a store manager at Zuid. He covered there for two weeks in July while Zuid's manager was on holiday. Nobody removed the role, so for five months he could adjust any stock count at a store he didn't work in. Nothing bad happened. That's not the same as nothing being wrong. Section 6.9 shows what Larder changed.</p>
+</aside>
+
+<!-- ======================================================== 6.1 -->
+<h2 class="sec" id="s6-1"><span class="n">6.1</span>The access matrix</h2>
+
+<p class="lead">Every access model is a way of writing down one big table: principals down the side, resources across the top, and in each cell the actions that principal may perform on that resource. This is the <span class="term">access control matrix</span>. Nobody stores it whole (it would be enormous and mostly empty), but every model is a compression of it.</p>
+
+<figure class="wide" id="fig6-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig6-1-t fig6-1-d">
+      <title id="fig6-1-t">An access control matrix for Larder</title>
+      <desc id="fig6-1-d">Rows are principals: Tomás, Aylin, Joost and the stock sync service. Columns are resources: Noord stock, Zuid stock, Rotterdam rota and business order B-1042. Tomás may view, count and adjust Noord stock. Aylin may view Zuid stock. Joost may view all stock and edit the Rotterdam rota. The sync service may count stock at Noord and Zuid. Nobody in the stock tool may see the business order. One column, the permissions on one resource, is an access control list. One row, the permissions one principal holds, is a capability list.</desc>
+      <rect class="pub" x="168" y="18" width="140" height="196" rx="3"/>
+      <rect class="node-accent" x="14" y="118" width="736" height="32" rx="3" opacity=".18"/>
+      <text class="t-label" x="238" y="40" text-anchor="middle">Noord stock</text>
+      <text class="t-label" x="384" y="40" text-anchor="middle">Zuid stock</text>
+      <text class="t-label" x="530" y="40" text-anchor="middle">Rotterdam rota</text>
+      <text class="t-label" x="676" y="40" text-anchor="middle">order B-1042</text>
+      <path class="wire-dash" d="M14 54 H750"/>
+      <text class="t-label" x="22" y="78">Tomás</text>
+      <text class="t-mono" x="238" y="78" text-anchor="middle">view count adjust</text>
+      <text class="t-mono" x="384" y="78" text-anchor="middle">—</text>
+      <text class="t-mono" x="530" y="78" text-anchor="middle">—</text>
+      <text class="t-mono" x="676" y="78" text-anchor="middle">—</text>
+      <text class="t-label" x="22" y="108">Aylin</text>
+      <text class="t-mono" x="238" y="108" text-anchor="middle">—</text>
+      <text class="t-mono" x="384" y="108" text-anchor="middle">view</text>
+      <text class="t-mono" x="530" y="108" text-anchor="middle">—</text>
+      <text class="t-mono" x="676" y="108" text-anchor="middle">—</text>
+      <text class="t-label" x="22" y="139">Joost</text>
+      <text class="t-mono" x="238" y="139" text-anchor="middle">view</text>
+      <text class="t-mono" x="384" y="139" text-anchor="middle">view</text>
+      <text class="t-mono" x="530" y="139" text-anchor="middle">view edit</text>
+      <text class="t-mono" x="676" y="139" text-anchor="middle">—</text>
+      <text class="t-label" x="22" y="172">sync service</text>
+      <text class="t-mono" x="238" y="172" text-anchor="middle">count</text>
+      <text class="t-mono" x="384" y="172" text-anchor="middle">count</text>
+      <text class="t-mono" x="530" y="172" text-anchor="middle">—</text>
+      <text class="t-mono" x="676" y="172" text-anchor="middle">—</text>
+      <text class="t-small t-accent" x="238" y="234" text-anchor="middle">a column = an ACL</text>
+      <text class="t-small" x="560" y="234" text-anchor="middle">a row (Joost's, shaded) = a capability list</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 6.1</b> The access matrix. Store it by column and you get access control lists; by row, capabilities; by rule, roles and attributes.</figcaption>
+</figure>
+
+<!-- ======================================================== 6.2 -->
+<h2 class="sec" id="s6-2"><span class="n">6.2</span>Access control lists</h2>
+
+<p>An <span class="term">access control list</span> (ACL) stores the matrix by column: each resource carries a list of who may do what to it. File permissions are ACLs; so are sharing settings on a document (“Anna can edit, the team can comment”). ACLs are easy to understand for one resource, and answer “who can reach this file?” instantly.</p>
+
+<p>They're hard to manage at scale. “What can Aylin reach?” means reading every ACL in the system, and when Aylin changes jobs, someone must find and edit each one. They suit cases where the owner of each resource genuinely decides who shares it, as in document sharing, and little else.</p>
+
+<aside class="side"><b>S3 ACLs</b>S3 still supports per-object ACLs from its early days, but new buckets have them switched off (Object Ownership: “bucket owner enforced”). AWS's advice, and this book's, is to keep them off and use policies (<a href="09-policies.html">Chapter 9</a>).</aside>
+
+<!-- ======================================================== 6.3 -->
+<h2 class="sec" id="s6-3"><span class="n">6.3</span>Roles</h2>
+
+<p><span class="term">Role-based access control</span> (RBAC) adds a layer: permissions are granted to <strong>roles</strong> named after jobs (“store manager”, “picker”), and people are assigned roles. When someone changes job, you change their roles, and every permission follows. RBAC is the most widely used model, and for good reason: roles match how organisations already think, and “who has the store manager role?” is an easy question to answer and review.</p>
+
+<p>RBAC goes wrong in two familiar ways:</p>
+<ul>
+  <li><strong>Role explosion.</strong> Roles start as jobs, then pick up a second dimension: a job <em>at a store</em>, <em>in a team</em>, <em>for a customer</em>. Every new store multiplies the roles. Larder's four jobs times three stores is 12 roles; times twelve stores it's 48, before any exceptions. Soon nobody knows what <code>noord-lead-2</code> was for.</li>
+  <li><strong>Privilege creep.</strong> People collect roles as they cover, move and help out, and roles are rarely taken away, because nobody notices extra access until it's misused. Tomás's Zuid role is a textbook case. Regular access reviews (<a href="index.html#ch13">Chapter 13</a>) and assignments that expire are the cures.</li>
+</ul>
+
+<p>Good role design keeps roles about <strong>what</strong> a job does, and moves <strong>where</strong> or <strong>for whom</strong> into something else: attributes or relationships.</p>
+
+<!-- ======================================================== 6.4 -->
+<h2 class="sec" id="s6-4"><span class="n">6.4</span>Attributes</h2>
+
+<p><span class="term">Attribute-based access control</span> (ABAC) writes rules over attributes of the principal, the resource, the action and the context:</p>
+<pre><code>allow if  action in permissions_of(principal.job)
+     and  resource.store in principal.stores
+     and  context.time is within the principal's shift</code></pre>
+
+<p>One rule replaces every “job at store” role. Add Utrecht, and nothing in the rules changes: Utrecht's staff get <code>stores = {utrecht}</code> from the HR system, and Utrecht's stock items carry <code>store = utrecht</code>. You've already seen ABAC in AWS: comparing a principal tag with a resource tag (<a href="09-policies.html">Chapter 9</a>, 9.6) is exactly this.</p>
+
+<p>ABAC has its own costs:</p>
+<ul>
+  <li><strong>Auditing gets harder.</strong> “Who can adjust Zuid's stock?” is no longer a list you can read; you have to evaluate the rule against every person's attributes.</li>
+  <li><strong>Attributes become security data.</strong> Whoever can change someone's <code>stores</code> attribute, or a resource's tag, can change access. Attributes must come from a trustworthy source (the HR system, not a free-text field users can edit) and be protected like permissions.</li>
+  <li><strong>Missing attributes need a safe default.</strong> A resource without a <code>store</code> attribute should be denied, not open to everyone.</li>
+</ul>
+
+<!-- ======================================================== 6.5 -->
+<h2 class="sec" id="s6-5"><span class="n">6.5</span>Relationships</h2>
+
+<p>Some access follows from how things relate. A Korenwolf office manager may see <em>their office's</em> orders; Korenwolf's Head of Workplace may see the orders of <em>every office in her organisation</em>; a document is visible to <em>members of the folder it's in</em>. Neither roles nor attributes say this naturally. <span class="term">Relationship-based access control</span> (ReBAC) stores facts as relationships (“Rotterdam office has manager J. de Vries”, “order B-1042 belongs to the Rotterdam office”) and answers questions by following them.</p>
+
+<figure class="wide" id="fig6-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 230" role="img" aria-labelledby="fig6-2-t fig6-2-d">
+      <title id="fig6-2-t">Relationships that decide who may view a business order</title>
+      <desc id="fig6-2-d">Order B-1042 belongs to the Korenwolf Rotterdam office. J. de Vries is manager of the Rotterdam office, so the path from J. de Vries to the order exists and she may view it. M. Bakker is manager of the Amsterdam office, which has no path to the order, so he may not. Both offices have Korenwolf as parent organisation, and Hanna is admin of Korenwolf, so she reaches the order through the organisation and may view it.</desc>
+      <defs><marker id="c6ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c6ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node-accent" x="300" y="14" width="160" height="44" rx="22"/><text class="t-label on-accent" x="380" y="41" text-anchor="middle">org: Korenwolf</text>
+      <rect class="node" x="140" y="96" width="190" height="44" rx="5"/><text class="t-mono" x="235" y="123" text-anchor="middle">office: kw-rotterdam</text>
+      <rect class="node" x="430" y="96" width="190" height="44" rx="5"/><text class="t-mono" x="525" y="123" text-anchor="middle">office: kw-amsterdam</text>
+      <rect class="pub" x="140" y="176" width="190" height="40" rx="5"/><text class="t-mono" x="235" y="201" text-anchor="middle">order: B-1042</text>
+      <rect class="ext" x="12" y="20" width="110" height="36" rx="18"/><text class="t-label" x="67" y="43" text-anchor="middle">hanna</text>
+      <rect class="ext" x="12" y="100" width="110" height="36" rx="18"/><text class="t-label" x="67" y="123" text-anchor="middle">j.devries</text>
+      <rect class="ext" x="640" y="100" width="110" height="36" rx="18"/><text class="t-label" x="695" y="123" text-anchor="middle">m.bakker</text>
+      <path class="wire-accent" d="M124 38 H296" marker-end="url(#c6ah2)"/><text class="t-small" x="210" y="30" text-anchor="middle">admin</text>
+      <path class="wire" d="M235 94 L330 60" marker-end="url(#c6ah)"/><text class="t-small" x="262" y="72">parent</text>
+      <path class="wire" d="M525 94 L430 60" marker-end="url(#c6ah)"/><text class="t-small" x="486" y="72">parent</text>
+      <path class="wire-accent" d="M124 118 H136" marker-end="url(#c6ah2)"/><text class="t-small" x="70" y="154" text-anchor="middle">manager</text>
+      <path class="wire" d="M638 118 H624" marker-end="url(#c6ah)"/><text class="t-small" x="695" y="154" text-anchor="middle">manager</text>
+      <path class="wire" d="M235 174 V144" marker-end="url(#c6ah)"/><text class="t-small" x="245" y="164">office</text>
+      <text class="t-small" x="350" y="190">j.devries: manager of its office ✓</text>
+      <text class="t-small" x="350" y="206">hanna: admin of its office's org ✓</text>
+      <text class="t-small" x="350" y="222">m.bakker: no path ✗</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 6.2</b> ReBAC answers “may this person view this order?” by looking for a path. A rule says which paths count: <em>manager of the order's office, or admin of that office's organisation</em>.</figcaption>
+</figure>
+
+<p>ReBAC is how large sharing systems work: Google described its global authorisation system, <strong>Zanzibar</strong>, which stores trillions of such relationships for Drive, YouTube and Cloud; open-source systems such as OpenFGA and SpiceDB follow the same design. It suits multi-tenant products with organisations, teams, folders and sharing. It needs a place to store the relationships, kept in step with your application's data.</p>
+
+<!-- ======================================================== 6.6 -->
+<h2 class="sec" id="s6-6"><span class="n">6.6</span>Principles that apply to every model</h2>
+
+<ul>
+  <li><strong><span class="term">Least privilege</span>:</strong> each principal gets the access its job needs, and no more, for no longer than needed. Every model can express it; only discipline achieves it.</li>
+  <li><strong>Default deny:</strong> no rule, no access (<a href="01-who-and-what.html">Chapter 1</a>). Missing attributes and broken relationships deny.</li>
+  <li><strong><span class="term">Separation of duties</span>:</strong> split powerful tasks so one person can't complete them alone. The person who adds a supplier shouldn't approve its payments; the engineer who writes a production change shouldn't be the only reviewer.</li>
+  <li><strong>Deny overrides:</strong> a small number of explicit “never” rules (no one deletes backups; nothing leaves the EU) that win over any allow. AWS builds this into policy evaluation (<a href="index.html#ch10">Chapter 10</a>).</li>
+  <li><strong>Time limits:</strong> temporary needs get access that expires by itself. Tomás's July cover should have ended in July without anyone remembering.</li>
+</ul>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: checking the action but not the object</p>
+  <p>The most common authorisation bug in web APIs isn't a wrong role; it's checking that a user may “view orders” and then returning <em>whichever</em> order ID they ask for. Change <code>/orders/1042</code> to <code>/orders/1043</code> and you see someone else's. OWASP ranks this, <em>broken object-level authorisation</em>, as the number one API security risk. Every request for a specific object must check that <em>this</em> principal may access <em>this</em> object, which is exactly the question ABAC and ReBAC ask.</p>
+</div>
+
+<!-- ======================================================== 6.7 -->
+<h2 class="sec" id="s6-7"><span class="n">6.7</span>Choosing, and combining</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 6.1 · Four ways to write down access</caption>
+    <thead><tr><th></th><th>ACLs</th><th>RBAC</th><th>ABAC</th><th>ReBAC</th></tr></thead>
+    <tbody>
+      <tr><td>Grants are attached to</td><td>each resource</td><td>roles, assigned to people</td><td>rules over attributes</td><td>relationships between objects</td></tr>
+      <tr><td>Good at</td><td>owner-controlled sharing</td><td>jobs; easy reviews</td><td>scaling across locations, teams, tags</td><td>ownership, hierarchies, sharing</td></tr>
+      <tr><td>Struggles with</td><td>“what can this person reach?”</td><td>role explosion; creep</td><td>“who can reach this?”; attribute hygiene</td><td>keeping relationships in sync</td></tr>
+      <tr><td>Example</td><td>a shared document</td><td>an AWS permission set</td><td>AWS tag conditions</td><td>Google Drive folders</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Real systems combine them, and a good default is:</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Roles for what a job does; attributes for where and for whom; relationships for who owns what. Keep each one small.</p>
+</div>
+
+<p>Wherever the decision is made, make it in one place. Authorisation rules scattered through application code (<code>if user.role == "admin" or user.id == order.owner_id …</code>) can't be reviewed, tested or changed safely. Put them in a policy layer: a module, a library, or a <strong>policy engine</strong> such as Open Policy Agent (Rego), Cedar or OpenFGA, which takes a request and returns allow or deny (the policy decision point of <a href="01-who-and-what.html">Chapter 1</a>).</p>
+
+<!-- ======================================================== 6.8 -->
+<h2 class="sec" id="s6-8"><span class="n">6.8</span>Across providers</h2>
+
+<p>Cloud permission systems mix the same models. Knowing which is which explains a lot of their design:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 6.2 · Access models in the clouds and for your own apps</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Roles</td><td>IAM roles and Identity Center permission sets (<a href="index.html#ch12">Chapter 12</a>)</td><td>Azure RBAC role definitions and assignments</td><td>predefined and custom IAM roles</td></tr>
+      <tr><td>Attributes</td><td>tag conditions: <code>aws:PrincipalTag</code>, <code>aws:ResourceTag</code> (<a href="09-policies.html">Chapter 9</a>)</td><td>role assignment conditions (Azure ABAC), on storage attributes and tags</td><td>IAM Conditions on resource tags, names and time</td></tr>
+      <tr><td>Relationships</td><td>account and organisation structure (<a href="index.html#ch20">Chapter 20</a>)</td><td>management group → subscription → resource group scopes</td><td>organisation → folder → project inheritance</td></tr>
+      <tr><td>ACLs</td><td>S3 ACLs (legacy; keep off)</td><td>storage shared access signatures and container ACLs (data lake)</td><td>Cloud Storage ACLs (prefer uniform bucket-level access)</td></tr>
+      <tr><td>For your own apps</td><td>Amazon Verified Permissions (Cedar)</td><td>Entra ID app roles and groups in tokens</td><td>IAP and app-level policies; open-source engines</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>Azure RBAC is role-based with a strong relationship flavour: a role assignment at a management group is inherited by every subscription, resource group and resource below it. Role assignment <strong>conditions</strong> add ABAC, for example letting a role read only blobs whose index tag <code>project</code> matches the principal's attribute.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>Google Cloud's resource hierarchy makes inheritance central: a role granted on a folder applies to every project and resource in it. <strong>IAM Conditions</strong> narrow a binding by resource name, type, tags or time, which is how you grant temporary access that expires by itself.</p>
+</div>
+
+<!-- ======================================================== 6.9 -->
+<h2 class="sec" id="s6-9"><span class="n">6.9</span>At Larder: four jobs, one rule</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Eli and Joost rewrote the stock tool's access before Utrecht's staff were added. The 12 store roles became <strong>four jobs</strong>, and a person's job and home store now come from the HR system, which Joost's team already keeps up to date. One rule decides: the job's permissions, at the person's stores. Covering another store is a <strong>temporary store assignment with an end date</strong>, requested in the tool and approved by the store's manager; it disappears on the end date. The seven other roles shrank to three after nobody could explain the rest. Tomás's Zuid access went with the spreadsheet.</p>
+  <p>For Larder for Business, the portal that launches in spring 2027 checks orders by relationship from the start: an office manager sees their office's orders, and a customer's administrator, such as Korenwolf's Hanna, sees every office in their organisation. Every order request checks the order's office against the person, not just their role.</p>
+</aside>
+
+<!-- ======================================================== 6.10 -->
+<h2 class="sec" id="s6-10"><span class="n">6.10</span>Lab: one question, three models</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 6 · RBAC, ABAC and ReBAC side by side</p>
+  <p><strong>You'll</strong> answer Larder's access questions with roles, then with an attribute rule, then answer the business-order question with relationships, count roles as stores grow, and see privilege creep in action. <strong>You need</strong> Python 3. <strong>Cost:</strong> nothing.</p>
+</div>
+
+<p class="code-title"><span>models.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># models.py · the same access questions answered three ways: RBAC, ABAC, ReBAC</span>
+JOBS = {                                   <span class="c"># what each job may do, anywhere it works</span>
+    <span class="s">"picker"</span>:        {<span class="s">"stock:view"</span>},
+    <span class="s">"stock-clerk"</span>:   {<span class="s">"stock:view"</span>, <span class="s">"stock:count"</span>},
+    <span class="s">"store-manager"</span>: {<span class="s">"stock:view"</span>, <span class="s">"stock:count"</span>, <span class="s">"stock:adjust"</span>, <span class="s">"rota:edit"</span>},
+    <span class="s">"operations"</span>:    {<span class="s">"stock:view"</span>, <span class="s">"rota:edit"</span>},
+}
+
+<span class="c"># ---------- RBAC: a role per job per store, assigned by hand</span>
+<span class="k">def</span> rbac_roles(stores):
+    <span class="k">return</span> {f<span class="s">"{job}@{store}"</span>: perms <span class="k">for</span> job, perms <span class="k">in</span> JOBS.items() <span class="k">for</span> store <span class="k">in</span> stores}
+
+ROLES = rbac_roles([<span class="s">"noord"</span>, <span class="s">"zuid"</span>, <span class="s">"rotterdam"</span>])
+ASSIGNED = {<span class="s">"tomas"</span>: {<span class="s">"store-manager@noord"</span>, <span class="s">"store-manager@zuid"</span>},   <span class="c"># covered Zuid in July...</span>
+            <span class="s">"aylin"</span>: {<span class="s">"picker@zuid"</span>},
+            <span class="s">"joost"</span>: {f<span class="s">"operations@{s}"</span> <span class="k">for</span> s <span class="k">in</span> [<span class="s">"noord"</span>, <span class="s">"zuid"</span>, <span class="s">"rotterdam"</span>]}}
+
+<span class="k">def</span> rbac(user, action, store):
+    <span class="k">return</span> any(action <span class="k">in</span> ROLES[r] <span class="k">and</span> r.endswith(<span class="s">"@"</span> + store) <span class="k">for</span> r <span class="k">in</span> ASSIGNED.get(user, ()))
+
+<span class="c"># ---------- ABAC: one rule over attributes of the person and the resource</span>
+PEOPLE = {<span class="s">"tomas"</span>: {<span class="s">"job"</span>: <span class="s">"store-manager"</span>, <span class="s">"stores"</span>: {<span class="s">"noord"</span>}},   <span class="c"># from the HR system</span>
+          <span class="s">"aylin"</span>: {<span class="s">"job"</span>: <span class="s">"picker"</span>, <span class="s">"stores"</span>: {<span class="s">"zuid"</span>}},
+          <span class="s">"joost"</span>: {<span class="s">"job"</span>: <span class="s">"operations"</span>, <span class="s">"stores"</span>: {<span class="s">"*"</span>}}}
+
+<span class="k">def</span> abac(user, action, store):
+    p = PEOPLE.get(user)
+    <span class="k">return</span> bool(p) <span class="k">and</span> action <span class="k">in</span> JOBS[p[<span class="s">"job"</span>]] <span class="k">and</span> (store <span class="k">in</span> p[<span class="s">"stores"</span>] <span class="k">or</span> <span class="s">"*"</span> <span class="k">in</span> p[<span class="s">"stores"</span>])
+
+<span class="c"># ---------- ReBAC: who may see a business order follows relationships</span>
+TUPLES = {(<span class="s">"office:kw-rotterdam"</span>, <span class="s">"manager"</span>, <span class="s">"j.devries"</span>),
+          (<span class="s">"office:kw-amsterdam"</span>, <span class="s">"manager"</span>, <span class="s">"m.bakker"</span>),
+          (<span class="s">"org:korenwolf"</span>, <span class="s">"admin"</span>, <span class="s">"hanna"</span>),
+          (<span class="s">"office:kw-rotterdam"</span>, <span class="s">"parent"</span>, <span class="s">"org:korenwolf"</span>),
+          (<span class="s">"office:kw-amsterdam"</span>, <span class="s">"parent"</span>, <span class="s">"org:korenwolf"</span>),
+          (<span class="s">"order:B-1042"</span>, <span class="s">"office"</span>, <span class="s">"office:kw-rotterdam"</span>)}
+
+<span class="k">def</span> related(obj, rel):
+    <span class="k">return</span> {s <span class="k">for</span> (o, r, s) <span class="k">in</span> TUPLES <span class="k">if</span> o == obj <span class="k">and</span> r == rel}
+
+<span class="k">def</span> can_view_order(user, order):
+    <span class="k">for</span> office <span class="k">in</span> related(order, <span class="s">"office"</span>):
+        <span class="k">if</span> user <span class="k">in</span> related(office, <span class="s">"manager"</span>):
+            <span class="k">return</span> True
+        <span class="k">if</span> any(user <span class="k">in</span> related(org, <span class="s">"admin"</span>) <span class="k">for</span> org <span class="k">in</span> related(office, <span class="s">"parent"</span>)):
+            <span class="k">return</span> True
+    <span class="k">return</span> False
+
+<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:
+    print(f<span class="s">"RBAC roles for 3 stores: {len(ROLES)}; for 12 stores: {len(rbac_roles(range(12)))}\n"</span>)
+    questions = [(<span class="s">"tomas"</span>, <span class="s">"stock:adjust"</span>, <span class="s">"noord"</span>), (<span class="s">"tomas"</span>, <span class="s">"stock:adjust"</span>, <span class="s">"zuid"</span>),
+                 (<span class="s">"aylin"</span>, <span class="s">"stock:adjust"</span>, <span class="s">"zuid"</span>), (<span class="s">"aylin"</span>, <span class="s">"stock:view"</span>, <span class="s">"zuid"</span>),
+                 (<span class="s">"joost"</span>, <span class="s">"rota:edit"</span>, <span class="s">"rotterdam"</span>), (<span class="s">"joost"</span>, <span class="s">"stock:adjust"</span>, <span class="s">"rotterdam"</span>)]
+    print(f<span class="s">"{'question':&lt;34} RBAC   ABAC"</span>)
+    <span class="k">for</span> q <span class="k">in</span> questions:
+        print(f<span class="s">"{' '.join(q):&lt;34} {str(rbac(*q)):&lt;6} {abac(*q)}"</span>)
+    print()
+    <span class="k">for</span> user <span class="k">in</span> [<span class="s">"j.devries"</span>, <span class="s">"m.bakker"</span>, <span class="s">"hanna"</span>]:
+        print(f<span class="s">"{user:&lt;10} may view order B-1042: {can_view_order(user, 'order:B-1042')}"</span>)</code></pre>
+
+<ol class="steps">
+  <li><strong>Run it</strong> with <code>python3 models.py</code>:
+<pre><code>RBAC roles for 3 stores: 12; for 12 stores: 48
+
+question                           RBAC   ABAC
+tomas stock:adjust noord           True   True
+tomas stock:adjust zuid            True   False
+aylin stock:adjust zuid            False  False
+aylin stock:view zuid              True   True
+joost rota:edit rotterdam          True   True
+joost stock:adjust rotterdam       False  False
+
+j.devries  may view order B-1042: True
+m.bakker   may view order B-1042: False
+hanna      may view order B-1042: True</code></pre>
+  The two models agree everywhere except one row: RBAC still remembers Tomás's July cover. ABAC reads his store from HR, so it doesn't. The ReBAC answers follow the paths in Figure 6.2.</li>
+  <li><strong>Add a store.</strong> Add <code>"utrecht"</code> to the list in <code>ROLES</code> and count the roles. Then add a Utrecht picker in both models. In RBAC you add a role and an assignment; in ABAC, one person with <code>"stores": {"utrecht"}</code>, and no rule changes.</li>
+  <li><strong>Break it on purpose.</strong> In <code>abac</code>, change the store check to <code>store in p.get("stores", {store})</code> and remove Aylin's <code>"stores"</code> key: a person with a missing attribute now gets access everywhere. That's why missing attributes must deny. Then, in <code>TUPLES</code>, add <code>("office:kw-amsterdam", "manager", "j.devries")</code>, as if someone mistyped an office: she now sees Amsterdam's orders too. In ReBAC, the relationships <em>are</em> the permissions.</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Give ABAC a temporary cover: <code>"cover": {"store": "zuid", "until": "2026-07-19"}</code>, and a <code>today</code> argument, so Tomás's July access ends by itself. (2) Add a relationship type <code>viewer</code> on an order, so an office manager can share one order with a colleague, and extend <code>can_view_order</code>.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s6-11"><span class="n">6.11</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Roles that encode location, team or customer</td><td>Role explosion; nobody knows what each role is for.</td><td>Roles for jobs; attributes or relationships for scope.</td></tr>
+      <tr><td>Access without an end date for temporary needs</td><td>Privilege creep, as with Tomás.</td><td>Time-limited assignments; regular reviews.</td></tr>
+      <tr><td>Checking the action but not the object</td><td>Users read others' records by changing an ID.</td><td>Check this principal against this object on every request.</td></tr>
+      <tr><td>Attributes users can edit themselves</td><td>Anyone can grant themselves access.</td><td>Attributes from a trusted source, changed only by authorised people.</td></tr>
+      <tr><td>Missing attributes treated as “match anything”</td><td>Untagged resources or people get broad access.</td><td>Missing means deny.</td></tr>
+      <tr><td>Authorisation scattered through code</td><td>Can't review, test or change it safely.</td><td>One policy layer or engine.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum6">
+  <h2 class="sec" id="sum6"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Every model compresses the <strong>access matrix</strong>: ACLs store it by resource, capabilities by principal, roles and rules by pattern.</li>
+    <li><strong>RBAC</strong> matches jobs and is easy to review, but suffers role explosion and privilege creep.</li>
+    <li><strong>ABAC</strong> scales across stores, teams and tags with one rule, but makes “who can reach this?” harder and turns attributes into security data.</li>
+    <li><strong>ReBAC</strong> follows relationships: ownership, hierarchies, sharing.</li>
+    <li>Combine them: roles for what, attributes for where, relationships for whose; decide in one policy layer.</li>
+    <li>Least privilege, default deny, separation of duties, deny overrides and time limits apply to every model. Always check the object, not just the action.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Access control matrix</dt><dd>Principals × resources, with permitted actions in each cell.</dd>
+    <dt>ACL</dt><dd>Access control list: the permissions stored on one resource.</dd>
+    <dt>RBAC</dt><dd>Role-based access control: permissions granted to roles, roles assigned to principals.</dd>
+    <dt>ABAC</dt><dd>Attribute-based access control: rules over attributes of principal, resource, action and context.</dd>
+    <dt>ReBAC</dt><dd>Relationship-based access control: decisions follow relationships between objects.</dd>
+    <dt>Role explosion</dt><dd>Roles multiplying because they encode extra dimensions such as location.</dd>
+    <dt>Privilege creep</dt><dd>Access accumulating over time as people move and cover.</dd>
+    <dt>Least privilege</dt><dd>Only the access needed, for only as long as needed.</dd>
+    <dt>Separation of duties</dt><dd>Splitting sensitive tasks so no one person can complete them alone.</dd>
+    <dt>Policy engine</dt><dd>A component that evaluates authorisation rules and returns allow or deny.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Which model fits each: a shared slide deck; “store managers can adjust stock at their store”; “Korenwolf's admin sees all its offices' orders”? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>An ACL (owner-controlled sharing); ABAC (job plus a store attribute), or RBAC with attributes; ReBAC (organisation → office → order).</p></details>
+    </li>
+    <li>
+      <p>Why did ABAC fix Tomás's leftover access, when RBAC didn't? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>ABAC reads his store from the HR system, which was updated when the cover ended; RBAC depended on someone remembering to remove a role assignment, which nobody did.</p></details>
+    </li>
+    <li>
+      <p>An API checks that the caller has the <code>orders:read</code> scope, then returns <code>/orders/{id}</code> for any ID. What's wrong, and what's the fix? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Broken object-level authorisation: any caller with the scope can read any order. Check that the caller is related to that order (owner, or manager of its office) before returning it.</p></details>
+    </li>
+    <li>
+      <p>Give one example of separation of duties at Larder, and how you'd enforce it. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Refunds over €100: support staff can propose, a team lead must approve, and nobody can approve their own. Enforce it in the refund tool's policy: the approver must hold the lead role and differ from the requester.</p></details>
+    </li>
+    <li>
+      <p>What new risks does ABAC introduce, and how do you control them? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Whoever can change attributes or tags can change access, missing attributes can be mistaken for “match all”, and it's harder to list who can reach a resource. Source attributes from a trusted system, restrict who can change them, deny when they're missing, and evaluate rules regularly to produce access reports.</p></details>
+    </li>
+    <li>
+      <p>Compare how inheritance works in Azure RBAC and Google Cloud IAM. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Both inherit downwards: Azure from management groups to subscriptions, resource groups and resources; Google Cloud from organisation to folders, projects and resources. In both, a grant high up applies to everything below it, so grant at the lowest scope that works.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>NIST <a href="https://csrc.nist.gov/pubs/sp/800/162/upd2/final">SP 800-162, Guide to ABAC</a>.</li>
+    <li><a href="https://research.google/pubs/zanzibar-googles-consistent-global-authorization-system/">Zanzibar: Google's consistent, global authorization system</a>.</li>
+    <li>OWASP <a href="https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/">API1: Broken Object Level Authorization</a>.</li>
+    <li>Policy engines: <a href="https://www.cedarpolicy.com/">Cedar</a>, <a href="https://www.openpolicyagent.org/">Open Policy Agent</a>, <a href="https://openfga.dev/">OpenFGA</a>.</li>
+    <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/introduction_attribute-based-access-control.html">ABAC with tags</a>. Azure: <a href="https://learn.microsoft.com/azure/role-based-access-control/conditions-overview">Azure ABAC</a>. Google Cloud: <a href="https://cloud.google.com/iam/docs/conditions-overview">IAM Conditions</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="05-saml-federation.html">5 · SAML and federation</a></div>
+  <div><span>Next</span><a href="index.html#ch7">7 · The AWS account and its root user</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 2 · Identity and Access in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

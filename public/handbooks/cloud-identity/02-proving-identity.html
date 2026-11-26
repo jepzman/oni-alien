@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Passwords, MFA and passkeys · Identity and Access in the Cloud</title>
+<meta name="description" content="How people prove who they are, why passwords fail, and which second factors actually stop phishing.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=86bdfe1bff">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 2</a> · <a href="index.html">Identity and Access in the Cloud</a></span><span>Part I · Chapter 2</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part I · How access works</p>
+  <p class="chno">2</p>
+  <h1>Passwords, MFA and passkeys</h1>
+  <p class="promise">Authentication is where most breaches start: a reused password, a code typed into the wrong site, a help desk talked into a reset. This chapter explains why passwords fail and how to store them so a leak doesn't hurt, then compares second factors by the one property that matters most: whether they stop phishing. It ends with passkeys, which do.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Name the four ways passwords get broken, and the defence for each.</li>
+      <li>Store passwords with a salted, slow hash, and choose its settings.</li>
+      <li>Explain how a one-time code is calculated, and why it can still be phished.</li>
+      <li>Explain how passkeys stop phishing, and where they still need care.</li>
+      <li>Choose authentication for customers, staff and administrators.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>The four questions, principals and credentials (<a href="01-who-and-what.html">Chapter 1</a>).</li>
+      <li>What a hash function is helps; 2.2 recaps it.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, Python 3, no cloud account</dd>
+      <dt>Main provider</dt><dd>provider-neutral, with AWS, Azure and Google Cloud in 2.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>On the night of Saturday 21 November 2026, Larder's login endpoint received about 40,000 sign-in attempts in four hours, from about 2,000 different addresses. Each tried one email address and one password, and moved on. 310 of them worked. By the time the pattern was spotted on Sunday morning, the attackers had used saved payment methods to send 41 orders to addresses that weren't the customers'.</p>
+  <p>Nobody had stolen anything from Larder. Its password database was intact, and properly hashed since Jasper first built it. The attackers had a list of email addresses and passwords leaked from other sites, and 310 Larder customers had used the same password here. Section 2.1 names the attack; section 2.9 shows what Larder changed.</p>
+</aside>
+
+<!-- ======================================================== 2.1 -->
+<h2 class="sec" id="s2-1"><span class="n">2.1</span>How passwords fail</h2>
+
+<p class="lead">A password is a secret that the user and the system both know. That design has four weak points, and it helps to keep them apart because each has a different defence:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 2.1 · Four ways passwords get broken</caption>
+    <thead><tr><th>Attack</th><th>How it works</th><th>Main defence</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Guessing</strong></td><td>Try common passwords against many accounts (“password spraying”), or many passwords against one.</td><td>Rate limits and lockouts; reject common passwords (2.3)</td></tr>
+      <tr><td><strong>Credential stuffing</strong></td><td>Replay email–password pairs leaked from <em>other</em> sites, betting on reuse.</td><td>Check against breached passwords; MFA; passkeys</td></tr>
+      <tr><td><strong>Phishing</strong></td><td>A fake site, email or call gets the user to type the password, and often the second factor, for the attacker.</td><td>Phishing-resistant factors (2.4, 2.6)</td></tr>
+      <tr><td><strong>Stolen database</strong></td><td>The attacker copies your password store and cracks it offline, at their own speed.</td><td>Salted, slow hashing (2.2)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Larder's Saturday night was <span class="term">credential stuffing</span>. It's cheap for attackers, because billions of leaked pairs circulate, and it works because people reuse passwords. Strong hashing doesn't help against it: the attacker isn't attacking your database, just logging in. Only the defences in the last column do.</p>
+
+<!-- ======================================================== 2.2 -->
+<h2 class="sec" id="s2-2"><span class="n">2.2</span>Storing passwords: salted, slow hashes</h2>
+
+<p>You must be able to check a password without being able to read it. The tool is a <strong>hash function</strong>: a one-way calculation that turns any input into a fixed-size fingerprint. You store the fingerprint; at login you hash what was typed and compare. Never store passwords as they are, and never encrypt them: encryption can be reversed by anyone who gets the key, and in a breach they often do.</p>
+
+<p>A plain hash such as SHA-256 isn't enough, for two reasons:</p>
+<ul>
+  <li><strong>It's fast.</strong> Fast is good for checking files and bad for passwords: an attacker with your database can try billions of guesses a second on graphics cards. In the lab, one laptop core manages millions.</li>
+  <li><strong>It's the same for everyone.</strong> Two customers with the password <code>winter2026</code> get the same hash, so cracking one cracks both, and precomputed tables of common passwords work instantly.</li>
+</ul>
+
+<p>The fix has two parts. A <span class="term">salt</span>, a random value generated for each password and stored next to it, makes every hash unique even for identical passwords. A <span class="term">password hashing function</span> is deliberately slow and, in modern designs, needs lots of memory, so that each guess costs real time and real hardware.</p>
+
+<figure class="wide" id="fig2-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 230" role="img" aria-labelledby="fig2-1-t fig2-1-d">
+      <title id="fig2-1-t">Storing and checking a password</title>
+      <desc id="fig2-1-d">At sign-up, the password winter2026 and 16 random bytes of salt go into a slow hash function such as scrypt or Argon2id, which takes about 50 milliseconds and 16 or more mebibytes of memory. The stored record holds the algorithm, its settings, the salt and the hash. At login, the typed password and the stored salt go through the same function with the same settings, and the result is compared with the stored hash in constant time.</desc>
+      <defs><marker id="c2ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <text class="t-small" x="12" y="22">Sign-up</text>
+      <rect class="node" x="12" y="32" width="170" height="36" rx="4"/><text class="t-mono" x="97" y="55" text-anchor="middle">"winter2026"</text>
+      <rect class="node" x="12" y="78" width="170" height="36" rx="4"/><text class="t-mono" x="97" y="101" text-anchor="middle">salt: 16 random bytes</text>
+      <path class="wire" d="M184 50 L214 70" marker-end="url(#c2ah)"/>
+      <path class="wire" d="M184 96 L214 80" marker-end="url(#c2ah)"/>
+      <rect class="node-accent" x="218" y="44" width="170" height="60" rx="5"/>
+      <text class="t-label on-accent" x="303" y="70" text-anchor="middle">slow hash</text>
+      <text class="t-small on-accent" x="303" y="90" text-anchor="middle">scrypt / Argon2id · ~50 ms</text>
+      <path class="wire" d="M390 74 H436" marker-end="url(#c2ah)"/>
+      <rect class="pub" x="440" y="44" width="308" height="60" rx="5"/>
+      <text class="t-small" x="452" y="64">stored record</text>
+      <text class="t-mono" x="452" y="88">scrypt$16384$8$1$&lt;salt&gt;$&lt;hash&gt;</text>
+      <text class="t-small" x="12" y="150">Login</text>
+      <rect class="node" x="12" y="160" width="170" height="36" rx="4"/><text class="t-mono" x="97" y="183" text-anchor="middle">what was typed</text>
+      <path class="wire" d="M184 178 H214" marker-end="url(#c2ah)"/>
+      <rect class="node-accent" x="218" y="150" width="170" height="56" rx="5"/>
+      <text class="t-label on-accent" x="303" y="174" text-anchor="middle">same function</text>
+      <text class="t-small on-accent" x="303" y="193" text-anchor="middle">stored salt and settings</text>
+      <path class="wire-dash" d="M594 106 V140 H303 V146" marker-end="url(#c2ah)"/>
+      <path class="wire" d="M390 178 H436" marker-end="url(#c2ah)"/>
+      <rect class="node" x="440" y="158" width="308" height="40" rx="5"/>
+      <text class="t-label" x="594" y="183" text-anchor="middle">equal to stored hash? (constant time)</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 2.1</b> The record stores everything needed to repeat the calculation, except the password. Storing the settings lets you raise them later: rehash each user's password with the new settings the next time they log in.</figcaption>
+</figure>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 2.2 · Password hashing functions, in order of preference</caption>
+    <thead><tr><th>Function</th><th>Starting settings (OWASP, at the time of writing)</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Argon2id</strong></td><td>19 MiB memory, 2 iterations, 1 thread</td><td>The modern default; memory-hard, which hurts graphics-card attacks</td></tr>
+      <tr><td><strong>scrypt</strong></td><td>N = 2<sup>17</sup>, r = 8, p = 1 (128 MiB)</td><td>Memory-hard; in Python's standard library</td></tr>
+      <tr><td><strong>bcrypt</strong></td><td>cost 10 or more</td><td>Older but solid; only uses the first 72 bytes of a password</td></tr>
+      <tr><td><strong>PBKDF2-HMAC-SHA256</strong></td><td>600,000 iterations</td><td>Use when you need FIPS-approved algorithms</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Pick the slowest settings your login servers can afford at peak, and measure: if a check takes 50 ms of one core, a login spike of 100 attempts a second needs five cores just for hashing. Better still, don't store passwords at all: use a managed identity service (Amazon Cognito, Microsoft Entra External ID, Google's Identity Platform, or a specialist provider), which does this for you.</p>
+
+<!-- ======================================================== 2.3 -->
+<h2 class="sec" id="s2-3"><span class="n">2.3</span>Password rules that actually help</h2>
+
+<p>Many familiar password rules make things worse. People forced to add a symbol write <code>Password1!</code>; people forced to change every 90 days write <code>Winter2026</code>, then <code>Spring2027</code>. NIST's Digital Identity Guidelines (SP 800-63B, revised in 2025) reflect what the evidence shows:</p>
+<ul>
+  <li><strong>Length over complexity.</strong> At least 15 characters when a password is the only factor, at least 8 when it's combined with MFA; allow at least 64. No rules about mixing character types.</li>
+  <li><strong>Check against breached and common passwords</strong> at sign-up and at password change, and reject matches. Services such as <em>Have I Been Pwned's</em> Pwned Passwords let you check without revealing the password: you send the first five characters of its SHA-1 hash and compare the returned list yourself.</li>
+  <li><strong>No forced periodic changes.</strong> Force a change only when there's evidence of compromise.</li>
+  <li><strong>Let password managers work:</strong> allow pasting, and don't block autofill.</li>
+  <li><strong>Limit failed attempts</strong> per account, and watch failure rates across all accounts, which is how stuffing shows up.</li>
+</ul>
+
+<!-- ======================================================== 2.4 -->
+<h2 class="sec" id="s2-4"><span class="n">2.4</span>Second factors, and which ones stop phishing</h2>
+
+<p>Multi-factor authentication adds something you have to something you know. All of the factors below stop credential stuffing, because the attacker has the password but not the phone or key. They differ sharply against phishing.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 2.3 · Second factors compared</caption>
+    <thead><tr><th>Factor</th><th>How it works</th><th>Phishing</th><th>Other weaknesses</th></tr></thead>
+    <tbody>
+      <tr><td>SMS or voice code</td><td>A code sent to your phone number</td><td>Phishable: you type it into the fake site</td><td>SIM swapping; the code travels over the phone network</td></tr>
+      <tr><td>Authenticator app code (TOTP)</td><td>A code calculated from a shared secret and the time (2.5)</td><td>Phishable</td><td>The secret sits on the server too</td></tr>
+      <tr><td>Push approval</td><td>“Is this you signing in?” on a phone app</td><td>Phishable; and <em>push fatigue</em>: attackers send prompts until someone taps yes</td><td>Number matching (type the number shown on screen) helps a lot</td></tr>
+      <tr><td><strong>Security key or passkey (FIDO2/WebAuthn)</strong></td><td>The device signs a challenge with a private key for this exact site (2.6)</td><td><strong>Resistant</strong>: the signature only works for the real site</td><td>Account recovery must be as strong (2.7)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Why can codes be phished? Because a code is just a value. A <strong>real-time phishing proxy</strong> sits between the user and the real site: it shows the real login page, passes along everything the user types, including the code, and keeps the session cookie the real site sends back. The user notices nothing. With a passkey, the browser itself checks which site is asking, and the signature it produces is only valid for that site:</p>
+
+<figure class="wide" id="fig2-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig2-2-t fig2-2-d">
+      <title id="fig2-2-t">A real-time phishing proxy against a one-time code and against a passkey</title>
+      <desc id="fig2-2-d">Top row: a user types their password and one-time code into a fake site, larder-login.example. The proxy forwards both to the real site, larder.example, which accepts them and returns a session cookie that the attacker keeps. Bottom row: the same fake site asks for a passkey. The browser signs a challenge for the origin larder-login.example, because that's the site it's on. The proxy forwards the signature to larder.example, which expects a signature for larder.example and rejects it.</desc>
+      <defs><marker id="c2ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <text class="t-small" x="12" y="20">One-time code</text>
+      <rect class="node" x="12" y="30" width="130" height="60" rx="5"/><text class="t-label" x="77" y="56" text-anchor="middle">user</text><text class="t-small" x="77" y="76" text-anchor="middle">password + code</text>
+      <rect class="ext" x="250" y="30" width="200" height="60" rx="5"/><text class="t-label t-warn" x="350" y="56" text-anchor="middle">fake site (proxy)</text><text class="t-mono" x="350" y="76" text-anchor="middle">larder-login.example</text>
+      <rect class="node" x="558" y="30" width="190" height="60" rx="5"/><text class="t-label" x="653" y="56" text-anchor="middle">real site</text><text class="t-mono" x="653" y="76" text-anchor="middle">larder.example</text>
+      <path class="wire" d="M144 60 H246" marker-end="url(#c2ah2)"/>
+      <path class="wire" d="M452 60 H554" marker-end="url(#c2ah2)"/>
+      <text class="t-small" x="503" y="106" text-anchor="middle">accepted ✓</text>
+      <text class="t-small t-warn" x="350" y="110" text-anchor="middle">attacker keeps the session</text>
+      <text class="t-small" x="12" y="150">Passkey</text>
+      <rect class="node" x="12" y="160" width="130" height="60" rx="5"/><text class="t-label" x="77" y="186" text-anchor="middle">browser</text><text class="t-small" x="77" y="206" text-anchor="middle">signs for the site it's on</text>
+      <rect class="ext" x="250" y="160" width="200" height="60" rx="5"/><text class="t-label t-warn" x="350" y="186" text-anchor="middle">fake site (proxy)</text><text class="t-mono" x="350" y="206" text-anchor="middle">larder-login.example</text>
+      <rect class="node" x="558" y="160" width="190" height="60" rx="5"/><text class="t-label" x="653" y="186" text-anchor="middle">real site</text><text class="t-mono" x="653" y="206" text-anchor="middle">larder.example</text>
+      <path class="wire" d="M144 190 H246" marker-end="url(#c2ah2)"/>
+      <text class="t-mono" x="195" y="240" text-anchor="middle">origin = larder-login.example</text>
+      <path class="wire" d="M452 190 H554" marker-end="url(#c2ah2)"/>
+      <text class="t-label" x="653" y="240" text-anchor="middle">wrong origin: rejected ✗</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 2.2</b> Codes are values that anyone can pass along. A passkey signature includes the site the browser was really on, so it's useless anywhere else.</figcaption>
+</figure>
+
+<!-- ======================================================== 2.5 -->
+<h2 class="sec" id="s2-5"><span class="n">2.5</span>How a one-time code is made</h2>
+
+<p>An authenticator app's six-digit code is a <span class="term">TOTP</span>, a time-based one-time password (RFC 6238). It's worth knowing exactly how it works, because it explains both its strengths and its limits:</p>
+<ol class="steps">
+  <li>At enrolment, the server generates a random <strong>secret</strong> and shows it as a QR code. The app stores it; so does the server.</li>
+  <li>Both sides count <strong>time steps</strong>: the Unix time divided by 30, rounded down. Every 30 seconds, the number goes up by one.</li>
+  <li>Both compute an <strong>HMAC</strong> (a keyed hash, here with SHA-1) of the time step, using the secret as the key.</li>
+  <li>Both take four bytes from the result, at a position chosen by its last byte, and keep the last six decimal digits. That's the code.</li>
+</ol>
+<p>The server accepts the current code, usually plus or minus one step for clock drift, and should refuse a code that's already been used. Nothing is sent anywhere, which is why it works offline. But the server must store the secret in a form it can use, so a server breach exposes every secret; and a code is a value, so it can be phished.</p>
+
+<!-- ======================================================== 2.6 -->
+<h2 class="sec" id="s2-6"><span class="n">2.6</span>Passkeys and WebAuthn</h2>
+
+<p>A <span class="term">passkey</span> replaces the shared secret with a key pair. It's built on the FIDO2 standards; the part browsers implement is called <strong>WebAuthn</strong>. At registration, the user's device creates a new key pair just for this site. The private key never leaves the device (or the user's password manager or platform keychain); the site stores only the public key.</p>
+
+<p>At sign-in:</p>
+<ol class="steps">
+  <li>The site sends a random <strong>challenge</strong>.</li>
+  <li>The browser asks the device to sign it, and adds the <strong>origin</strong> it's actually on (<code>https://larder.example</code>) to what gets signed. The user unlocks the key with a fingerprint, face or PIN, which never leaves the device.</li>
+  <li>The site checks the signature with the stored public key, and checks that the origin is its own.</li>
+</ol>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Passkeys resist phishing because the browser, not the user, decides which site a signature is for. There's no secret for the user to type into the wrong place.</p>
+</div>
+
+<p>There's also nothing worth stealing on the server: a database of public keys is useless to an attacker. Passkeys come in two kinds. <strong>Synced passkeys</strong> are backed up by the platform (Apple, Google, Microsoft or a password manager) across a person's devices; they're convenient and right for most customers. <strong>Device-bound passkeys</strong> live on one hardware security key and can't be copied; use them for administrators, where you want to know exactly where the key is.</p>
+
+<aside class="side"><b>Passkey or MFA?</b>A passkey combines something you have (the device) with something you are or know (the unlock), so on its own it counts as phishing-resistant MFA. A security key used as a second factor after a password gives the same protection.</aside>
+
+<!-- ======================================================== 2.7 -->
+<h2 class="sec" id="s2-7"><span class="n">2.7</span>Recovery: the back door</h2>
+
+<p>Every authentication system has a way in for people who've lost their phone or forgotten their password, and attackers know it. A strong passkey is worthless if “I lost my phone” to the help desk gets a new one by email. Design recovery as carefully as login:</p>
+<ul>
+  <li>Offer <strong>several registered factors</strong> (two passkeys, or a passkey and recovery codes), so losing one isn't a recovery event.</li>
+  <li>Give <strong>one-time recovery codes</strong> at enrolment, to be stored offline.</li>
+  <li>For staff, recovery goes through <strong>verified identity</strong>: a video call with a manager who knows them, or showing ID in person, never a phone call alone. Help-desk social engineering is behind many well-known breaches.</li>
+  <li><strong>Notify</strong> on every change of factor or email address, through the old channel as well as the new.</li>
+  <li><strong>Slow down</strong> sensitive changes after recovery: no payout-address changes for 24 hours, for example.</li>
+</ul>
+
+<!-- ======================================================== 2.8 -->
+<h2 class="sec" id="s2-8"><span class="n">2.8</span>Across providers</h2>
+
+<p>For your cloud accounts, you won't store passwords yourself: the provider or your identity provider does. What you choose is <em>which</em> factors are allowed, and for whom.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 2.4 · Strong authentication for cloud administrators</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Where people sign in</td><td>IAM Identity Center, or your IdP through it</td><td>Microsoft Entra ID</td><td>Google accounts (Cloud Identity / Workspace), or your IdP</td></tr>
+      <tr><td>Phishing-resistant options</td><td>FIDO2 security keys and passkeys</td><td>passkeys, FIDO2 keys, Windows Hello for Business, certificate-based authentication</td><td>passkeys and security keys</td></tr>
+      <tr><td>Enforcing it</td><td>MFA settings in Identity Center; IAM conditions on <code>aws:MultiFactorAuthPresent</code></td><td>Conditional Access with the “phishing-resistant MFA” authentication strength</td><td>2-Step Verification enforcement, including “security keys only”, per organisational unit</td></tr>
+      <tr><td>The account's own superuser</td><td>root user: MFA required, ideally a security key (<a href="index.html#ch7">Chapter 7</a>)</td><td>Global Administrators in Entra ID</td><td>super administrators in Cloud Identity / Workspace</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>Microsoft Authenticator push uses <strong>number matching</strong> by default (the user types the number shown on the sign-in screen), which blunts push-fatigue attacks. For administrators, a Conditional Access policy requiring the built-in <strong>phishing-resistant MFA</strong> authentication strength allows only passkeys, FIDO2 keys, Windows Hello for Business and certificates.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>Google Cloud console access is a Google account sign-in, so the controls live in the Cloud Identity or Workspace admin console: enforce 2-Step Verification, and for administrators allow <strong>only security keys</strong>. Google's Advanced Protection Program goes further for the highest-risk people.</p>
+</div>
+
+<!-- ======================================================== 2.9 -->
+<h2 class="sec" id="s2-9"><span class="n">2.9</span>Choosing for customers, staff and administrators</h2>
+
+<p>There's no single right answer, because the people and the risks differ. A reasonable baseline:</p>
+<ul>
+  <li><strong>Customers:</strong> offer passkeys and make them the easy path; keep passwords with breached-password checks and rate limits; ask for extra verification on risky actions (a new delivery address with a saved card) rather than on every login.</li>
+  <li><strong>Staff:</strong> single sign-on with MFA for everything (<a href="index.html#ch12">Chapter 12</a>); push with number matching at minimum, passkeys preferred.</li>
+  <li><strong>Administrators and production access:</strong> phishing-resistant factors only: device-bound passkeys or hardware security keys, two per person.</li>
+</ul>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: what changed</p>
+  <p>By Sunday afternoon, the 310 accounts were locked and their owners emailed; the 41 orders were refunded, and Lena reported the incident to the Dutch data protection authority within the 72 hours GDPR allows. In the following two weeks, Dee's mobile team and Eli shipped four changes: failed-login limits per account and per address, with an alert when the overall failure rate jumps; a breached-password check at sign-up, login and password change; a step-up check (a code sent to the account's email) before a saved card can pay for an order to a new address; and passkeys in the app and on the web. Within a month, 18 % of active customers had added a passkey.</p>
+  <p>For staff, the incident started a harder conversation. Engineers used push approvals without number matching, and the <code>ops</code> user from <a href="01-who-and-what.html">Chapter 1</a> had no second factor at all. Eli ordered two hardware security keys for each of the nine people with production access; <a href="index.html#ch12">Chapter 12</a> puts them to use.</p>
+</aside>
+
+<!-- ======================================================== 2.10 -->
+<h2 class="sec" id="s2-10"><span class="n">2.10</span>Lab: hash a password, and make a one-time code</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 2 · Slow hashes, salt and TOTP</p>
+  <p><strong>You'll</strong> measure how much slower a password hash is than a plain hash, see what salt does, store and verify a password, then build TOTP from scratch, check it against the standard's test vectors and, if you like, compare it with your own authenticator app. <strong>You need</strong> Python 3.8 or later, nothing else. <strong>Cost:</strong> nothing.</p>
+</div>
+
+<p class="code-title"><span>passwords.py</span><span>Python 3.8+ (hashlib.scrypt needs OpenSSL, as standard builds have)</span></p>
+<pre><code><span class="c"># passwords.py · fast hashes, slow hashes, salt, and a storage format</span>
+<span class="k">import</span> hashlib, hmac, os, time
+
+<span class="k">def</span> fast(password):
+    <span class="k">return</span> hashlib.sha256(password.encode()).hexdigest()
+
+<span class="k">def</span> slow(password, salt, n=2**14, r=8, p=1):
+    <span class="k">return</span> hashlib.scrypt(password.encode(), salt=salt, n=n, r=r, p=p,
+                          maxmem=64 * 1024 * 1024).hex()
+
+<span class="k">def</span> guesses_per_second(fn, seconds=1.0):
+    count, start = 0, time.perf_counter()
+    <span class="k">while</span> time.perf_counter() - start &lt; seconds:
+        fn()
+        count += 1
+    <span class="k">return</span> count / seconds
+
+<span class="c"># 1. How fast can an attacker try guesses against each kind of hash?</span>
+salt = os.urandom(16)
+print(f<span class="s">"sha256: {guesses_per_second(lambda: fast('correct horse')):&gt;12,.0f} guesses/s"</span>)
+print(f<span class="s">"scrypt: {guesses_per_second(lambda: slow('correct horse', salt)):&gt;12,.0f} guesses/s"</span>)
+
+<span class="c"># 2. Two customers with the same password</span>
+print(<span class="s">"same without salt:"</span>, fast(<span class="s">"winter2026"</span>) == fast(<span class="s">"winter2026"</span>))
+print(<span class="s">"same with salt:   "</span>, slow(<span class="s">"winter2026"</span>, os.urandom(16)) == slow(<span class="s">"winter2026"</span>, os.urandom(16)))
+
+<span class="c"># 3. What you store, and how you check a login against it</span>
+<span class="k">def</span> store(password):
+    salt = os.urandom(16)
+    <span class="k">return</span> f<span class="s">"scrypt$16384$8$1${salt.hex()}${slow(password, salt)}"</span>
+
+<span class="k">def</span> verify(password, stored):
+    _, n, r, p, salt, digest = stored.split(<span class="s">"$"</span>)
+    attempt = slow(password, bytes.fromhex(salt), int(n), int(r), int(p))
+    <span class="k">return</span> hmac.compare_digest(attempt, digest)
+
+record = store(<span class="s">"winter2026"</span>)
+print(record[:40] + <span class="s">"…"</span>)
+print(<span class="s">"right password:"</span>, verify(<span class="s">"winter2026"</span>, record))
+print(<span class="s">"wrong password:"</span>, verify(<span class="s">"Winter2026"</span>, record))</code></pre>
+
+<ol class="steps">
+  <li><strong>Run it</strong> with <code>python3 passwords.py</code>. Your numbers will differ; on the machine used for this book:
+<pre><code>sha256:    2,606,019 guesses/s
+scrypt:           37 guesses/s
+same without salt: True
+same with salt:    False
+scrypt$16384$8$1$8f9a27e11ee1f73b7d26865…
+right password: True
+wrong password: False</code></pre>
+  The slow hash is about 70,000 times slower per guess, and that's on one core with lab settings (N = 2<sup>14</sup>, 16 MiB). An attacker with graphics cards gains a lot more speed on SHA-256 than on scrypt, because scrypt needs memory for every guess. With salt, identical passwords give different records.</li>
+  <li><strong>Make it slower.</strong> Change the defaults to <code>n=2**17</code> and <code>maxmem=256 * 1024 * 1024</code> (the production settings in Table 2.2) and run again. How many logins a second could one core of your machine check?</li>
+</ol>
+
+<p class="code-title"><span>totp.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># totp.py · time-based one-time passwords (RFC 6238), from scratch</span>
+<span class="k">import</span> base64, hashlib, hmac, struct, time
+
+<span class="k">def</span> hotp(key, counter, digits=6):
+    mac = hmac.new(key, struct.pack(<span class="s">"&gt;Q"</span>, counter), hashlib.sha1).digest()
+    offset = mac[-1] &amp; 0x0F                                  <span class="c"># dynamic truncation</span>
+    code = struct.unpack(<span class="s">"&gt;I"</span>, mac[offset:offset + 4])[0] &amp; 0x7FFFFFFF
+    <span class="k">return</span> str(code % 10 ** digits).zfill(digits)
+
+<span class="k">def</span> totp(key, at=None, step=30, digits=6):
+    now = time.time() <span class="k">if</span> at <span class="k">is</span> None <span class="k">else</span> at
+    <span class="k">return</span> hotp(key, int(now // step), digits)
+
+<span class="k">def</span> check(key, code, at=None, window=1):
+    now = time.time() <span class="k">if</span> at <span class="k">is</span> None <span class="k">else</span> at
+    <span class="k">return</span> any(hmac.compare_digest(totp(key, now + d * 30), code)
+               <span class="k">for</span> d <span class="k">in</span> range(-window, window + 1))
+
+<span class="c"># 1. The test vectors from RFC 6238, appendix B (SHA-1, 8 digits)</span>
+key = b<span class="s">"12345678901234567890"</span>
+<span class="k">for</span> t, want <span class="k">in</span> [(59, <span class="s">"94287082"</span>), (1111111109, <span class="s">"07081804"</span>), (1234567890, <span class="s">"89005924"</span>)]:
+    got = totp(key, t, digits=8)
+    print(f<span class="s">"{t:&gt;10}  {got}  {'ok' if got == want else 'WRONG'}"</span>)
+
+<span class="c"># 2. A secret like the one inside an authenticator app's QR code</span>
+secret = base64.b32encode(b<span class="s">"larder-lab-not-real!"</span>).decode()
+print(<span class="s">"otpauth://totp/Larder:lab?secret="</span> + secret + <span class="s">"&amp;issuer=Larder"</span>)
+code = totp(base64.b32decode(secret))
+print(<span class="s">"code now:"</span>, code, <span class="s">"| accepted:"</span>, check(base64.b32decode(secret), code))
+print(<span class="s">"code from 5 minutes ago accepted:"</span>,
+      check(base64.b32decode(secret), totp(base64.b32decode(secret), time.time() - 300)))</code></pre>
+
+<ol class="steps" start="3">
+  <li><strong>Run it</strong> with <code>python3 totp.py</code>. The first three lines must say <code>ok</code>: your code now matches the standard. Then:
+<pre><code>otpauth://totp/Larder:lab?secret=NRQXEZDFOIWWYYLCFVXG65BNOJSWC3BB&amp;issuer=Larder
+code now: 960043 | accepted: True
+code from 5 minutes ago accepted: False</code></pre>
+  Your code will differ, because the time does.</li>
+  <li><strong>Compare with a real app.</strong> In any authenticator app, add an account manually with the secret <code>NRQXEZDFOIWWYYLCFVXG65BNOJSWC3BB</code>, then run the script again: both show the same code. Delete the account from the app afterwards; this secret is printed in a book, so it protects nothing.</li>
+  <li><strong>Break it on purpose.</strong> Change <code>window=1</code> to <code>window=10</code> in <code>check</code>: a code from five minutes ago is now accepted, giving a phisher ten minutes instead of one. Then change <code>step=30</code> to <code>step=60</code> in <code>totp</code> and compare with the app: the codes no longer match, because both sides must agree on every parameter.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Make <code>check</code> remember the last time step each secret was used, and refuse a code from that step or earlier. That's the replay protection RFC 6238 asks for.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s2-11"><span class="n">2.11</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Fast or unsalted hashes (MD5, SHA-1, SHA-256)</td><td>A stolen database is cracked in hours.</td><td>Argon2id, scrypt or bcrypt with a per-password salt; or a managed identity service.</td></tr>
+      <tr><td>Encrypting passwords instead of hashing</td><td>Whoever gets the key gets every password.</td><td>One-way hashing.</td></tr>
+      <tr><td>Composition rules and forced 90-day changes</td><td>Predictable passwords (<code>Winter2026!</code>).</td><td>Length, breached-password checks, change on evidence.</td></tr>
+      <tr><td>SMS or push as the only MFA for admins</td><td>Phishing proxies and push fatigue get through.</td><td>Passkeys or hardware security keys.</td></tr>
+      <tr><td>Recovery weaker than login</td><td>Attackers skip the passkey and call the help desk.</td><td>Several factors, recovery codes, verified identity for staff.</td></tr>
+      <tr><td>Watching only per-account failures</td><td>Stuffing tries each account once and is never locked.</td><td>Alert on failure rates across all accounts and by source.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum2">
+  <h2 class="sec" id="sum2"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Passwords fail four ways: <strong>guessing, stuffing, phishing and stolen databases</strong>. Each needs its own defence.</li>
+    <li>Store passwords with a <strong>salt</strong> and a <strong>slow, memory-hard hash</strong> (Argon2id or scrypt), with the settings stored alongside; or don't store them at all.</li>
+    <li>Good password policy is length, breached-password checks and rate limits, not composition rules or forced changes.</li>
+    <li>Every second factor stops credential stuffing; only <strong>passkeys and security keys</strong> stop phishing.</li>
+    <li>A TOTP code is an HMAC of the time with a shared secret: offline and simple, but phishable.</li>
+    <li>Passkeys sign a challenge bound to the real origin; the server stores only public keys.</li>
+    <li>Recovery is part of authentication. Make it as strong as login.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Credential stuffing</dt><dd>Logging in with username–password pairs leaked from other sites.</dd>
+    <dt>Salt</dt><dd>A random per-password value hashed with it, so identical passwords give different hashes.</dd>
+    <dt>Password hashing function</dt><dd>A deliberately slow, often memory-hard hash such as Argon2id, scrypt or bcrypt.</dd>
+    <dt>MFA</dt><dd>Multi-factor authentication: two or more different kinds of factor.</dd>
+    <dt>TOTP</dt><dd>Time-based one-time password: an HMAC of the current 30-second step and a shared secret.</dd>
+    <dt>Phishing-resistant</dt><dd>An authenticator whose output can't be relayed to a site other than the one it was made for.</dd>
+    <dt>Passkey</dt><dd>A FIDO2/WebAuthn credential: a per-site key pair whose private key stays on the user's device or keychain.</dd>
+    <dt>Origin</dt><dd>The scheme, host and port of a web page, such as <code>https://larder.example</code>.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Larder's password hashes were never stolen, yet 310 accounts were taken over. Name the attack and two defences that would have helped. <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Credential stuffing. Breached-password checks, MFA or passkeys, and rate limits with alerting on the overall failure rate. Strong hashing doesn't help, because the attacker logs in normally.</p></details>
+    </li>
+    <li>
+      <p>Why does adding a salt not make a single password any harder to crack, and why use it anyway? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The salt is stored next to the hash, so an attacker cracking one record uses it. Its value is across records: every password must be attacked separately, identical passwords aren't revealed, and precomputed tables don't work.</p></details>
+    </li>
+    <li>
+      <p>A login server checks 200 passwords a second at peak, and an Argon2id check takes 40 ms of CPU. How many cores does hashing need? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>200 × 0.04 s = 8 core-seconds per second, so eight cores, plus headroom for spikes and attacks (which also arrive as login attempts).</p></details>
+    </li>
+    <li>
+      <p>An administrator uses an authenticator app code. Explain how a real-time phishing proxy gets into their account, and what would stop it. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The proxy shows the real login page, relays the password and code to the real site as they're typed, and keeps the session cookie the real site returns. A passkey or security key stops it, because the browser signs for the fake origin and the real site rejects the signature.</p></details>
+    </li>
+    <li>
+      <p>Design authentication for Larder's three groups: customers, pickers on shared store tablets, and engineers with production access. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Customers: passkeys first, passwords with breached checks and rate limits, step-up for risky actions. Pickers: personal badges or short PINs on a managed device, with short sessions, since the tablet is shared but the identity shouldn't be. Engineers: single sign-on with hardware security keys or device-bound passkeys, two each, and recovery through a verified call with their manager.</p></details>
+    </li>
+    <li>
+      <p>Compare how you'd require phishing-resistant MFA for administrators on Azure and on Google Cloud. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Azure: a Conditional Access policy for the administrator roles requiring the phishing-resistant MFA authentication strength. Google Cloud: in the Cloud Identity or Workspace admin console, enforce 2-Step Verification with security keys only for the administrators' organisational unit.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>NIST <a href="https://pages.nist.gov/800-63-4/sp800-63b.html">SP 800-63B, Authentication and Authenticator Management</a>.</li>
+    <li>OWASP <a href="https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html">Password Storage Cheat Sheet</a> and <a href="https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html">MFA Cheat Sheet</a>.</li>
+    <li><a href="https://datatracker.ietf.org/doc/html/rfc6238">RFC 6238, TOTP</a>; <a href="https://www.w3.org/TR/webauthn-2/">W3C Web Authentication</a>; <a href="https://fidoalliance.org/passkeys/">FIDO Alliance on passkeys</a>.</li>
+    <li>AWS: <a href="https://docs.aws.amazon.com/singlesignon/latest/userguide/enable-mfa.html">MFA in IAM Identity Center</a>. Azure: <a href="https://learn.microsoft.com/entra/identity/authentication/concept-authentication-strengths">authentication strengths</a>. Google: <a href="https://support.google.com/a/answer/9176657">deploying 2-Step Verification</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="01-who-and-what.html">1 · Who are you, and what may you do?</a></div>
+  <div><span>Next</span><a href="03-tokens-sessions.html">3 · Sessions and tokens</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 2 · Identity and Access in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

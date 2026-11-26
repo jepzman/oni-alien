@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>SAML and federation · Identity and Access in the Cloud</title>
+<meta name="description" content="Trusting someone else&#x27;s login: identity providers, assertions, and why SAML still runs most enterprise SSO.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=86bdfe1bff">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 2</a> · <a href="index.html">Identity and Access in the Cloud</a></span><span>Part I · Chapter 5</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part I · How access works</p>
+  <p class="chno">5</p>
+  <h1>SAML and federation</h1>
+  <p class="promise">Federation means trusting someone else's login: your partner's staff sign in with their own company accounts, and your employees reach a hundred SaaS tools and your cloud consoles with one. Much of that still runs on SAML 2.0, an XML standard from 2005 that every enterprise identity provider speaks. This chapter explains how SAML works, what an assertion says, how to check one, and how to decide how far to trust the identity provider that sent it.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain identity providers, service providers and the metadata that connects them.</li>
+      <li>Follow an SP-initiated SAML sign-in, and say why IdP-initiated sign-in is riskier.</li>
+      <li>Read a SAML assertion and list every check a service provider must make.</li>
+      <li>Choose between SAML and OpenID Connect for a new integration.</li>
+      <li>Limit what a federated identity provider can vouch for.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Trust and identity providers (<a href="01-who-and-what.html">Chapter 1</a>, 1.5–1.6).</li>
+      <li>Token checks (<a href="03-tokens-sessions.html">Chapter 3</a>, 3.5) and OpenID Connect (<a href="04-oauth-oidc.html">Chapter 4</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, Python 3, no cloud account</dd>
+      <dt>Main provider</dt><dd>provider-neutral, with AWS, Azure and Google Cloud in 5.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Korenwolf's three offices start their Larder for Business service in January 2027, and Korenwolf IT's 40-section solution design template has a firm line in it: <em>all supplier portals used by staff must use single sign-on with the Korenwolf identity provider, via SAML 2.0</em>. Their office managers will sign in to Larder with their Korenwolf accounts, and when someone leaves Korenwolf, their access to Larder must end with their Korenwolf account. Eli has until 18 December to make it work.</p>
+  <p>The protocol is the easy part. The question that takes Eli a week is a different one: if Larder trusts Korenwolf's identity provider to say who someone is, what stops it saying something Larder shouldn't believe? Section 5.7 answers it.</p>
+</aside>
+
+<!-- ======================================================== 5.1 -->
+<h2 class="sec" id="s5-1"><span class="n">5.1</span>What federation is for</h2>
+
+<p class="lead"><span class="term">Federation</span> is an agreement between two systems: one authenticates people, the other accepts its word. The person signs in once, with the account their organisation manages, and gets into applications run by someone else. Everyone gains something:</p>
+<ul>
+  <li><strong>The person</strong> has one login and one set of factors, instead of a password per supplier.</li>
+  <li><strong>Their organisation</strong> keeps control: it decides who may use the app, enforces its MFA rules, and ends access by disabling one account.</li>
+  <li><strong>The application</strong> stores no passwords for these people, and doesn't run their resets.</li>
+</ul>
+<p>The same idea runs inside your own company: employees sign in to the AWS console, Slack and Jira through one identity provider (<a href="index.html#ch12">Chapter 12</a>). And it works between machines, when a CI system's token is accepted by a cloud (<a href="index.html#ch17">Chapter 17</a>). This chapter is about people and SAML; the principles carry over.</p>
+
+<!-- ======================================================== 5.2 -->
+<h2 class="sec" id="s5-2"><span class="n">5.2</span>Identity providers, service providers and metadata</h2>
+
+<p>SAML has two roles. The <span class="term">identity provider</span> (IdP) authenticates the person and issues a signed statement about them: Korenwolf's Microsoft Entra ID. The <span class="term">service provider</span> (SP) is the application that relies on it: Larder's login service. (OpenID Connect calls the SP a <em>relying party</em>.)</p>
+
+<p>Before anyone signs in, the two exchange <span class="term">metadata</span>, an XML document each publishes about itself. It's how trust is written down (<a href="01-who-and-what.html">Chapter 1</a>, 1.6):</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 5.1 · What each side's metadata tells the other</caption>
+    <thead><tr><th>From</th><th>Field</th><th>Larder–Korenwolf example</th></tr></thead>
+    <tbody>
+      <tr><td>IdP</td><td>entity ID: the IdP's unique name</td><td><code>https://sts.korenwolf.example/7c1d</code></td></tr>
+      <tr><td>IdP</td><td>single sign-on URL: where to send people</td><td><code>https://login.korenwolf.example/saml2</code></td></tr>
+      <tr><td>IdP</td><td>signing certificate: the public key that checks its signatures</td><td>an X.509 certificate, valid three years</td></tr>
+      <tr><td>SP</td><td>entity ID: the SP's unique name, used as the audience</td><td><code>https://login.larder.example/saml</code></td></tr>
+      <tr><td>SP</td><td>assertion consumer service (ACS) URL: where responses are posted</td><td><code>https://login.larder.example/saml/acs/korenwolf</code></td></tr>
+      <tr><td>SP</td><td>requested attributes and name ID format</td><td>email, office, groups; persistent ID</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>The certificate is the heart of it: the SP will believe any assertion signed with the matching private key. Certificates expire, and an unnoticed expiry stops every sign-in at once, so put the date in a calendar and agree how rollovers will work (most IdPs can publish the next certificate in advance).</p>
+
+<!-- ======================================================== 5.3 -->
+<h2 class="sec" id="s5-3"><span class="n">5.3</span>A sign-in, step by step</h2>
+
+<p>SAML moves messages through the user's browser, using redirects and auto-submitting HTML forms; the IdP and SP never talk directly during a sign-in. The usual flow starts at the application, so it's called <strong>SP-initiated</strong>:</p>
+
+<figure class="wide" id="fig5-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 340" role="img" aria-labelledby="fig5-1-t fig5-1-d">
+      <title id="fig5-1-t">An SP-initiated SAML sign-in</title>
+      <desc id="fig5-1-d">Three participants: the browser, Larder as service provider, and Korenwolf's identity provider. Step 1: the office manager opens Larder and types an email at korenwolf.example. Step 2: Larder recognises the domain and redirects the browser to Korenwolf's identity provider with an AuthnRequest whose ID is _req-7f3a. Step 3: the identity provider authenticates the person, without a prompt if they're already signed in to Korenwolf. Step 4: the identity provider returns a page that auto-posts a signed SAML response to the browser. Step 5: the browser posts it to Larder's assertion consumer service URL. Step 6: Larder validates it and creates its own session.</desc>
+      <defs><marker id="c5ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c5ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="40" y="12" width="150" height="40" rx="4"/><text class="t-label" x="115" y="37" text-anchor="middle">browser</text>
+      <rect class="node" x="305" y="12" width="150" height="40" rx="4"/><text class="t-label" x="380" y="37" text-anchor="middle">Larder (SP)</text>
+      <rect class="node-accent" x="570" y="12" width="150" height="40" rx="4"/><text class="t-label on-accent" x="645" y="37" text-anchor="middle">Korenwolf (IdP)</text>
+      <path class="wire-dash" d="M115 52 V328 M380 52 V328 M645 52 V328"/>
+      <path class="wire" d="M115 88 H376" marker-end="url(#c5ah)"/>
+      <text class="t-small halo-priv" x="124" y="80">① sign in as …@korenwolf.example</text>
+      <path class="wire" d="M380 132 H119" marker-end="url(#c5ah)"/>
+      <text class="t-small halo-priv" x="124" y="124">② redirect + AuthnRequest (ID _req-7f3a)</text>
+      <path class="wire" d="M115 176 H641" marker-end="url(#c5ah)"/>
+      <text class="t-small halo-priv" x="124" y="168">③ AuthnRequest; person signs in (MFA by Korenwolf's rules)</text>
+      <path class="wire-accent" d="M645 220 H119" marker-end="url(#c5ah2)"/>
+      <text class="t-small halo-priv" x="124" y="212">④ page that auto-posts the signed Response</text>
+      <path class="wire-accent" d="M115 264 H376" marker-end="url(#c5ah2)"/>
+      <text class="t-small halo-priv" x="124" y="256">⑤ POST SAMLResponse to the ACS URL</text>
+      <rect class="pub" x="300" y="280" width="160" height="40" rx="4"/>
+      <text class="t-small halo-priv" x="380" y="298" text-anchor="middle">⑥ validate (5.5),</text>
+      <text class="t-small" x="380" y="313" text-anchor="middle">start Larder session</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 5.1</b> SP-initiated SAML. Everything passes through the browser, so the response's signature, audience, recipient and time window are what make it trustworthy.</figcaption>
+</figure>
+
+<p>Step ① has a name: <strong>home realm discovery</strong>, working out which IdP a person belongs to, here from the email domain. In step ② the SP remembers the request's ID; in step ⑥ it checks that the response answers that request (<code>InResponseTo</code>).</p>
+
+<p>SAML can also start at the IdP: the person clicks a Larder tile in Korenwolf's app portal, and the IdP posts an <strong>unsolicited</strong> response straight to Larder. This <strong>IdP-initiated</strong> sign-in is convenient, but there's no request to match it to, so the SP can't tell a fresh sign-in from a response captured and replayed, or injected into someone else's browser. Prefer SP-initiated; if you must accept IdP-initiated, keep validity windows short and keep a replay cache.</p>
+
+<!-- ======================================================== 5.4 -->
+<h2 class="sec" id="s5-4"><span class="n">5.4</span>Inside an assertion</h2>
+
+<p>The SAML response carries an <span class="term">assertion</span>: the IdP's signed statement about the person. Strip away the namespaces and it reads quite naturally:</p>
+
+<figure class="wide" id="fig5-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 330" role="img" aria-labelledby="fig5-2-t fig5-2-d">
+      <title id="fig5-2-t">The parts of a SAML assertion and the question each answers</title>
+      <desc id="fig5-2-d">A simplified assertion. Issuer: who vouches, Korenwolf's identity provider. Signature: proof it came from them, unchanged. Subject with NameID kw-48d1a0 and subject confirmation data with InResponseTo, Recipient and NotOnOrAfter: who it's about, and where and when it may be used. Conditions with NotBefore, NotOnOrAfter and Audience: for which service, and when. AuthnStatement with the time and method of sign-in: how they authenticated. AttributeStatement with email, office and groups: facts about the person.</desc>
+      <rect class="priv" x="12" y="12" width="470" height="306" rx="6"/>
+      <text class="t-mono" x="24" y="36">&lt;Assertion ID="_a-91c2"&gt;</text>
+      <text class="t-mono" x="38" y="60">&lt;Issuer&gt;https://sts.korenwolf.example/7c1d&lt;/Issuer&gt;</text>
+      <text class="t-mono" x="38" y="84">&lt;Signature&gt;…&lt;/Signature&gt;</text>
+      <text class="t-mono" x="38" y="108">&lt;Subject&gt; &lt;NameID&gt;kw-48d1a0&lt;/NameID&gt;</text>
+      <text class="t-mono" x="52" y="128">InResponseTo="_req-7f3a" Recipient="…/acs/korenwolf"</text>
+      <text class="t-mono" x="52" y="148">NotOnOrAfter="08:35:00Z" &lt;/Subject&gt;</text>
+      <text class="t-mono" x="38" y="176">&lt;Conditions NotBefore="08:29" NotOnOrAfter="08:35"&gt;</text>
+      <text class="t-mono" x="52" y="196">&lt;Audience&gt;https://login.larder.example/saml</text>
+      <text class="t-mono" x="38" y="224">&lt;AuthnStatement AuthnInstant="08:29:58Z" …/&gt;</text>
+      <text class="t-mono" x="38" y="252">&lt;AttributeStatement&gt; email, office=Rotterdam,</text>
+      <text class="t-mono" x="52" y="272">groups="Larder office managers"</text>
+      <text class="t-mono" x="24" y="300">&lt;/Assertion&gt;</text>
+      <path class="wire-accent" d="M486 56 H512"/><text class="t-label" x="520" y="60">who vouches?</text>
+      <path class="wire-accent" d="M486 80 H512"/><text class="t-label" x="520" y="84">is it really from them?</text>
+      <path class="wire-accent" d="M486 128 H512"/><text class="t-label" x="520" y="124">who is it about,</text>
+      <text class="t-label" x="520" y="142">where may it be used?</text>
+      <path class="wire-accent" d="M486 186 H512"/><text class="t-label" x="520" y="182">for which service,</text>
+      <text class="t-label" x="520" y="200">and when?</text>
+      <path class="wire-accent" d="M486 220 H512"/><text class="t-label" x="520" y="224">how did they sign in?</text>
+      <path class="wire-accent" d="M486 262 H512"/><text class="t-label" x="520" y="266">facts about them</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 5.2</b> A SAML assertion, simplified. It's the same set of facts as an OIDC ID token (<a href="04-oauth-oidc.html">Chapter 4</a>), in XML: issuer, subject, audience, validity, how the person authenticated, and attributes.</figcaption>
+</figure>
+
+<p>Two details deserve attention:</p>
+<ul>
+  <li><strong>The NameID</strong> identifies the person to this SP. Prefer a <em>persistent</em> format, an opaque ID that never changes for this person and this SP. An email address as NameID breaks when someone marries and changes their name, and can be reassigned to a new employee later. Together with the issuer, the NameID is the key for the account, like <code>iss</code> + <code>sub</code> in OIDC.</li>
+  <li><strong>Attributes</strong> are whatever the IdP is configured to release: names, email, department, group memberships. The SP should ask for the minimum, and treat each one as a claim made by the IdP, which is only as trustworthy as the IdP's own data.</li>
+</ul>
+
+<!-- ======================================================== 5.5 -->
+<h2 class="sec" id="s5-5"><span class="n">5.5</span>Checking an assertion</h2>
+
+<p>A SAML response arrives as a form post from a browser, which anyone can make. Before trusting it, the SP must check:</p>
+
+<ol class="steps">
+  <li><strong>Signature:</strong> the assertion (or the whole response) is signed, the signature is valid, and it was made with the certificate from <em>this</em> IdP's metadata, not one embedded in the message.</li>
+  <li><strong>Issuer:</strong> exactly the IdP this connection trusts.</li>
+  <li><strong>Audience:</strong> your SP's entity ID.</li>
+  <li><strong>Recipient and destination:</strong> your ACS URL for this connection.</li>
+  <li><strong>Time:</strong> now is between <code>NotBefore</code> and <code>NotOnOrAfter</code>, with a small allowance for clock differences.</li>
+  <li><strong>InResponseTo:</strong> answers a request you sent and haven't seen answered.</li>
+  <li><strong>One use:</strong> the assertion ID hasn't been seen before (keep a cache until its expiry).</li>
+  <li><strong>Then your own rules</strong> about what this IdP may say (5.7), and map the attributes to the account.</li>
+</ol>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: never write your own SAML validation</p>
+  <p>XML signatures sign a <em>part</em> of a document, identified by an ID. In <strong>signature wrapping</strong> attacks, the attacker keeps the validly signed part where the signature check finds it, and adds a second, unsigned assertion where the application reads its data. Code that checks one element and reads another is fooled. These bugs keep reappearing, even in mature libraries. Use a well-maintained SAML library or, better, a managed identity service, and keep it updated.</p>
+</div>
+
+<!-- ======================================================== 5.6 -->
+<h2 class="sec" id="s5-6"><span class="n">5.6</span>SAML or OpenID Connect?</h2>
+
+<p>Both protocols federate sign-in, and most identity providers speak both. They differ in age and in what they're good at:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 5.2 · SAML 2.0 and OpenID Connect side by side</caption>
+    <thead><tr><th></th><th>SAML 2.0</th><th>OpenID Connect</th></tr></thead>
+    <tbody>
+      <tr><td>Since</td><td>2005</td><td>2014</td></tr>
+      <tr><td>Format</td><td>XML, XML signatures</td><td>JSON, JWTs</td></tr>
+      <tr><td>Transport</td><td>through the browser (redirects and form posts)</td><td>browser redirects plus a back channel for tokens</td></tr>
+      <tr><td>Mobile and native apps</td><td>awkward</td><td>designed for them (<a href="04-oauth-oidc.html">Chapter 4</a>)</td></tr>
+      <tr><td>Calling APIs afterwards</td><td>not part of the standard</td><td>OAuth access tokens, in the same flow</td></tr>
+      <tr><td>Where it's strong</td><td>enterprise SaaS, older IdPs, cloud console federation</td><td>new apps, mobile, APIs, workload federation</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>For a new integration where both sides can choose, choose OpenID Connect: it's simpler to implement correctly and covers apps and APIs. Support SAML when your customers' identity providers require it, as Korenwolf's does: in enterprise sales it's often a checkbox you can't skip.</p>
+
+<!-- ======================================================== 5.7 -->
+<h2 class="sec" id="s5-7"><span class="n">5.7</span>How far to trust a partner's IdP</h2>
+
+<p>Here is the question that kept Eli busy. Once Larder trusts assertions signed by Korenwolf's IdP, those assertions can say anything: any email address, any group, any office. A misconfiguration at Korenwolf, a malicious administrator there, or an attacker who takes over their IdP could produce a perfectly signed assertion for <code>eli@larder.example</code>, or for an office manager at a different Larder business customer. The signature proves who <em>said</em> it, not that it's true.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">A federated IdP should only be able to vouch for its own people, inside its own organisation's account, with the attributes you need, and nothing more.</p>
+</div>
+
+<p>In practice, that means four rules on the SP side:</p>
+<ol class="steps">
+  <li><strong>Bind the connection to one tenant.</strong> Accounts created through Korenwolf's connection belong to Korenwolf's business account, always. No attribute in an assertion can move someone into another customer's account, or into Larder's staff tools.</li>
+  <li><strong>Bind it to the organisation's domains.</strong> Only email addresses at domains Korenwolf has proved it owns (<code>korenwolf.example</code>) are accepted from it. An assertion naming any other domain is rejected, however well signed.</li>
+  <li><strong>Key accounts on issuer + NameID</strong>, never on email alone, so an account can't be claimed by another IdP that asserts the same address.</li>
+  <li><strong>Ask the IdP to filter, and check anyway.</strong> Korenwolf assigns the Larder app only to its office managers' group, so other staff never get an assertion. Larder also requires that group in the assertion, so a mistake on one side isn't enough.</li>
+</ol>
+
+<p>Then decide how accounts appear and disappear. With <strong>just-in-time provisioning</strong>, the SP creates the account at the first successful sign-in from the assertion's attributes; simple, but the SP never hears that someone left, only that they stopped signing in. With <strong>SCIM</strong>, the IdP pushes creations, changes and removals to the SP as they happen (<a href="index.html#ch13">Chapter 13</a>). Either way, keep the SP's sessions short, because disabling someone at the IdP doesn't end a session they already have at the SP.</p>
+
+<!-- ======================================================== 5.8 -->
+<h2 class="sec" id="s5-8"><span class="n">5.8</span>Across providers</h2>
+
+<p>The clouds appear on both sides of federation: as IdPs for the apps you build, and as SPs that accept your company's IdP for console and CLI access.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 5.3 · SAML and federation at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Your workforce IdP into the cloud</td><td>IAM Identity Center with an external IdP (SAML for sign-in, SCIM for users and groups); or per-account IAM SAML providers and <code>AssumeRoleWithSAML</code></td><td>Entra ID is the directory; other IdPs federate into Entra ID</td><td>Cloud Identity / Workspace SSO with a third-party IdP; or workforce identity federation without Google accounts</td></tr>
+      <tr><td>Cloud as IdP for your SaaS apps</td><td>Identity Center applications (SAML)</td><td>Entra ID enterprise apps (SAML or OIDC), with thousands of templates</td><td>Workspace / Cloud Identity SAML apps</td></tr>
+      <tr><td>Partners' IdPs into your app</td><td>Cognito user pools: SAML and OIDC IdPs per customer</td><td>Entra External ID: SAML / WS-Fed and OIDC federation</td><td>Identity Platform: SAML and OIDC providers, multi-tenant</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>Inviting a partner's staff as <strong>B2B guests</strong> is Entra ID's own form of federation: the guest signs in with their home organisation's account, and lives in your tenant as a guest user you can add to groups and remove. Cross-tenant access settings decide which external tenants are allowed, and whether you trust their MFA.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p><strong>Workforce identity federation</strong> lets people from an external IdP (SAML or OIDC) use the Google Cloud console and APIs without Google accounts at all; IAM policies grant roles to attributes from the assertion, such as a group. It's the closest equivalent to AWS's <code>AssumeRoleWithSAML</code>.</p>
+</div>
+
+<!-- ======================================================== 5.9 -->
+<h2 class="sec" id="s5-9"><span class="n">5.9</span>At Larder: Korenwolf's office managers sign in</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Larder's login service could already act as a SAML SP for each business customer, so the work was configuration and rules. Eli and Korenwolf IT exchanged metadata on 7 December; Korenwolf assigned the Larder app to a new group, <em>Larder office managers</em>, with nine people from the three offices; and Korenwolf's IdP releases four things: a persistent NameID, email, office and that group.</p>
+  <p>On Larder's side, the connection is bound to Korenwolf's business account and to <code>korenwolf.example</code>; accounts are keyed on issuer + NameID; the group is required; and the office attribute picks which delivery address an office manager orders for. Accounts are created just in time for now, with sessions of eight hours; SCIM is on the plan for when Korenwolf's portal launches in spring (<a href="index.html#ch13">Chapter 13</a>). The first test sign-in failed because the audience in Korenwolf's configuration had a trailing slash; the second worked. It went live on 18 December, as planned.</p>
+  <p>The certificate in Korenwolf's metadata expires in December 2029. It's in Larder's on-call calendar for November 2029.</p>
+</aside>
+
+<!-- ======================================================== 5.10 -->
+<h2 class="sec" id="s5-10"><span class="n">5.10</span>Lab: be the service provider</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 5 · Read and check a SAML assertion</p>
+  <p><strong>You'll</strong> parse a SAML response like Korenwolf's, run the service provider's checks from 5.5 and 5.7, and watch it reject a replay, a late response, the wrong audience and an IdP vouching for someone it shouldn't. <strong>You need</strong> Python 3. <strong>Cost:</strong> nothing. <strong>Important:</strong> the lab doesn't check the XML signature, which needs a dedicated library (such as <code>python3-saml</code> or <code>pysaml2</code>, built on <code>xmlsec</code>); 5.5 explains why you shouldn't write that yourself.</p>
+</div>
+
+<p class="code-title"><span>saml.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># saml.py · read a SAML assertion and run a service provider's checks on it</span>
+<span class="c"># Teaching only: it does NOT verify the XML signature. Real code uses a library that does.</span>
+<span class="k">import</span> xml.etree.ElementTree <span class="k">as</span> ET
+<span class="k">from</span> datetime <span class="k">import</span> datetime
+
+NS = {<span class="s">"samlp"</span>: <span class="s">"urn:oasis:names:tc:SAML:2.0:protocol"</span>,
+      <span class="s">"saml"</span>: <span class="s">"urn:oasis:names:tc:SAML:2.0:assertion"</span>}
+
+RESPONSE = <span class="s">"""&lt;samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"
+    xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_r1" Version="2.0"
+    IssueInstant="2026-12-18T08:30:00Z" InResponseTo="_req-7f3a"
+    Destination="https://login.larder.example/saml/acs/korenwolf"&gt;
+  &lt;saml:Issuer&gt;https://sts.korenwolf.example/7c1d&lt;/saml:Issuer&gt;
+  &lt;samlp:Status&gt;&lt;samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/&gt;&lt;/samlp:Status&gt;
+  &lt;saml:Assertion ID="_a-91c2" Version="2.0" IssueInstant="2026-12-18T08:30:00Z"&gt;
+    &lt;saml:Issuer&gt;https://sts.korenwolf.example/7c1d&lt;/saml:Issuer&gt;
+    &lt;!-- &lt;ds:Signature&gt; over this Assertion goes here --&gt;
+    &lt;saml:Subject&gt;
+      &lt;saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent"&gt;kw-48d1a0&lt;/saml:NameID&gt;
+      &lt;saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"&gt;
+        &lt;saml:SubjectConfirmationData InResponseTo="_req-7f3a" NotOnOrAfter="2026-12-18T08:35:00Z"
+            Recipient="https://login.larder.example/saml/acs/korenwolf"/&gt;
+      &lt;/saml:SubjectConfirmation&gt;
+    &lt;/saml:Subject&gt;
+    &lt;saml:Conditions NotBefore="2026-12-18T08:29:00Z" NotOnOrAfter="2026-12-18T08:35:00Z"&gt;
+      &lt;saml:AudienceRestriction&gt;&lt;saml:Audience&gt;https://login.larder.example/saml&lt;/saml:Audience&gt;&lt;/saml:AudienceRestriction&gt;
+    &lt;/saml:Conditions&gt;
+    &lt;saml:AuthnStatement AuthnInstant="2026-12-18T08:29:58Z"&gt;
+      &lt;saml:AuthnContext&gt;&lt;saml:AuthnContextClassRef&gt;urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport&lt;/saml:AuthnContextClassRef&gt;&lt;/saml:AuthnContext&gt;
+    &lt;/saml:AuthnStatement&gt;
+    &lt;saml:AttributeStatement&gt;
+      &lt;saml:Attribute Name="email"&gt;&lt;saml:AttributeValue&gt;j.devries@korenwolf.example&lt;/saml:AttributeValue&gt;&lt;/saml:Attribute&gt;
+      &lt;saml:Attribute Name="office"&gt;&lt;saml:AttributeValue&gt;Rotterdam&lt;/saml:AttributeValue&gt;&lt;/saml:Attribute&gt;
+      &lt;saml:Attribute Name="groups"&gt;&lt;saml:AttributeValue&gt;Larder office managers&lt;/saml:AttributeValue&gt;&lt;/saml:Attribute&gt;
+    &lt;/saml:AttributeStatement&gt;
+  &lt;/saml:Assertion&gt;
+&lt;/samlp:Response&gt;"""</span>
+
+<span class="c"># What Larder configured for this connection (from Korenwolf's metadata, and its own)</span>
+TRUST = {<span class="s">"issuer"</span>: <span class="s">"https://sts.korenwolf.example/7c1d"</span>,
+         <span class="s">"audience"</span>: <span class="s">"https://login.larder.example/saml"</span>,
+         <span class="s">"acs"</span>: <span class="s">"https://login.larder.example/saml/acs/korenwolf"</span>,
+         <span class="s">"email_domain"</span>: <span class="s">"korenwolf.example"</span>,
+         <span class="s">"required_group"</span>: <span class="s">"Larder office managers"</span>}
+PENDING = {<span class="s">"_req-7f3a"</span>}            <span class="c"># AuthnRequest IDs we sent and haven't seen answered</span>
+SEEN = set()                       <span class="c"># assertion IDs already used (replay cache)</span>
+
+<span class="k">def</span> t(text):
+    <span class="k">return</span> datetime.fromisoformat(text.replace(<span class="s">"Z"</span>, <span class="s">"+00:00"</span>))
+
+<span class="k">def</span> check(xml, now, skew=60):
+    r = ET.fromstring(xml)
+    a = r.find(<span class="s">"saml:Assertion"</span>, NS)
+    cond = a.find(<span class="s">"saml:Conditions"</span>, NS)
+    scd = a.find(<span class="s">".//saml:SubjectConfirmationData"</span>, NS)
+    attrs = {x.get(<span class="s">"Name"</span>): x.findtext(<span class="s">"saml:AttributeValue"</span>, namespaces=NS)
+             <span class="k">for</span> x <span class="k">in</span> a.findall(<span class="s">".//saml:Attribute"</span>, NS)}
+    problems = []
+    <span class="k">if</span> a.findtext(<span class="s">"saml:Issuer"</span>, namespaces=NS) != TRUST[<span class="s">"issuer"</span>]:
+        problems.append(<span class="s">"issuer"</span>)
+    <span class="k">if</span> cond.findtext(<span class="s">".//saml:Audience"</span>, namespaces=NS) != TRUST[<span class="s">"audience"</span>]:
+        problems.append(<span class="s">"audience"</span>)
+    <span class="k">if</span> scd.get(<span class="s">"Recipient"</span>) != TRUST[<span class="s">"acs"</span>] <span class="k">or</span> r.get(<span class="s">"Destination"</span>) != TRUST[<span class="s">"acs"</span>]:
+        problems.append(<span class="s">"recipient"</span>)
+    <span class="k">if not</span> (t(cond.get(<span class="s">"NotBefore"</span>)).timestamp() - skew &lt;= now &lt;= t(cond.get(<span class="s">"NotOnOrAfter"</span>)).timestamp() + skew):
+        problems.append(<span class="s">"time window"</span>)
+    <span class="k">if</span> scd.get(<span class="s">"InResponseTo"</span>) <span class="k">not in</span> PENDING:
+        problems.append(<span class="s">"not a response to our request"</span>)
+    <span class="k">if</span> a.get(<span class="s">"ID"</span>) <span class="k">in</span> SEEN:
+        problems.append(<span class="s">"replayed assertion"</span>)
+    <span class="k">if not</span> attrs.get(<span class="s">"email"</span>, <span class="s">""</span>).endswith(<span class="s">"@"</span> + TRUST[<span class="s">"email_domain"</span>]):
+        problems.append(<span class="s">"email outside korenwolf.example"</span>)
+    <span class="k">if</span> attrs.get(<span class="s">"groups"</span>) != TRUST[<span class="s">"required_group"</span>]:
+        problems.append(<span class="s">"not in the Larder group"</span>)
+    <span class="k">if</span> problems:
+        <span class="k">return</span> <span class="s">"rejected: "</span> + <span class="s">", "</span>.join(problems)
+    SEEN.add(a.get(<span class="s">"ID"</span>))
+    PENDING.discard(scd.get(<span class="s">"InResponseTo"</span>))
+    name_id = a.findtext(<span class="s">".//saml:NameID"</span>, namespaces=NS)
+    <span class="k">return</span> f<span class="s">"ok: {TRUST['issuer']} | {name_id} | {attrs['email']} | office={attrs['office']}"</span>
+
+<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:
+    NOW = t(<span class="s">"2026-12-18T08:30:02Z"</span>).timestamp()
+    print(<span class="s">"as received     "</span>, check(RESPONSE, NOW))
+    print(<span class="s">"same one again  "</span>, check(RESPONSE, NOW + 10))
+    PENDING.add(<span class="s">"_req-7f3a"</span>); SEEN.clear()
+    print(<span class="s">"ten minutes late"</span>, check(RESPONSE, NOW + 600))
+    print(<span class="s">"other audience  "</span>, check(RESPONSE.replace(<span class="s">"login.larder.example/saml&lt;"</span>, <span class="s">"app.other.example/saml&lt;"</span>), NOW))
+    print(<span class="s">"a Larder email  "</span>, check(RESPONSE.replace(<span class="s">"j.devries@korenwolf.example"</span>, <span class="s">"eli@larder.example"</span>), NOW))</code></pre>
+
+<ol class="steps">
+  <li><strong>Run it</strong> with <code>python3 saml.py</code>:
+<pre><code>as received      ok: https://sts.korenwolf.example/7c1d | kw-48d1a0 | j.devries@korenwolf.example | office=Rotterdam
+same one again   rejected: not a response to our request, replayed assertion
+ten minutes late rejected: time window
+other audience   rejected: audience
+a Larder email   rejected: email outside korenwolf.example</code></pre>
+  Match each line to a check in 5.5 or 5.7. The last one is the important one: even if Korenwolf's IdP <em>signed</em> an assertion for <code>eli@larder.example</code>, Larder wouldn't accept it from this connection.</li>
+  <li><strong>Read the account key.</strong> The success line shows issuer and NameID first. Change the email in <code>RESPONSE</code> to a different <code>@korenwolf.example</code> address and run again: it's still the same account (<code>kw-48d1a0</code>), with a changed email, which is what should happen when someone changes their name.</li>
+  <li><strong>Break it on purpose.</strong> Comment out the domain check and run again: the assertion for a Larder employee is accepted. Then delete <code>PENDING.add("_req-7f3a"); SEEN.clear()</code> and run again: every later test now also fails with “not a response to our request”, because once a request has been answered, it can't be answered again.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Look at a real IdP's metadata: in Microsoft Entra ID, every tenant publishes it at <code>https://login.microsoftonline.com/&lt;tenant-id&gt;/federationmetadata/2007-06/federationmetadata.xml</code>. Find the entity ID, the sign-in URL and the signing certificate's expiry (decode the certificate with <code>openssl x509 -noout -enddate</code>).</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s5-11"><span class="n">5.11</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Home-made SAML validation</td><td>Signature wrapping and other subtle bypasses.</td><td>A maintained library or managed identity service.</td></tr>
+      <tr><td>Trusting the certificate inside the message</td><td>Anyone can sign an assertion with their own key.</td><td>Only the certificate from the IdP's metadata.</td></tr>
+      <tr><td>Letting a partner IdP assert any domain or tenant</td><td>A partner, or whoever compromises them, can sign in as your staff or other customers.</td><td>Bind each connection to a tenant and verified domains.</td></tr>
+      <tr><td>Email as the account key</td><td>Takeover when addresses change or are reused.</td><td>Issuer + persistent NameID.</td></tr>
+      <tr><td>Accepting IdP-initiated responses freely</td><td>Replayed or injected sign-ins.</td><td>SP-initiated; short windows and a replay cache if not.</td></tr>
+      <tr><td>Forgetting certificate expiry</td><td>Every federated sign-in fails on the same morning.</td><td>Calendar it; agree a rollover with the IdP.</td></tr>
+      <tr><td>Long SP sessions with JIT accounts</td><td>Leavers keep access until their session ends.</td><td>Short sessions; SCIM deprovisioning.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum5">
+  <h2 class="sec" id="sum5"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li><strong>Federation</strong>: an SP accepts an IdP's word about who someone is. The person's own organisation keeps control of their account.</li>
+    <li>Trust is set up with <strong>metadata</strong>: entity IDs, URLs and the IdP's signing certificate.</li>
+    <li>SAML sign-in passes through the browser; <strong>SP-initiated</strong> flows can be matched to a request, IdP-initiated ones can't.</li>
+    <li>An <strong>assertion</strong> says who vouches, about whom, for which service, when, how they signed in, and some attributes.</li>
+    <li>Check signature (with the metadata's certificate), issuer, audience, recipient, time, InResponseTo and one-time use, with a library.</li>
+    <li>Limit what each IdP can vouch for: its own tenant, its own domains, required groups. Key accounts on issuer + NameID.</li>
+    <li>Prefer OpenID Connect for new integrations; support SAML where customers need it.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Federation</dt><dd>Accepting another system's authentication of a person.</dd>
+    <dt>Identity provider (IdP)</dt><dd>Authenticates people and issues signed assertions about them.</dd>
+    <dt>Service provider (SP)</dt><dd>The application that relies on the IdP's assertions.</dd>
+    <dt>Metadata</dt><dd>An XML description of an IdP or SP: entity ID, endpoints and certificates.</dd>
+    <dt>Assertion</dt><dd>A signed SAML statement about a subject's authentication and attributes.</dd>
+    <dt>ACS URL</dt><dd>Assertion consumer service: the SP endpoint that receives SAML responses.</dd>
+    <dt>NameID</dt><dd>The identifier for the subject; persistent NameIDs never change for a person and SP.</dd>
+    <dt>Home realm discovery</dt><dd>Working out which IdP a person belongs to.</dd>
+    <dt>JIT provisioning</dt><dd>Creating an account at a person's first federated sign-in.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>In the Larder–Korenwolf setup, which is the IdP, which is the SP, and where is the person's password checked? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Korenwolf's Entra ID is the IdP and checks the password and MFA. Larder's login service is the SP; it never sees the password.</p></details>
+    </li>
+    <li>
+      <p>Why does an SP keep the IDs of the AuthnRequests it sends, and of the assertions it has accepted? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Request IDs let it check that a response answers a sign-in this SP started (<code>InResponseTo</code>). Assertion IDs let it reject a captured response that's replayed while still within its time window.</p></details>
+    </li>
+    <li>
+      <p>An assertion is correctly signed by a partner's IdP and names <code>finance@yourcompany.example</code>. What should happen, and why? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Reject it. The partner's connection may only vouch for its own verified domains and its own tenant; a valid signature proves who made the statement, not that the partner is entitled to make it.</p></details>
+    </li>
+    <li>
+      <p>Korenwolf disables an office manager's account at 10:00. They had signed in to Larder at 09:00. When does their Larder access end, and how would you make it sooner? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>With just-in-time accounts, when Larder's session ends: up to eight hours after 09:00. Sooner: shorter sessions, and SCIM deprovisioning so Larder hears about the disabled account and ends its sessions at once.</p></details>
+    </li>
+    <li>
+      <p>A start-up is adding enterprise SSO to its new web and mobile app. Should it start with SAML or OIDC? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Start with OpenID Connect, which suits mobile and APIs and is easier to get right; add SAML when an enterprise customer's IdP requires it, ideally through an identity service that handles both.</p></details>
+    </li>
+    <li>
+      <p>Compare how a partner's staff could be given access to your app on Azure and on AWS. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Azure: invite them as B2B guests in your Entra ID tenant, signing in with their home organisation, governed by cross-tenant access settings; or add their IdP to Entra External ID. AWS: add their IdP (SAML or OIDC) to a Cognito user pool, one IdP per partner, mapped to that partner's account in your app.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>OASIS <a href="https://docs.oasis-open.org/security/saml/Post2.0/sstc-saml-tech-overview-2.0.html">SAML 2.0 Technical Overview</a>.</li>
+    <li>OWASP <a href="https://cheatsheetseries.owasp.org/cheatsheets/SAML_Security_Cheat_Sheet.html">SAML Security Cheat Sheet</a>.</li>
+    <li>AWS: <a href="https://docs.aws.amazon.com/singlesignon/latest/userguide/manage-your-identity-source-idp.html">Identity Center with an external IdP</a>. Azure: <a href="https://learn.microsoft.com/entra/identity-platform/single-sign-on-saml-protocol">SAML single sign-on protocol</a>. Google Cloud: <a href="https://cloud.google.com/iam/docs/workforce-identity-federation">Workforce identity federation</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="04-oauth-oidc.html">4 · OAuth 2.0 and OpenID Connect</a></div>
+  <div><span>Next</span><a href="06-access-models.html">6 · Access models</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 2 · Identity and Access in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

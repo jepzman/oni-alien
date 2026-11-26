@@ -121,7 +121,7 @@ NAT Elastic IP `198.51.100.7` (StockPilot allow-lists it). Chapter 9 should rete
 ## 6. Handbook 2 · Identity and Access in the Cloud (approved 2026-11-26)
 
 **Approved by the owner on 2026-11-26** (all six decisions below: yes; sample = Chapter 9; on the shelf now as a
-placeholder). **Chapter 9 written 2026-11-26; next Chapter 1.** Status and briefs: **`docs/HANDOFF-handbook-2-identity.md`**.
+placeholder). **Part I (1–6) and Chapter 9 written 2026-11-26; next Chapter 7.** Status and briefs: **`docs/HANDOFF-handbook-2-identity.md`**.
 
 Outline: `content/handbooks/cloud-identity/book.py` (same format as Handbook 1). Listed in `BOOKS`; until a chapter
 is written, only its contents page is built (no PDF, not in `journals.json`).
@@ -147,7 +147,7 @@ Handbook 1 ch. 12 (endpoint policies) and ch. 24 (landing zones); ch. 21 picks u
 
 ### Larder storyline (approved; now in `docs/larder-casebook.md`, “Series 3 · Identity and Access in the Cloud”)
 
-Must not contradict the casebook: ADR 0021 (24 May 2027, staff tools SSO/SCIM) and the 11 Oct 2026 security review
+Must not contradict the casebook: ADR 0021 (24 May 2027, staff tools SSO/SCIM) and the 11 Oct 2027 security review (Ana, Vol. 5)
 (non-expiring business API keys, unsigned webhooks) are reused, not rewritten.
 
 - **The starting point (Nov 2026 audit, ch. 7–8):** the original account Jasper opened in 2024 still has a root
@@ -160,7 +160,7 @@ Must not contradict the casebook: ADR 0021 (24 May 2027, staff tools SSO/SCIM) a
 - **People (ch. 12–14):** Identity Center with the company IdP; permission sets `ReadOnly`, `Developer`,
   `ProdOperator` (just-in-time, approved by a tech lead); two break-glass users in a safe. Ch. 13 links to ADR 0021.
 - **Partners (ch. 19, 21):** StockPilot and the PSP use cross-account roles with external IDs or signed requests;
-  Korenwolf's business API keys expire after 90 days (from the Oct 2026 review).
+  Korenwolf's business API keys expire after 90 days (from the Oct 2027 review).
 
 ### Owner decisions (all approved 2026-11-26)
 

@@ -1,9 +1,8 @@
 # Handoff: Handbook 2 · Identity and Access in the Cloud
 
-Status as of **2026-11-26**: **in progress, 1 of 25 chapters written: Chapter 9 (the sample).** The owner approved
-everything in `docs/HANDOFF-handbooks.md` §6 (title, 25 chapters in six parts, AWS as main provider, the Larder
-storyline, show it on the shelf now) and picked Chapter 9 as the sample. **Next: Chapter 1**, then Part I in order
-(`BOOK["next"]` in `book.py` is set to 1, which puts the “next up” badge on the contents page).
+Status as of **2026-11-26**: **in progress, 7 of 25 chapters written: Part I (1–6) and Chapter 9 (the sample).**
+The owner approved everything in `docs/HANDOFF-handbooks.md` §6 and picked Chapter 9 as the sample. **Next: Chapter 7**,
+then 8, 10, 11 (the rest of Part II), then Parts III–VI in order (`BOOK["next"]` in `book.py` is 7).
 
 Read first: `docs/HANDOFF-handbooks.md` §1–2 (what a handbook is, the voice, the building blocks, the look). This
 book uses exactly the same style, blocks, CSS (`public/assets/book.css`) and build as Handbook 1. The best model to copy
@@ -14,7 +13,7 @@ from is `content/handbooks/cloud-networking/09-firewalls.html` (a chapter about 
 | What | Where |
 | --- | --- |
 | Outline (parts, chapters, summaries, topics, appendices) | `content/handbooks/cloud-identity/book.py` |
-| Chapter bodies | `content/handbooks/cloud-identity/<nn>-<slug>.html`; written: `09-policies.html` |
+| Chapter bodies | `content/handbooks/cloud-identity/<nn>-<slug>.html`; written: 01–06, 09 |
 | Built contents page | `public/handbooks/cloud-identity/index.html` |
 | Build | `python3 scripts/build_notes.py` (builds everything, including both handbooks and the landing shelf) |
 | Preview | `npm run serve`, then http://localhost:8080/handbooks/cloud-identity/ |
@@ -145,6 +144,34 @@ Appendix A (policy cookbook: collect the chapter's final policies there).
 use the theme tokens (see the SVGs in Handbook 1 chapters 8–10) and have `<title>`/`<desc>`. Check figures at desktop
 and 375 px, light and dark, with no horizontal overflow; check all links.
 
+## 3a. Part I (chapters 1–6): written 2026-11-26
+
+Provider-neutral foundations, each with a Larder story (Nov–Dec 2026, all in the casebook's identity section), two
+figures, an “Across providers” section and a **stdlib-only Python lab that was run**; the outputs printed in the
+chapters are the real outputs (ch. 2's timings are machine-dependent and say so; ch. 3–6 use fixed clocks or are
+deterministic).
+
+| Ch. | Story | Lab file (in the chapter) | Checked against |
+| --- | --- | --- | --- |
+| 1 | `ops` user shortens backup retention; nobody knows who | `access.py`, `access_personal.py` | run |
+| 2 | credential stuffing, 310 accounts | `passwords.py`, `totp.py` | RFC 6238 test vectors |
+| 3 | stolen phone keeps ordering after password change | `tokens.py` (HS256 JWT) | run; PyJWT decodes the same token |
+| 4 | Spendwise wants a password → OAuth client | `oauth.py` (imports `tokens.py`) | RFC 7636 test vector |
+| 5 | Korenwolf SAML SSO, live 18 Dec | `saml.py` (no signature check; says so) | run |
+| 6 | stock tool roles, Tomás's leftover Zuid role | `models.py` (RBAC/ABAC/ReBAC) | run |
+
+Every “break it on purpose” step was also run and behaves as described. Lab 3's `verify()` omits “may …” when a token
+has no scope (needed by ch. 4); ch. 3's printed outputs are unchanged by that.
+
+Checks: no duplicate ids or broken `aria-labelledby`/marker references across `all.html`; every page at 1280 px
+(light, dark) and 375 px (dark) has no horizontal overflow; all 12 figures inspected; sequence-diagram step labels use
+`halo-priv` so lifelines don't cross the text; print (A4) check: no `pre`, table or figure is clipped in either book
+(the whole of Handbook 2 so far prints to 117 pages).
+
+**Dates to respect:** the security review with “non-expiring business API keys” and “other office's orders by ID” is
+**11 Oct 2027** (Ana, Vol. 5), not 2026; Part I avoids it (ch. 6 warns about object-level checks in general). Ch. 19
+should move forward in time to tell it.
+
 ## 4. Order of work after Chapter 9
 
 1. Chapter 9 (above). Update this file and `docs/HANDOFF-handbooks.md`.
@@ -156,4 +183,5 @@ and 375 px, light and dark, with no horizontal overflow; check all links.
 - [x] Chapter 9 written, built, checked (desktop + 375 px, light + dark, links).
 - [ ] Chapter 9 lab run once in a real AWS account (see §3).
 - [ ] Confirm the Pages workflow passes now that this book has PDFs (chapter 9 + whole book).
-- [ ] Chapter 1 next, then Part I in order.
+- [x] Part I (1–6) written and checked.
+- [ ] Chapter 7 next, then 8, 10, 11.

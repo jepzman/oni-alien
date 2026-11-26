@@ -8,7 +8,7 @@ BOOK = dict(
     key="cloud-identity",
     series="Jef’s Handbooks",
     no=2,
-    next=1,  # chapter 9 (the sample) is written; then Part I in order
+    next=7,  # Part I (1–6) and chapter 9 are written; then the rest of Part II
     title="Identity and Access in the Cloud",
     subtitle="From passwords to permission guardrails",
     shelf_blurb="Authentication, OAuth and SSO, IAM policies, roles, workload identity, secrets and multi-account guardrails, with AWS as the main provider and Azure and Google Cloud compared.",
@@ -97,7 +97,7 @@ BOOK = dict(
                   "Where secrets live, how they rotate, and how KMS key policies form a second permission system next to IAM.",
                   "Secrets Manager and Parameter Store · rotation · KMS keys and key policies · grants · envelope encryption"),
                  (19, "api-access", "Service-to-service and API access",
-                  "Signed AWS requests, authorisers for your own APIs, and keys for partners that expire. Retells Larder's October 2026 security review.",
+                  "Signed AWS requests, authorisers for your own APIs, and keys for partners that expire. Retells Larder's October 2027 security review.",
                   "SigV4 · API Gateway authorisers · Cognito and JWT validation · mTLS · partner API keys and rotation"),
              ]),
         dict(no="V", title="Many accounts",
