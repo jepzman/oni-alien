@@ -288,3 +288,24 @@ Owner asked to start with volumes 1 and 2 after approving the sample. Both are w
   first status amber; baseline v1.0 signed 28 Sep 2027 (pilot 6 Mar 2028, wave 1 24 Jun 2028); A1-07 is risk 1 and
   Vexmoor's assurance calls the migration plan “optimistic”.
 - **Next**: Vol. 3 · Digging Up the Legacy (discovery, the 31 %, CR-007). Then the Lodestar file extra (section 9).
+
+## 14. Vols. 3 and 4 written and built (26 Nov 2026)
+
+Owner asked to continue with volumes 3 and 4, then push and open a pull request.
+
+- **Vol. 3 · Digging Up the Legacy** (`content/vendor-3/`: `01_inside.py`, `02_seams.py`, `03_news.py`, `04_plan.py`),
+  Sep 2027 → Feb 2028: software archaeology, Bert's knowledge, the golden master, the 02:10 job, the full data profile
+  (31 %), change capture, the billing interface v1.2, the strangler plan, the discovery report, the telling order, CR-007,
+  security reviews, migration waves, ADR-0019 (overruled), design authority day.
+- **Vol. 4 · Delivery Under Fire** (`content/vendor-4/`: `01_truth.py`, `02_moves.py`, `03_line.py`, `04_night.py`),
+  Mar → Sep 2028: the watermelon report, RAID, side-door scope, multi-vendor blame, the rival adviser, the steering
+  ambush, escalation, re-planning, test environments, defect triage, quoting the contract, protecting margin, the cutover
+  runbook, go / no-go, wave 1 night. Ends on Sunday 24 Sep 2028 with Hana exhausted (sets up Vol. 6's burnout).
+- Every note's `meta` is computed by a small `on_site(d)` helper in each file (days since 4 Jul 2027), so day counts can't drift.
+- Journal entries `vendor-3`, `vendor-4` in `JOURNALS`; `PLANNED_VENDOR` now lists vols. 5–6; spine titles added; the
+  future-log line now says vols. 5–6. `pdf-build.json` lists `vendor-3`, `vendor-4`.
+- Facts: `docs/lodestar-casebook.md`, sections “Vol. 3” and “Vol. 4”.
+- Checked: all 60 figures in contact sheets (fixed overlapping numbers, labels and arrows), no horizontal scroll at
+  375 px on any Series 5 note, every related-note link resolves.
+- **Next**: Vol. 5 · Other People's Politics (hypercare, Oct 2028 → Jan 2029: the sponsor changes, saying no, the client
+  asks to change the numbers), then Vol. 6 · The Cost and the Ending.

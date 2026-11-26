@@ -131,11 +131,72 @@ Staff), Dame Helena Strand (she/her, CEO), Pip (he/him; joins Priya's Customer O
   report 14 Dec; pilot (20,000 accounts) live **Mon 6 March 2028**; wave 1 go-live **Sat 24 June 2028**; top-10 risks;
   41 assumptions (A1-07 marked “at risk: sample shows 7.8 %”). Vexmoor's assurance note: “data migration plan optimistic”.
 
+## Vol. 3 · Digging Up the Legacy (Sep 2027 → Feb 2028)
+
+- **MAVIS inventory** (4 Oct): 4.1m lines COBOL, 1,214 programs (449 never ran in 12 months · 498 rarely · 267
+  nightly), 386 batch jobs, 412 tables, 84 copybooks; 61 programs touch addresses.
+- **Bert's book** (from 14 Oct): questions via Lottie, Bert's hours 10:00–12:00, 64 pages by 10 Dec; successors Lottie,
+  Marta, Asif. Bert credited on page 1 of the discovery report.
+- **Golden master** (27 Oct): CUSTBL07 (1999), 10,000 accounts; 3 hidden rules: R5 vacant properties, **R7 pro-rata
+  standing charge rounds half down** (kept for wave 1, DL-021), R11 Welsh flag (fixed).
+- **Change capture spike** (4–15 Oct, note dated 21 Oct): log capture ≈ 40 s for 9 core tables (licence ≈ £85k/yr);
+  18 % of tables lack reliable timestamps; snapshots 24 h. An EBCDIC £ sign caught by a test.
+- **Halvorsen spec v1.2** (2 Nov): 42 fields (+ address line 4), 6 undocumented behaviours written down (B1: town not
+  upper-case → silently dropped), 58 contract tests, version in every file header.
+- **The 02:10 job** (9 Nov): 14 steps; step 9 **ADDRFIX** (2003, lookup table from 2011) rewrites Northern postcodes;
+  step 12 **COPYMTR** feeds Gareth's meter system (a hidden consumer; Kofi added to IA-01).
+- **Data profile** (19 Nov, all 380,000 wave 1 accounts): validity **31 %** fail (117,800); duplicates 4.2 %; meter
+  mismatches 2.9 %; missing PSR flags 0.6 %. Opened before 2005: 48 % fail; after 2015: 6 %. The April sample came from
+  accounts opened after 2015. Bert hand-checked 30.
+- **Strangler plan** (30 Nov): one system-of-record flag per account, a router, a nightly back-feed for 7 MAVIS
+  processes, 14-day rollback per wave, nightly reconciliation. Pilot area: **Ashgrove** (20,000 accounts, 340 staff households).
+- **Telling order** (8–14 Dec): Bert → Elaine → Priya + Nkem (Priya: “Option B. And I'll tell Rupert myself.”) → Hollis,
+  Kofi → steering. **Discovery report D4** on 14 Dec: two front pages, 6 findings, options A/B/C, recommendation B.
+- **Security reviews**: requested 6 Oct (week 14, planned week 2); passed 12 Jan 2028; finding S3: PSR flags →
+  field-level encryption, 2 roles, access logged.
+- **ADR-0019** (19 Jan 2028, DL-028): Hollis chooses **MetroBus** (2014 integration bus, 15-minute polling) over log
+  capture; Wrenfield's dissent recorded; +3 weeks; −£85k/yr.
+- **Migration plan** (25 Jan): pilot 5 Jun; rehearsals 15 Apr, 15 Jul, 26 Aug; 12 Customer Ops exception-desk staff;
+  window Sat 18:00 → Sun 08:00, target 11 h.
+- **Design authority** (9 Feb, DL-030): approved with 4 conditions (PSR encryption, MetroBus delay alerts, performance
+  test by July, Kofi's sign-off on meter fields). **M2 accepted; £720,000 invoiced.**
+- **CR-007**: submitted 14 Dec at £1.1m, +4 months (£247k + £310k + £180k + £363k); agreed **11 Feb 2028 at £700k,
+  +3 months** (Customer Ops cleanses ≈ 40 %: −£99k; MetroBus: −£85k; self-service portal → wave 2: −£216k). Rates
+  unchanged. **Baseline v2.0** (DL-031): pilot **Mon 5 Jun 2028**, wave 1 night **Sat 23 Sep 2028**.
+
+## Vol. 4 · Delivery Under Fire (Mar → Sep 2028)
+
+- **RAID** (3 Apr): 214 rows → top 12, backlog 161, closed 41; Mondays 09:45, 15 min, with Elaine.
+- **Rehearsal 1** (8 Apr): 98.1 % reconciled (R7 missing in the back-feed; fixed by 28 Apr).
+- **Status #38** (14 Apr): first RED; four measures (burn-up −2.4 weeks, tests 39 %, reconciliation 98.1 %, 7 sev 1–2);
+  overall colour = the worst measure (Schedule 7 Annex B.2).
+- **Side-door work** (20 Apr): 23 requests in 6 weeks = 41 days; 9 to the change pool (£58k), 11 to wave 2, 3 declined;
+  a front-door form in #lodestar.
+- **Environments** (9 May): 31 % of test days lost Mar–Apr; booking calendar, masked 2028 MAVIS copy; 9 % by July.
+- **Halvorsen triage** (16 May): 3.1 % rejected; Halvorsen's test system on parser v1.1; fixed 25 May; IA-01 v1.2.
+- **Acceleration review** (24 May): Vexmoor asks for source code; terms of reference from Priya; evidence pack;
+  supervised walkthrough (background IP, §12); report 21 Jun: “achievable, with risk”. House rule: no comment on Vexmoor.
+- **Pilot** live Mon 5 Jun; M3 rejected 23 Jun (exceptions 0.8 % > 0.5 %); accepted **3 Jul** (0.3 %).
+- **Steering ambush** (28 Jun): Oliver's “9 weeks behind” (measured against baseline v1.0); real slip 2 weeks; written
+  answer 30 Jun; new rule: papers circulated 2 working days before (Schedule 7 §2.7).
+- **Plan v2.3** (3 Jul, DL-047): velocity 38 not 45; bulk address edit and MI screen → wave 2; +1 engineer; 9 days of
+  buffer shown (4 used by the night).
+- **Escalation E-006** (10 Jul): performance environment; pilot servers on 22 and 29 Jul; passed with 18 % headroom.
+- **UAT** (from 3 Jul, triage 27 Jul): 412 items → 188 defects, 161 changes (19 to the pool, £41k), 41 duplicates,
+  22 not reproducible; Rosa and Oskar triage Mon/Wed/Fri.
+- **X-07** (8 Aug): Gareth's ten years of meter history; interim: readable in MAVIS; CR-019 (≈ £140k) for wave 2.
+- **Margin** (18 Aug): 19 % at bid → 9 % forecast; levers +£69k → 10 % (floor 15 %); rehearsal 3 kept.
+- **Rehearsal 3** (26 Aug): 10 h 40 (target 11 h); runbook v3, 312 steps; point of no return 04:30.
+- **Go / no-go** (6 Sep, DL-058): 13 of 14 green; C9 99.97 % (3 accounts); GO with condition (3 accounts excluded);
+  Horizon assurance's dissent recorded.
+- **Wave 1 night** (Sat 23 → Sun 24 Sep): CP1 23:00 and CP2 02:10 on time; 04:10 MetroBus queue full (back-feed +
+  migration) → 22 minutes; CP3 04:52; **live 07:40**; 379,997 accounts; 1,206 exceptions (0.32 %), cleared Sunday 19:10;
+  night log at 08:15 (14 lessons). Monday's billing run fine; first bills, no complaints. Hana worked 19 hours.
+
 ## Later volumes (planned, keep consistent)
 
-Discovery report and CR-007 (14 Dec 2027: +£1.1m, +4 months; agreed Feb 2028 at +£700k, +3 months); the full data
-profile shows **31 %** failing the address check; wave 1 go / no-go 6 Sep 2028; cutover night 23 Sep 2028; phase 2 bid
-March 2029; the ending in June 2029 (room 27A, a door not yet opened).
+Hypercare (8 weeks from 24 Sep 2028); a sponsor change; Hana's burnout; wave 2 planning; the phase 2 bid against Vexmoor
+(March 2029); the ending in June 2029 (room 27A, a door not yet opened).
 
 ## Minor cast and references (Vols. 1–2)
 

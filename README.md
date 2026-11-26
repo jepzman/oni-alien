@@ -43,12 +43,14 @@ Live site: https://jepzman.github.io/oni-alien/
 
 **Book 5 · The IT Operations Notebook** (Eli, the platform and operations engineer; skin `theme-ops`, an incident logbook of carbon-copy forms) covers ITIL 4 and SRE in plain words. Each note is a question someone running IT must answer, with an **ITIL tag** under the title (practice group, the six value chain activities, the practices, the SRE word, older names), a **maturity ladder** (by hand → written down → scripted → automatic) in place of gains vs losses, and on incident notes a **pager log**: the alert as it arrived. Ratings: nine operations ratings (user impact, reliability, recovery speed, change safety, visibility, toil reduction, cost awareness, sustainable on-call, low overhead). Book 5 is complete (six volumes); plan and decisions in `docs/HANDOFF-it-operations.md`. Independent study notes, not affiliated with PeopleCert or AXELOS.
 
-**Series 5 · On the Client's Floor** (Ines, lead architect at Wrenfield Digital, a vendor; skin `theme-vendor`, a consultant's daybook with a visitor pass clipped to every note, `public/assets/vendor.css`) follows the same MetroVolt as the Darkside grimoire, from outside: winning the Lodestar programme, signing it and starting it. Each note adds **both sides of the table**, **what the contract says**, an **account health** dial (green / amber / red), a **pressure gauge** and **the 23:00 note**. Ratings: nine vendor ratings (client trust, team health, margin protected, scope clarity, technical integrity, risk control, political cover, speed, low overhead). Renderer `scripts/vendor.py`; facts `docs/lodestar-casebook.md`; plan `docs/PLAN-vendor-side.md`.
+**Series 5 · On the Client's Floor** (Ines, lead architect at Wrenfield Digital, a vendor; skin `theme-vendor`, a consultant's daybook with a visitor pass clipped to every note, `public/assets/vendor.css`) follows the same MetroVolt as the Darkside grimoire, from outside: winning the Lodestar programme, signing it, digging into the legacy system and delivering wave 1. Each note adds **both sides of the table**, **what the contract says**, an **account health** dial (green / amber / red), a **pressure gauge** and **the 23:00 note**. Ratings: nine vendor ratings (client trust, team health, margin protected, scope clarity, technical integrity, risk control, political cover, speed, low overhead). Renderer `scripts/vendor.py`; facts `docs/lodestar-casebook.md`; plan `docs/PLAN-vendor-side.md`.
 
 | Vol. | Journal | Notes |
 |---|---|---|
 | 1 | Winning the Work (`/vendor-1/`) | 15 |
 | 2 | Signing and Starting (`/vendor-2/`) | 15 |
+| 3 | Digging Up the Legacy (`/vendor-3/`) | 15 |
+| 4 | Delivery Under Fire (`/vendor-4/`) | 15 |
 
 | Book · vol. | Journal | Notes |
 |---|---|---|
