@@ -121,10 +121,10 @@ BOOK = dict(
              ]),
     ],
     appendices=[
-        ("A", "Subnet and CIDR cheat sheet", "Every prefix from /8 to /32 with sizes, plus splitting tables."),
-        ("B", "AWS, Azure and Google Cloud translation table", "Every service and term in the book, side by side."),
-        ("C", "Lab setup and cost safety", "Accounts, CLIs, Terraform, budgets and alarms, and how to clean up."),
-        ("D", "Glossary", "Every key term from every chapter."),
-        ("E", "Answers to the exercises", "Worked answers to every “check your understanding” question."),
+        ("A", "cidr", "Subnet and CIDR cheat sheet", "Every prefix from /8 to /32 with sizes, plus splitting tables."),
+        ("B", "providers", "AWS, Azure and Google Cloud translation table", "Every service and term in the book, side by side."),
+        ("C", "lab-setup", "Lab setup and cost safety", "Accounts, CLIs, Terraform, budgets and alarms, and how to clean up."),
+        ("D", "glossary", "Glossary", "Every key term from every chapter."),
+        ("E", "answers", "Answers to the exercises", "Worked answers to every “check your understanding” question."),
     ],
 )

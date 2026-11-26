@@ -1,8 +1,8 @@
 # Handoff: Jef's Handbooks (Series 3). Draft for review
 
 Status as of 2026-11-26: **approved and in progress.** Owner decisions: title OK, AWS as the main provider, Larder as
-the running example, 25 chapters, labs may cost up to about $1 (with clean-up steps). Written: all 25 chapters
-(Parts I–VI). Appendices A–E are still “coming”. The book is on the landing page (a **Handbooks** section after Deep dives, added when main's
+the running example, 25 chapters, labs may cost up to about $1 (with clean-up steps). Complete: all 25 chapters
+(Parts I–VI) and appendices A–E. The book is on the landing page (a **Handbooks** section after Deep dives, added when main's
 format-based landing page was merged in) and in `journals.json` (chapter PDFs + whole-book PDF).
 
 - Contents page: `public/handbooks/cloud-networking/index.html`
@@ -110,8 +110,11 @@ NAT Elastic IP `198.51.100.7` (StockPilot allow-lists it). Chapter 9 should rete
 
 1. [x] Landing page: Handbooks section (`handbook_items()` in `build_notes.py`); `journals.json` entries for chapter and whole-book PDFs.
 2. [x] Part I: chapters 1–6. [x] Part II: chapters 7–10. [x] Part III: chapters 11–15. [x] Part IV: chapters 16–18. [x] Part V: chapters 19–21. [x] Part VI: chapters 22–25.
-3. [ ] Appendices A–E (CIDR cheat sheet, AWS/Azure/GCP translation table, lab setup and cost safety, glossary,
-   answers). Chapters already point to Appendix C for lab setup and to the glossary.
+3. [x] Appendices: A (CIDR tables generated with Python's ipaddress; the one-off generator lives in the history),
+   B (provider translation table, hand-written), C (lab setup; its lab table was generated from the chapter cards),
+   D (glossary) and E (answers) are **generated at build time** from every chapter's key terms and quiz by
+   `glossary_body()` / `answers_body()` in `scripts/build_handbooks.py`, so they stay in sync automatically.
+   Appendix pages are `appendix-<letter>-<slug>.html`; cross-references are written `href="#appC"`.
    ch. 24 networks as code, VPC sharing vs per-team VPCs; ch. 25 second region and DNS failover;
    ch. 21 identity-aware access instead of client VPN;
    ch. 22 flow logs and Reachability Analyzer; ch. 25 second region (`10.32.0.0/12`) and DNS failover.
