@@ -1,13 +1,18 @@
 # Handoff: Jef's Handbooks (Series 3). Draft for review
 
-Status as of 2026-11-26: **proposal.** The style, the outline of Handbook 1 (*Networking in the Cloud*) and one
-sample chapter (Chapter 8) are written. Nothing is linked from the landing page yet: the owner reviews first.
+Status as of 2026-11-26: **approved and in progress.** Owner decisions: title OK, AWS as the main provider, Larder as
+the running example, 25 chapters, labs may cost up to about $1 (with clean-up steps). Written: Part I (chapters 1–6)
+and chapter 8. The book is on the landing page (Series 3 shelf) and in `journals.json` (chapter PDFs + whole-book PDF).
 
 - Contents page: `public/handbooks/cloud-networking/index.html`
 - Sample chapter: `public/handbooks/cloud-networking/08-inside-a-vpc.html`
 - Preview: `npm run serve`, then open http://localhost:8080/handbooks/cloud-networking/
-- Sources: `content/handbooks/cloud-networking/book.py` (outline), `…/08-inside-a-vpc.html` (chapter body),
-  `scripts/build_handbooks.py` (build), `public/assets/book.css` (skin)
+- Sources: `content/handbooks/cloud-networking/book.py` (outline), `…/<nn>-<slug>.html` (chapter bodies; a chapter is
+  “written” when its file exists), `scripts/build_handbooks.py` (build; also run by `build_notes.py`),
+  `public/assets/book.css` (skin)
+- Build: `python3 scripts/build_notes.py` builds everything, including the handbooks, the landing shelf and `all.html`.
+- IDs must be unique across the book (all chapters share `all.html`): prefix SVG markers `c<n>…`, sections `s<n>-<m>`,
+  figures `fig<n>-<m>`, summary `sum<n>`. Cross-references are written `href="#ch<n>"`.
 
 ## 1. What the series is, and how it differs from the notebooks
 
@@ -84,23 +89,23 @@ Full chapter summaries and topic lists: `content/handbooks/cloud-networking/book
 
 ### New Larder facts (Series 3)
 
+Company plan inside `10.0.0.0/8`: office Amsterdam `10.1.0.0/24`; Amsterdam stores `10.8.0.0/16` (Noord `10.8.3.0/24`,
+router `10.8.3.1`); Rotterdam stores `10.9.0.0/16`; store VPNs use BGP after the Rotterdam missing-route incident (ch. 4).
+Jasper's first VPC was `172.17.0.0/16` and clashed with Docker (ch. 2). Public API `api.larder.example` (TTL incident,
+ch. 5); webhooks `hooks.larder.example` (missing intermediate, ch. 6); payment client resets via NAT idle timeout (ch. 3).
 VPC `10.20.0.0/16`, eu-central-1 · public `10.20.0–2.0/24` · app `10.20.16.0/20`, `10.20.32.0/20`, `10.20.48.0/20` ·
 data `10.20.64–66.0/24` · `10.20.128.0/17` spare · other Larder networks in `10.0.0.0/8` via a transit gateway ·
 NAT Elastic IP `198.51.100.7` (StockPilot allow-lists it). Chapter 9 should retell the casebook's 29 Oct 2026 incident
-(a network rule change cut Dispatch off from Postgres for 25 minutes). Add these to `docs/larder-casebook.md` once approved.
+(a network rule change cut Dispatch off from Postgres for 25 minutes). Add these to `docs/larder-casebook.md`.
 
-## 4. Open questions for the owner
+## 4. Decisions (owner, 2026-11-26)
 
-1. Series name (“Jef's Handbooks”) and book title (“Networking in the Cloud: from packets to landing zones”)?
-2. AWS as the main provider, with Azure and Google Cloud compared, or equal weight to all three?
-3. Keep Larder as the running example?
-4. Length: 25 chapters at ~45 minutes each. Shorter (≈18, merging Part V into others)?
-5. Labs that cost a little money (with clean-up steps), or console-free/free-tier-only labs?
-6. Next handbooks to plan (e.g. Kubernetes, Databases, Security)?
+1. Title and series name: OK. 2. AWS main provider: OK. 3. Larder stays. 4. 25 chapters. 5. Labs up to ~$1.
 
-## 5. Build checklist once approved
+## 5. Progress and checklist
 
-1. [ ] Owner answers section 4; adjust the style and outline.
-2. [ ] Landing page: a Series 3 shelf (`build_notes.py`), and `journals.json` entries so the PDF workflow covers chapters.
-3. [ ] Write Part I, then Part II in order (chapters depend on each other).
-4. [ ] Per chapter: diagrams checked at desktop and 375 px, light and dark; labs run once in a real account; links checked.
+1. [x] Landing page: Series 3 shelf; `journals.json` entries for chapter and whole-book PDFs.
+2. [x] Part I: chapters 1–6. [x] Chapter 8.
+3. [ ] Part II: chapters 7, 9, 10. Then Parts III–VI in order, then the appendices.
+4. Per chapter: figures checked at desktop and 375 px, light and dark (no horizontal overflow); labs not yet run in a
+   real account (owner or a later session should run the AWS labs once); links checked.
