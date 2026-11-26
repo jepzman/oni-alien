@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>IP addresses and CIDR without fear · Networking in the Cloud</title>
+<meta name="description" content="Reading and writing address ranges, splitting them into subnets, private ranges, and enough IPv6 to not be scared of it.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=14ff46171f">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 1</a> · <a href="index.html">Networking in the Cloud</a></span><span>Part I · Chapter 2</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part I · How networks work</p>
+  <p class="chno">2</p>
+  <h1>IP addresses and CIDR without fear</h1>
+  <p class="promise">Every cloud network starts with a line like <code>10.20.0.0/16</code>, and most network mistakes start there too: a range that's too small, two ranges that overlap, a subnet that doesn't start where you thought. This chapter makes address ranges something you can read, split and check in your head, with just enough binary to see why the rules are what they are.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Read CIDR notation and say how many addresses a range holds.</li>
+      <li>Tell whether an address belongs to a range, and find a range's first and last address.</li>
+      <li>Split a range into subnets that don't overlap.</li>
+      <li>Recognise the special ranges: private, link-local, documentation, and IPv6.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Packets and IP addresses (<a href="01-what-happens.html">Chapter 1</a>).</li>
+      <li>Python 3 for the lab (it's installed on most Macs and Linux machines).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 50 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, your own computer, free</dd>
+      <dt>Provider</dt><dd>none; AWS details where they matter</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Larder's first VPC was created by Jasper, the co-founder, in an afternoon: <code>172.17.0.0/16</code>, because it was the example in a blog post. It worked for two years. Then Eli tried to run the reporting jobs in Docker containers on one of the servers, and every call from a container to the database timed out.</p>
+  <p>Nothing was wrong with the database, the security groups or the routes. The problem was in the address range itself, and by section 2.7 you'll be able to spot it at a glance.</p>
+</aside>
+
+<!-- ======================================================== 2.1 -->
+<h2 class="sec" id="s2-1"><span class="n">2.1</span>The big picture</h2>
+
+<p class="lead">An IPv4 address is a 32-bit number. We write it as four decimal numbers between 0 and 255, separated by dots, because that's easier on people than 32 ones and zeros: <code>10.20.17.8</code>. Each of the four numbers is called an <span class="term">octet</span>, because it stands for eight bits.</p>
+
+<p>Networks rarely talk about single addresses. They talk about <strong>ranges</strong>: “everything from <code>10.20.0.0</code> to <code>10.20.255.255</code>”. Route tables match ranges, firewalls allow ranges, and every VPC and subnet is a range. The modern way to write a range is <span class="term">CIDR notation</span> (Classless Inter-Domain Routing): an address, a slash, and a number.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big"><code>10.20.0.0/16</code> means: every address whose first 16 bits are the same as the first 16 bits of <code>10.20.0.0</code>. The number after the slash is how many bits are fixed.</p>
+</div>
+
+<p>The fixed bits are the <span class="term">network part</span> (also called the <span class="term">prefix</span>), and the remaining bits are the <span class="term">host part</span>, free to vary. A <code>/16</code> fixes 16 bits and leaves 16 free, so it holds 2<sup>16</sup> = 65,536 addresses. That one sentence is most of what this chapter is about. The rest is practice.</p>
+
+<!-- ======================================================== 2.2 -->
+<h2 class="sec" id="s2-2"><span class="n">2.2</span>Binary in five minutes</h2>
+
+<p>You only need binary for one thing: seeing where the network part ends when the slash isn't a multiple of 8. Each octet is eight bits, and each bit is worth twice the one to its right:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 2.1 · The value of each bit in an octet</caption>
+    <thead><tr><th class="num">128</th><th class="num">64</th><th class="num">32</th><th class="num">16</th><th class="num">8</th><th class="num">4</th><th class="num">2</th><th class="num">1</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">1</td><td class="num">0</td><td class="num">1</td><td class="num">0</td><td>8 + 2 = <strong>10</strong></td></tr>
+      <tr><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">1</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">1</td><td>16 + 1 = <strong>17</strong></td></tr>
+      <tr><td class="num">1</td><td class="num">0</td><td class="num">1</td><td class="num">0</td><td class="num">1</td><td class="num">1</td><td class="num">0</td><td class="num">0</td><td>128 + 32 + 8 + 4 = <strong>172</strong></td></tr>
+      <tr><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">1</td><td><strong>255</strong>, the largest an octet can be</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>To turn a number into bits, go left to right: if the bit's value fits into what's left, write 1 and subtract; otherwise write 0. For 17: 128 no, 64 no, 32 no, 16 yes (1 left), 8 no, 4 no, 2 no, 1 yes. So <code>00010001</code>.</p>
+
+<p>Here is the address <code>10.20.17.8</code> in full, with a <code>/20</code> prefix:</p>
+
+<figure class="wide" id="fig2-1">
+  <div class="fig-frame">
+      <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig2-1-t fig2-1-d">
+      <title id="fig2-1-t">The 32 bits of 10.20.17.8/20</title>
+      <desc id="fig2-1-d">The address 10.20.17.8 written as 32 bits in four groups of eight: 00001010, 00010100, 00010001, 00001000. The first 20 bits are the network part, shaded; the last 12 bits are the host part. Setting the host bits to zero gives the network address 10.20.16.0. The host part, 0001 00001000, is host number 264 in that network.</desc>
+      <rect class="pub" x="22" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="31.5" y="90" text-anchor="middle">0</text>
+      <rect class="pub" x="43" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="52.5" y="90" text-anchor="middle">0</text>
+      <rect class="pub" x="64" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="73.5" y="90" text-anchor="middle">0</text>
+      <rect class="pub" x="85" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="94.5" y="90" text-anchor="middle">0</text>
+      <rect class="pub" x="106" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="115.5" y="90" text-anchor="middle">1</text>
+      <rect class="pub" x="127" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="136.5" y="90" text-anchor="middle">0</text>
+      <rect class="pub" x="148" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="157.5" y="90" text-anchor="middle">1</text>
+      <rect class="pub" x="169" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="178.5" y="90" text-anchor="middle">0</text>
+      <rect class="pub" x="198" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="207.5" y="90" text-anchor="middle">0</text>
+      <rect class="pub" x="219" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="228.5" y="90" text-anchor="middle">0</text>
+      <rect class="pub" x="240" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="249.5" y="90" text-anchor="middle">0</text>
+      <rect class="pub" x="261" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="270.5" y="90" text-anchor="middle">1</text>
+      <rect class="pub" x="282" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="291.5" y="90" text-anchor="middle">0</text>
+      <rect class="pub" x="303" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="312.5" y="90" text-anchor="middle">1</text>
+      <rect class="pub" x="324" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="333.5" y="90" text-anchor="middle">0</text>
+      <rect class="pub" x="345" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="354.5" y="90" text-anchor="middle">0</text>
+      <rect class="pub" x="374" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="383.5" y="90" text-anchor="middle">0</text>
+      <rect class="pub" x="395" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="404.5" y="90" text-anchor="middle">0</text>
+      <rect class="pub" x="416" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="425.5" y="90" text-anchor="middle">0</text>
+      <rect class="pub" x="437" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="446.5" y="90" text-anchor="middle">1</text>
+      <rect class="priv" x="458" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="467.5" y="90" text-anchor="middle">0</text>
+      <rect class="priv" x="479" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="488.5" y="90" text-anchor="middle">0</text>
+      <rect class="priv" x="500" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="509.5" y="90" text-anchor="middle">0</text>
+      <rect class="priv" x="521" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="530.5" y="90" text-anchor="middle">1</text>
+      <rect class="priv" x="550" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="559.5" y="90" text-anchor="middle">0</text>
+      <rect class="priv" x="571" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="580.5" y="90" text-anchor="middle">0</text>
+      <rect class="priv" x="592" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="601.5" y="90" text-anchor="middle">0</text>
+      <rect class="priv" x="613" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="622.5" y="90" text-anchor="middle">0</text>
+      <rect class="priv" x="634" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="643.5" y="90" text-anchor="middle">1</text>
+      <rect class="priv" x="655" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="664.5" y="90" text-anchor="middle">0</text>
+      <rect class="priv" x="676" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="685.5" y="90" text-anchor="middle">0</text>
+      <rect class="priv" x="697" y="70" width="19" height="30" rx="2"/>
+      <text class="t-mono" x="706.5" y="90" text-anchor="middle">0</text>
+      <text class="t-label" x="105" y="56" text-anchor="middle">10</text>
+      <text class="t-label" x="193" y="56" text-anchor="middle">.</text>
+      <text class="t-label" x="281" y="56" text-anchor="middle">20</text>
+      <text class="t-label" x="369" y="56" text-anchor="middle">.</text>
+      <text class="t-label" x="457" y="56" text-anchor="middle">17</text>
+      <text class="t-label" x="545" y="56" text-anchor="middle">.</text>
+      <text class="t-label" x="633" y="56" text-anchor="middle">8</text>
+      <path class="wire-accent" d="M22 114 V122 H456 V114"/>
+      <text class="t-label t-accent" x="239" y="142" text-anchor="middle">network part: first 20 bits (/20)</text>
+      <path class="wire-dash" d="M458 114 V122 H716 V114"/>
+      <text class="t-label" x="587" y="142" text-anchor="middle">host part: 12 bits</text>
+      <text class="t-small" x="22" y="184">Host bits set to 0 → the network address: 10.20.16.0/20 (covers 10.20.16.0 to 10.20.31.255, 4,096 addresses)</text>
+      <text class="t-small" x="22" y="206">Host bits of this address: 0001 00001000 = 264, so 10.20.17.8 is address number 264 in that network</text>
+      <text class="t-small" x="22" y="30">bit values in each group: 128 64 32 16 8 4 2 1</text>
+      </svg>
+  </div>
+  <figcaption><b>Figure 2.1</b> A <code>/20</code> fixes the first 20 bits: the first two octets and the first four bits of the third. The network starts where all host bits are 0 and ends where they're all 1.</figcaption>
+</figure>
+
+<aside class="side"><b>Subnet masks</b>Older tools write the prefix as a <em>mask</em>: the fixed bits as ones. <code>/24</code> is <code>255.255.255.0</code> and <code>/20</code> is <code>255.255.240.0</code>. Same information, harder to read. You'll still meet masks in operating systems and VPN settings.</aside>
+
+<!-- ======================================================== 2.3 -->
+<h2 class="sec" id="s2-3"><span class="n">2.3</span>How big is a range?</h2>
+
+<p>A range with prefix <code>/n</code> has 32 − <em>n</em> host bits, so it holds 2<sup>32−n</sup> addresses. Each step of the prefix halves or doubles the size: a <code>/23</code> is twice a <code>/24</code>, a <code>/25</code> is half of one.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 2.2 · Prefix sizes you'll use most</caption>
+    <thead><tr><th>Prefix</th><th>Mask</th><th class="num">Addresses</th><th>Typical use in the cloud</th></tr></thead>
+    <tbody>
+      <tr><td><code>/8</code></td><td><code>255.0.0.0</code></td><td class="num">16,777,216</td><td>A whole company's private space, like <code>10.0.0.0/8</code></td></tr>
+      <tr><td><code>/16</code></td><td><code>255.255.0.0</code></td><td class="num">65,536</td><td>One VPC (the largest AWS allows for one block)</td></tr>
+      <tr><td><code>/20</code></td><td><code>255.255.240.0</code></td><td class="num">4,096</td><td>A subnet for containers in one zone</td></tr>
+      <tr><td><code>/22</code></td><td><code>255.255.252.0</code></td><td class="num">1,024</td><td>A small VPC, or a large VM subnet</td></tr>
+      <tr><td><code>/24</code></td><td><code>255.255.255.0</code></td><td class="num">256</td><td>A subnet for VMs or databases</td></tr>
+      <tr><td><code>/26</code></td><td><code>255.255.255.192</code></td><td class="num">64</td><td>A subnet for load balancers or NAT gateways</td></tr>
+      <tr><td><code>/28</code></td><td><code>255.255.255.240</code></td><td class="num">16</td><td>The smallest AWS subnet</td></tr>
+      <tr><td><code>/32</code></td><td><code>255.255.255.255</code></td><td class="num">1</td><td>One exact address, in a firewall or route</td></tr>
+      <tr><td><code>/0</code></td><td><code>0.0.0.0</code></td><td class="num">4,294,967,296</td><td>Every address: the default route, “anywhere”</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Remember that the provider keeps some addresses in every subnet: five on AWS and Azure, four on Google Cloud (<a href="08-inside-a-vpc.html">Chapter 8</a>). A <code>/24</code> gives you 251 usable addresses on AWS, not 256.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Watch out</p>
+  <p>The slash counts <strong>fixed</strong> bits, so a bigger number means a <strong>smaller</strong> range. A <code>/28</code> is tiny and a <code>/16</code> is big. When someone says “give me a bigger subnet”, they want a smaller number after the slash.</p>
+</div>
+
+<!-- ======================================================== 2.4 -->
+<h2 class="sec" id="s2-4"><span class="n">2.4</span>Is this address in that range?</h2>
+
+<p>This is the question behind every route lookup and every firewall rule, and you'll ask it constantly while debugging. For prefixes that are multiples of 8, just compare whole octets: <code>10.20.99.1</code> is in <code>10.20.0.0/16</code> because the first two octets match.</p>
+
+<p>For any other prefix, use the <strong>block size</strong> method. It works entirely in decimal:</p>
+
+<ol class="steps">
+  <li><strong>Find the interesting octet:</strong> the one where the prefix ends. For <code>/20</code>, the first 16 bits cover two octets, and the remaining 4 fixed bits fall in the <strong>third</strong> octet.</li>
+  <li><strong>Find the block size:</strong> 2 to the power of the host bits in that octet. The third octet has 8 − 4 = 4 host bits, so blocks are 2<sup>4</sup> = <strong>16</strong> wide.</li>
+  <li><strong>Round down</strong> the address's interesting octet to a multiple of the block size. For <code>10.20.17.8</code>: 17 rounds down to <strong>16</strong>.</li>
+  <li><strong>Read off the range.</strong> The network is <code>10.20.16.0/20</code>, running from <code>10.20.16.0</code> to <code>10.20.31.255</code> (16 + 16 − 1 = 31).</li>
+</ol>
+
+<p>Try a few the same way:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 2.3 · Block-size worked examples</caption>
+    <thead><tr><th>Question</th><th>Block</th><th>Working</th><th>Answer</th></tr></thead>
+    <tbody>
+      <tr><td>Is <code>10.20.47.3</code> in <code>10.20.32.0/20</code>?</td><td>16 in octet 3</td><td>32 to 47</td><td>Yes</td></tr>
+      <tr><td>Is <code>10.20.48.1</code> in <code>10.20.32.0/20</code>?</td><td>16 in octet 3</td><td>48 is past 47</td><td>No: it's in <code>10.20.48.0/20</code></td></tr>
+      <tr><td>Which /26 holds <code>10.20.0.77</code>?</td><td>64 in octet 4</td><td>77 rounds down to 64</td><td><code>10.20.0.64/26</code> (.64 to .127)</td></tr>
+      <tr><td>Is <code>172.31.5.5</code> in <code>172.16.0.0/12</code>?</td><td>16 in octet 2</td><td>16 to 31</td><td>Yes</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 2.5 -->
+<h2 class="sec" id="s2-5"><span class="n">2.5</span>Splitting a range into subnets</h2>
+
+<p>Designing a network means cutting one big range into smaller ones that don't overlap. Every extra bit you add to the prefix splits a range in two: a <code>/16</code> becomes two <code>/17</code>s, four <code>/18</code>s, sixteen <code>/20</code>s, or 256 <code>/24</code>s.</p>
+
+<p>There's one rule that makes this safe, and it's the rule people break most often:</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">A block always starts on a multiple of its own size. A <code>/20</code> (16 wide in the third octet) can start at <code>.0</code>, <code>.16</code>, <code>.32</code>, <code>.48</code>… and nowhere else.</p>
+</div>
+
+<p>So <code>10.20.8.0/20</code> isn't a valid network: 8 isn't a multiple of 16. Its host bits aren't all zero. Some tools quietly change it to <code>10.20.0.0/20</code>, others reject it, and AWS refuses to create the subnet. Either way, it's not what you meant.</p>
+
+<p>Figure 2.2 shows the plan from <a href="08-inside-a-vpc.html">Chapter 8</a> as nested blocks. Reading a plan this way makes overlaps and gaps obvious.</p>
+
+<figure class="wide" id="fig2-2">
+  <div class="fig-frame">
+      <svg class="dg" viewBox="0 0 760 300" role="img" aria-labelledby="fig2-2-t fig2-2-d">
+      <title id="fig2-2-t">Larder's 10.20.0.0/16 split into blocks</title>
+      <desc id="fig2-2-d">Three rows show the same address range at different zoom levels. Row one: the whole 10.20.0.0/16. Row two: two halves, 10.20.0.0/17 in use and 10.20.128.0/17 kept spare. Row three: the first half split into eight /20 blocks: 10.20.0.0/20 holds the public /24 subnets, 10.20.16.0/20, 10.20.32.0/20 and 10.20.48.0/20 are the app subnets for zones a, b and c, 10.20.64.0/20 holds the data /24 subnets, and 10.20.80.0/20 to 10.20.112.0/20 are free.</desc>
+      <rect class="vpc" x="20" y="30" width="717" height="42" rx="4"/>
+      <text class="t-label" x="380" y="56" text-anchor="middle">10.20.0.0/16 · 65,536 addresses</text>
+      <rect class="pub" x="20" y="100" width="357" height="42" rx="4"/>
+      <text class="t-label" x="200" y="126" text-anchor="middle">10.20.0.0/17 · in use</text>
+      <rect class="priv" x="380" y="100" width="357" height="42" rx="4"/>
+      <text class="t-label" x="560" y="126" text-anchor="middle">10.20.128.0/17 · spare</text>
+      <path class="wire-dash" d="M20 144 L20 176 M377 144 L737 176"/>
+      <rect class="pub" x="20" y="180" width="87" height="52" rx="4"/>
+      <text class="t-label" x="63.5" y="202" text-anchor="middle">public</text>
+      <text class="t-mono" x="63.5" y="221" text-anchor="middle">.0.0/20</text>
+      <rect class="pub" x="110" y="180" width="87" height="52" rx="4"/>
+      <text class="t-label" x="153.5" y="202" text-anchor="middle">app a</text>
+      <text class="t-mono" x="153.5" y="221" text-anchor="middle">.16.0/20</text>
+      <rect class="pub" x="200" y="180" width="87" height="52" rx="4"/>
+      <text class="t-label" x="243.5" y="202" text-anchor="middle">app b</text>
+      <text class="t-mono" x="243.5" y="221" text-anchor="middle">.32.0/20</text>
+      <rect class="pub" x="290" y="180" width="87" height="52" rx="4"/>
+      <text class="t-label" x="333.5" y="202" text-anchor="middle">app c</text>
+      <text class="t-mono" x="333.5" y="221" text-anchor="middle">.48.0/20</text>
+      <rect class="pub" x="380" y="180" width="87" height="52" rx="4"/>
+      <text class="t-label" x="423.5" y="202" text-anchor="middle">data</text>
+      <text class="t-mono" x="423.5" y="221" text-anchor="middle">.64.0/20</text>
+      <rect class="priv" x="470" y="180" width="87" height="52" rx="4"/>
+      <text class="t-label" x="513.5" y="202" text-anchor="middle">free</text>
+      <text class="t-mono" x="513.5" y="221" text-anchor="middle">.80.0/20</text>
+      <rect class="priv" x="560" y="180" width="87" height="52" rx="4"/>
+      <text class="t-label" x="603.5" y="202" text-anchor="middle">free</text>
+      <text class="t-mono" x="603.5" y="221" text-anchor="middle">.96.0/20</text>
+      <rect class="priv" x="650" y="180" width="87" height="52" rx="4"/>
+      <text class="t-label" x="693.5" y="202" text-anchor="middle">free</text>
+      <text class="t-mono" x="693.5" y="221" text-anchor="middle">.112.0/20</text>
+      <text class="t-small" x="20" y="258">Zoomed in: 10.20.0.0/17 as eight /20 blocks. “public” and “data” are each cut further into /24 subnets, one per zone.</text>
+      <text class="t-small" x="20" y="280">Every block starts on a multiple of its own size, so none of them overlap.</text>
+      </svg>
+  </div>
+  <figcaption><b>Figure 2.2</b> Larder's VPC range at three zoom levels. Mixed sizes work as long as each block is aligned and they don't overlap: here the public and data tiers each take one <code>/20</code> and cut it into <code>/24</code> subnets, while each app subnet is a whole <code>/20</code>.</figcaption>
+</figure>
+
+<h3>Mixing sizes</h3>
+<p>Real plans mix sizes, as Figure 2.2 does. The easy way to stay safe: <strong>allocate the biggest blocks first</strong>, each at the next aligned position, and cut the small ones out of a block you've set aside for them. If you place small subnets first, you leave odd-sized gaps that no large block can fit into.</p>
+
+<!-- ======================================================== 2.6 -->
+<h2 class="sec" id="s2-6"><span class="n">2.6</span>Public and private addresses</h2>
+
+<p>Public IPv4 addresses are unique across the whole internet and they're scarce: all 4.3 billion are handed out. So three ranges were set aside (in RFC 1918) for <span class="term">private addresses</span>, which anyone may use inside their own network and which are never routed on the internet:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 2.4 · Special IPv4 ranges</caption>
+    <thead><tr><th>Range</th><th>What it's for</th><th>Where you'll meet it</th></tr></thead>
+    <tbody>
+      <tr><td><code>10.0.0.0/8</code></td><td>Private (RFC 1918)</td><td>Most company and cloud networks. Plenty of room.</td></tr>
+      <tr><td><code>172.16.0.0/12</code></td><td>Private (RFC 1918): <code>172.16.0.0</code>–<code>172.31.255.255</code></td><td>AWS default VPCs (<code>172.31.0.0/16</code>), Docker (<code>172.17.0.0/16</code>)</td></tr>
+      <tr><td><code>192.168.0.0/16</code></td><td>Private (RFC 1918)</td><td>Home routers. Avoid in the cloud: it clashes with people's VPN clients at home.</td></tr>
+      <tr><td><code>100.64.0.0/10</code></td><td>Shared address space for carrier NAT</td><td>Some providers' internal services; sometimes used for Kubernetes pods (<a href="index.html#ch19">Ch. 19</a>)</td></tr>
+      <tr><td><code>169.254.0.0/16</code></td><td>Link-local</td><td><code>169.254.169.254</code>: the instance metadata service on AWS, Azure and Google Cloud</td></tr>
+      <tr><td><code>127.0.0.0/8</code></td><td>Loopback: this machine</td><td><code>127.0.0.1</code>, “localhost”</td></tr>
+      <tr><td><code>192.0.2.0/24</code>, <code>198.51.100.0/24</code>, <code>203.0.113.0/24</code></td><td>Documentation only</td><td>Examples in books like this one. Never routed.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>A private address can't be reached from the internet directly. When a machine with one needs to reach the internet, something along the way swaps its private source address for a public one: your home router does it for your laptop, and a NAT gateway does it for private servers in the cloud (<a href="08-inside-a-vpc.html">Chapter 8</a>).</p>
+
+<aside class="side"><b>Public IPs cost money</b>Because they're scarce, AWS charges for every public IPv4 address, in use or not, at about $3.60 a month each. Another reason to keep servers private and share a few public addresses through NAT and load balancers.</aside>
+
+<!-- ======================================================== 2.7 -->
+<h2 class="sec" id="s2-7"><span class="n">2.7</span>Overlap: the mistake that lasts for years</h2>
+
+<p>Two ranges <span class="term">overlap</span> when they share any addresses. Inside one network that breaks routing, because the same address has two possible meanings. Across networks it means they can never be connected with plain routing: peering, VPNs and transit gateways all refuse or misbehave when ranges overlap (<a href="index.html#ch11">Chapter 11</a>).</p>
+
+<p>Overlap is easy to check with what you've learned: two aligned blocks either don't overlap at all, or one sits entirely inside the other. Find the larger block, and check whether the smaller block's first address falls inside it.</p>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Jasper's VPC was <code>172.17.0.0/16</code>. Docker's default bridge network, which it creates on every host for its containers, is <em>also</em> <code>172.17.0.0/16</code>. Inside a container, the database at <code>172.17.3.20</code> looked like a neighbour on the local Docker bridge, so packets went to the bridge and never left the server. The route table on the host was doing exactly what it was told.</p>
+  <p>The quick fix was to move Docker's bridge to another range in <code>/etc/docker/daemon.json</code>. The real fix took longer: Larder's new VPC, the one you met in <a href="08-inside-a-vpc.html">Chapter 8</a>, uses <code>10.20.0.0/16</code>, from a company-wide plan in <code>10.0.0.0/8</code> that leaves <code>172.16.0.0/12</code> to tools that like to claim it (<a href="index.html#ch10">Chapter 10</a>).</p>
+</aside>
+
+<!-- ======================================================== 2.8 -->
+<h2 class="sec" id="s2-8"><span class="n">2.8</span>Enough IPv6 to not be scared of it</h2>
+
+<p>IPv6 was designed to end the address shortage. An IPv6 address has <strong>128 bits</strong>, written as eight groups of four hexadecimal digits separated by colons:</p>
+<pre><code>2001:0db8:0000:0001:0000:0000:0000:0005</code></pre>
+<p>Two shortcuts make that bearable. Leading zeros in a group can be dropped, and <strong>one</strong> run of all-zero groups can be replaced by <code>::</code>. So the address above is <code>2001:db8:0:1::5</code>.</p>
+
+<p>CIDR works exactly the same way, just with more bits. The sizes are so large that the habits are different:</p>
+<ul>
+  <li>A subnet is <strong>always a <code>/64</code></strong>: 64 bits of network, 64 bits of host. That's 18 quintillion addresses per subnet, so you never size subnets by host count again.</li>
+  <li>On AWS, a VPC gets a <code>/56</code> from Amazon's pool (or from addresses you bring), which holds 256 <code>/64</code> subnets. Azure and Google Cloud also use <code>/64</code> subnets.</li>
+  <li>Cloud IPv6 addresses are usually <strong>globally unique and public</strong>. There's no NAT. Whether a server can be reached from the internet is decided by routing and firewalls alone. To let IPv6 servers go out but not be reached, AWS has an <em>egress-only internet gateway</em>.</li>
+  <li>Documentation examples use <code>2001:db8::/32</code>, like the address above.</li>
+</ul>
+
+<p>Most cloud networks today are <strong>dual stack</strong>: every subnet has an IPv4 range and an IPv6 range, and services listen on both. This book uses IPv4 in most examples because that's what you'll debug most often, and notes where IPv6 behaves differently. <a href="index.html#ch10">Chapter 10</a> covers when to adopt it.</p>
+
+<!-- ======================================================== 2.9 -->
+<h2 class="sec" id="s2-9"><span class="n">2.9</span>Let the computer check your maths</h2>
+
+<p>Do the arithmetic by hand until it's familiar, then let tools do it, especially in anything you'll apply to a real network. Three are worth knowing.</p>
+
+<h3>Python's <code>ipaddress</code> module</h3>
+<p class="code-title"><span>python3</span><span>no install needed</span></p>
+<pre><code><span class="k">import</span> ipaddress as ip
+
+vpc = ip.ip_network(<span class="s">"10.20.0.0/16"</span>)
+vpc.num_addresses                                 <span class="c"># 65536</span>
+ip.ip_address(<span class="s">"10.20.17.8"</span>) <span class="k">in</span> ip.ip_network(<span class="s">"10.20.16.0/20"</span>)   <span class="c"># True</span>
+list(vpc.subnets(new_prefix=<span class="s">18</span>))                <span class="c"># four /18s</span>
+ip.ip_network(<span class="s">"10.20.16.0/20"</span>).overlaps(ip.ip_network(<span class="s">"10.20.0.0/16"</span>))  <span class="c"># True</span>
+ip.ip_network(<span class="s">"10.20.8.0/20"</span>)                    <span class="c"># ValueError: has host bits set</span></code></pre>
+
+<h3>Terraform's <code>cidrsubnet</code></h3>
+<p>In infrastructure code you rarely type subnet ranges. You derive them from the VPC's range, so they can't drift out of line. <code>cidrsubnet(range, newbits, netnum)</code> adds <code>newbits</code> to the prefix and returns block number <code>netnum</code>:</p>
+<pre><code>cidrsubnet(<span class="s">"10.20.0.0/16"</span>, 8, 2)   <span class="c"># "10.20.2.0/24"   (/16 + 8 bits = /24, block 2)</span>
+cidrsubnet(<span class="s">"10.20.0.0/16"</span>, 4, 3)   <span class="c"># "10.20.48.0/20"  (/16 + 4 bits = /20, block 3)</span></code></pre>
+<p>That's how the lab in <a href="08-inside-a-vpc.html">Chapter 8</a> built its subnets.</p>
+
+<h3>Your cloud provider's IPAM</h3>
+<p>Once there are many teams and VPCs, a spreadsheet stops being enough. AWS VPC IP Address Manager, Azure Virtual Network Manager's IP address management and similar tools hand out non-overlapping ranges from a central pool. They're the subject of <a href="index.html#ch10">Chapter 10</a>.</p>
+
+<!-- ======================================================== 2.10 -->
+<h2 class="sec" id="s2-10"><span class="n">2.10</span>Lab: practise until it's boring</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 2 · Subnet a VPC by hand, then check it</p>
+  <p><strong>You'll</strong> design a subnet plan on paper and check it with Python. <strong>You need</strong> Python 3 and, for the last step, Terraform or OpenTofu. <strong>Cost:</strong> nothing; nothing is created in the cloud.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Warm up by hand.</strong> Without tools, write down the first and last address and the size of: <code>10.0.0.0/22</code>, <code>10.1.4.0/23</code>, <code>192.168.10.128/25</code>, <code>10.30.40.0/21</code>. Then check each with <code>ip.ip_network("…")</code>, its <code>[0]</code>, <code>[-1]</code> and <code>num_addresses</code>.</li>
+  <li><strong>Spot the invalid ones.</strong> Which of these aren't valid networks: <code>10.0.3.0/22</code>, <code>10.0.4.0/22</code>, <code>10.0.6.0/23</code>, <code>10.0.7.0/23</code>? Work it out, then let Python tell you.</li>
+  <li><strong>Design a plan.</strong> You have <code>10.40.0.0/16</code> and three zones. You need a public <code>/24</code>, an app <code>/20</code> and a data <code>/24</code> per zone, with half the range kept free. Write the nine subnets down, biggest first.</li>
+  <li><strong>Check it.</strong> Put your nine ranges in a Python list and run this to find overlaps and confirm they all fit in the VPC:
+<pre><code>plan = [ip.ip_network(c) <span class="k">for</span> c <span class="k">in</span> [<span class="s">"10.40.0.0/24"</span>, ...]]
+vpc = ip.ip_network(<span class="s">"10.40.0.0/16"</span>)
+<span class="k">for</span> i, a <span class="k">in</span> enumerate(plan):
+    <span class="k">assert</span> a.subnet_of(vpc), a
+    <span class="k">for</span> b <span class="k">in</span> plan[i + 1:]:
+        <span class="k">assert</span> <span class="k">not</span> a.overlaps(b), (a, b)
+print(<span class="s">"plan OK"</span>)</code></pre></li>
+  <li><strong>Express it in Terraform.</strong> Run <code>terraform console</code> in an empty folder and reproduce your nine ranges with <code>cidrsubnet()</code> calls. If one doesn't match, your plan or your <code>netnum</code> is off by a block.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Find the ranges your own computer uses: your home network, any VPN, Docker (<code>docker network inspect bridge</code>). Would any of them clash with a VPC in <code>172.16.0.0/12</code>?</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s2-11"><span class="n">2.11</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Reading <code>/24</code> as “24 addresses”</td><td>Subnets sized ten times too small or too large.</td><td>The slash counts fixed bits: <code>/24</code> is 256 addresses.</td></tr>
+      <tr><td>Misaligned blocks like <code>10.20.8.0/20</code></td><td>Rejected, or silently changed to a different range.</td><td>Start every block on a multiple of its size.</td></tr>
+      <tr><td>Off-by-one on the last address</td><td>Firewall rules that miss the top of a range.</td><td>Last address = first + size − 1. Or use CIDR, not ranges.</td></tr>
+      <tr><td>Using <code>172.17.0.0/16</code> or <code>192.168.0.0/16</code> for VPCs</td><td>Clashes with Docker and with home networks on VPN.</td><td>Plan VPCs inside <code>10.0.0.0/8</code>.</td></tr>
+      <tr><td>Using someone else's public range privately</td><td>That company's real services become unreachable from your network.</td><td>Only use RFC 1918 ranges (or <code>100.64.0.0/10</code> deliberately).</td></tr>
+      <tr><td>Placing small subnets first</td><td>Gaps no large block fits into.</td><td>Allocate biggest first, aligned.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum2">
+  <h2 class="sec" id="sum2"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>An IPv4 address is 32 bits, written as four octets. CIDR <code>/n</code> fixes the first <em>n</em> bits; the range holds 2<sup>32−n</sup> addresses.</li>
+    <li>A bigger number after the slash means a smaller range.</li>
+    <li>To place an address, use the block size in the octet where the prefix ends, and round down.</li>
+    <li>Blocks must start on a multiple of their size. Aligned blocks either nest or don't overlap at all.</li>
+    <li>Use RFC 1918 private ranges, plan inside <code>10.0.0.0/8</code>, and avoid ranges your tools already claim.</li>
+    <li>IPv6: 128 bits, <code>/64</code> subnets, usually public, no NAT; reachability is down to routes and firewalls.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Octet</dt><dd>One of the four 8-bit numbers in an IPv4 address.</dd>
+    <dt>CIDR notation</dt><dd>A range written as address/prefix length, like <code>10.20.0.0/16</code>.</dd>
+    <dt>Prefix / network part</dt><dd>The fixed leading bits shared by every address in a range.</dd>
+    <dt>Host part</dt><dd>The remaining bits, which vary inside the range.</dd>
+    <dt>Subnet mask</dt><dd>The prefix written as an address of ones then zeros, like <code>255.255.255.0</code>.</dd>
+    <dt>Block size</dt><dd>How wide a range is in the octet where its prefix ends.</dd>
+    <dt>Private address</dt><dd>An address from the RFC 1918 ranges, never routed on the internet.</dd>
+    <dt>Overlap</dt><dd>Two ranges sharing any addresses; blocks routing between them.</dd>
+    <dt>Dual stack</dt><dd>Running IPv4 and IPv6 side by side on the same network.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>How many addresses are in a <code>/21</code>, and how many could you use for servers on AWS? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>2<sup>32−21</sup> = 2<sup>11</sup> = 2,048 addresses, of which 2,043 are usable on AWS (5 are reserved).</p></details>
+    </li>
+    <li>
+      <p>Which <code>/20</code> network contains <code>10.20.200.9</code>? Give its first and last address. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Blocks of 16 in the third octet: 200 rounds down to 192. So <code>10.20.192.0/20</code>, from <code>10.20.192.0</code> to <code>10.20.207.255</code>.</p></details>
+    </li>
+    <li>
+      <p>Do <code>10.8.0.0/14</code> and <code>10.10.0.0/16</code> overlap? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Yes. A <code>/14</code> is a block of 4 in the second octet, so <code>10.8.0.0/14</code> covers 10.8 to 10.11, which includes all of <code>10.10.0.0/16</code>.</p></details>
+    </li>
+    <li>
+      <p>A teammate proposes subnets <code>10.20.0.0/24</code>, <code>10.20.1.0/24</code> and <code>10.20.2.0/20</code>. What's wrong, and how would you fix it? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p><code>10.20.2.0/20</code> isn't aligned: a <code>/20</code> must start at a multiple of 16 in the third octet, so it's really <code>10.20.0.0/20</code>, which overlaps the two <code>/24</code>s. Place the <code>/20</code> at <code>10.20.16.0/20</code>, or allocate the <code>/20</code> first and put the <code>/24</code>s elsewhere.</p></details>
+    </li>
+    <li>
+      <p>Why can't you just create a <code>/16</code> for every team and stop worrying about addresses? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>You can, if they come from a plan that keeps them from overlapping each other and your offices. <code>10.0.0.0/8</code> holds 256 <code>/16</code>s, which is plenty for most companies, but only if they're handed out centrally. The danger isn't size, it's two teams picking the same range and later needing to connect.</p></details>
+    </li>
+    <li>
+      <p>An IPv6-only server in a public subnet has no NAT in front of it. How do you stop the internet from reaching it while still letting it download updates? <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>With routing and firewalls, not NAT. On AWS, route its IPv6 default route through an egress-only internet gateway, which allows outbound connections and their replies but nothing inbound, and keep its security group closed to inbound traffic.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li><a href="https://docs.python.org/3/howto/ipaddress.html">An introduction to the ipaddress module</a> (Python documentation).</li>
+    <li><a href="https://datatracker.ietf.org/doc/html/rfc1918">RFC 1918</a>, the two-page document that defines private address ranges.</li>
+    <li>AWS: <a href="https://docs.aws.amazon.com/vpc/latest/userguide/vpc-cidr-blocks.html">VPC CIDR blocks</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="01-what-happens.html">1 · What happens when you open a web page</a></div>
+  <div><span>Next</span><a href="index.html#ch3">3 · TCP, UDP and ports</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 1 · Networking in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>
