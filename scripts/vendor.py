@@ -8,6 +8,7 @@ Plan and field list: docs/PLAN-vendor-side.md, section 10; facts: docs/lodestar-
 Note fields (beyond the Series 2 ones):
   date         datetime.date of the scene (the page date)
   meta         short text after the date, e.g. "bid day 37 of 42" or "day 9 on site"
+  pass_no      optional fixed pass number (default: by date)
   pass_kind    "visitor" (default) or "contractor" (from 4 Aug 2027, when the team gets its own badges)
   where        pass footer place, default "FL 19"
   timesheet    optional dict(week, label, booked=[7], worked=[7], note)
@@ -27,7 +28,7 @@ def visitor_pass(n):
     band = "VISITOR · ESCORT REQUIRED" if kind == "visitor" else "CONTRACTOR · LODESTAR"
     cls = "vpass" + (" vpass--contractor" if kind != "visitor" else "")
     where = n.get("where", "FL 19")
-    no = PASS_NO + d.timetuple().tm_yday
+    no = n.get("pass_no", PASS_NO + d.timetuple().tm_yday)
     return f'''  <div class="{cls}" aria-label="{'Visitor' if kind == 'visitor' else 'Contractor'} pass">
     <div class="vpass-in">
       <div class="vpass-top"><span>METROVOLT</span><small>THE GRID</small></div>

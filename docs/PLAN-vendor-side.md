@@ -309,3 +309,23 @@ Owner asked to continue with volumes 3 and 4, then push and open a pull request.
   375 px on any Series 5 note, every related-note link resolves.
 - **Next**: Vol. 5 · Other People's Politics (hypercare, Oct 2028 → Jan 2029: the sponsor changes, saying no, the client
   asks to change the numbers), then Vol. 6 · The Cost and the Ending.
+
+## 15. Vols. 5 and 6 written and built: the series is complete (26 Nov 2026)
+
+Owner asked to finish volumes 5 and 6, then commit, open the pull request and merge.
+
+- **Vol. 5 · Other People's Politics** (`content/vendor-5/`: `01_room.py`, `02_ground.py`, `03_people.py`,
+  `04_integrity.py`), Oct 2028 → Jan 2029: reading the politics, the sponsor change, Gareth's budget, Lord Varnish's
+  slide, saying no, liked or trusted, the football box, sharing a floor with Vexmoor, staff fear, managing up, protecting
+  the team, the shouting client, the lift, changing the numbers (refused, 17:12), building a champion.
+- **Vol. 6 · The Cost and the Ending** (`content/vendor-6/`: `01_cost.py`, `02_handover.py`, `03_next.py`,
+  `04_ending.py`), Jan → Jun 2029: Hana's burnout and rotation, Ines's own 23:00 notes, sustainable pace, the warranty,
+  knowledge transfer, a joint lessons session, the handover architecture, the phase 2 bid, the wait, the case study,
+  the walk-away (BAFO), leaving well, ten rules, the last day.
+- **The ending** (section 11.5): Fri 15 Jun 2029, 17:05, Elaine asks for “a quick word, in room 27A”; the last note
+  stops as Ines knocks. Open on purpose: the phase 2 decision, Hana's return, Lottie's job offer. Pip stays at MetroVolt.
+- Renderer: `pass_no` (optional) fixes the pass number; the last day uses No. 0417.
+- `PLANNED_VENDOR` is empty; the landing section says the series is complete; `pdf-build.json` lists `vendor-5`,
+  `vendor-6`. Facts: casebook sections “Vol. 5” and “Vol. 6” (Tariq Rahman added to the team).
+- Checked: all figures of both volumes in contact sheets (fixed one overflowing credits box, one clipped label, one
+  long subtitle), no horizontal scroll at 375 px, every related-note link resolves.

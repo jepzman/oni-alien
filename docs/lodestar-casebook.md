@@ -33,6 +33,7 @@ contradict it. Update it with every volume. Plan: `docs/PLAN-vendor-side.md`.
 | Lottie Marsh (she/her) | junior engineer | first client project; asks the obvious questions. |
 | Vivian Locke (she/her) | account director (sales) | promised Priya “all your customers off MAVIS in twelve months” over dinner on 19 Jan 2027. |
 | Graham Wren (he/him) | founder and managing director | needs the deal, then the margin. |
+| Tariq Rahman (he/him) | senior engineer, Leeds | tech lead from 5 Feb 2029 (V-05), after Hana rotates off. |
 
 ## MetroVolt's people (new in Series 5)
 
@@ -193,10 +194,72 @@ Staff), Dame Helena Strand (she/her, CEO), Pip (he/him; joins Priya's Customer O
   migration) → 22 minutes; CP3 04:52; **live 07:40**; 379,997 accounts; 1,206 exceptions (0.32 %), cleared Sunday 19:10;
   night log at 08:15 (14 lessons). Monday's billing run fine; first bills, no complaints. Hana worked 19 hours.
 
-## Later volumes (planned, keep consistent)
+## Vol. 5 · Other People's Politics (Oct 2028 → Jan 2029)
 
-Hypercare (8 weeks from 24 Sep 2028); a sponsor change; Hana's burnout; wave 2 planning; the phase 2 bid against Vexmoor
-(March 2029); the ending in June 2029 (room 27A, a door not yet opened).
+- **Signals** (Oct): “Ascend readiness” series chaired by Rupert, without Priya; Gareth's team to floor 20; Vexmoor in
+  Rupert's lift. Ines briefs Rupert's office through Elaine; never speculates.
+- **Sponsor change** (7 Nov 2028): Priya → Rupert; variation V-04, DL-071. Day 1 thank Priya; week 1 a one-page brief;
+  week 2 learn what Rupert measures (cost out, Ascend targets, no surprises); baseline v2.0, change pool, phase 2
+  timetable re-confirmed in writing.
+- **Gareth / meter data**: IA-02, a meter data service owned by Network Assets, signed 30 Nov.
+- **Board slide** (30 Nov board): Lord Varnish's title “Lodestar: the Orion foundation delivers”; Ines sends facts
+  (379,997 customers, 0.32 %, no billing complaints, MAVIS batch −16 %), credits and “built on lessons from earlier
+  programmes”. He keeps the facts.
+- **Saying no**: free wave 2 design during hypercare declined; CR-021 readiness sprint £42k, 4–15 Dec; the readiness
+  pack given to every bidder.
+- **Hypercare** review 21 Nov; **M5 accepted 22 Nov 2028** (warranty starts).
+- **Football box** (Dec) declined; thank-you letters instead. **Floor 19**: Vexmoor's Ascend team moves in on 11 Dec;
+  floor rules (clean, private, off-site bid work, never poach or fish).
+- **Run team**: Asif, Marta, Kemi (MetroVolt); pairs Asif ↔ Bilal, Marta ↔ Hana, Kemi ↔ Oskar. Team agreement v2,
+  13 Dec (urgent requests via Ines or Callum; 08:00–19:00 unless severity 1).
+- **The lift** (14 Dec): “40 roles in spring”, “phase 2 budget cut?”; not repeated. February announcement: 36 roles,
+  phase 2 budget unchanged.
+- **The numbers** (16 Jan 2029): Rupert asks Wrenfield to sign “£1.9m a year realised”; realised ≈ £210k a year
+  (£1.9m when all waves are done). Refused in his office at 16:20 and in writing at 17:12; reply 19:40 “Use your wording”.
+- **Champions**: Elaine, Rosa, Gareth. Elaine declares a relationship; a second marker is assigned.
+- **Phase 2 tender** opens 5 Mar 2029.
+
+## Vol. 6 · The Cost and the Ending (Jan → Jun 2029)
+
+- **Hana** (1:1, Wed 10 Jan 2029, room 19C): worked/booked 1.5 since Aug; leave 15–26 Jan; reduced hours 29 Jan–2 Feb;
+  **rotates off Lodestar on Mon 5 Feb** to a smaller Leeds client. Key-personnel consent: Elaine, 10 Jan (§6.3);
+  variation **V-05** names **Tariq Rahman** (he/him, senior engineer, Leeds) tech lead; Bilal is his backup.
+  Hana's 14 handover pages (“ask for help sooner”). Callum also wasn't sleeping.
+- **Ines's own limits** (from 22 Jan): ≈ 400 late notes since Feb 2027, times 21:00 → 23:30; 3 hotel nights a week,
+  Fridays in Leeds, phone off 21:00 (severity 1 only), notebook closes 22:00. Delegated: Callum (phase 2 commercial),
+  Bilal (data estimates), Lottie (lessons session).
+- **Pace policy v1** (2 Feb): Lodestar averaged 9.1 h/day worked vs 7.5 booked, ≈ 2,900 unpaid hours (≈ 390 days);
+  measure (> 1.15 for 3 weeks → a conversation), cap 45 h, TOIL within a month, recovery weeks, plan at 85 %;
+  ≈ +6 % on the phase 2 price (bid §5.4).
+- **Walk-away conditions** signed 14 Feb (Ines, Callum, Graham): margin ≥ 15 %; liability capped at contract value;
+  never absorb data-quality risk; plan at 85 %.
+- **Warranty** 22 Nov 2028 → 20 Feb 2029 (Schedule 9): 37 reports = 14 defects, 15 changes (9 to the pool, £22k; 6 to
+  wave 2), 8 not ours. W-29 arrears report 22 s vs < 30 s → change, tuned to 4 s as recorded goodwill (≈ £6k).
+  **WC-01** signed by Elaine Fri 23 Feb.
+- **Knowledge transfer** (§11.2, Schedule 10): shadow 12–23 Feb, reverse shadow 26 Feb–9 Mar; 11 runbooks by the run
+  team; 4 drills (Kemi fixed the bad Halvorsen file in 41 min); certificate signed Fri 9 Mar by Kemi, Marta, Asif,
+  countersigned by Hollis. “I'd take the call at three.”
+- **Joint lessons** Thu 15 Mar, room 27B, facilitator Lottie; 24 people incl. Sven (Halvorsen) and Bea (Vexmoor);
+  Desmond's rules (no phase 2 talk, notes to every bidder); 63 stickies → 5 lessons (L1 Desmond, L2 Sven, L3 Hollis,
+  L4 Kemi, from Bea's note, L5 Elaine).
+- **Handbook v1.0** Fri 23 Mar: 22 pages; 12 of 74 decisions (DL-001…DL-074, e.g. DL-012, DL-047, DL-062), 9 debts;
+  Hollis adopts it as the supplier handover template.
+- **Phase 2 bid** submitted Wed 4 Apr 2029, 11:40: waves 2–4, ≈ 1.9 m accounts, 28 months, wave 2 live Jun 2030,
+  **£9.4m**, margin 15 %; evaluation 60 % quality / 40 % price; Hana “may rejoin for wave 3; her decision”.
+- **Orals** Thu 26 Apr (Wrenfield 10:00, Vexmoor 14:00); decision promised by 15 Jun. Both plans told to the team
+  Mon 30 Apr (win: mobilise 2 Jul; lose: 3 months' exit assistance, handover to Vexmoor, nobody redundant).
+  May: **Halvorsen wins the billing re-tender**, IA-01 unchanged.
+- **Case study** v3 approved Wed 6 Jun by Elaine and Anjali (§18), held until after the award; headline “Lodestar
+  wave 1: 379,997 customers, one long night, and what we learned”.
+- **BAFO** request Thu 24 May: −12 %, “absorb” data risk, unlimited liability. Fails 3 of 4 conditions. Reply Fri
+  1 Jun 10:15: −4 % (business portal → wave 4), shared data-quality pot £400k, cap as wave 1, “we would rather
+  withdraw”. Graham: “Send it. I mean it.” Desmond, 4 Jun: “Received. Noted.”
+- **Leaving well**: promises 47 of 47 closed by Thu 14 Jun; room 19C cleared (§16.4); 31 thank-you letters.
+  **Lottie** is offered a job on Kemi's run team (public advert, §17.2); undecided.
+- **Ascend 2030** memo, Tue 12 Jun 2029 (Darkside). Ines's ten rules (13 Jun).
+- **Last day** Fri 15 Jun 2029: pass V-0417 (No. 0417, renewed 26 times); kettle to Yusuf, Bert's bound book to Bert,
+  plant to Rosa. 17:05 Elaine: “A quick word, in room 27A.” The series ends at 17:09 as Ines knocks.
+- **Open, on purpose**: the phase 2 decision; Hana's return; Lottie's choice. Wave 1's contract ends 30 Jun 2029.
 
 ## Minor cast and references (Vols. 1–2)
 
