@@ -534,3 +534,18 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
 - **Handover** of Ordering to the reliability team: game days 14 and 21 Sep; pager 1 Oct; first incident 9 Oct, 18 min.
 - **Architects**: Cho (payments + data) and Dee (mobile + customer apps) grown from May; Cho led ADR 0029 alone in Sep;
   guild every other Thursday; architecture path on the career ladder from Oct.
+
+## Series 3 · Networking in the Cloud (handbook facts)
+
+Network facts used by Handbook 1 (details and chapter references in `docs/HANDOFF-handbooks.md`):
+
+- Address plan in `10.0.0.0/8`: offices `10.0.0.0/13` (Amsterdam office `10.1.0.0/24`), stores `10.8.0.0/13`, one
+  `/16` per city (Amsterdam `10.8`, Rotterdam `10.9`, Antwerp `10.10`; Noord `10.8.3.0/24`), Frankfurt `10.16.0.0/12`
+  (prod VPC `10.20.0.0/16`), second region `10.32.0.0/12`. Jasper's first VPC was `172.17.0.0/16` (clashed with Docker).
+- Prod VPC subnets: public `10.20.0–2.0/24`, app `10.20.16.0/20`, `.32.0/20`, `.48.0/20`, data `10.20.64–66.0/24`;
+  one NAT gateway per zone; NAT Elastic IP `198.51.100.7` is allow-listed by StockPilot.
+- Incidents told in the book: reporting subnet left on the main route table (ch. 8); Rotterdam store replies with no
+  route back (ch. 4, then BGP for store VPNs); payment resets after NAT idle timeout (ch. 3); `api.larder.example`
+  TTL cutover (ch. 5); missing intermediate on `hooks.larder.example` (ch. 6); cross-zone Kafka traffic ≈ €700/month
+  (ch. 7); 29 Oct 2026 Dispatch outage from a removed CIDR rule (ch. 9); Korenwolf overlaps `10.20.0.0/16` →
+  PrivateLink (ch. 10).

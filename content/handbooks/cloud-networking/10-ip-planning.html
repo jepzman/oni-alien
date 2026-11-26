@@ -1,0 +1,403 @@
+<!-- Handbook 1 · Networking in the Cloud · Chapter 10. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part II · Your network in the cloud</p>
+  <p class="chno">10</p>
+  <h1>Planning your IP address space</h1>
+  <p class="promise">One VPC can pick any range it likes. A company with dozens of VPCs, several regions, offices, stores and partners can't: every range it picks now decides what it can connect later. An hour spent on an address plan saves months of renumbering. This chapter shows how to size, divide and hand out address space so that it stays tidy for years, and what to do when you inherit a plan that isn't.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Estimate how much address space a company's cloud needs.</li>
+      <li>Design a hierarchical plan that never overlaps and summarises cleanly.</li>
+      <li>Hand out ranges with an IPAM tool instead of a spreadsheet.</li>
+      <li>Deal with running out: secondary ranges, Kubernetes pods, IPv6, overlapping partners.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>CIDR, splitting and overlap (<a href="#ch2">Chapter 2</a>).</li>
+      <li>Route summarisation and longest prefix match (<a href="#ch4">Chapter 4</a>).</li>
+      <li>Subnets and tiers (<a href="#ch8">Chapter 8</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, Python, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 10.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Korenwolf, Larder's first large business customer, wants its office ordering system to call Larder's API over a private connection instead of the internet. Their network team sends over their address ranges. The first line reads <code>10.20.0.0/16</code>: exactly the range of Larder's production VPC.</p>
+  <p>Nobody did anything wrong; <code>10.20.0.0/16</code> is a popular choice. But it means the two networks can't simply be routed together. Section 10.6 shows what Larder did instead.</p>
+</aside>
+
+<!-- ======================================================== 10.1 -->
+<h2 class="sec" id="s10-1"><span class="n">10.1</span>The big picture</h2>
+
+<p class="lead">An <span class="term">address plan</span> is a written decision about which ranges are used for what, across everything you'll ever want to connect: VPCs in every account and region, offices, stores, VPN users, and the partners you can foresee. A good plan has three properties:</p>
+<ul>
+  <li><strong>No overlap.</strong> Any two networks that might ever need to talk have different ranges (<a href="#ch2">Chapter 2</a>).</li>
+  <li><strong>Room to grow.</strong> Each part has space for years of growth without being renumbered.</li>
+  <li><strong>Hierarchy.</strong> Related networks sit in one larger block, so one route can cover them all.</li>
+</ul>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Addresses are free; renumbering is expensive. Plan generously, in aligned blocks, and hand ranges out from one place.</p>
+</div>
+
+<!-- ======================================================== 10.2 -->
+<h2 class="sec" id="s10-2"><span class="n">10.2</span>How much space do you need?</h2>
+
+<p>Work outward from the VPCs. A typical company ends up with one VPC per <strong>account × environment × region</strong>, plus shared ones for networking and tooling. Then size each VPC from its subnets (<a href="#ch8">Chapter 8</a>): tiers × zones × subnet size, plus at least as much again kept free.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 10.1 · Larder's sizing, five years out</caption>
+    <thead><tr><th>What</th><th class="num">Count</th><th>Size each</th><th>Block</th></tr></thead>
+    <tbody>
+      <tr><td>Production, staging, development VPCs per region</td><td class="num">3</td><td><code>/16</code></td><td rowspan="3">one <code>/12</code> per region (16 <code>/16</code>s)</td></tr>
+      <tr><td>Network hub and shared services per region</td><td class="num">1–2</td><td><code>/16</code></td></tr>
+      <tr><td>Future team accounts</td><td class="num">up to 10</td><td><code>/16</code></td></tr>
+      <tr><td>Regions</td><td class="num">1 now, 2 planned</td><td><code>/12</code></td><td>two <code>/12</code>s</td></tr>
+      <tr><td>Offices and VPN users</td><td class="num">a few</td><td><code>/24</code>–<code>/20</code></td><td rowspan="2">one <code>/12</code> for everything on premises</td></tr>
+      <tr><td>Dark stores, six cities, up to 20 stores each</td><td class="num">~120</td><td><code>/24</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>That's three <code>/12</code>s out of the sixteen in <code>10.0.0.0/8</code>. Plenty left for surprises: a third region, an acquisition, a partner who needs a range from you.</p>
+
+<aside class="side"><b>Why /16 per VPC</b>It's generous for most workloads and the largest a single AWS VPC block can be. Containers are the usual reason to need it (10.5). Smaller VPCs are fine if your plan has a way to add more space later.</aside>
+
+<!-- ======================================================== 10.3 -->
+<h2 class="sec" id="s10-3"><span class="n">10.3</span>A hierarchical plan</h2>
+
+<p>Divide the top block by the thing that changes least, usually <strong>location</strong> (on-premises, then one block per region), then by <strong>environment or account</strong>, then by <strong>tier and zone</strong> inside each VPC. Each level is an aligned block inside the one above.</p>
+
+<figure class="wide" id="fig10-1">
+  <div class="fig-frame">
+      <svg class="dg" viewBox="0 0 760 290" role="img" aria-labelledby="fig10-1-t fig10-1-d">
+      <title id="fig10-1-t">Larder's plan for 10.0.0.0/8</title>
+      <desc id="fig10-1-d">Row one: 10.0.0.0/8 split into sixteen /12 blocks. 10.0.0.0/12 is on-premises (offices and stores), 10.16.0.0/12 is the Frankfurt region, 10.32.0.0/12 is the second region, and the other thirteen are reserved. Row two zooms into 10.16.0.0/12: 10.16.0.0/16 is the network hub, 10.17 development, 10.18 staging, 10.19 reserved, 10.20 production, and 10.21 to 10.31 are free for new accounts.</desc>
+      <rect class="pub" x="20" y="30" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="41" y="50" text-anchor="middle">.0</text>
+      <text class="t-small" x="41" y="72" text-anchor="middle">sites</text>
+      <rect class="pub" x="65" y="30" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="86" y="50" text-anchor="middle">.16</text>
+      <text class="t-small" x="86" y="72" text-anchor="middle">FRA</text>
+      <rect class="pub" x="110" y="30" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="131" y="50" text-anchor="middle">.32</text>
+      <text class="t-small" x="131" y="72" text-anchor="middle">R2</text>
+      <rect class="priv" x="155" y="30" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="176" y="50" text-anchor="middle">.48</text>
+      <rect class="priv" x="200" y="30" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="221" y="50" text-anchor="middle">.64</text>
+      <rect class="priv" x="245" y="30" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="266" y="50" text-anchor="middle">.80</text>
+      <rect class="priv" x="290" y="30" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="311" y="50" text-anchor="middle">.96</text>
+      <rect class="priv" x="335" y="30" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="356" y="50" text-anchor="middle">.112</text>
+      <rect class="priv" x="380" y="30" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="401" y="50" text-anchor="middle">.128</text>
+      <rect class="priv" x="425" y="30" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="446" y="50" text-anchor="middle">.144</text>
+      <rect class="priv" x="470" y="30" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="491" y="50" text-anchor="middle">.160</text>
+      <rect class="priv" x="515" y="30" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="536" y="50" text-anchor="middle">.176</text>
+      <rect class="priv" x="560" y="30" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="581" y="50" text-anchor="middle">.192</text>
+      <rect class="priv" x="605" y="30" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="626" y="50" text-anchor="middle">.208</text>
+      <rect class="priv" x="650" y="30" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="671" y="50" text-anchor="middle">.224</text>
+      <rect class="priv" x="695" y="30" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="716" y="50" text-anchor="middle">.240</text>
+      <text class="t-small" x="20" y="20">10.0.0.0/8 as sixteen /12 blocks (second octet shown)</text>
+      <text class="t-small" x="20" y="106">sites = offices and stores (on-premises) · FRA = Frankfurt · R2 = second region · the rest reserved</text>
+      <path class="wire-dash" d="M65 114 L20 140 M107 114 L737 140"/>
+      <rect class="pub" x="20" y="144" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="41" y="164" text-anchor="middle">.16</text>
+      <text class="t-small" x="41" y="186" text-anchor="middle">hub</text>
+      <rect class="pub" x="65" y="144" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="86" y="164" text-anchor="middle">.17</text>
+      <text class="t-small" x="86" y="186" text-anchor="middle">dev</text>
+      <rect class="pub" x="110" y="144" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="131" y="164" text-anchor="middle">.18</text>
+      <text class="t-small" x="131" y="186" text-anchor="middle">stage</text>
+      <rect class="priv" x="155" y="144" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="176" y="164" text-anchor="middle">.19</text>
+      <text class="t-small" x="176" y="186" text-anchor="middle">spare</text>
+      <rect class="node-accent" x="200" y="144" width="42" height="54" rx="3"/>
+      <text class="t-mono on-accent" x="221" y="164" text-anchor="middle">.20</text>
+      <text class="t-small on-accent" x="221" y="186" text-anchor="middle">prod</text>
+      <rect class="priv" x="245" y="144" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="266" y="164" text-anchor="middle">.21</text>
+      <text class="t-small" x="266" y="186" text-anchor="middle">free</text>
+      <rect class="priv" x="290" y="144" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="311" y="164" text-anchor="middle">.22</text>
+      <text class="t-small" x="311" y="186" text-anchor="middle">free</text>
+      <rect class="priv" x="335" y="144" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="356" y="164" text-anchor="middle">.23</text>
+      <text class="t-small" x="356" y="186" text-anchor="middle">free</text>
+      <rect class="priv" x="380" y="144" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="401" y="164" text-anchor="middle">.24</text>
+      <text class="t-small" x="401" y="186" text-anchor="middle">free</text>
+      <rect class="priv" x="425" y="144" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="446" y="164" text-anchor="middle">.25</text>
+      <text class="t-small" x="446" y="186" text-anchor="middle">free</text>
+      <rect class="priv" x="470" y="144" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="491" y="164" text-anchor="middle">.26</text>
+      <text class="t-small" x="491" y="186" text-anchor="middle">free</text>
+      <rect class="priv" x="515" y="144" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="536" y="164" text-anchor="middle">.27</text>
+      <text class="t-small" x="536" y="186" text-anchor="middle">free</text>
+      <rect class="priv" x="560" y="144" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="581" y="164" text-anchor="middle">.28</text>
+      <text class="t-small" x="581" y="186" text-anchor="middle">free</text>
+      <rect class="priv" x="605" y="144" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="626" y="164" text-anchor="middle">.29</text>
+      <text class="t-small" x="626" y="186" text-anchor="middle">free</text>
+      <rect class="priv" x="650" y="144" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="671" y="164" text-anchor="middle">.30</text>
+      <text class="t-small" x="671" y="186" text-anchor="middle">free</text>
+      <rect class="priv" x="695" y="144" width="42" height="54" rx="3"/>
+      <text class="t-mono" x="716" y="164" text-anchor="middle">.31</text>
+      <text class="t-small" x="716" y="186" text-anchor="middle">free</text>
+      <text class="t-small" x="20" y="224">Zoomed in: 10.16.0.0/12, the Frankfurt region, as sixteen /16 VPCs. Production is 10.20.0.0/16 (Chapter 8).</text>
+      <text class="t-small" x="20" y="246">From any store or office, one route covers every Frankfurt VPC: 10.16.0.0/12.</text>
+      <text class="t-small" x="20" y="268">From Frankfurt, one route covers every store: 10.8.0.0/13 (inside the on-prem block).</text>
+      </svg>
+  </div>
+  <figcaption><b>Figure 10.1</b> Larder's plan. Because each region and each group of sites is one aligned block, route tables stay short: a store needs one route for all of Frankfurt, and Frankfurt needs one route for all stores.</figcaption>
+</figure>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 10.2 · Larder's address plan</caption>
+    <thead><tr><th>Block</th><th>Use</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>10.0.0.0/13</code></td><td>Offices and VPN users</td><td>Amsterdam office <code>10.1.0.0/24</code></td></tr>
+      <tr><td><code>10.8.0.0/13</code></td><td>Dark stores, one <code>/16</code> per city</td><td>Amsterdam <code>10.8.0.0/16</code>, Rotterdam <code>10.9.0.0/16</code>, Antwerp <code>10.10.0.0/16</code>…</td></tr>
+      <tr><td><code>10.16.0.0/12</code></td><td>Frankfurt (<code>eu-central-1</code>)</td><td>hub <code>10.16</code>, dev <code>10.17</code>, staging <code>10.18</code>, prod <code>10.20</code></td></tr>
+      <tr><td><code>10.32.0.0/12</code></td><td>Second region</td><td>reserved for the standby region (<a href="#ch25">Chapter 25</a>)</td></tr>
+      <tr><td><code>10.48.0.0/12</code> – <code>10.240.0.0/12</code></td><td>Reserved</td><td>not handed out without a decision</td></tr>
+      <tr><td><code>100.64.0.0/10</code></td><td>Kubernetes pods, never routed outside a cluster</td><td>see 10.5</td></tr>
+      <tr><td><code>172.16.0.0/12</code>, <code>192.168.0.0/16</code></td><td>Never used for networks</td><td>left to Docker, home routers and VPN clients</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Notice how summarisation pays off. When Antwerp's stores come online in <code>10.10.0.0/16</code>, nothing in Frankfurt changes: the route to <code>10.8.0.0/13</code> already covers it, and with BGP (<a href="#ch4">Chapter 4</a>) even that route is learned automatically.</p>
+
+<!-- ======================================================== 10.4 -->
+<h2 class="sec" id="s10-4"><span class="n">10.4</span>Handing out ranges: IPAM</h2>
+
+<p>A plan in a document is a good start. A plan that's <em>enforced</em> is better. <span class="term">IPAM</span> (IP address management) tools hold the plan as a tree of <strong>pools</strong> and hand out ranges on request, so two teams can't pick the same block.</p>
+
+<p>With <strong>Amazon VPC IPAM</strong>, Larder's plan becomes: a top-level pool <code>10.0.0.0/8</code>; a regional pool <code>10.16.0.0/12</code> for <code>eu-central-1</code>; and pools per environment below it, each with rules such as “allocations must be <code>/16</code>” and “only these accounts may allocate”. A new VPC then asks for a range instead of naming one:</p>
+
+<p class="code-title"><span>vpc.tf</span><span>allocation from an IPAM pool</span></p>
+<pre><code><span class="k">resource</span> <span class="s">"aws_vpc"</span> <span class="s">"team"</span> {
+  ipv4_ipam_pool_id   = var.prod_pool_id   <span class="c"># shared with this account through AWS RAM</span>
+  ipv4_netmask_length = 16                 <span class="c"># "give me the next free /16"</span>
+  tags = { Name = <span class="s">"orders-prod"</span> }
+}</code></pre>
+
+<p>IPAM also monitors: it flags VPCs whose ranges overlap or don't come from a pool, and shows how full each pool is. Azure Virtual Network Manager has IP address pools that work the same way, and Google Cloud offers <em>internal ranges</em> to reserve and track blocks.</p>
+
+<!-- ======================================================== 10.5 -->
+<h2 class="sec" id="s10-5"><span class="n">10.5</span>When a VPC runs out</h2>
+
+<p>The most common cause is containers. On AWS's managed Kubernetes, each pod gets a real VPC address by default, and a busy cluster can burn through a <code>/20</code> faster than anyone expected. You have four options, from simplest to most involved:</p>
+
+<ol class="steps">
+  <li><strong>Add a secondary range to the VPC.</strong> AWS lets you add more CIDR blocks to a VPC (five by default, with some restrictions on mixing private ranges) and create new subnets in them. Take them from your plan like any other allocation.</li>
+  <li><strong>Pack addresses more tightly.</strong> Prefix delegation gives each node whole <code>/28</code> blocks, reducing waste and API calls, but still uses VPC space.</li>
+  <li><strong>Give pods non-routed addresses.</strong> Put pods in a secondary range from <code>100.64.0.0/10</code> that's never routed outside the VPC, and let nodes translate pod traffic leaving the VPC. Every cluster can reuse the same range. <a href="#ch19">Chapter 19</a> builds this.</li>
+  <li><strong>Use IPv6 for pods.</strong> Effectively unlimited, and no translation inside the VPC; the rest of the path must speak IPv6 or be translated.</li>
+</ol>
+
+<p>You can add space but never shrink a VPC's ranges or a subnet's size in place. That asymmetry is why the plan should be generous from the start.</p>
+
+<!-- ======================================================== 10.6 -->
+<h2 class="sec" id="s10-6"><span class="n">10.6</span>When ranges overlap anyway</h2>
+
+<p>Your own plan can prevent overlap inside the company. It can't control partners, customers, or companies you acquire. When two overlapping networks must talk, there are three ways out:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 10.3 · Connecting overlapping networks</caption>
+    <thead><tr><th>Option</th><th>How it works</th><th>Best for</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Expose a service privately</strong></td><td>The provider connects a consumer's endpoint to your load balancer; no routes are exchanged (PrivateLink on AWS, <a href="#ch12">Chapter 12</a>)</td><td>Partners and customers who call one of your services</td></tr>
+      <tr><td><strong>Translate addresses (NAT)</strong></td><td>One side is shown to the other under a different, non-overlapping range</td><td>When whole networks must reach each other and nobody can renumber</td></tr>
+      <tr><td><strong>Renumber</strong></td><td>One side moves to new ranges</td><td>Inside your own company, eventually; painful but permanent</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Korenwolf only needed to call one service, Larder's ordering API, so Eli used AWS PrivateLink. Larder put the API behind a Network Load Balancer and published it as an <em>endpoint service</em>; Korenwolf created an endpoint in their own VPC, which appears there as a few addresses in <em>their</em> subnets. Each side keeps its own <code>10.20.0.0/16</code>, no routes are exchanged, and Korenwolf can reach nothing at Larder except that one API. <a href="#ch12">Chapter 12</a> builds it.</p>
+</aside>
+
+<!-- ======================================================== 10.7 -->
+<h2 class="sec" id="s10-7"><span class="n">10.7</span>Across providers, and IPv6</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 10.4 · Address planning tools and limits</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Central allocation</td><td>VPC IPAM pools</td><td>Virtual Network Manager IP address pools</td><td>internal ranges</td></tr>
+      <tr><td>Grow a network</td><td>secondary CIDR blocks</td><td>add address spaces to a VNet</td><td>add subnets or expand a subnet's range (it can grow, not shrink)</td></tr>
+      <tr><td>Share one network across teams</td><td>VPC sharing (subnets shared through RAM)</td><td>subnets in a central VNet with delegated access</td><td>Shared VPC (host and service projects)</td></tr>
+      <tr><td>IPv6</td><td><code>/56</code> per VPC, <code>/64</code> per subnet</td><td>IPv6 address space per VNet, <code>/64</code> subnets</td><td><code>/64</code> per subnet, internal or external</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Sharing one network between teams, rather than giving every team its own VPC, saves a lot of space and is worth knowing about: a central team owns the VPC and its subnets, and shares specific subnets with team accounts. <a href="#ch24">Chapter 24</a> compares the two models.</p>
+
+<h3>When to adopt IPv6</h3>
+<p>IPv6 removes the shortage, but not the need for a plan: you still want to know which <code>/56</code> belongs to which VPC. New VPCs should be <strong>dual stack</strong> from the start, because adding IPv6 later is easy but adding it everywhere at once is not. Two practical reasons push in the same direction: AWS charges for every public IPv4 address, and IPv6 gives container platforms all the addresses they could want. Internal services that are IPv6-only are still rare, though; most teams run dual stack for years.</p>
+
+<!-- ======================================================== 10.8 -->
+<h2 class="sec" id="s10-8"><span class="n">10.8</span>Lab: an address plan you can test</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 10 · Plan as code</p>
+  <p><strong>You'll</strong> write an address plan as data, test it automatically, and find the next free block, the core of what an IPAM tool does. <strong>You need</strong> Python 3. <strong>Cost:</strong> nothing.</p>
+</div>
+
+<p class="code-title"><span>plan.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="k">import</span> ipaddress <span class="k">as</span> ip
+
+PLAN = {
+    <span class="s">"10.0.0.0/8"</span>: {
+        <span class="s">"10.0.0.0/13"</span>:  <span class="s">"offices"</span>,
+        <span class="s">"10.8.0.0/13"</span>:  <span class="s">"stores"</span>,
+        <span class="s">"10.16.0.0/12"</span>: {<span class="s">"10.16.0.0/16"</span>: <span class="s">"hub"</span>, <span class="s">"10.17.0.0/16"</span>: <span class="s">"dev"</span>,
+                         <span class="s">"10.18.0.0/16"</span>: <span class="s">"staging"</span>, <span class="s">"10.20.0.0/16"</span>: <span class="s">"prod"</span>},
+        <span class="s">"10.32.0.0/12"</span>: <span class="s">"region-2"</span>,
+    }
+}
+
+<span class="k">def</span> check(tree, parent=None, path=<span class="s">""</span>):
+    nets = [ip.ip_network(c) <span class="k">for</span> c <span class="k">in</span> tree]          <span class="c"># raises on misaligned blocks</span>
+    <span class="k">for</span> i, a <span class="k">in</span> enumerate(nets):
+        <span class="k">if</span> parent: <span class="k">assert</span> a.subnet_of(parent), f<span class="s">"{a} not inside {parent}"</span>
+        <span class="k">for</span> b <span class="k">in</span> nets[i + 1:]:
+            <span class="k">assert</span> <span class="k">not</span> a.overlaps(b), f<span class="s">"{a} overlaps {b}"</span>
+    <span class="k">for</span> cidr, child <span class="k">in</span> tree.items():
+        <span class="k">if</span> isinstance(child, dict):
+            check(child, ip.ip_network(cidr), path + <span class="s">"/"</span> + cidr)
+
+<span class="k">def</span> next_free(parent, used, prefix):
+    used = [ip.ip_network(u) <span class="k">for</span> u <span class="k">in</span> used]
+    <span class="k">for</span> cand <span class="k">in</span> ip.ip_network(parent).subnets(new_prefix=prefix):
+        <span class="k">if</span> <span class="k">not</span> any(cand.overlaps(u) <span class="k">for</span> u <span class="k">in</span> used):
+            <span class="k">return</span> cand
+
+check(PLAN)
+print(<span class="s">"plan OK"</span>)
+fra = PLAN[<span class="s">"10.0.0.0/8"</span>][<span class="s">"10.16.0.0/12"</span>]
+print(<span class="s">"next /16 in Frankfurt:"</span>, next_free(<span class="s">"10.16.0.0/12"</span>, fra, 16))</code></pre>
+
+<ol class="steps">
+  <li><strong>Run it.</strong> <code>python3 plan.py</code> prints <code>plan OK</code> and the next free <code>/16</code>. Why is it <code>10.19.0.0/16</code> and not <code>10.21.0.0/16</code>?</li>
+  <li><strong>Break it three ways</strong> and read each error: add <code>"10.20.0.0/17": "test"</code> to Frankfurt (overlap); add <code>"10.40.0.0/16": "oops"</code> to Frankfurt (outside its parent); add <code>"10.36.0.0/12"</code> at the top (misaligned).</li>
+  <li><strong>Reserve on purpose.</strong> Mark <code>10.19.0.0/16</code> as <code>"spare"</code> so <code>next_free</code> skips it, as Larder's plan does.</li>
+  <li><strong>Plan a city.</strong> Add a <code>"stores"</code> subtree with one <code>/16</code> per city and allocate Antwerp with <code>next_free</code>.</li>
+  <li><strong>Make it a test.</strong> Turn <code>check(PLAN)</code> into a test that runs in CI whenever someone edits the plan. That's the review step an IPAM tool enforces.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Write the plan's leaves out as a Terraform variables file (<code>vpc_cidrs = { prod = "10.20.0.0/16", … }</code>) so infrastructure code reads its ranges from the tested plan instead of typing them.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s10-9"><span class="n">10.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Every team picks its own range</td><td>Overlaps appear the day two teams need to connect.</td><td>One plan, one allocator (IPAM).</td></tr>
+      <tr><td>Using the defaults (<code>172.31.0.0/16</code>, <code>10.0.0.0/16</code>)</td><td>Every default VPC and tutorial overlaps with yours.</td><td>Pick ranges from your plan; delete unused default VPCs.</td></tr>
+      <tr><td>Ranges allocated in no particular order</td><td>No summarisation; route tables grow with every VPC.</td><td>Hierarchical, aligned blocks by location then environment.</td></tr>
+      <tr><td>Sizing for today</td><td>Renumbering, or a patchwork of secondary ranges.</td><td>Size for years; addresses cost nothing.</td></tr>
+      <tr><td>Planning only the cloud</td><td>Offices, stores and VPN users collide with VPCs.</td><td>Plan everything that will ever be routed together.</td></tr>
+      <tr><td>Routing to a partner with an overlapping range</td><td>Parts of both networks become unreachable.</td><td>PrivateLink-style service endpoints, or NAT.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum10">
+  <h2 class="sec" id="sum10"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>A good address plan has <strong>no overlap</strong>, <strong>room to grow</strong> and a <strong>hierarchy</strong> that lets one route cover many networks.</li>
+    <li>Size from accounts × environments × regions, with each VPC sized from its tiers and zones, then double it.</li>
+    <li>Divide by location first, then environment, then tier and zone, in aligned blocks.</li>
+    <li>Enforce the plan with <strong>IPAM</strong> pools instead of a spreadsheet.</li>
+    <li>When a VPC runs out: secondary ranges, tighter packing, non-routed pod ranges, or IPv6. You can grow, never shrink.</li>
+    <li>For partners with overlapping ranges, expose services privately instead of routing networks together.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Address plan</dt><dd>The written decision of which ranges are used for what.</dd>
+    <dt>Summarisation</dt><dd>Covering many networks with one shorter-prefix route.</dd>
+    <dt>IPAM</dt><dd>A tool that holds the plan as pools and allocates ranges from it.</dd>
+    <dt>Pool</dt><dd>A block in an IPAM tree, with rules for what can be allocated from it.</dd>
+    <dt>Secondary CIDR</dt><dd>An extra range added to an existing VPC.</dd>
+    <dt>VPC sharing</dt><dd>One central VPC whose subnets are shared with other accounts.</dd>
+    <dt>Dual stack</dt><dd>Every network has both IPv4 and IPv6 ranges.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Larder opens stores in a seventh city. Using Table 10.2, which range do they get, and what changes in Frankfurt's route tables? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>The next <code>/16</code> in <code>10.8.0.0/13</code> after the existing cities, for example <code>10.14.0.0/16</code> if six are used (<code>10.8</code>–<code>10.13</code>). Nothing changes in Frankfurt: the existing route for <code>10.8.0.0/13</code> already covers it, and with BGP the store's route is learned anyway. An eighth city still fits; a ninth would need a new block.</p></details>
+    </li>
+    <li>
+      <p>Why divide by location before environment, rather than the other way round? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Routing follows location: offices, stores and other regions reach a region through one path, so a single block per region keeps routes short. Dividing by environment first would scatter each region's VPCs across several blocks and need more routes everywhere.</p></details>
+    </li>
+    <li>
+      <p>An EKS cluster in a <code>/16</code> VPC is running out of addresses. Name two fixes that don't involve a new VPC. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Any two of: add a secondary CIDR and new subnets for pods; give pods a non-routed range from <code>100.64.0.0/10</code> (custom networking); use prefix delegation to reduce waste; move pods to IPv6.</p></details>
+    </li>
+    <li>
+      <p>A partner overlaps your production range and needs to call one API. Why is PrivateLink better than a VPN with NAT here? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>PrivateLink exchanges no routes, so overlap doesn't matter, and the partner can reach only that one service. A VPN with NAT works but is more complex, joins the networks more broadly, and needs translation rules maintained on at least one side.</p></details>
+    </li>
+    <li>
+      <p>A colleague says “we're moving to IPv6, so we don't need an address plan”. What do you answer? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Scarcity goes away, but you still need to know which prefix belongs to which VPC and region for routing, firewall rules, troubleshooting and summarisation. And you'll run IPv4 alongside for years, so its plan still matters.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/vpc/latest/ipam/what-it-is-ipam.html">What is IPAM?</a> and <a href="https://docs.aws.amazon.com/vpc/latest/userguide/vpc-cidr-blocks.html">VPC CIDR blocks</a>, including the rules for secondary ranges.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/virtual-network-manager/concept-ip-address-management">IP address management in Virtual Network Manager</a>.</li>
+    <li>Google Cloud: <a href="https://cloud.google.com/vpc/docs/internal-ranges">Internal ranges</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="#ch9">9 · Firewalls in the cloud</a></div>
+  <div><span>Next</span><a href="#ch11">11 · Connecting VPCs</a></div>
+</nav>

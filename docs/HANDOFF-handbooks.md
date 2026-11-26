@@ -1,8 +1,8 @@
 # Handoff: Jef's Handbooks (Series 3). Draft for review
 
 Status as of 2026-11-26: **approved and in progress.** Owner decisions: title OK, AWS as the main provider, Larder as
-the running example, 25 chapters, labs may cost up to about $1 (with clean-up steps). Written: Part I (chapters 1–6)
-and chapter 8. The book is on the landing page (Series 3 shelf) and in `journals.json` (chapter PDFs + whole-book PDF).
+the running example, 25 chapters, labs may cost up to about $1 (with clean-up steps). Written: Parts I and II
+(chapters 1–10). The book is on the landing page (Series 3 shelf) and in `journals.json` (chapter PDFs + whole-book PDF).
 
 - Contents page: `public/handbooks/cloud-networking/index.html`
 - Sample chapter: `public/handbooks/cloud-networking/08-inside-a-vpc.html`
@@ -89,7 +89,10 @@ Full chapter summaries and topic lists: `content/handbooks/cloud-networking/book
 
 ### New Larder facts (Series 3)
 
-Company plan inside `10.0.0.0/8`: office Amsterdam `10.1.0.0/24`; Amsterdam stores `10.8.0.0/16` (Noord `10.8.3.0/24`,
+Company plan inside `10.0.0.0/8` (ch. 10): offices `10.0.0.0/13`, stores `10.8.0.0/13` (one /16 per city),
+Frankfurt `10.16.0.0/12` (hub `10.16`, dev `10.17`, staging `10.18`, spare `10.19`, prod `10.20`), second region
+`10.32.0.0/12`, pods `100.64.0.0/10`; Korenwolf also uses `10.20.0.0/16` → PrivateLink (ch. 10, 12).
+Office Amsterdam `10.1.0.0/24`; Amsterdam stores `10.8.0.0/16` (Noord `10.8.3.0/24`,
 router `10.8.3.1`); Rotterdam stores `10.9.0.0/16`; store VPNs use BGP after the Rotterdam missing-route incident (ch. 4).
 Jasper's first VPC was `172.17.0.0/16` and clashed with Docker (ch. 2). Public API `api.larder.example` (TTL incident,
 ch. 5); webhooks `hooks.larder.example` (missing intermediate, ch. 6); payment client resets via NAT idle timeout (ch. 3).
@@ -105,7 +108,12 @@ NAT Elastic IP `198.51.100.7` (StockPilot allow-lists it). Chapter 9 should rete
 ## 5. Progress and checklist
 
 1. [x] Landing page: Series 3 shelf; `journals.json` entries for chapter and whole-book PDFs.
-2. [x] Part I: chapters 1–6. [x] Chapter 8.
-3. [ ] Part II: chapters 7, 9, 10. Then Parts III–VI in order, then the appendices.
-4. Per chapter: figures checked at desktop and 375 px, light and dark (no horizontal overflow); labs not yet run in a
+2. [x] Part I: chapters 1–6. [x] Part II: chapters 7–10.
+3. [ ] Part III (11–15), then Parts IV–VI in order, then the appendices. Forward references already promise:
+   ch. 11 transit gateway appliance mode and SG referencing; ch. 12 builds Larder's PrivateLink endpoint service for
+   Korenwolf (NLB + endpoint service); ch. 13 BGP for store VPNs and MTU; ch. 19 pods in `100.64.0.0/10`;
+   ch. 22 flow logs and Reachability Analyzer; ch. 25 second region (`10.32.0.0/12`) and DNS failover.
+4. Lab code: the Python labs (ch. 2, 4, 10) were run and print what the text says. The Terraform labs (ch. 8, 9)
+   were not run or validated (Terraform wasn't available in the session); run `terraform validate` and one real apply.
+5. Per chapter: figures checked at desktop and 375 px, light and dark (no horizontal overflow); labs not yet run in a
    real account (owner or a later session should run the AWS labs once); links checked.
