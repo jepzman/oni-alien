@@ -224,7 +224,7 @@
 <p>Trust isn't a feeling; it's configuration you can read. Somewhere there's a setting that says “accept tokens signed by this key, issued by this provider, meant for this app”. When that setting is too broad (any issuer, any audience), anyone who can get a token from <em>somewhere</em> gets in. Two places you'll meet this soon:</p>
 <ul>
   <li><strong>Federation</strong>: Larder trusts Korenwolf's identity provider to vouch for Korenwolf's office managers, so they don't need Larder passwords (<a href="#chapter-05-saml-federation">Chapter 5</a>).</li>
-  <li><strong>Role trust policies</strong> on AWS, which say who may assume a role (<a href="index.html#ch8">Chapter 8</a>). A trust policy that's too broad is one of the most serious IAM mistakes there is.</li>
+  <li><strong>Role trust policies</strong> on AWS, which say who may assume a role (<a href="#chapter-08-users-roles">Chapter 8</a>). A trust policy that's too broad is one of the most serious IAM mistakes there is.</li>
 </ul>
 
 <div class="box box-key">
@@ -254,7 +254,7 @@
 
 <aside class="box box-story" aria-label="Larder, solved">
   <p class="label">At Larder: what Eli does instead</p>
-  <p>Eli can't find out who changed the backups, and he stops trying: there's no answer in the data, and asking six people to accuse each other helps nobody. The useful question is how to make the next log line name a person, and make the change impossible without deliberate effort. His plan, which the rest of this book carries out: an identity for every engineer through single sign-on (<a href="index.html#ch12">Chapter 12</a>); admin access only when needed, with approval (<a href="index.html#ch14">Chapter 14</a>); and a guardrail that denies shortening backup retention in production, whoever asks (<a href="index.html#ch10">Chapter 10</a> and <a href="index.html#ch20">Chapter 20</a>). The <code>ops</code> user's password is changed that afternoon, and the user is deleted in Chapter 12.</p>
+  <p>Eli can't find out who changed the backups, and he stops trying: there's no answer in the data, and asking six people to accuse each other helps nobody. The useful question is how to make the next log line name a person, and make the change impossible without deliberate effort. His plan, which the rest of this book carries out: an identity for every engineer through single sign-on (<a href="index.html#ch12">Chapter 12</a>); admin access only when needed, with approval (<a href="index.html#ch14">Chapter 14</a>); and a guardrail that denies shortening backup retention in production, whoever asks (<a href="#chapter-10-evaluation">Chapter 10</a> and <a href="index.html#ch20">Chapter 20</a>). The <code>ops</code> user's password is changed that afternoon, and the user is deleted in Chapter 12.</p>
 </aside>
 
 <div class="box box-warn">
@@ -704,7 +704,7 @@ jasper logs:Read       logs/dispatch  unauthenticated</code></pre>
       <tr><td>Where people sign in</td><td>IAM Identity Center, or your IdP through it</td><td>Microsoft Entra ID</td><td>Google accounts (Cloud Identity / Workspace), or your IdP</td></tr>
       <tr><td>Phishing-resistant options</td><td>FIDO2 security keys and passkeys</td><td>passkeys, FIDO2 keys, Windows Hello for Business, certificate-based authentication</td><td>passkeys and security keys</td></tr>
       <tr><td>Enforcing it</td><td>MFA settings in Identity Center; IAM conditions on <code>aws:MultiFactorAuthPresent</code></td><td>Conditional Access with the “phishing-resistant MFA” authentication strength</td><td>2-Step Verification enforcement, including “security keys only”, per organisational unit</td></tr>
-      <tr><td>The account's own superuser</td><td>root user: MFA required, ideally a security key (<a href="index.html#ch7">Chapter 7</a>)</td><td>Global Administrators in Entra ID</td><td>super administrators in Cloud Identity / Workspace</td></tr>
+      <tr><td>The account's own superuser</td><td>root user: MFA required, ideally a security key (<a href="#chapter-07-account-root">Chapter 7</a>)</td><td>Global Administrators in Entra ID</td><td>super administrators in Cloud Identity / Workspace</td></tr>
     </tbody>
   </table>
 </div>
@@ -2411,7 +2411,7 @@ a Larder email   rejected: email outside korenwolf.example</code></pre>
   <li><strong><span class="term">Least privilege</span>:</strong> each principal gets the access its job needs, and no more, for no longer than needed. Every model can express it; only discipline achieves it.</li>
   <li><strong>Default deny:</strong> no rule, no access (<a href="#chapter-01-who-and-what">Chapter 1</a>). Missing attributes and broken relationships deny.</li>
   <li><strong><span class="term">Separation of duties</span>:</strong> split powerful tasks so one person can't complete them alone. The person who adds a supplier shouldn't approve its payments; the engineer who writes a production change shouldn't be the only reviewer.</li>
-  <li><strong>Deny overrides:</strong> a small number of explicit “never” rules (no one deletes backups; nothing leaves the EU) that win over any allow. AWS builds this into policy evaluation (<a href="index.html#ch10">Chapter 10</a>).</li>
+  <li><strong>Deny overrides:</strong> a small number of explicit “never” rules (no one deletes backups; nothing leaves the EU) that win over any allow. AWS builds this into policy evaluation (<a href="#chapter-10-evaluation">Chapter 10</a>).</li>
   <li><strong>Time limits:</strong> temporary needs get access that expires by itself. Tomás's July cover should have ended in July without anyone remembering.</li>
 </ul>
 
@@ -2656,6 +2656,813 @@ hanna      may view order B-1042: True</code></pre>
 
 
 </article>
+<article class="sheet chapter" id="chapter-07-account-root">
+<header class="opener">
+  <p class="eyebrow">Part II · IAM on AWS</p>
+  <p class="chno">7</p>
+  <h1>The AWS account and its root user</h1>
+  <p class="promise">Everything in AWS lives inside an account, and every account starts with one identity that can do anything in it, including closing it: the root user. This chapter explains what an account is as a security boundary, what the root user can do that nobody else can, and how to lock it away so well that you never use it, while still being able to get it back on the day you need it.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain what an AWS account isolates, and why it's the strongest boundary AWS offers.</li>
+      <li>List the tasks only the root user can do.</li>
+      <li>Secure a root user: no keys, strong MFA, a company-owned email and phone, monitored sign-ins.</li>
+      <li>Recover root access when the email, password or MFA device is lost.</li>
+      <li>Read a credential report and find the risky credentials in an account.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Principals and credentials (<a href="#chapter-01-who-and-what">Chapter 1</a>); MFA and security keys (<a href="#chapter-02-proving-identity">Chapter 2</a>).</li>
+      <li>ARNs (<a href="#chapter-09-policies">Chapter 9</a>, 9.4) help; this chapter recaps what it needs.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 35 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, AWS CLI and Python 3, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 7.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>On Monday 23 November 2026, a week after the backup incident (<a href="#chapter-01-who-and-what">Chapter 1</a>), Eli starts his audit with the account itself: the one Jasper opened in March 2024, which still runs everything in production. The credential report has bad news on its first line. The root user has an active access key, created minutes after the account itself, last used in March 2025.</p>
+  <p>Then it gets worse. The root user's email address is <code>jasper@larder.example</code>, a mailbox that was switched off when Jasper left in August 2025. Its MFA device was an app on Jasper's phone, now wiped. Nobody knows the password. Larder's most powerful identity has a working key that nobody controls, and no working way in for anyone who should. Section 7.8 shows how Eli got it back.</p>
+</aside>
+
+<!-- ======================================================== 7.1 -->
+<h2 class="sec" id="s7-1"><span class="n">7.1</span>What an account is</h2>
+
+<p class="lead">An <span class="term">AWS account</span> is a container for resources, identities and a bill. Each has a 12-digit <strong>account ID</strong> (<code>111122223333</code> in this book's examples) and is isolated from every other account by default:</p>
+<ul>
+  <li><strong>Resources:</strong> a bucket, database or VPC belongs to exactly one account.</li>
+  <li><strong>Identities:</strong> IAM users and roles exist inside one account, and by default can only touch that account's resources.</li>
+  <li><strong>Permissions:</strong> nothing crosses an account boundary unless <em>both</em> sides allow it (<a href="#chapter-10-evaluation">Chapter 10</a>, <a href="index.html#ch21">Chapter 21</a>).</li>
+  <li><strong>Quotas and billing:</strong> limits (such as the number of VPCs) and costs are per account.</li>
+</ul>
+
+<p>That makes the account AWS's strongest security boundary, which is why companies use many of them: one per environment, per team, per workload (<a href="index.html#ch20">Chapter 20</a>). A mistake or a breach in the development account then can't reach production. Larder has two: Jasper's original account, which runs production (and still holds the network hub from Handbook 1), and a second account for development and staging that Eli opened in 2025. They aren't part of an organisation yet.</p>
+
+<figure class="wide" id="fig7-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig7-1-t fig7-1-d">
+      <title id="fig7-1-t">What lives inside an AWS account</title>
+      <desc id="fig7-1-d">Two accounts side by side. Larder's production account, 111122223333, contains the root user at the top, then IAM users and roles, then resources such as buckets, databases and VPCs, and its own bill and quotas. A second account, 444455556666, contains the same layers separately. Between them is the account boundary: nothing crosses it unless both sides allow it.</desc>
+      <rect class="vpc" x="12" y="14" width="330" height="222" rx="8"/>
+      <text class="t-label" x="28" y="38">account 111122223333 · production</text>
+      <rect class="node-accent" x="28" y="52" width="298" height="38" rx="4"/><text class="t-label on-accent" x="177" y="76" text-anchor="middle">root user (email + password)</text>
+      <rect class="node" x="28" y="100" width="298" height="38" rx="4"/><text class="t-label" x="177" y="124" text-anchor="middle">IAM users and roles</text>
+      <rect class="pub" x="28" y="148" width="298" height="38" rx="4"/><text class="t-label" x="177" y="172" text-anchor="middle">resources: buckets, databases, VPCs …</text>
+      <rect class="priv" x="28" y="196" width="298" height="28" rx="4"/><text class="t-small" x="177" y="215" text-anchor="middle">its own bill and quotas</text>
+      <rect class="vpc" x="418" y="14" width="330" height="222" rx="8"/>
+      <text class="t-label" x="434" y="38">account 444455556666 · staging</text>
+      <rect class="node-accent" x="434" y="52" width="298" height="38" rx="4"/><text class="t-label on-accent" x="583" y="76" text-anchor="middle">its own root user</text>
+      <rect class="node" x="434" y="100" width="298" height="38" rx="4"/><text class="t-label" x="583" y="124" text-anchor="middle">its own IAM users and roles</text>
+      <rect class="pub" x="434" y="148" width="298" height="38" rx="4"/><text class="t-label" x="583" y="172" text-anchor="middle">its own resources</text>
+      <rect class="priv" x="434" y="196" width="298" height="28" rx="4"/><text class="t-small" x="583" y="215" text-anchor="middle">its own bill and quotas</text>
+      <path class="wire-dash" d="M380 14 V236"/>
+      <text class="t-small halo-priv" x="380" y="126" text-anchor="middle" transform="rotate(-90 380 126)">nothing crosses unless both allow</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 7.1</b> An account is a box around resources, identities and a bill. Its root user sits above everything inside it.</figcaption>
+</figure>
+
+<aside class="side"><b>Is an account ID secret?</b>No: it appears in every ARN, and AWS doesn't treat it as a secret. But it tells an attacker which account to target, so don't publish it needlessly. Never rely on its secrecy.</aside>
+
+<!-- ======================================================== 7.2 -->
+<h2 class="sec" id="s7-2"><span class="n">7.2</span>The root user</h2>
+
+<p>When you create an account, you give an email address and a password. That pair is the <span class="term">root user</span>: an identity with complete, unrestricted access to everything in the account. Three properties make it special:</p>
+<ul>
+  <li><strong>IAM policies can't limit it.</strong> There's no policy you can attach to root. The only thing that restricts a root user is an organisation-level guardrail (an SCP) when the account is a member of an AWS Organization (<a href="index.html#ch20">Chapter 20</a>).</li>
+  <li><strong>It can do a few things no one else can</strong> (Table 7.1).</li>
+  <li><strong>It's tied to an email address</strong>, and whoever controls that mailbox can reset the password.</li>
+</ul>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 7.1 · Tasks that need the root user (at the time of writing)</caption>
+    <thead><tr><th>Task</th><th>When you'd need it</th></tr></thead>
+    <tbody>
+      <tr><td>Change the root email address or password</td><td>handing over or recovering the account</td></tr>
+      <tr><td>Create or delete root access keys</td><td>only ever to delete them</td></tr>
+      <tr><td>Close the account</td><td>end of life</td></tr>
+      <tr><td>Restore IAM permissions</td><td>when the only IAM administrator has locked themselves out</td></tr>
+      <tr><td>Remove an S3 bucket policy or SQS queue policy that denies everyone</td><td>after a policy mistake locks out all IAM principals</td></tr>
+      <tr><td>Activate IAM access to the Billing console</td><td>once, when setting up an account</td></tr>
+      <tr><td>Configure MFA delete on an S3 bucket</td><td>protecting critical buckets from deletion</td></tr>
+      <tr><td>Register as a seller in the Reserved Instance Marketplace; sign up for GovCloud</td><td>rarely</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>That's the whole list. Everything else, from creating users to deleting databases, can and should be done by IAM principals with the right permissions. The root user is for emergencies and a handful of account-level chores.</p>
+
+<!-- ======================================================== 7.3 -->
+<h2 class="sec" id="s7-3"><span class="n">7.3</span>Locking it away</h2>
+
+<p>Because it can't be limited, the root user must be impossible to use casually and hard to steal. The checklist:</p>
+
+<ol class="steps">
+  <li><strong>No access keys.</strong> Root keys give unlimited programmatic access and can't be restricted. Delete any that exist, after checking when they were last used and by what.</li>
+  <li><strong>Phishing-resistant MFA, more than one device.</strong> Register two or more FIDO2 security keys or passkeys (an account's root user can have up to eight MFA devices), kept in different places. AWS now requires MFA for root users in most accounts.</li>
+  <li><strong>A long, random password</strong> in the company's password vault, ideally readable only by two people together.</li>
+  <li><strong>A company-owned email address that's a group,</strong> such as <code>aws-root@larder.example</code>, delivered to several trusted people. Never a personal address, and never one person's work mailbox, which disappears when they leave.</li>
+  <li><strong>A company-owned phone number</strong> as the account's primary contact, because AWS uses it to verify you during recovery (7.4).</li>
+  <li><strong>Alternate contacts</strong> for billing, operations and security, so AWS's security notices reach a team, not a former employee.</li>
+  <li><strong>Alerts on root sign-in.</strong> Any use of root should page someone (<a href="index.html#ch23">Chapter 23</a>). If root is used, it should be because you planned to.</li>
+</ol>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Treat the root user like the deeds to a building: kept safe, owned by the company, needed rarely, and missed immediately if anyone touches them.</p>
+</div>
+
+<!-- ======================================================== 7.4 -->
+<h2 class="sec" id="s7-4"><span class="n">7.4</span>Getting root back</h2>
+
+<p>Root access is lost more often than it's stolen: the person who set it up leaves, a phone is replaced, a mailbox is closed. AWS's recovery paths all depend on the account's contact details, which is why 7.3 insists they belong to the company:</p>
+<ul>
+  <li><strong>Lost password:</strong> “Forgot password” on the root sign-in page sends a reset link to the root email address.</li>
+  <li><strong>Lost MFA device:</strong> the sign-in page offers to sign in with <em>alternative factors</em>: AWS verifies the root email address, then calls the account's primary contact phone number.</li>
+  <li><strong>Lost email or phone too:</strong> AWS Support can help, but expect identity checks and time.</li>
+</ul>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: root on someone's personal email</p>
+  <p>If the root email is a founder's personal address, or a freelancer's, that person owns your account in every way that matters. They can reset the password, and you can't. Moving root to a company group address is one of the first jobs in any AWS account review.</p>
+</div>
+
+<!-- ======================================================== 7.5 -->
+<h2 class="sec" id="s7-5"><span class="n">7.5</span>Seeing every credential: the credential report</h2>
+
+<p>The <span class="term">credential report</span> is a CSV file listing every IAM user in the account, plus the root user, with the state of each credential: whether a password is set and when it was last used, whether MFA is on, and for each access key when it was created and last used, in which region and for which service. It's generated on request (at most once every four hours) and is the fastest way to see what's lying around in an account. The lab reads one.</p>
+
+<p>Two other quick views help: <code>aws iam get-account-summary</code> reports whether the root user has MFA (<code>AccountMFAEnabled</code>) and access keys (<code>AccountAccessKeysPresent</code>); and the IAM console's dashboard shows the same as security recommendations.</p>
+
+<!-- ======================================================== 7.6 -->
+<h2 class="sec" id="s7-6"><span class="n">7.6</span>Root in an organisation</h2>
+
+<p>When accounts belong to an <strong>AWS Organization</strong> (<a href="index.html#ch20">Chapter 20</a>), root works differently:</p>
+<ul>
+  <li>The <strong>management account</strong>, which pays for and governs the organisation, has a root user that nothing can restrict. Secure it most carefully of all, and run no workloads in that account.</li>
+  <li>The root users of <strong>member accounts</strong> are limited by service control policies, like every other principal there.</li>
+  <li>With <strong>centralised root access</strong>, the organisation can remove root credentials (password, keys, MFA) from member accounts entirely. When a root-only task is needed, such as unlocking a bucket policy that denies everyone, an administrator in the management account performs it through a short-lived, task-scoped root session (<code>sts:AssumeRoot</code>). New member accounts then never have root credentials at all.</li>
+</ul>
+
+<figure class="wide" id="fig7-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 200" role="img" aria-labelledby="fig7-2-t fig7-2-d">
+      <title id="fig7-2-t">Root users in a standalone account and in an organisation</title>
+      <desc id="fig7-2-d">Left: a standalone account whose root user has unrestricted access, with email, password and MFA. Right: an organisation. The management account's root user is unrestricted and must be secured most carefully. Member accounts sit under service control policies; with centralised root access, their root users have no credentials, and root-only tasks are done from the management account through a short task-scoped session.</desc>
+      <defs><marker id="c7ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="vpc" x="12" y="14" width="230" height="172" rx="8"/>
+      <text class="t-label" x="28" y="38">standalone account</text>
+      <rect class="node-accent" x="28" y="54" width="198" height="56" rx="4"/>
+      <text class="t-label on-accent" x="127" y="78" text-anchor="middle">root: unrestricted</text>
+      <text class="t-small on-accent" x="127" y="98" text-anchor="middle">email · password · MFA</text>
+      <text class="t-small" x="127" y="140" text-anchor="middle">only you can protect it</text>
+      <rect class="region" x="282" y="14" width="466" height="172" rx="8"/>
+      <text class="t-label" x="298" y="38">organisation</text>
+      <rect class="node-accent" x="298" y="54" width="190" height="56" rx="4"/>
+      <text class="t-label on-accent" x="393" y="78" text-anchor="middle">management account</text>
+      <text class="t-small on-accent" x="393" y="98" text-anchor="middle">root: unrestricted</text>
+      <rect class="priv" x="540" y="46" width="192" height="126" rx="6"/>
+      <text class="t-small" x="552" y="64">member accounts, under SCPs</text>
+      <rect class="node" x="552" y="74" width="168" height="34" rx="4"/><text class="t-small" x="636" y="95" text-anchor="middle">root: no credentials</text>
+      <rect class="node" x="552" y="118" width="168" height="34" rx="4"/><text class="t-small" x="636" y="139" text-anchor="middle">root: no credentials</text>
+      <path class="wire-accent" d="M490 90 H548" marker-end="url(#c7ah)"/>
+      <text class="t-small" x="393" y="140" text-anchor="middle">task-scoped root session</text>
+      <text class="t-small" x="393" y="156" text-anchor="middle">(sts:AssumeRoot) when needed</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 7.2</b> In an organisation, only the management account keeps a fully powerful root user. Member accounts can have no root credentials at all.</figcaption>
+</figure>
+
+<!-- ======================================================== 7.7 -->
+<h2 class="sec" id="s7-7"><span class="n">7.7</span>Across providers</h2>
+
+<p>Azure and Google Cloud have no single “root user” per subscription or project, but they have the same problem one level up: a few all-powerful administrator identities that must be locked away and never lost.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 7.2 · The all-powerful identities at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Boundary</td><td>account</td><td>tenant (directory); subscriptions inside it</td><td>organisation; projects inside it</td></tr>
+      <tr><td>Most powerful identity</td><td>root user of each account (management account's is unrestricted)</td><td>Global Administrator in Entra ID, who can elevate to manage every subscription</td><td>super administrator in Cloud Identity / Workspace</td></tr>
+      <tr><td>Recommended practice</td><td>no keys, FIDO2 MFA, group email, centralised root access for members</td><td>two cloud-only <strong>emergency access</strong> accounts with FIDO2 keys, monitored; few Global Administrators</td><td>dedicated super admin accounts with security keys, not used day to day; a backup super admin</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>A Global Administrator can turn on <strong>Elevate access</strong> to become User Access Administrator over every subscription in the tenant. Keep Global Administrators to a handful, give them separate admin accounts from their daily ones, and keep two <strong>emergency access</strong> (“break-glass”) accounts that don't depend on federation or a single MFA method, with alerts on every sign-in.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p><strong>Super administrators</strong> of the Cloud Identity or Workspace account can grant themselves any role in the organisation. Google recommends using them only for administration, protecting them with security keys, keeping at least one backup, and granting the day-to-day <em>Organization Administrator</em> role to ordinary accounts instead.</p>
+</div>
+
+<!-- ======================================================== 7.8 -->
+<h2 class="sec" id="s7-8"><span class="n">7.8</span>At Larder: getting root back</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Larder still owns the domain, so the fix started with email: on 24 November, Larder's IT administrator restored <code>jasper@larder.example</code> as an alias delivering to a new group, <code>aws-root@larder.example</code> (Eli, Femke and Marco). A password reset link arrived within a minute. For MFA, Eli used <em>sign in with alternative factors</em>: AWS verified the email address, then called the account's primary contact number, which turned out to be Femke's mobile, from the week the founders opened the account. Femke read out the code.</p>
+  <p>Once signed in, Eli and Femke worked through 7.3 together. The root access key had last been used on 4 March 2025, by S3, which matched a nightly export script on an old virtual machine retired that month; the key was deleted. Two FIDO2 security keys were registered, one for the office safe and one kept by Femke. The root email became <code>aws-root@larder.example</code>, the primary phone a company number, and the alternate contacts the platform team's address. The new password went into the company vault. Root hasn't been used since; when the account becomes Larder's management account (<a href="index.html#ch20">Chapter 20</a>), it will matter even more.</p>
+</aside>
+
+<!-- ======================================================== 7.9 -->
+<h2 class="sec" id="s7-9"><span class="n">7.9</span>Lab: audit an account's credentials</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 7 · Root status and the credential report</p>
+  <p><strong>You'll</strong> check your account's root user from the CLI, download its credential report, and run a script that lists what needs fixing, first on a sample shaped like Larder's account, then on yours. <strong>You need</strong> the AWS CLI v2 with read access to IAM (the <code>IAMReadOnlyAccess</code> policy is enough) and Python 3. <strong>Cost:</strong> free; nothing is created.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Check root from the CLI.</strong>
+<pre><code>aws iam get-account-summary \
+  --query 'SummaryMap.{RootMFA: AccountMFAEnabled, RootKeys: AccountAccessKeysPresent}'</code></pre>
+  You want <code>RootMFA</code> to be <code>1</code> and <code>RootKeys</code> to be <code>0</code>. If either isn't, fix it first, signed in as root, following 7.3.</li>
+  <li><strong>Check the contacts.</strong> <code>aws account get-alternate-contact --alternate-contact-type SECURITY</code> shows who receives AWS's security notices. An error saying none is set means nobody does.</li>
+  <li><strong>Save this script</strong> as <code>credcheck.py</code>:
+<p class="code-title"><span>credcheck.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># credcheck.py · read an IAM credential report and list what needs fixing</span>
+<span class="k">import</span> csv, sys
+<span class="k">from</span> datetime <span class="k">import</span> datetime, timezone
+
+TODAY = datetime(2026, 11, 23, 12, 0, tzinfo=timezone.utc)  <span class="c"># use datetime.now(timezone.utc) for real</span>
+STALE = 90                                                 <span class="c"># days</span>
+
+<span class="k">def</span> age(value):
+    <span class="s">"""Days since a timestamp in the report, or None for N/A, not_supported, no_information."""</span>
+    <span class="k">try</span>:
+        <span class="k">return</span> (TODAY - datetime.fromisoformat(value)).days
+    <span class="k">except</span> ValueError:
+        <span class="k">return</span> None
+
+<span class="k">def</span> findings(row):
+    user, out = row[<span class="s">"user"</span>], []
+    <span class="k">if</span> user == <span class="s">"&lt;root_account&gt;"</span>:
+        <span class="k">if</span> row[<span class="s">"access_key_1_active"</span>] == <span class="s">"true"</span> <span class="k">or</span> row[<span class="s">"access_key_2_active"</span>] == <span class="s">"true"</span>:
+            out.append(<span class="s">"ROOT has an active access key: delete it"</span>)
+        <span class="k">if</span> row[<span class="s">"mfa_active"</span>] != <span class="s">"true"</span>:
+            out.append(<span class="s">"ROOT has no MFA"</span>)
+        used = age(row[<span class="s">"password_last_used"</span>])
+        <span class="k">if</span> used <span class="k">is not</span> None <span class="k">and</span> used &lt; STALE:
+            out.append(f<span class="s">"root signed in {used} days ago: find out why"</span>)
+        <span class="k">return</span> out
+    <span class="k">if</span> row[<span class="s">"password_enabled"</span>] == <span class="s">"true"</span> <span class="k">and</span> row[<span class="s">"mfa_active"</span>] != <span class="s">"true"</span>:
+        out.append(<span class="s">"console password without MFA"</span>)
+    <span class="k">if</span> row[<span class="s">"password_enabled"</span>] == <span class="s">"true"</span> <span class="k">and</span> (age(row[<span class="s">"password_last_used"</span>]) <span class="k">or</span> 0) &gt; STALE:
+        out.append(f<span class="s">"password unused for {age(row['password_last_used'])} days"</span>)
+    <span class="k">for</span> n <span class="k">in</span> (<span class="s">"1"</span>, <span class="s">"2"</span>):
+        <span class="k">if</span> row[f<span class="s">"access_key_{n}_active"</span>] != <span class="s">"true"</span>:
+            <span class="k">continue</span>
+        rotated, used = age(row[f<span class="s">"access_key_{n}_last_rotated"</span>]), age(row[f<span class="s">"access_key_{n}_last_used_date"</span>])
+        out.append(f<span class="s">"access key {n}: {rotated} days old, "</span>
+                   + (f<span class="s">"last used {used} days ago"</span> <span class="k">if</span> used <span class="k">is not</span> None <span class="k">else</span> <span class="s">"never used"</span>))
+    <span class="k">return</span> out
+
+path = sys.argv[1] <span class="k">if</span> len(sys.argv) &gt; 1 <span class="k">else</span> <span class="s">"sample-report.csv"</span>
+<span class="k">for</span> row <span class="k">in</span> csv.DictReader(open(path, newline=<span class="s">""</span>)):
+    <span class="k">for</span> f <span class="k">in</span> findings(row):
+        print(f<span class="s">"{row['user']:&lt;15} {f}"</span>)</code></pre></li>
+  <li><strong>Run it on Larder's sample.</strong> Save the six-line report below as <code>sample-report.csv</code> (real reports have the same 22 columns), then run <code>python3 credcheck.py</code>.
+<pre><code>user,arn,user_creation_time,password_enabled,password_last_used,password_last_changed,password_next_rotation,mfa_active,access_key_1_active,access_key_1_last_rotated,access_key_1_last_used_date,access_key_1_last_used_region,access_key_1_last_used_service,access_key_2_active,access_key_2_last_rotated,access_key_2_last_used_date,access_key_2_last_used_region,access_key_2_last_used_service,cert_1_active,cert_1_last_rotated,cert_2_active,cert_2_last_rotated
+&lt;root_account&gt;,arn:aws:iam::111122223333:root,2024-03-11T09:02:51+00:00,not_supported,2025-07-30T16:40:12+00:00,not_supported,not_supported,true,true,2024-03-11T09:20:05+00:00,2025-03-04T01:00:13+00:00,eu-central-1,s3,false,N/A,N/A,N/A,N/A,false,N/A,false,N/A
+ops,arn:aws:iam::111122223333:user/ops,2024-06-02T10:11:40+00:00,true,2026-11-12T22:13:58+00:00,2024-06-02T10:11:40+00:00,N/A,false,false,N/A,N/A,N/A,N/A,false,N/A,N/A,N/A,N/A,false,N/A,false,N/A
+deploy-bot,arn:aws:iam::111122223333:user/deploy-bot,2024-05-20T08:30:00+00:00,false,N/A,N/A,N/A,false,true,2024-05-20T08:31:12+00:00,2026-11-23T07:02:44+00:00,eu-central-1,ecs,false,N/A,N/A,N/A,N/A,false,N/A,false,N/A
+ben,arn:aws:iam::111122223333:user/ben,2024-09-02T08:00:00+00:00,true,2026-11-20T14:22:10+00:00,2026-02-01T09:00:00+00:00,N/A,true,false,N/A,N/A,N/A,N/A,false,N/A,N/A,N/A,N/A,false,N/A,false,N/A
+eli,arn:aws:iam::111122223333:user/eli,2025-01-13T08:00:00+00:00,true,2026-11-23T08:45:02+00:00,2025-11-03T10:00:00+00:00,N/A,true,true,2026-06-01T09:00:00+00:00,2026-11-22T19:10:00+00:00,eu-central-1,iam,false,N/A,N/A,N/A,N/A,false,N/A,false,N/A
+jasper,arn:aws:iam::111122223333:user/jasper,2024-03-11T09:30:00+00:00,true,2025-08-14T17:55:31+00:00,2024-03-11T09:30:00+00:00,N/A,false,true,2024-03-12T10:00:00+00:00,2025-06-19T23:01:00+00:00,eu-central-1,s3,false,N/A,N/A,N/A,N/A,false,N/A,false,N/A</code></pre>
+  Output:
+<pre><code>&lt;root_account&gt;  ROOT has an active access key: delete it
+ops             console password without MFA
+deploy-bot      access key 1: 917 days old, last used 0 days ago
+eli             access key 1: 175 days old, last used 0 days ago
+jasper          console password without MFA
+jasper          password unused for 465 days
+jasper          access key 1: 986 days old, last used 521 days ago</code></pre>
+  Every line is a decision. The root key goes (7.3). <code>ops</code> and <code>jasper</code> are <a href="#chapter-08-users-roles">Chapter 8</a>'s problem. <code>deploy-bot</code>'s two-and-a-half-year-old key is in daily use, so it can't just be deleted; <a href="index.html#ch17">Chapter 17</a> replaces it.</li>
+  <li><strong>Run it on your own account.</strong> Change <code>TODAY</code> to <code>datetime.now(timezone.utc)</code>, then:
+<pre><code>aws iam generate-credential-report             <span class="c"># repeat until "State": "COMPLETE"</span>
+aws iam get-credential-report --query Content --output text | base64 --decode &gt; report.csv
+python3 credcheck.py report.csv</code></pre>
+  On macOS, use <code>base64 -D</code>. The report holds no secrets, only metadata, but it's a map of your account's weak spots: delete it when you're done.</li>
+  <li><strong>Find root's recent activity.</strong> Root actions in the last 90 days appear in CloudTrail under the user name <code>root</code>:
+<pre><code>aws cloudtrail lookup-events --max-results 20 \
+  --lookup-attributes AttributeKey=Username,AttributeValue=root \
+  --query 'Events[].[EventTime, EventName]' --output table</code></pre>
+  In a well-run account this is empty, or shows only what you did on purpose.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Extend <code>findings</code> to flag users whose access key was never used but is older than seven days. Those are usually keys someone created “just in case”.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s7-10"><span class="n">7.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Root access keys</td><td>Unlimited, unrestrictable programmatic access for whoever finds them.</td><td>None, ever.</td></tr>
+      <tr><td>Root email on one person's mailbox</td><td>Access leaves with them, or stays with them.</td><td>A company group address.</td></tr>
+      <tr><td>One MFA device, on one phone</td><td>A lost phone locks you out; recovery depends on old contact details.</td><td>Two or more FIDO2 keys in different places.</td></tr>
+      <tr><td>Using root for daily work</td><td>Every action has unlimited blast radius and no attribution.</td><td>IAM roles through single sign-on; root only for Table 7.1.</td></tr>
+      <tr><td>No alternate contacts</td><td>AWS's security warnings reach nobody.</td><td>Security, operations and billing contacts set to team addresses.</td></tr>
+      <tr><td>Workloads in the management account</td><td>A compromise there controls the whole organisation.</td><td>Keep it for governance only (<a href="index.html#ch20">Chapter 20</a>).</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum7">
+  <h2 class="sec" id="sum7"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>An <strong>account</strong> isolates resources, identities, permissions, quotas and billing. It's AWS's strongest boundary.</li>
+    <li>The <strong>root user</strong> can do everything and can't be limited by IAM policies; only SCPs restrict it, in member accounts.</li>
+    <li>Only a short list of tasks needs root. Do everything else with IAM principals.</li>
+    <li>Lock root away: no keys, two or more FIDO2 keys, a vaulted password, a company group email and phone, alternate contacts, alerts on use.</li>
+    <li>Recovery depends on the root email and the account's phone number. Make sure the company owns both.</li>
+    <li>The <strong>credential report</strong> lists every credential in the account; read it regularly.</li>
+    <li>In an organisation, member accounts can have no root credentials at all.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>AWS account</dt><dd>A container for resources, identities and billing, isolated from other accounts.</dd>
+    <dt>Account ID</dt><dd>The 12-digit number identifying an account, part of every ARN.</dd>
+    <dt>Root user</dt><dd>The account's original email-and-password identity, with unrestricted access.</dd>
+    <dt>Credential report</dt><dd>A CSV of every IAM user and root, with password, MFA and access key status.</dd>
+    <dt>Alternate contacts</dt><dd>Billing, operations and security contacts AWS uses for notices.</dd>
+    <dt>Management account</dt><dd>The account that creates and pays for an AWS Organization.</dd>
+    <dt>Centralised root access</dt><dd>Removing member accounts' root credentials and doing root tasks through scoped sessions.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Why can't you limit the root user of a standalone account with an IAM policy? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>IAM policies attach to users, groups and roles; the root user isn't one of them. Only an organisation's SCPs apply to a member account's root.</p></details>
+    </li>
+    <li>
+      <p>An administrator applied a bucket policy that denies all actions to every principal. Every IAM user now gets “access denied”, including admins. How do you fix it? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Sign in as the root user (or, in an organisation with centralised root access, use a task-scoped root session from the management account) and delete the bucket policy. That's one of the root-only tasks.</p></details>
+    </li>
+    <li>
+      <p>The credential report shows a root access key last used yesterday. What do you do, in order? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Treat it as a possible incident: find out from CloudTrail what it was used for and from where. If it's an unknown use, rotate root's password and MFA, and investigate. Then move whatever legitimately used it to a role, and delete the key.</p></details>
+    </li>
+    <li>
+      <p>Explain why the root email address should be a group, not a person. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Whoever receives that mail can reset the password and helps pass MFA recovery. A personal mailbox disappears or leaves with its owner; a group survives staff changes and can't be used by one person alone without others seeing.</p></details>
+    </li>
+    <li>
+      <p>Design root security for a new company with one AWS account today and an organisation planned next year. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Today: group root email and company phone, two FIDO2 keys in separate places, vaulted password, no keys, alternate contacts, an alert on root sign-in. Next year: make this account the management account with no workloads, create members from it, and turn on centralised root access so members have no root credentials.</p></details>
+    </li>
+    <li>
+      <p>Compare the AWS root user with Azure's Global Administrator. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Root is one per account and can't be restricted there; Global Administrator is a role in an Entra ID tenant that several accounts can hold, and can elevate to manage every subscription. Both should be few, use phishing-resistant MFA, have emergency fallbacks and be monitored.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_root-user.html">AWS account root user</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/root-user-tasks.html">tasks that require root</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_getting-report.html">credential reports</a> and <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_root-enable-root-access.html">centralised root access</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/entra/identity/role-based-access-control/security-emergency-access">Manage emergency access accounts</a>.</li>
+    <li>Google Cloud: <a href="https://cloud.google.com/resource-manager/docs/super-admin-best-practices">Super administrator best practices</a>.</li>
+  </ul>
+</section>
+
+
+
+</article>
+<article class="sheet chapter" id="chapter-08-users-roles">
+<header class="opener">
+  <p class="eyebrow">Part II · IAM on AWS</p>
+  <p class="chno">8</p>
+  <h1>Users, groups and roles</h1>
+  <p class="promise">AWS IAM gives you three kinds of identity. Users are the oldest and easiest to understand, and the one to avoid. Roles are the one to build everything on: an identity with no password and no permanent key, which people, services and other accounts borrow for an hour at a time. This chapter explains how a role is put together, what happens when you assume one, and how to write the trust policy that decides who can.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain why IAM users are a legacy pattern, and when one is still acceptable.</li>
+      <li>Describe a role as a trust policy plus permission policies.</li>
+      <li>Assume a role and read the temporary credentials and session it produces.</li>
+      <li>Write trust policies for people, AWS services and other accounts, with conditions.</li>
+      <li>Control who can hand a role to a service, with <code>iam:PassRole</code>.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Short-lived credentials (<a href="#chapter-03-tokens-sessions">Chapter 3</a>); the account and root user (<a href="#chapter-07-account-root">Chapter 7</a>).</li>
+      <li>Reading policies (<a href="#chapter-09-policies">Chapter 9</a>). This chapter writes the other half: trust policies.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 50 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, AWS CLI, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 8.10</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>The second page of Eli's credential report (<a href="#chapter-07-account-root">Chapter 7</a>) lists Larder's IAM users: eleven with console passwords. Eight are current engineers, each with read-only access and a personal access key or two. Three belong to people who've left: Jasper, and two contractors from 2024. Jasper's user still has an active access key. Then there's <code>ops</code>, the shared user with <code>AdministratorAccess</code> from <a href="#chapter-01-who-and-what">Chapter 1</a>, which engineers use whenever production needs fixing because their own users can only look.</p>
+  <p>Single sign-on (<a href="index.html#ch12">Chapter 12</a>) will replace all of this, but that's weeks away. Eli wants something safe for production work <em>this</em> month, without a shared password. Section 8.11 shows what he built.</p>
+</aside>
+
+<!-- ======================================================== 8.1 -->
+<h2 class="sec" id="s8-1"><span class="n">8.1</span>IAM users</h2>
+
+<p class="lead">An <span class="term">IAM user</span> is a long-lived identity inside one account. It can have a <strong>console password</strong> and up to two <strong>access keys</strong> for the CLI and SDKs. An access key is a pair: an <em>access key ID</em> starting with <code>AKIA</code>, and a secret access key, shown once when it's created. Two keys are allowed so you can rotate: create the new one, switch everything to it, then delete the old.</p>
+
+<p>Users get permissions from policies attached to them directly or, better, to groups they belong to.</p>
+
+<!-- ======================================================== 8.2 -->
+<h2 class="sec" id="s8-2"><span class="n">8.2</span>Groups</h2>
+
+<p>An <span class="term">IAM group</span> is a set of users that share policies: attach a policy to <code>developers</code>, and every user in it gets those permissions. Groups are simple, with three limits worth knowing: a group isn't a principal (you can't name it in a trust or resource policy, or sign in as it); groups can't contain other groups; and they only hold IAM users, not roles or federated people. Groups in your identity provider are a different thing, and much more useful (<a href="index.html#ch12">Chapter 12</a>).</p>
+
+<!-- ======================================================== 8.3 -->
+<h2 class="sec" id="s8-3"><span class="n">8.3</span>Why users are a legacy pattern</h2>
+
+<p>IAM users were AWS's original answer to “how do people get in?”, and they still work. But they carry every problem from Part I:</p>
+<ul>
+  <li><strong>Long-lived credentials.</strong> Passwords and access keys last until someone deletes them. Larder's credential report shows the result: a key two and a half years old, and three more belonging to people who've left (<a href="#chapter-03-tokens-sessions">Chapter 3</a>).</li>
+  <li><strong>One account at a time.</strong> A user exists in one account. With ten accounts, a person needs ten users, ten passwords and ten MFA devices, or you build cross-account roles anyway.</li>
+  <li><strong>A separate directory.</strong> Joiners and leavers in your company's directory don't reach IAM. Someone must remember to create and delete users by hand (<a href="index.html#ch13">Chapter 13</a>).</li>
+</ul>
+
+<p>The modern answer is: <strong>people</strong> sign in through IAM Identity Center or another identity provider and get temporary role sessions (<a href="index.html#ch12">Chapter 12</a>); <strong>workloads</strong> on AWS use roles provided by the platform (<a href="index.html#ch15">Chapter 15</a>); <strong>workloads outside AWS</strong> exchange their own platform's tokens for role sessions (<a href="index.html#ch17">Chapter 17</a>). An IAM user is acceptable only where nothing else works: a third-party tool that can only take an access key, or an emergency break-glass account (<a href="index.html#ch14">Chapter 14</a>), and then with a narrow policy, monitoring and rotation.</p>
+
+<!-- ======================================================== 8.4 -->
+<h2 class="sec" id="s8-4"><span class="n">8.4</span>Roles</h2>
+
+<p>An <span class="term">IAM role</span> is an identity with permissions but <strong>no credentials of its own</strong>: no password, no access keys. Instead, trusted principals <em>assume</em> it and receive temporary credentials for a session. A role is defined by two kinds of policy, and keeping them apart is most of the battle:</p>
+
+<figure class="wide" id="fig8-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 230" role="img" aria-labelledby="fig8-1-t fig8-1-d">
+      <title id="fig8-1-t">The two halves of a role</title>
+      <desc id="fig8-1-d">A role in the middle. On its left, the trust policy, a resource-based policy on the role itself, answers who may assume it: here, named engineers, signed in with MFA. On its right, permission policies, identity-based policies, answer what a session may do once assumed: here, production operations. Assuming the role through STS produces a session with temporary credentials that expire.</desc>
+      <defs><marker id="c8ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="12" y="40" width="210" height="110" rx="6"/>
+      <text class="t-label" x="117" y="66" text-anchor="middle">trust policy</text>
+      <text class="t-small" x="117" y="88" text-anchor="middle">who may assume it?</text>
+      <text class="t-mono" x="117" y="114" text-anchor="middle">engineers' users,</text>
+      <text class="t-mono" x="117" y="132" text-anchor="middle">only with MFA</text>
+      <rect class="node-accent" x="275" y="56" width="210" height="78" rx="6"/>
+      <text class="t-label on-accent" x="380" y="88" text-anchor="middle">role: prod-operator</text>
+      <text class="t-small on-accent" x="380" y="110" text-anchor="middle">no password, no keys</text>
+      <rect class="node" x="538" y="40" width="210" height="110" rx="6"/>
+      <text class="t-label" x="643" y="66" text-anchor="middle">permission policies</text>
+      <text class="t-small" x="643" y="88" text-anchor="middle">what may a session do?</text>
+      <text class="t-mono" x="643" y="114" text-anchor="middle">operate production,</text>
+      <text class="t-mono" x="643" y="132" text-anchor="middle">but not change IAM</text>
+      <path class="wire" d="M224 95 H271" marker-end="url(#c8ah)"/>
+      <path class="wire" d="M487 95 H534" marker-end="url(#c8ah)"/>
+      <rect class="pub" x="210" y="176" width="340" height="40" rx="5"/>
+      <text class="t-small" x="380" y="194" text-anchor="middle">sts:AssumeRole → a session: temporary key (ASIA…),</text>
+      <text class="t-small" x="380" y="209" text-anchor="middle">secret and session token, expiring in 15 min – 12 h</text>
+      <path class="wire-dash" d="M380 136 V172" marker-end="url(#c8ah)"/>
+    </svg>
+  </div>
+  <figcaption><b>Figure 8.1</b> A role is a trust policy (who can get in) and permission policies (what they can do once in). Mixing the two up is the source of most role mistakes.</figcaption>
+</figure>
+
+<ul>
+  <li>The <span class="term">trust policy</span> is a resource-based policy on the role itself. Its <code>Principal</code> names who may call <code>sts:AssumeRole</code> (or its web identity and SAML variants) on this role, and its conditions say under what circumstances.</li>
+  <li>The <strong>permission policies</strong> are ordinary identity-based policies (<a href="#chapter-09-policies">Chapter 9</a>): what a session of this role may do.</li>
+</ul>
+
+<p>Roles serve every kind of principal from <a href="#chapter-01-who-and-what">Chapter 1</a>: people (through single sign-on or, as at Larder this month, from IAM users), AWS services acting for you (an ECS task, a Lambda function), pipelines outside AWS, and principals in other accounts.</p>
+
+<!-- ======================================================== 8.5 -->
+<h2 class="sec" id="s8-5"><span class="n">8.5</span>Assuming a role</h2>
+
+<p>Assuming a role is an API call to <strong>AWS STS</strong>, the Security Token Service:</p>
+
+<pre><code>aws sts assume-role \
+  --role-arn arn:aws:iam::111122223333:role/prod-operator \
+  --role-session-name eli \
+  --source-identity eli</code></pre>
+
+<p>STS checks the trust policy and the caller's own permissions (<a href="#chapter-10-evaluation">Chapter 10</a>), and returns temporary credentials:</p>
+
+<pre><code>{
+  <span class="k">"Credentials"</span>: {
+    <span class="k">"AccessKeyId"</span>: <span class="s">"ASIAQEXAMPLE7RTHUNA"</span>,
+    <span class="k">"SecretAccessKey"</span>: <span class="s">"…"</span>,
+    <span class="k">"SessionToken"</span>: <span class="s">"IQoJb3JpZ2luX2VjE…"</span>,
+    <span class="k">"Expiration"</span>: <span class="s">"2026-12-07T10:42:13+00:00"</span>
+  },
+  <span class="k">"AssumedRoleUser"</span>: {
+    <span class="k">"Arn"</span>: <span class="s">"arn:aws:sts::111122223333:assumed-role/prod-operator/eli"</span>
+  },
+  <span class="k">"SourceIdentity"</span>: <span class="s">"eli"</span>
+}</code></pre>
+
+<p>Things to notice:</p>
+<ul>
+  <li><strong>Temporary keys start with <code>ASIA</code></strong>, long-lived ones with <code>AKIA</code>. Seeing <code>AKIA</code> in a log or a leak tells you a long-lived key is involved.</li>
+  <li><strong>All three parts are needed</strong>: key ID, secret and session token. Tools pass them as <code>AWS_ACCESS_KEY_ID</code>, <code>AWS_SECRET_ACCESS_KEY</code> and <code>AWS_SESSION_TOKEN</code>.</li>
+  <li><strong>The session expires</strong>: by default after one hour; you can ask for 15 minutes up to the role's <em>maximum session duration</em>, which you set between 1 and 12 hours.</li>
+  <li><strong>The session has its own ARN</strong>: <code>assumed-role/<i>role-name</i>/<i>session-name</i></code>. That's what CloudTrail records, so choose session names that identify the person or job.</li>
+  <li><strong>Source identity</strong> is a value set when the role is first assumed, which can't be changed afterwards and is recorded in CloudTrail for every action in the session, even across further role assumptions. It's how you keep <a href="#chapter-01-who-and-what">Chapter 1</a>'s accountability when people share a role.</li>
+</ul>
+
+<aside class="side"><b>Role chaining</b>Using a role session to assume another role is called <em>role chaining</em>. AWS limits chained sessions to one hour, whatever the maximum session duration says.</aside>
+
+<!-- ======================================================== 8.6 -->
+<h2 class="sec" id="s8-6"><span class="n">8.6</span>Writing trust policies</h2>
+
+<p>A trust policy has the same grammar as any policy (<a href="#chapter-09-policies">Chapter 9</a>), with a <code>Principal</code> and an action from STS. The principal says what kind of thing may assume the role:</p>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 8.1 · Who can be trusted to assume a role</caption>
+    <thead><tr><th>Principal</th><th>Example</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>A specific user or role</td><td><code>{"AWS": "arn:aws:iam::111122223333:user/eli"}</code></td><td>exactly that identity</td></tr>
+      <tr><td>An account</td><td><code>{"AWS": "arn:aws:iam::111122223333:root"}</code></td><td>any principal in that account <em>whose own policies allow it</em>; the account's administrators decide who</td></tr>
+      <tr><td>An AWS service</td><td><code>{"Service": "ecs-tasks.amazonaws.com"}</code></td><td>that service, acting for you (8.7)</td></tr>
+      <tr><td>A federated provider</td><td><code>{"Federated": "arn:aws:iam::111122223333:oidc-provider/token.actions.githubusercontent.com"}</code></td><td>people or workloads authenticated by that SAML or OIDC provider (<a href="#chapter-05-saml-federation">Chapter 5</a>, <a href="index.html#ch17">Chapter 17</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Despite the name, <code>arn:aws:iam::111122223333:root</code> in a principal doesn't mean the root user. It means “the account”, handing the decision to that account's IAM policies. Conditions then narrow the trust:</p>
+
+<p class="code-title"><span>prod-operator-trust.json</span><span>trust policy</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [{
+    <span class="k">"Sid"</span>: <span class="s">"EngineersWithMfaAndTheirOwnName"</span>,
+    <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+    <span class="k">"Principal"</span>: { <span class="k">"AWS"</span>: [
+      <span class="s">"arn:aws:iam::111122223333:user/ben"</span>,
+      <span class="s">"arn:aws:iam::111122223333:user/eli"</span>
+    ] },
+    <span class="k">"Action"</span>: [<span class="s">"sts:AssumeRole"</span>, <span class="s">"sts:SetSourceIdentity"</span>],
+    <span class="k">"Condition"</span>: {
+      <span class="k">"Bool"</span>: { <span class="s">"aws:MultiFactorAuthPresent"</span>: <span class="s">"true"</span> },
+      <span class="k">"StringEquals"</span>: { <span class="s">"sts:SourceIdentity"</span>: <span class="s">"${aws:username}"</span> }
+    }
+  }]
+}</code></pre>
+
+<p>Read aloud: “Allow Ben's and Eli's users to assume this role, only if they signed in with MFA, and only if they set the source identity to their own user name.” The last condition stops anyone from recording a colleague's name. Other conditions you'll meet: <code>sts:ExternalId</code> for third parties (<a href="index.html#ch21">Chapter 21</a>), <code>aws:SourceAccount</code> and <code>aws:SourceArn</code> for services (8.7), and the <code>sub</code> and <code>aud</code> claims of OIDC tokens (<a href="index.html#ch17">Chapter 17</a>).</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: trust that's too wide</p>
+  <p><code>"Principal": {"AWS": "*"}</code> without strong conditions lets <em>any AWS account in the world</em> try to assume your role. Trusting another company's whole account trusts every administrator they have. And trusting a federated provider without conditions on <em>which</em> identities (such as which GitHub repository) lets anyone that provider authenticates in. A role's permissions are only as safe as its trust policy.</p>
+</div>
+
+<!-- ======================================================== 8.7 -->
+<h2 class="sec" id="s8-7"><span class="n">8.7</span>Roles for AWS services, and <code>iam:PassRole</code></h2>
+
+<p>Many services act for you: an ECS task reads from S3, a Lambda function writes to DynamoDB, CloudFormation creates resources. Each does it by assuming a role you give it:</p>
+<ul>
+  <li>A <strong>service role</strong> is an ordinary role whose trust policy names the service (<code>ecs-tasks.amazonaws.com</code>, <code>lambda.amazonaws.com</code>). You write its permissions.</li>
+  <li>An <strong>instance profile</strong> is the wrapper that lets an EC2 instance use a role (<a href="index.html#ch15">Chapter 15</a>).</li>
+  <li>A <strong>service-linked role</strong> is created and managed by a service for its own needs, with a fixed policy. You can see it but not edit it.</li>
+</ul>
+
+<p>Handing a role to a service is itself a permission: <code>iam:PassRole</code>. Whoever can launch a task <em>and</em> pass any role can run code with that role's permissions, including an administrator role. That's one of the classic ways to escalate privileges in AWS. Limit it to the roles a person or pipeline actually needs to pass, and to the service that should receive them:</p>
+
+<pre><code>{
+  <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+  <span class="k">"Action"</span>: <span class="s">"iam:PassRole"</span>,
+  <span class="k">"Resource"</span>: <span class="s">"arn:aws:iam::111122223333:role/dispatch-task"</span>,
+  <span class="k">"Condition"</span>: { <span class="k">"StringEquals"</span>: { <span class="s">"iam:PassedToService"</span>: <span class="s">"ecs-tasks.amazonaws.com"</span> } }
+}</code></pre>
+
+<p>Service role trust policies should also say <em>which</em> of your resources may use them, with <code>aws:SourceAccount</code> or <code>aws:SourceArn</code>, so a service acting for someone else can't be tricked into using your role (the “confused deputy” of <a href="index.html#ch21">Chapter 21</a>).</p>
+
+<!-- ======================================================== 8.8 -->
+<h2 class="sec" id="s8-8"><span class="n">8.8</span>How tools find credentials</h2>
+
+<p>The AWS CLI and SDKs look for credentials in a fixed order, the <span class="term">credential provider chain</span>, and use the first they find. Knowing the order explains most “why is it using <em>those</em> credentials?” puzzles:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 8.2 · Where the CLI and SDKs look, roughly in order</caption>
+    <thead><tr><th>Source</th><th>Example</th><th>Typical use</th></tr></thead>
+    <tbody>
+      <tr><td>Command-line options</td><td><code>--profile prod</code></td><td>choosing a profile per command</td></tr>
+      <tr><td>Environment variables</td><td><code>AWS_ACCESS_KEY_ID</code>, <code>AWS_SESSION_TOKEN</code>, <code>AWS_PROFILE</code></td><td>scripts, CI, temporary sessions</td></tr>
+      <tr><td>Web identity token file</td><td><code>AWS_WEB_IDENTITY_TOKEN_FILE</code> + <code>AWS_ROLE_ARN</code></td><td>Kubernetes pods (<a href="index.html#ch16">Chapter 16</a>)</td></tr>
+      <tr><td>Config and credentials files</td><td><code>~/.aws/config</code>: SSO profiles, <code>role_arn</code> + <code>source_profile</code>, <code>credential_process</code></td><td>people on laptops</td></tr>
+      <tr><td>Container credentials</td><td><code>AWS_CONTAINER_CREDENTIALS_RELATIVE_URI</code></td><td>ECS tasks</td></tr>
+      <tr><td>Instance metadata</td><td>IMDSv2 on EC2</td><td>EC2 instances (<a href="index.html#ch15">Chapter 15</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>When in doubt, <code>aws sts get-caller-identity</code> tells you who you are right now, and works whatever your permissions.</p>
+
+<!-- ======================================================== 8.9 -->
+<h2 class="sec" id="s8-9"><span class="n">8.9</span>Changing roles from the console</h2>
+
+<p>People with IAM users can also <strong>switch role</strong> in the AWS console: the console assumes the role for them, with MFA if the trust policy requires it, and shows the role's name in the top bar. A CLI profile does the same:</p>
+<pre><code>[profile prod-operator]
+role_arn = arn:aws:iam::111122223333:role/prod-operator
+source_profile = eli
+mfa_serial = arn:aws:iam::111122223333:mfa/eli-phone
+role_session_name = eli
+duration_seconds = 3600</code></pre>
+<p>The CLI then asks for a six-digit code before assuming the role. One limit to know: MFA for API and CLI calls accepts only one-time-code devices (an authenticator app or a hardware TOTP token), not FIDO2 security keys or passkeys, which work for console sign-in only. With single sign-on (<a href="index.html#ch12">Chapter 12</a>), this whole step disappears: people sign in once, with whatever factor the identity provider requires, choose an account and a permission set, and get a role session directly.</p>
+
+<!-- ======================================================== 8.10 -->
+<h2 class="sec" id="s8-10"><span class="n">8.10</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 8.3 · People, workloads and borrowed identities at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>People</td><td>Identity Center users or federated people; IAM users (legacy)</td><td>Entra ID users</td><td>Google accounts (Cloud Identity / Workspace) or federated identities</td></tr>
+      <tr><td>Workloads</td><td>roles assumed by services</td><td>managed identities; service principals</td><td>service accounts</td></tr>
+      <tr><td>Borrowing an identity</td><td><code>sts:AssumeRole</code> → temporary credentials</td><td>no assume step: roles are assigned to the identity directly; Privileged Identity Management activates roles for a time</td><td>service account impersonation (<code>roles/iam.serviceAccountTokenCreator</code>) → short-lived tokens</td></tr>
+      <tr><td>Long-lived keys to avoid</td><td>IAM user access keys</td><td>service principal client secrets</td><td>service account keys (JSON)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>Azure has no “assume role”: you assign roles directly to a user, group or managed identity at a scope. Temporary elevation comes from <strong>Privileged Identity Management</strong> (PIM), where an eligible person activates a role for a few hours, with justification and optional approval (<a href="index.html#ch14">Chapter 14</a>).</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>The closest thing to assuming a role is <strong>impersonating a service account</strong>: a principal with the Token Creator role on a service account can get short-lived tokens for it, for example with <code>gcloud --impersonate-service-account</code>. Avoid downloading service account keys, which are long-lived like IAM user access keys; organisations can forbid them with an organisation policy.</p>
+</div>
+
+<!-- ======================================================== 8.11 -->
+<h2 class="sec" id="s8-11"><span class="n">8.11</span>At Larder: <code>ops</code> becomes a role</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Eli did it in three steps in the first week of December. First, the leavers: he deactivated the access keys of Jasper's and the two contractors' users, removed their console passwords, waited a week to see whether anything broke (nothing did), and deleted the users. Second, he created a role, <code>prod-operator</code>, with <code>ops</code>'s old powers minus IAM changes, a one-hour maximum session, and the trust policy from 8.6, listing the six engineers on the on-call rota (8.6 shows two of them). Each of them registered two MFA devices on their own IAM user, their new security key for the console and an authenticator app for the CLI, and got a CLI profile like the one in 8.9. Third, he removed <code>ops</code>'s password and detached its policies; the user itself goes in <a href="index.html#ch12">Chapter 12</a>, along with every other IAM user.</p>
+  <p>The difference shows in CloudTrail. A production change now reads <code>assumed-role/prod-operator/ben</code>, with <code>sourceIdentity: ben</code>, and Ben had to pass MFA to make it. Had the backup change from <a href="#chapter-01-who-and-what">Chapter 1</a> happened this way, the first line of the investigation would have named a person.</p>
+</aside>
+
+<!-- ======================================================== 8.12 -->
+<h2 class="sec" id="s8-12"><span class="n">8.12</span>Lab: create, assume and inspect a role</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 8 · A role, a session and a source identity</p>
+  <p><strong>You'll</strong> create a read-only role, assume it with a source identity, look at the temporary credentials and the session's ARN, find the limits of what the session can do, and see the assumption in CloudTrail. <strong>You need</strong> the AWS CLI v2, signed in to a sandbox account as an administrator (Appendix C), and a Unix shell. <strong>Cost:</strong> free.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Create the role.</strong> It trusts your account (so your administrator permissions decide whether you may assume it) and allows setting a source identity.
+<pre><code>ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+cat &gt; trust.json &lt;&lt;EOF
+{ "Version": "2012-10-17",
+  "Statement": [{ "Effect": "Allow",
+                  "Principal": { "AWS": "arn:aws:iam::$ACCOUNT:root" },
+                  "Action": ["sts:AssumeRole", "sts:SetSourceIdentity"] }] }
+EOF
+aws iam create-role --role-name iam-lab-reader --assume-role-policy-document file://trust.json
+aws iam attach-role-policy --role-name iam-lab-reader \
+  --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess</code></pre>
+  Wait about ten seconds for IAM to catch up.</li>
+  <li><strong>Assume it for 15 minutes</strong> and load the session into your shell:
+<pre><code>read -r AK SK ST EXP &lt;&lt;&lt; "$(aws sts assume-role \
+  --role-arn arn:aws:iam::$ACCOUNT:role/iam-lab-reader \
+  --role-session-name lab-$USER --source-identity $USER --duration-seconds 900 \
+  --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken,Expiration]' --output text)"
+export AWS_ACCESS_KEY_ID=$AK AWS_SECRET_ACCESS_KEY=$SK AWS_SESSION_TOKEN=$ST
+echo "$AK expires $EXP"
+aws sts get-caller-identity --query Arn --output text</code></pre>
+  The key starts with <code>ASIA</code>, expires in 15 minutes, and you are now <code>arn:aws:sts::…:assumed-role/iam-lab-reader/lab-<i>you</i></code>.</li>
+  <li><strong>Find the session's edges.</strong> Predict each result first:
+<pre><code>aws s3 ls                                                      <span class="c"># a</span>
+aws iam list-users                                             <span class="c"># b</span>
+aws sts assume-role --role-arn arn:aws:iam::$ACCOUNT:role/iam-lab-reader \
+  --role-session-name again                                    <span class="c"># c</span></code></pre>
+  a works (the role reads S3). b is denied: nothing in the role's permission policies allows <code>iam:ListUsers</code>, and the error message says so. c is denied too: the trust policy would allow it, but the <em>session's own</em> permissions don't include <code>sts:AssumeRole</code>. Both sides must agree, which is <a href="#chapter-10-evaluation">Chapter 10</a>'s subject.</li>
+  <li><strong>Return to yourself</strong> with <code>unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN</code>, and check with <code>get-caller-identity</code>.</li>
+  <li><strong>Find it in CloudTrail.</strong> After a few minutes (CloudTrail can take up to about 15 to show events):
+<pre><code>aws cloudtrail lookup-events --max-results 5 \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=AssumeRole \
+  --query 'Events[].CloudTrailEvent' --output text |
+python3 -c 'import sys, json
+for line in sys.stdin:
+    e = json.loads(line); p = e.get("requestParameters") or {}
+    print(e["eventTime"], e["userIdentity"].get("arn"), "→", p.get("roleSessionName"), p.get("sourceIdentity"))'</code></pre>
+  You'll see who assumed the role, the session name and the source identity.</li>
+  <li><strong>Clean up.</strong>
+<pre><code>aws iam detach-role-policy --role-name iam-lab-reader \
+  --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+aws iam delete-role --role-name iam-lab-reader
+rm trust.json</code></pre></li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Add the MFA condition from 8.6 to the trust policy, then try step 2 again: it fails until you pass <code>--serial-number</code> and <code>--token-code</code>. (2) Set the role's maximum session duration to two hours with <code>aws iam update-role --max-session-duration 7200</code> and assume it with <code>--duration-seconds 7200</code>.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s8-13"><span class="n">8.13</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>IAM users for people</td><td>Long-lived passwords and keys; leavers keep access.</td><td>Single sign-on with role sessions.</td></tr>
+      <tr><td>Access keys for workloads on AWS</td><td>Keys in config files, images and Git history.</td><td>Service roles (<a href="index.html#ch15">Chapter 15</a>).</td></tr>
+      <tr><td>Wide trust (<code>"AWS": "*"</code>, whole accounts, unconditioned providers)</td><td>Strangers or partners' admins can assume the role.</td><td>Named principals plus conditions.</td></tr>
+      <tr><td><code>iam:PassRole</code> on <code>*</code></td><td>Anyone who can launch a service gets any role's permissions.</td><td>Specific role ARNs and <code>iam:PassedToService</code>.</td></tr>
+      <tr><td>Meaningless session names</td><td>CloudTrail can't tell sessions apart.</td><td>Session names and source identity that name the person or job.</td></tr>
+      <tr><td>Long maximum session durations “for convenience”</td><td>Stolen sessions stay useful for hours.</td><td>One hour for powerful roles; longer only where needed.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum8">
+  <h2 class="sec" id="sum8"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li><strong>IAM users</strong> have long-lived passwords and keys (<code>AKIA…</code>) in one account; they're a legacy pattern. <strong>Groups</strong> bundle users' policies and aren't principals.</li>
+    <li>A <strong>role</strong> has no credentials; trusted principals assume it and get temporary ones (<code>ASIA…</code>) from STS.</li>
+    <li>A role = a <strong>trust policy</strong> (who may assume it, when) + <strong>permission policies</strong> (what a session may do).</li>
+    <li>Sessions last 15 minutes to 12 hours (chained ones, one hour); session names and <strong>source identity</strong> keep accountability.</li>
+    <li>Trust specific principals with conditions; an account principal delegates to that account's policies.</li>
+    <li>Services act through service roles; <code>iam:PassRole</code> decides who may hand them one, so restrict it.</li>
+    <li>The CLI and SDKs use the first credentials in the provider chain; <code>get-caller-identity</code> tells you which.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>IAM user</dt><dd>A long-lived identity with a password and/or access keys in one account.</dd>
+    <dt>IAM group</dt><dd>A set of IAM users sharing policies; not a principal.</dd>
+    <dt>IAM role</dt><dd>An identity without credentials, assumed for temporary sessions.</dd>
+    <dt>Trust policy</dt><dd>The resource-based policy on a role that says who may assume it.</dd>
+    <dt>STS</dt><dd>AWS Security Token Service, which issues temporary credentials.</dd>
+    <dt>Role session</dt><dd>A period of use of a role, with its own ARN and temporary credentials.</dd>
+    <dt>Source identity</dt><dd>An unchangeable value recorded for every action in a session and its chained sessions.</dd>
+    <dt>Service role</dt><dd>A role an AWS service assumes to act for you.</dd>
+    <dt><code>iam:PassRole</code></dt><dd>The permission to give a role to an AWS service.</dd>
+    <dt>Credential provider chain</dt><dd>The order in which tools look for credentials.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>You find <code>AKIAQEXAMPLE…</code> in a public repository. What kind of credential is it, and why does that make it worse than <code>ASIA…</code>? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>A long-lived IAM user (or root) access key. It works until deleted, whereas an <code>ASIA</code> key is part of a temporary session that expires within hours. Deactivate it now, then investigate its use in CloudTrail.</p></details>
+    </li>
+    <li>
+      <p>A trust policy names <code>arn:aws:iam::111122223333:root</code>. Can every user in that account assume the role? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Only those whose own identity policies allow <code>sts:AssumeRole</code> on this role. Naming the account delegates the choice to that account's administrators; it doesn't mean the root user, and it doesn't mean everyone.</p></details>
+    </li>
+    <li>
+      <p>Write a trust policy for a role that ECS tasks in your account use. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>{"Effect": "Allow", "Principal": {"Service": "ecs-tasks.amazonaws.com"}, "Action": "sts:AssumeRole", "Condition": {"StringEquals": {"aws:SourceAccount": "111122223333"}}}</code>, optionally with <code>aws:SourceArn</code> limited to your cluster's tasks.</p></details>
+    </li>
+    <li>
+      <p>A developer may create Lambda functions and has <code>iam:PassRole</code> on <code>*</code>. Explain how they could become an administrator. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>They create a function, pass it an existing administrator role, and invoke it: the function's code runs with administrator permissions and can, for example, attach <code>AdministratorAccess</code> to the developer. Restrict PassRole to specific roles.</p></details>
+    </li>
+    <li>
+      <p>Six engineers share a powerful role. Design it so that CloudTrail still shows which of them did what, and nobody can pretend to be another. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Require <code>sts:SetSourceIdentity</code> with <code>sts:SourceIdentity</code> equal to <code>${aws:username}</code> (or the IdP's user attribute with SSO), require MFA, and keep sessions to an hour. Every event then carries a source identity that the person couldn't choose freely.</p></details>
+    </li>
+    <li>
+      <p>Compare how a person gets temporary admin rights on AWS and on Azure. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>AWS: they assume a role (directly or through an SSO permission set) and get a time-limited session. Azure: they're made <em>eligible</em> for a role in Privileged Identity Management and activate it for a few hours, with justification or approval; there's no separate identity to assume.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html">IAM roles</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_control-access_monitor.html">source identity</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_passrole.html">passing roles to services</a>, and <a href="https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html">the SDKs' credential providers</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview">Managed identities</a>. Google Cloud: <a href="https://cloud.google.com/iam/docs/service-account-impersonation">Service account impersonation</a>.</li>
+  </ul>
+</section>
+
+
+
+</article>
 <article class="sheet chapter" id="chapter-09-policies">
 <header class="opener">
   <p class="eyebrow">Part II · IAM on AWS</p>
@@ -2680,7 +3487,7 @@ hanna      may view order B-1042: True</code></pre>
     <ul>
       <li>Principals, actions and resources (<a href="#chapter-01-who-and-what">Chapter 1</a>).</li>
       <li>Least privilege and default deny (<a href="#chapter-06-access-models">Chapter 6</a>).</li>
-      <li>What a role is (<a href="index.html#ch8">Chapter 8</a>). This chapter recaps the little it needs.</li>
+      <li>What a role is (<a href="#chapter-08-users-roles">Chapter 8</a>). This chapter recaps the little it needs.</li>
     </ul>
   </div>
   <div>
@@ -2718,7 +3525,7 @@ hanna      may view order B-1042: True</code></pre>
   <p class="big">Nothing is allowed until a statement allows it, and an explicit deny beats any allow.</p>
 </div>
 
-<p>There are more policy types (permission boundaries, session policies, and the organisation-wide guardrails called SCPs and RCPs), and the full order in which AWS combines them is the subject of <a href="index.html#ch10">Chapter 10</a>. For now, one identity and its policies are enough.</p>
+<p>There are more policy types (permission boundaries, session policies, and the organisation-wide guardrails called SCPs and RCPs), and the full order in which AWS combines them is the subject of <a href="#chapter-10-evaluation">Chapter 10</a>. For now, one identity and its policies are enough.</p>
 
 <!-- ======================================================== 9.2 -->
 <h2 class="sec" id="s9-2"><span class="n">9.2</span>Anatomy of a statement</h2>
@@ -2950,7 +3757,7 @@ hanna      may view order B-1042: True</code></pre>
 <pre><code>{ <span class="k">"Effect"</span>: <span class="s">"Allow"</span>, <span class="k">"Action"</span>: [<span class="s">"s3:GetObject"</span>, <span class="s">"s3:PutObject"</span>],
   <span class="k">"Resource"</span>: <span class="s">"arn:aws:s3:::larder-scratch/home/${aws:username}/*"</span> }</code></pre>
 
-<p><code>aws:username</code> only exists for IAM users, and you'll stop using IAM users in <a href="index.html#ch8">Chapter 8</a> and <a href="index.html#ch12">Chapter 12</a>. With roles, the useful variables are <strong>tags</strong>. A <span class="term">principal tag</span> is a key-value pair on the role (or passed in from your identity provider when someone signs in), and a <span class="term">resource tag</span> is one on the resource. Compare the two, and one statement covers every team:</p>
+<p><code>aws:username</code> only exists for IAM users, and you'll stop using IAM users in <a href="#chapter-08-users-roles">Chapter 8</a> and <a href="index.html#ch12">Chapter 12</a>. With roles, the useful variables are <strong>tags</strong>. A <span class="term">principal tag</span> is a key-value pair on the role (or passed in from your identity provider when someone signs in), and a <span class="term">resource tag</span> is one on the resource. Compare the two, and one statement covers every team:</p>
 
 <p class="code-title"><span>team-secrets.json</span><span>attribute-based access control</span></p>
 <pre><code>{
@@ -3033,7 +3840,7 @@ hanna      may view order B-1042: True</code></pre>
   <li><strong>Add conditions</strong> where they're cheap and meaningful: a prefix, a tag, the organisation.</li>
   <li><strong>Validate</strong> with IAM Access Analyzer (in the lab), which catches typos, impossible combinations and risky patterns before anything is attached.</li>
   <li><strong>Test</strong> the real workload in a non-production environment, including the things it should <em>not</em> be able to do.</li>
-  <li><strong>Watch</strong> CloudTrail for <code>AccessDenied</code> from the role for a few days after rollout (<a href="index.html#ch11">Chapter 11</a> shows how).</li>
+  <li><strong>Watch</strong> CloudTrail for <code>AccessDenied</code> from the role for a few days after rollout (<a href="#chapter-11-access-denied">Chapter 11</a> shows how).</li>
 </ol>
 
 <aside class="box box-story" aria-label="Larder, solved">
@@ -3084,7 +3891,7 @@ hanna      may view order B-1042: True</code></pre>
 
 <aside class="box box-story" aria-label="Larder, rollout">
   <p class="label">At Larder: rollout</p>
-  <p>The new policy goes to staging first, where the team runs a full evening of route planning and checks that writing to <code>config/</code> and reading <code>orders/</code> are both refused. In production, Eli attaches it alongside the old one, watches CloudTrail for a day to confirm nothing Dispatch does depends on the old policy alone, and then detaches <code>s3:*</code>. The account audit has 40 more findings, and <a href="index.html#ch8">Chapter 8</a> and <a href="index.html#ch17">Chapter 17</a> pick up the two worst.</p>
+  <p>The new policy goes to staging first, where the team runs a full evening of route planning and checks that writing to <code>config/</code> and reading <code>orders/</code> are both refused. In production, Eli attaches it alongside the old one, watches CloudTrail for a day to confirm nothing Dispatch does depends on the old policy alone, and then detaches <code>s3:*</code>. The account audit has 40 more findings, and <a href="#chapter-08-users-roles">Chapter 8</a> and <a href="index.html#ch17">Chapter 17</a> pick up the two worst.</p>
 </aside>
 
 <!-- ======================================================== 9.10 -->
@@ -3104,7 +3911,7 @@ echo '{"zones": 3}' &gt; zones.json
 aws s3 cp zones.json s3://$B/config/zones.json
 aws s3 cp zones.json s3://$B/orders/export.json
 echo "bucket: $B"</code></pre></li>
-  <li><strong>Create the role.</strong> Its trust policy (the subject of <a href="index.html#ch8">Chapter 8</a>) lets identities in your own account assume it, if their own policies allow that, which an administrator's do.
+  <li><strong>Create the role.</strong> Its trust policy (the subject of <a href="#chapter-08-users-roles">Chapter 8</a>) lets identities in your own account assume it, if their own policies allow that, which an administrator's do.
 <pre><code>cat &gt; trust.json &lt;&lt;EOF
 { "Version": "2012-10-17",
   "Statement": [{ "Effect": "Allow", "Action": "sts:AssumeRole",
@@ -3240,6 +4047,863 @@ rm zones.json trust.json policy.json sloppy.json</code></pre>
     <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements.html">IAM JSON policy element reference</a>, <a href="https://docs.aws.amazon.com/service-authorization/latest/reference/reference.html">Service Authorization Reference</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html">global condition keys</a> and <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-policy-validation.html">Access Analyzer policy validation</a>.</li>
     <li>Azure: <a href="https://learn.microsoft.com/azure/role-based-access-control/role-definitions">Understand role definitions</a>.</li>
     <li>Google Cloud: <a href="https://cloud.google.com/iam/docs/overview">IAM overview</a> and <a href="https://cloud.google.com/iam/docs/conditions-overview">IAM Conditions</a>.</li>
+  </ul>
+</section>
+
+
+
+</article>
+<article class="sheet chapter" id="chapter-10-evaluation">
+<header class="opener">
+  <p class="eyebrow">Part II · IAM on AWS</p>
+  <p class="chno">10</p>
+  <h1>How AWS decides: policy evaluation logic</h1>
+  <p class="promise">A single request to AWS can be touched by up to seven kinds of policy: the caller's own, the resource's, a permissions boundary, a session policy, and the organisation's guardrails. AWS combines them in a fixed order, and once you know that order, every “why was this allowed?” and “why was this denied?” has an answer. This chapter teaches the order, one policy type at a time, with a flowchart you'll use for the rest of your career.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Name every policy type that can affect a request, and say which can grant and which can only limit.</li>
+      <li>Walk a request through AWS's evaluation order and predict the result.</li>
+      <li>Explain why an explicit deny beats <code>AdministratorAccess</code>, and use that for guardrails.</li>
+      <li>Say what both sides must allow for cross-account access.</li>
+      <li>Use permissions boundaries to let teams create roles safely.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Reading policies (<a href="#chapter-09-policies">Chapter 9</a>) and roles and trust policies (<a href="#chapter-08-users-roles">Chapter 8</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 50 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, Python 3; optional AWS CLI step, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 10.9</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p><a href="#chapter-01-who-and-what">Chapter 1</a> left Eli with a promise: nobody should be able to shorten the orders database's backups, “whoever asks”. In the first week of December he writes a policy that <em>denies</em> changing or deleting the orders database, and deleting any database backup, and attaches it to the engineers' group and to the new <code>prod-operator</code> role (<a href="#chapter-08-users-roles">Chapter 8</a>).</p>
+  <p>The next morning, Ben tries a harmless change to the database's maintenance window as <code>prod-operator</code>, a role with full production powers, and gets “access denied”. “I'm an admin,” he writes in the team chat, “how can anything deny me?” A week later Marco, the CFO, asks a sharper question: “So now it's impossible to shorten the backups?” It isn't, and section 10.10 explains why not.</p>
+</aside>
+
+<!-- ======================================================== 10.1 -->
+<h2 class="sec" id="s10-1"><span class="n">10.1</span>One request, many policies</h2>
+
+<p class="lead"><a href="#chapter-09-policies">Chapter 9</a> looked at one policy at a time. In reality, every request is judged against all the policies that apply to it at once. There are seven kinds, and they divide into two groups: policies that can <strong>grant</strong> access, and policies that can only <strong>limit</strong> it.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 10.1 · The policy types AWS evaluates</caption>
+    <thead><tr><th>Type</th><th>Attached to</th><th>Can grant?</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Identity-based policy</strong></td><td>a user, group or role</td><td>yes</td><td>what this identity may do (<a href="#chapter-09-policies">Chapter 9</a>)</td></tr>
+      <tr><td><strong>Resource-based policy</strong></td><td>a resource: bucket, key, queue, role trust</td><td>yes</td><td>who may use this resource</td></tr>
+      <tr><td><strong>Permissions boundary</strong></td><td>a user or role</td><td>no: a ceiling</td><td>the most an identity may ever have</td></tr>
+      <tr><td><strong>Session policy</strong></td><td>one role session, passed when it's created</td><td>no: a ceiling</td><td>narrowing a session below its role</td></tr>
+      <tr><td><strong>Service control policy (SCP)</strong></td><td>an organisation, OU or member account</td><td>no: a ceiling</td><td>the most any principal in those accounts may do</td></tr>
+      <tr><td><strong>Resource control policy (RCP)</strong></td><td>an organisation, OU or member account</td><td>no: a ceiling</td><td>the most anyone may do to resources in those accounts</td></tr>
+      <tr><td>ACLs</td><td>some older resources (S3, VPC endpoints for some services)</td><td>yes</td><td>legacy cross-account grants; avoid (<a href="#chapter-06-access-models">Chapter 6</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Two rules from <a href="#chapter-09-policies">Chapter 9</a> still hold across all of them: nothing is allowed unless something allows it, and an explicit deny in <em>any</em> of them wins.</p>
+
+<!-- ======================================================== 10.2 -->
+<h2 class="sec" id="s10-2"><span class="n">10.2</span>The order of evaluation</h2>
+
+<p>For a request within one account, AWS asks these questions in order. The first one that decides, decides:</p>
+
+<figure class="wide" id="fig10-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 470" role="img" aria-labelledby="fig10-1-t fig10-1-d">
+      <title id="fig10-1-t">AWS's policy evaluation order within one account</title>
+      <desc id="fig10-1-d">Seven questions in order. One: is there an explicit deny in any policy? If yes, deny. Two: if the account is under resource control policies, does an RCP allow it? If no, deny. Three: if under service control policies, does an SCP allow it? If no, deny. Four: does a resource-based policy allow this principal? If yes, allow (in the same account). Five: does an identity-based policy allow it? If no, deny. Six: if the identity has a permissions boundary, does it allow it? If no, deny. Seven: if this is a session with a session policy, does it allow it? If no, deny. Otherwise, allow.</desc>
+      <defs><marker id="c10ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c10ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="150" y="12" width="360" height="40" rx="5"/><text class="t-label" x="166" y="37">① Explicit deny in any policy?</text>
+      <rect class="node" x="150" y="70" width="360" height="40" rx="5"/><text class="t-label" x="166" y="95">② Under RCPs: does an RCP allow it?</text>
+      <rect class="node" x="150" y="128" width="360" height="40" rx="5"/><text class="t-label" x="166" y="153">③ Under SCPs: does an SCP allow it?</text>
+      <rect class="pub" x="150" y="186" width="360" height="40" rx="5"/><text class="t-label" x="166" y="211">④ Does a resource-based policy allow it?</text>
+      <rect class="node-accent" x="150" y="244" width="360" height="40" rx="5"/><text class="t-label on-accent" x="166" y="269">⑤ Does an identity-based policy allow it?</text>
+      <rect class="node" x="150" y="302" width="360" height="40" rx="5"/><text class="t-label" x="166" y="327">⑥ Boundary set: does it allow it?</text>
+      <rect class="node" x="150" y="360" width="360" height="40" rx="5"/><text class="t-label" x="166" y="385">⑦ Session policy set: does it allow it?</text>
+      <rect class="pub" x="150" y="418" width="360" height="40" rx="20"/><text class="t-title" x="330" y="444" text-anchor="middle">ALLOW</text>
+      <path class="wire" d="M330 52 V66 M330 110 V124 M330 168 V182 M330 226 V240 M330 284 V298 M330 342 V356 M330 400 V414"/>
+      <text class="t-small" x="338" y="64">no</text><text class="t-small" x="338" y="122">yes / none</text><text class="t-small" x="338" y="180">yes / none</text>
+      <text class="t-small" x="338" y="238">no</text><text class="t-small" x="338" y="296">yes</text><text class="t-small" x="338" y="354">yes / none</text><text class="t-small" x="338" y="412">yes / none</text>
+      <rect class="ext" x="588" y="12" width="160" height="388" rx="8"/>
+      <text class="t-title t-warn" x="668" y="212" text-anchor="middle">DENY</text>
+      <path class="wire" d="M512 32 H584" marker-end="url(#c10ah)"/><text class="t-small" x="548" y="26" text-anchor="middle">yes</text>
+      <path class="wire" d="M512 90 H584" marker-end="url(#c10ah)"/><text class="t-small" x="548" y="84" text-anchor="middle">no</text>
+      <path class="wire" d="M512 148 H584" marker-end="url(#c10ah)"/><text class="t-small" x="548" y="142" text-anchor="middle">no</text>
+      <path class="wire" d="M512 264 H584" marker-end="url(#c10ah)"/><text class="t-small" x="548" y="258" text-anchor="middle">no</text>
+      <path class="wire" d="M512 322 H584" marker-end="url(#c10ah)"/><text class="t-small" x="548" y="316" text-anchor="middle">no</text>
+      <path class="wire" d="M512 380 H584" marker-end="url(#c10ah)"/><text class="t-small" x="548" y="374" text-anchor="middle">no</text>
+      <path class="wire-accent" d="M150 206 H40 V438 H146" marker-end="url(#c10ah2)"/>
+      <text class="t-small t-accent" x="48" y="200">yes</text>
+      <text class="t-small" x="48" y="330">same account:</text>
+      <text class="t-small" x="48" y="346">allowed here</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 10.1</b> AWS's evaluation order in one account, simplified. Steps ② ③ ⑥ ⑦ only apply when that kind of policy exists. Across accounts, step ④ doesn't short-cut: both ④ and ⑤ must allow (10.5).</figcaption>
+</figure>
+
+<p>Read it as two kinds of question. Steps ①, ②, ③, ⑥ and ⑦ can only say <em>no</em>: they're filters. Steps ④ and ⑤ are where a <em>yes</em> comes from. A request is allowed only if something grants it and nothing filters it out.</p>
+
+<aside class="side"><b>Simplified</b>The full rules have more detail, especially about how boundaries and session policies interact with resource-based policies that name a role rather than a session. AWS's documentation has the complete flowchart; this one is right for the cases you'll meet most.</aside>
+
+<!-- ======================================================== 10.3 -->
+<h2 class="sec" id="s10-3"><span class="n">10.3</span>Explicit deny: guardrails</h2>
+
+<p>Step ① is why Ben, with full production powers, was denied. <code>AdministratorAccess</code> is just an identity-based policy that allows <code>*</code> on <code>*</code>; it answers step ⑤. An explicit deny in any attached policy is checked first, at step ①, and nothing later can undo it. That makes explicit deny the tool for <span class="term">guardrails</span>: rules that hold however generous someone's other permissions are.</p>
+
+<p class="code-title"><span>protect-orders-db.json</span><span>customer managed policy, Larder</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [
+    {
+      <span class="k">"Sid"</span>: <span class="s">"OnlyDbChangeMayAlterOrdersDb"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+      <span class="k">"Action"</span>: [<span class="s">"rds:ModifyDBInstance"</span>, <span class="s">"rds:DeleteDBInstance"</span>],
+      <span class="k">"Resource"</span>: <span class="s">"arn:aws:rds:eu-central-1:111122223333:db:orders-prod"</span>,
+      <span class="k">"Condition"</span>: { <span class="k">"StringNotLike"</span>: { <span class="s">"aws:PrincipalArn"</span>: [
+        <span class="s">"arn:aws:iam::111122223333:role/db-change"</span>,
+        <span class="s">"arn:aws:iam::111122223333:role/break-glass-*"</span>
+      ] } }
+    },
+    {
+      <span class="k">"Sid"</span>: <span class="s">"NobodyDeletesBackups"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+      <span class="k">"Action"</span>: [<span class="s">"rds:DeleteDBSnapshot"</span>, <span class="s">"rds:DeleteDBInstanceAutomatedBackup"</span>],
+      <span class="k">"Resource"</span>: <span class="s">"*"</span>
+    }
+  ]
+}</code></pre>
+
+<p>Read aloud: “Deny changing or deleting the orders database, unless you're the <code>db-change</code> role or a break-glass role. Deny deleting any database snapshot or automated backup, for everyone.” The pattern in the first statement (deny, <em>except</em> for named principals through <code>aws:PrincipalArn</code>) is the standard way to write a guardrail with a controlled exception. Use <code>aws:PrincipalArn</code> rather than the session ARN, because it gives the role's ARN for any session of that role.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Allows add up; one deny ends the discussion. Grant with allows, and draw lines that nobody may cross with denies.</p>
+</div>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: a guardrail only guards what it's attached to</p>
+  <p>An identity-based deny protects only from the identities it's attached to. Every user, group and role you forget, including the next one somebody creates, is outside it. That's the gap Marco's question found. Guardrails that must hold for <em>everyone</em> in an account belong one level up, in an SCP (10.8, <a href="index.html#ch20">Chapter 20</a>), or, for resources that support them, in a resource-based policy.</p>
+</div>
+
+<!-- ======================================================== 10.4 -->
+<h2 class="sec" id="s10-4"><span class="n">10.4</span>Resource-based policies in the same account</h2>
+
+<p>Step ④ is easy to miss. Within one account, if a resource-based policy (a bucket policy, a KMS key policy, a role's trust policy) allows a specific principal, that's enough: the principal doesn't also need an identity-based allow. That's why a trust policy that names <code>user/eli</code> lets Eli assume the role, while one that names the whole account (<code>…:root</code>) also needs Eli's own policies to allow <code>sts:AssumeRole</code> (<a href="#chapter-08-users-roles">Chapter 8</a>, 8.6).</p>
+
+<p>It also means resource policies deserve the same review as identity policies: a bucket policy that grants <code>s3:*</code> to a role gives that role full access to the bucket, whatever its identity policies say.</p>
+
+<aside class="side"><b>KMS is different</b>KMS keys are stricter: a key policy must allow access, either directly or by delegating to IAM policies with a statement for the account. Without that, even an administrator can't use the key (<a href="index.html#ch18">Chapter 18</a>).</aside>
+
+<!-- ======================================================== 10.5 -->
+<h2 class="sec" id="s10-5"><span class="n">10.5</span>Across accounts: both sides must agree</h2>
+
+<p>When the principal and the resource are in different accounts, there's no short cut at step ④. Each account controls its own side, and both must allow:</p>
+
+<figure class="wide" id="fig10-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 210" role="img" aria-labelledby="fig10-2-t fig10-2-d">
+      <title id="fig10-2-t">Cross-account access needs an allow on both sides</title>
+      <desc id="fig10-2-d">A role in StockPilot's account, 999988887777, wants to read an object in Larder's bucket in account 111122223333. StockPilot's account must allow it, through the role's identity-based policy and any SCPs and boundaries there. Larder's account must allow it, through the bucket policy naming StockPilot's role and any RCPs there. Only when both allow does the request succeed. An explicit deny on either side ends it.</desc>
+      <defs><marker id="c10ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="vpc" x="12" y="14" width="300" height="180" rx="8"/>
+      <text class="t-label" x="28" y="38">StockPilot · 999988887777</text>
+      <rect class="node" x="28" y="52" width="268" height="40" rx="4"/><text class="t-mono" x="162" y="77" text-anchor="middle">role/stock-sync</text>
+      <rect class="priv" x="28" y="104" width="268" height="74" rx="4"/>
+      <text class="t-small" x="40" y="124">must allow, on this side:</text>
+      <text class="t-small" x="40" y="144">identity policy: s3:GetObject on Larder's bucket</text>
+      <text class="t-small" x="40" y="164">and its SCPs, boundary, session policy</text>
+      <rect class="vpc" x="448" y="14" width="300" height="180" rx="8"/>
+      <text class="t-label" x="464" y="38">Larder · 111122223333</text>
+      <rect class="node" x="464" y="52" width="268" height="40" rx="4"/><text class="t-mono" x="598" y="77" text-anchor="middle">s3://larder-stock-exports</text>
+      <rect class="priv" x="464" y="104" width="268" height="74" rx="4"/>
+      <text class="t-small" x="476" y="124">must allow, on this side:</text>
+      <text class="t-small" x="476" y="144">bucket policy naming role/stock-sync</text>
+      <text class="t-small" x="476" y="164">and its RCPs</text>
+      <path class="wire-accent" d="M298 72 H460" marker-end="url(#c10ah3)"/>
+      <text class="t-small" x="380" y="64" text-anchor="middle">GetObject</text>
+      <text class="t-label" x="380" y="140" text-anchor="middle">both: allow</text>
+      <text class="t-small" x="380" y="160" text-anchor="middle">either: deny</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 10.2</b> Across accounts, each side holds a veto. That's what makes accounts such strong boundaries.</figcaption>
+</figure>
+
+<p>Assuming a role in another account works the same way: the caller's own account must allow <code>sts:AssumeRole</code> on that role's ARN, and the role's trust policy in the other account must trust the caller. Once assumed, the session lives in the role's account and only its permissions there count (<a href="index.html#ch21">Chapter 21</a>).</p>
+
+<!-- ======================================================== 10.6 -->
+<h2 class="sec" id="s10-6"><span class="n">10.6</span>Permissions boundaries: safe delegation</h2>
+
+<p>A <span class="term">permissions boundary</span> is a managed policy set on a user or role as its <em>ceiling</em>: the identity can do only what both its own policies and the boundary allow. It grants nothing by itself.</p>
+
+<p>Boundaries exist to solve one problem well: <strong>letting teams create their own roles</strong> without letting them create roles more powerful than they should. Without a boundary, anyone allowed to create roles and attach policies can create an administrator role and assume it. With one, you allow role creation <em>only if</em> the new role carries the boundary:</p>
+
+<pre><code>{
+  <span class="k">"Sid"</span>: <span class="s">"CreateTeamRolesOnlyWithTheBoundary"</span>,
+  <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+  <span class="k">"Action"</span>: [<span class="s">"iam:CreateRole"</span>, <span class="s">"iam:AttachRolePolicy"</span>, <span class="s">"iam:PutRolePolicy"</span>],
+  <span class="k">"Resource"</span>: <span class="s">"arn:aws:iam::111122223333:role/team-*"</span>,
+  <span class="k">"Condition"</span>: { <span class="k">"StringEquals"</span>: {
+    <span class="s">"iam:PermissionsBoundary"</span>: <span class="s">"arn:aws:iam::111122223333:policy/team-boundary"</span> } }
+}</code></pre>
+
+<p>Pair it with a deny on <code>iam:DeleteRolePermissionsBoundary</code> and <code>iam:PutRolePermissionsBoundary</code>, and on editing the boundary policy itself, or the ceiling can simply be removed. Now a team can create <code>team-reporting</code> with <code>AdministratorAccess</code> attached and it still can only do what <code>team-boundary</code> allows. Put your guardrail denies inside the boundary too, and every role created this way carries them.</p>
+
+<!-- ======================================================== 10.7 -->
+<h2 class="sec" id="s10-7"><span class="n">10.7</span>Session policies</h2>
+
+<p>A <span class="term">session policy</span> is passed when a role session is created (<code>aws sts assume-role --policy …</code> or <code>--policy-arns …</code>). The session gets the <em>intersection</em> of the role's permissions and the session policy. It's how a broker service can hand out one shared role, narrowed per request: “this session may only read <code>tenant-42/</code>”. People rarely write session policies by hand, but they explain some surprising denials, and IAM Identity Center and other services use them behind the scenes.</p>
+
+<!-- ======================================================== 10.8 -->
+<h2 class="sec" id="s10-8"><span class="n">10.8</span>SCPs and RCPs: the organisation's ceiling</h2>
+
+<p>When accounts belong to an AWS Organization (<a href="index.html#ch20">Chapter 20</a>), two more ceilings apply, set centrally:</p>
+<ul>
+  <li><strong>Service control policies</strong> limit what <em>principals in</em> member accounts may do, including those accounts' root users. A deny in an SCP applies to every role and user in the account, however created, which closes the gap from 10.3.</li>
+  <li><strong>Resource control policies</strong> limit what <em>anyone</em> may do to resources in member accounts, including principals from outside the organisation. They support a growing list of services, starting with S3, STS, KMS, SQS and Secrets Manager.</li>
+</ul>
+<p>Neither ever grants anything; by default each account has a policy allowing everything (<code>FullAWSAccess</code>, <code>RCPFullAWSAccess</code>), and you add denies or replace the default with an allow-list. Two exceptions to remember: SCPs and RCPs don't apply to the <strong>management account</strong>, and SCPs don't restrict <strong>service-linked roles</strong>.</p>
+
+<!-- ======================================================== 10.9 -->
+<h2 class="sec" id="s10-9"><span class="n">10.9</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 10.2 · How the big three combine permissions</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Grants combine by</td><td>union of allows, after filters</td><td>union of role assignments at the scope and above</td><td>union of allow-policy bindings on the resource and its ancestors</td></tr>
+      <tr><td>Explicit deny</td><td>any <code>Deny</code> statement, anywhere</td><td>deny assignments, created by Azure for managed applications and deployment stacks, not written directly</td><td>IAM deny policies, evaluated before allow policies</td></tr>
+      <tr><td>Organisation ceilings</td><td>SCPs (principals), RCPs (resources)</td><td>Azure Policy (resource configuration, not permissions); management group RBAC</td><td>deny policies at organisation or folder; organisation policy constraints (configuration)</td></tr>
+      <tr><td>Delegation ceiling</td><td>permissions boundaries</td><td>role assignment conditions limiting which roles a delegate may assign</td><td>conditions on who may grant which roles</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>Azure RBAC is additive: a principal's permissions are the union of its role assignments at every scope above the resource, and there's no way for you to write a general-purpose deny. Guardrails come from elsewhere: <strong>Azure Policy</strong> stops non-compliant resources being created or changed (no public storage accounts, only these regions), and resource <strong>locks</strong> (<code>CanNotDelete</code>, <code>ReadOnly</code>) protect critical resources from deletion by anyone, owners included.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>Google Cloud evaluates <strong>IAM deny policies</strong> first, then the union of allow-policy bindings inherited down the resource hierarchy. Deny policies attach to the organisation, folders or projects and can exempt principals, which makes them the nearest equivalent to an AWS guardrail with an exception. Configuration rules (such as “no external IPs”) are <strong>organisation policy constraints</strong>, a separate system.</p>
+</div>
+
+<!-- ======================================================== 10.10 -->
+<h2 class="sec" id="s10-10"><span class="n">10.10</span>At Larder: who can still shorten the backups?</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Ben's answer was step ①: an explicit deny in <code>protect-orders-db</code> beats the allow in his administrator policy. His maintenance-window change went through the new <code>db-change</code> role, which only Larder's two database owners may assume, with MFA, and whose sessions CloudTrail records like any other.</p>
+  <p>Marco's answer took Eli an afternoon with the lab's evaluator. The guardrail was attached to the engineers' group and <code>prod-operator</code>, but not to <code>deploy-bot</code>, the pipeline's IAM user with <code>AdministratorAccess</code>, which could still change the database. Nor would it be attached to any role created next month. Eli attached it to <code>deploy-bot</code> the same day, and added a rule for the team: every new role gets the <code>team-boundary</code> permissions boundary, which contains the same denies, and only roles with it can be created by anyone but the platform team. He told Marco the honest version: it's now very hard, not impossible, and it becomes impossible when the accounts join an organisation and the guardrail moves into an SCP (<a href="index.html#ch20">Chapter 20</a>).</p>
+</aside>
+
+<!-- ======================================================== 10.11 -->
+<h2 class="sec" id="s10-11"><span class="n">10.11</span>Lab: an evaluator you can read</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 10 · Figure 10.1 in a hundred lines</p>
+  <p><strong>You'll</strong> run a small implementation of AWS's evaluation order on eight of Larder's requests, predict each result first, then change policies and see which step decides. Optionally, you'll check one case against AWS's own policy simulator. <strong>You need</strong> Python 3; for the last step, the AWS CLI. <strong>Cost:</strong> free. The evaluator supports only the policy features this chapter uses; it's for learning, not for checking real policies.</p>
+</div>
+
+<p class="code-title"><span>evaluate.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># evaluate.py · AWS policy evaluation logic for one request, simplified for learning</span>
+<span class="k">from</span> fnmatch <span class="k">import</span> fnmatchcase
+
+<span class="k">def</span> as_list(x):
+    <span class="k">return</span> x <span class="k">if</span> isinstance(x, list) <span class="k">else</span> [x]
+
+<span class="k">def</span> statement_matches(st, req, check_principal=False):
+    <span class="k">if not</span> any(fnmatchcase(req[<span class="s">"action"</span>].lower(), a.lower()) <span class="k">for</span> a <span class="k">in</span> as_list(st.get(<span class="s">"Action"</span>, []))):
+        <span class="k">return</span> False
+    <span class="k">if not</span> any(fnmatchcase(req[<span class="s">"resource"</span>], r) <span class="k">for</span> r <span class="k">in</span> as_list(st.get(<span class="s">"Resource"</span>, <span class="s">"*"</span>))):
+        <span class="k">return</span> False
+    <span class="k">if</span> check_principal:
+        allowed = as_list(st.get(<span class="s">"Principal"</span>, {}).get(<span class="s">"AWS"</span>, []))
+        account_root = f<span class="s">"arn:aws:iam::{req['principal_account']}:root"</span>
+        names = {req[<span class="s">"principal"</span>], req[<span class="s">"context"</span>][<span class="s">"aws:PrincipalArn"</span>], account_root, <span class="s">"*"</span>}
+        <span class="k">if not</span> names &amp; set(allowed):
+            <span class="k">return</span> False
+    <span class="k">for</span> op, tests <span class="k">in</span> st.get(<span class="s">"Condition"</span>, {}).items():
+        <span class="k">for</span> key, want <span class="k">in</span> tests.items():
+            have = req[<span class="s">"context"</span>].get(key)
+            <span class="k">if</span> op == <span class="s">"StringEquals"</span> <span class="k">and</span> have <span class="k">not in</span> as_list(want):
+                <span class="k">return</span> False
+            <span class="k">if</span> op == <span class="s">"StringNotLike"</span> <span class="k">and</span> (have <span class="k">is</span> None <span class="k">or</span> any(fnmatchcase(have, w) <span class="k">for</span> w <span class="k">in</span> as_list(want))):
+                <span class="k">return</span> False
+            <span class="k">if</span> op == <span class="s">"Bool"</span> <span class="k">and</span> str(have).lower() != str(want).lower():
+                <span class="k">return</span> False
+    <span class="k">return</span> True
+
+<span class="k">def</span> decide(req, identity=(), resource=None, boundary=None, session=None, scp=None, rcp=None):
+    policies = {<span class="s">"identity-based policy"</span>: identity, <span class="s">"resource-based policy"</span>: resource <span class="k">or</span> [],
+                <span class="s">"permissions boundary"</span>: boundary <span class="k">or</span> [], <span class="s">"session policy"</span>: session <span class="k">or</span> [],
+                <span class="s">"SCP"</span>: scp <span class="k">or</span> [], <span class="s">"RCP"</span>: rcp <span class="k">or</span> []}
+    <span class="k">def</span> hits(kind, effect):
+        <span class="k">return</span> any(st[<span class="s">"Effect"</span>] == effect <span class="k">and</span> statement_matches(st, req, kind == <span class="s">"resource-based policy"</span>)
+                   <span class="k">for</span> st <span class="k">in</span> policies[kind])
+    <span class="k">for</span> kind <span class="k">in</span> policies:                                         <span class="c"># 1. any explicit deny wins</span>
+        <span class="k">if</span> hits(kind, <span class="s">"Deny"</span>):
+            <span class="k">return</span> f<span class="s">"DENY   explicit deny in {kind}"</span>
+    <span class="k">if</span> rcp <span class="k">is not</span> None <span class="k">and not</span> hits(<span class="s">"RCP"</span>, <span class="s">"Allow"</span>):              <span class="c"># 2. RCPs must allow</span>
+        <span class="k">return</span> <span class="s">"DENY   no RCP allows it"</span>
+    <span class="k">if</span> scp <span class="k">is not</span> None <span class="k">and not</span> hits(<span class="s">"SCP"</span>, <span class="s">"Allow"</span>):              <span class="c"># 3. SCPs must allow</span>
+        <span class="k">return</span> <span class="s">"DENY   no SCP allows it"</span>
+    same_account = req[<span class="s">"principal_account"</span>] == req[<span class="s">"resource_account"</span>]
+    by_resource = hits(<span class="s">"resource-based policy"</span>, <span class="s">"Allow"</span>)
+    <span class="k">if</span> same_account <span class="k">and</span> by_resource:                              <span class="c"># 4. same account: resource policy is enough</span>
+        <span class="k">return</span> <span class="s">"ALLOW  by resource-based policy"</span>
+    <span class="k">if not</span> hits(<span class="s">"identity-based policy"</span>, <span class="s">"Allow"</span>):                <span class="c"># 5. identity policy must allow</span>
+        <span class="k">return</span> <span class="s">"DENY   no identity-based policy allows it"</span>
+    <span class="k">if</span> boundary <span class="k">is not</span> None <span class="k">and not</span> hits(<span class="s">"permissions boundary"</span>, <span class="s">"Allow"</span>):
+        <span class="k">return</span> <span class="s">"DENY   permissions boundary doesn't allow it"</span>     <span class="c"># 6. boundary caps it</span>
+    <span class="k">if</span> session <span class="k">is not</span> None <span class="k">and not</span> hits(<span class="s">"session policy"</span>, <span class="s">"Allow"</span>):
+        <span class="k">return</span> <span class="s">"DENY   session policy doesn't allow it"</span>           <span class="c"># 7. session policy caps it</span>
+    <span class="k">if not</span> same_account:                                          <span class="c"># cross-account needs both sides</span>
+        <span class="k">return</span> (<span class="s">"ALLOW  identity- and resource-based policies both allow it"</span> <span class="k">if</span> by_resource
+                <span class="k">else</span> <span class="s">"DENY   cross-account: no resource-based policy allows it"</span>)
+    <span class="k">return</span> <span class="s">"ALLOW  by identity-based policy"</span>
+
+<span class="c"># ---------------------------------------------------------------- Larder's policies</span>
+PROD, STOCKPILOT = <span class="s">"111122223333"</span>, <span class="s">"999988887777"</span>
+ADMIN = [{<span class="s">"Effect"</span>: <span class="s">"Allow"</span>, <span class="s">"Action"</span>: <span class="s">"*"</span>, <span class="s">"Resource"</span>: <span class="s">"*"</span>}]
+GUARDRAIL = [{<span class="s">"Effect"</span>: <span class="s">"Deny"</span>,
+              <span class="s">"Action"</span>: [<span class="s">"rds:ModifyDBInstance"</span>, <span class="s">"rds:DeleteDBInstance"</span>],
+              <span class="s">"Resource"</span>: f<span class="s">"arn:aws:rds:eu-central-1:{PROD}:db:orders-prod"</span>,
+              <span class="s">"Condition"</span>: {<span class="s">"StringNotLike"</span>: {<span class="s">"aws:PrincipalArn"</span>: [f<span class="s">"arn:aws:iam::{PROD}:role/db-change"</span>,
+                                                                   f<span class="s">"arn:aws:iam::{PROD}:role/break-glass-*"</span>]}}},
+             {<span class="s">"Effect"</span>: <span class="s">"Deny"</span>,
+              <span class="s">"Action"</span>: [<span class="s">"rds:DeleteDBSnapshot"</span>, <span class="s">"rds:DeleteDBInstanceAutomatedBackup"</span>], <span class="s">"Resource"</span>: <span class="s">"*"</span>}]
+DEV_BOUNDARY = [{<span class="s">"Effect"</span>: <span class="s">"Allow"</span>, <span class="s">"Action"</span>: [<span class="s">"s3:*"</span>, <span class="s">"logs:*"</span>, <span class="s">"dynamodb:*"</span>], <span class="s">"Resource"</span>: <span class="s">"*"</span>}]
+BUCKET = [{<span class="s">"Effect"</span>: <span class="s">"Allow"</span>, <span class="s">"Principal"</span>: {<span class="s">"AWS"</span>: f<span class="s">"arn:aws:iam::{STOCKPILOT}:role/stock-sync"</span>},
+           <span class="s">"Action"</span>: <span class="s">"s3:GetObject"</span>, <span class="s">"Resource"</span>: <span class="s">"arn:aws:s3:::larder-stock-exports/*"</span>}]
+READ_EXPORTS = [{<span class="s">"Effect"</span>: <span class="s">"Allow"</span>, <span class="s">"Action"</span>: <span class="s">"s3:GetObject"</span>, <span class="s">"Resource"</span>: <span class="s">"arn:aws:s3:::larder-stock-exports/*"</span>}]
+SCP_ALLOW_LIST = [{<span class="s">"Effect"</span>: <span class="s">"Allow"</span>, <span class="s">"Action"</span>: [<span class="s">"s3:*"</span>, <span class="s">"ec2:*"</span>, <span class="s">"ecs:*"</span>, <span class="s">"logs:*"</span>], <span class="s">"Resource"</span>: <span class="s">"*"</span>}]
+
+<span class="k">def</span> principal_arn(arn):
+    <span class="s">"""A role session's aws:PrincipalArn is its role's ARN; anything else is itself."""</span>
+    <span class="k">if</span> <span class="s">":assumed-role/"</span> <span class="k">not in</span> arn:
+        <span class="k">return</span> arn
+    <span class="k">return</span> f<span class="s">"arn:aws:iam::{arn.split(':')[4]}:role/{arn.split('/')[1]}"</span>
+
+<span class="k">def</span> req(principal, action, resource, resource_account=PROD):
+    <span class="k">return</span> {<span class="s">"principal"</span>: principal, <span class="s">"action"</span>: action, <span class="s">"resource"</span>: resource,
+            <span class="s">"principal_account"</span>: principal.split(<span class="s">":"</span>)[4], <span class="s">"resource_account"</span>: resource_account,
+            <span class="s">"context"</span>: {<span class="s">"aws:PrincipalArn"</span>: principal_arn(principal)}}
+
+DB = f<span class="s">"arn:aws:rds:eu-central-1:{PROD}:db:orders-prod"</span>
+cases = [
+    (<span class="s">"1 admin changes the orders DB, no guardrail"</span>,
+     req(f<span class="s">"arn:aws:sts::{PROD}:assumed-role/prod-operator/ben"</span>, <span class="s">"rds:ModifyDBInstance"</span>, DB), dict(identity=ADMIN)),
+    (<span class="s">"2 same, guardrail attached"</span>,
+     req(f<span class="s">"arn:aws:sts::{PROD}:assumed-role/prod-operator/ben"</span>, <span class="s">"rds:ModifyDBInstance"</span>, DB), dict(identity=ADMIN + GUARDRAIL)),
+    (<span class="s">"3 the db-change role, guardrail attached"</span>,
+     req(f<span class="s">"arn:aws:sts::{PROD}:assumed-role/db-change/pipeline"</span>, <span class="s">"rds:ModifyDBInstance"</span>, DB), dict(identity=ADMIN + GUARDRAIL)),
+    (<span class="s">"4 deploy-bot: guardrail forgotten"</span>,
+     req(f<span class="s">"arn:aws:iam::{PROD}:user/deploy-bot"</span>, <span class="s">"rds:ModifyDBInstance"</span>, DB), dict(identity=ADMIN)),
+    (<span class="s">"5 developer role inside a boundary"</span>,
+     req(f<span class="s">"arn:aws:sts::{PROD}:assumed-role/team-tool/dee"</span>, <span class="s">"iam:CreateUser"</span>, f<span class="s">"arn:aws:iam::{PROD}:user/x"</span>),
+     dict(identity=ADMIN, boundary=DEV_BOUNDARY)),
+    (<span class="s">"6 StockPilot reads an export, no bucket policy"</span>,
+     req(f<span class="s">"arn:aws:sts::{STOCKPILOT}:assumed-role/stock-sync/s1"</span>, <span class="s">"s3:GetObject"</span>, <span class="s">"arn:aws:s3:::larder-stock-exports/today.csv"</span>),
+     dict(identity=READ_EXPORTS)),
+    (<span class="s">"7 same, with the bucket policy"</span>,
+     req(f<span class="s">"arn:aws:sts::{STOCKPILOT}:assumed-role/stock-sync/s1"</span>, <span class="s">"s3:GetObject"</span>, <span class="s">"arn:aws:s3:::larder-stock-exports/today.csv"</span>),
+     dict(identity=READ_EXPORTS, resource=BUCKET)),
+    (<span class="s">"8 admin, under an allow-list SCP"</span>,
+     req(f<span class="s">"arn:aws:sts::{PROD}:assumed-role/prod-operator/eli"</span>, <span class="s">"rds:ModifyDBInstance"</span>, DB), dict(identity=ADMIN, scp=SCP_ALLOW_LIST)),
+]
+<span class="k">for</span> name, r, pols <span class="k">in</span> cases:
+    print(f<span class="s">"{name:&lt;48} {decide(r, **pols)}"</span>)</code></pre>
+
+<ol class="steps">
+  <li><strong>Predict, then run.</strong> Cover the output below, write down ALLOW or DENY and the step from Figure 10.1 for each case, then run <code>python3 evaluate.py</code>:
+<pre><code>1 admin changes the orders DB, no guardrail      ALLOW  by identity-based policy
+2 same, guardrail attached                       DENY   explicit deny in identity-based policy
+3 the db-change role, guardrail attached         ALLOW  by identity-based policy
+4 deploy-bot: guardrail forgotten                ALLOW  by identity-based policy
+5 developer role inside a boundary               DENY   permissions boundary doesn't allow it
+6 StockPilot reads an export, no bucket policy   DENY   cross-account: no resource-based policy allows it
+7 same, with the bucket policy                   ALLOW  identity- and resource-based policies both allow it
+8 admin, under an allow-list SCP                 DENY   no SCP allows it</code></pre>
+  Cases 1 and 2 are Ben's morning. Case 4 is Marco's question. Case 8 previews <a href="index.html#ch20">Chapter 20</a>: even an administrator can't use a service the organisation hasn't allowed.</li>
+  <li><strong>Close the gap.</strong> Add <code>GUARDRAIL</code> to case 4's identity policies. Then add a case for a brand-new role with <code>AdministratorAccess</code> and no guardrail: it's allowed. Finally, give that role <code>boundary=DEV_BOUNDARY + GUARDRAIL</code>, the 10.10 fix, and run again.</li>
+  <li><strong>Break it on purpose.</strong> In the guardrail's exception list, change <code>role/break-glass-*</code> to <code>role/*</code>, a common slip, and run case 2 again: every role in the account is now an exception, and the guardrail protects nothing. In case 7, change the bucket policy's principal to StockPilot's whole account (<code>arn:aws:iam::999988887777:root</code>): still allowed, but now <em>any</em> identity there whose own policies allow it can read Larder's exports.</li>
+  <li><strong>Optional: ask AWS.</strong> Save the <code>GUARDRAIL</code> statements as <code>guardrail.json</code> (a full policy, with <code>Version</code>), then run AWS's simulator, which is free:
+<pre><code>aws iam simulate-custom-policy \
+  --policy-input-list file://guardrail.json '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"*","Resource":"*"}]}' \
+  --action-names rds:ModifyDBInstance \
+  --resource-arns arn:aws:rds:eu-central-1:111122223333:db:orders-prod \
+  --context-entries "ContextKeyName=aws:PrincipalArn,ContextKeyValues=arn:aws:iam::111122223333:role/prod-operator,ContextKeyType=string" \
+  --query 'EvaluationResults[].[EvalActionName, EvalDecision]' --output text</code></pre>
+  Expect <code>explicitDeny</code>. Change the context value to <code>…:role/db-change</code> and expect <code>allowed</code>.</li>
+</ol>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s10-12"><span class="n">10.12</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>“Admins can do anything”</td><td>Surprise at guardrails; or guardrails never written.</td><td>Explicit deny for lines nobody may cross.</td></tr>
+      <tr><td>Guardrails attached identity by identity</td><td>Every forgotten or new identity bypasses them.</td><td>Permissions boundaries for new roles; SCPs and RCPs for everyone.</td></tr>
+      <tr><td>Exceptions with wide wildcards (<code>role/*</code>)</td><td>The exception swallows the rule.</td><td>Exact role names or a narrow, reserved prefix.</td></tr>
+      <tr><td>Expecting a boundary or SCP to grant</td><td>Access still denied after adding one.</td><td>Ceilings only filter; grant with identity or resource policies.</td></tr>
+      <tr><td>Reviewing identity policies only</td><td>Bucket, key and trust policies grant access unnoticed.</td><td>Review resource-based policies too; use Access Analyzer (<a href="index.html#ch23">Chapter 23</a>).</td></tr>
+      <tr><td>Granting cross-account to a whole account</td><td>Every admin in the other account gets in.</td><td>Name specific roles; add conditions.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum10">
+  <h2 class="sec" id="sum10"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Seven policy types can apply. <strong>Identity</strong> and <strong>resource</strong> policies grant; <strong>boundaries, session policies, SCPs and RCPs</strong> only limit.</li>
+    <li>Order: explicit deny anywhere → RCPs → SCPs → resource policy (same account) → identity policy → boundary → session policy.</li>
+    <li>An <strong>explicit deny</strong> beats every allow, including <code>AdministratorAccess</code>: use it for guardrails, with exceptions via <code>aws:PrincipalArn</code>.</li>
+    <li>In one account, a resource policy naming a principal is enough; <strong>across accounts, both sides must allow</strong>.</li>
+    <li><strong>Permissions boundaries</strong> let teams create roles safely, if the boundary can't be removed.</li>
+    <li>Identity-attached guardrails cover only what they're attached to; organisation-wide ones belong in SCPs and RCPs.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Explicit deny</dt><dd>A matching <code>Deny</code> statement in any policy; always wins.</dd>
+    <dt>Implicit deny</dt><dd>The default result when nothing allows a request.</dd>
+    <dt>Guardrail</dt><dd>A deny that holds regardless of other permissions.</dd>
+    <dt>Permissions boundary</dt><dd>A managed policy that caps an identity's maximum permissions.</dd>
+    <dt>Session policy</dt><dd>A policy passed at session creation that narrows a role session.</dd>
+    <dt>SCP</dt><dd>Service control policy: an organisation ceiling on principals in member accounts.</dd>
+    <dt>RCP</dt><dd>Resource control policy: an organisation ceiling on access to resources in member accounts.</dd>
+    <dt><code>aws:PrincipalArn</code></dt><dd>The ARN of the calling user or role (a role session's role), used for exceptions.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Which policy types can grant access, and which can only take it away? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Identity-based and resource-based policies (and legacy ACLs) can grant. Permissions boundaries, session policies, SCPs and RCPs can only limit.</p></details>
+    </li>
+    <li>
+      <p>A role has <code>AdministratorAccess</code> and a permissions boundary allowing only <code>s3:*</code>. Can it create an IAM user? Can it delete a bucket? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>No: the boundary doesn't allow <code>iam:CreateUser</code>. Yes: both the identity policy and the boundary allow <code>s3:DeleteBucket</code>, unless something denies it explicitly.</p></details>
+    </li>
+    <li>
+      <p>A bucket in account A has a policy allowing a role in account B to read it. The role's own policies allow nothing. Can it read the bucket? What if the role were in account A? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>From account B, no: across accounts both sides must allow, and B's side doesn't. In account A, yes: within one account a resource-based policy naming the principal is enough.</p></details>
+    </li>
+    <li>
+      <p>Why is an explicit deny in an identity policy a weaker guardrail than the same deny in an SCP? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The identity policy protects only from the identities it's attached to; any other or new identity bypasses it. An SCP applies to every principal in the member account, however it was created, including the root user.</p></details>
+    </li>
+    <li>
+      <p>Design a way for Larder's product teams to create roles for their own services without being able to give themselves more power than the platform team allows. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>A <code>team-boundary</code> policy with the services teams may use and the guardrail denies. Teams may create and modify roles named <code>team-*</code> only with that boundary (condition on <code>iam:PermissionsBoundary</code>), may pass only <code>team-*</code> roles, and are denied removing or changing boundaries and editing the boundary policy itself.</p></details>
+    </li>
+    <li>
+      <p>Compare how you'd stop anyone deleting a production database on AWS and on Azure. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>AWS: an explicit deny on the delete action (in an SCP to cover everyone, with an exception for a break-glass role), plus RDS deletion protection. Azure: a <code>CanNotDelete</code> resource lock, which blocks deletion even by owners until someone with permission removes the lock, and Azure Policy for configuration rules.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html">Policy evaluation logic</a> (the full flowchart), <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic-cross-account.html">cross-account evaluation</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html">permissions boundaries</a>, <a href="https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_rcps.html">RCPs</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/azure-resource-manager/management/lock-resources">resource locks</a>. Google Cloud: <a href="https://cloud.google.com/iam/docs/deny-overview">IAM deny policies</a>.</li>
+  </ul>
+</section>
+
+
+
+</article>
+<article class="sheet chapter" id="chapter-11-access-denied">
+<header class="opener">
+  <p class="eyebrow">Part II · IAM on AWS</p>
+  <p class="chno">11</p>
+  <h1>Debugging “access denied”</h1>
+  <p class="promise">Every engineer who works with AWS meets “access denied” weekly. Most people respond by adding permissions until it goes away, which is how <code>s3:*</code> on <code>*</code> ends up in production. This chapter gives you a method instead: find out exactly who asked for exactly what, read what AWS tells you about why it said no, confirm it in CloudTrail, and fix the one policy that's actually responsible.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Follow a seven-step method from an error message to the policy that caused it.</li>
+      <li>Read the reason in an AWS access-denied message, and decode an encoded one.</li>
+      <li>Find denied calls in CloudTrail, including calls one service made for another.</li>
+      <li>Tell real permission problems from look-alikes: expired tokens, wrong accounts, clock skew.</li>
+      <li>Fix a denial with the smallest correct change.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>The evaluation order (<a href="#chapter-10-evaluation">Chapter 10</a>), roles and sessions (<a href="#chapter-08-users-roles">Chapter 8</a>), reading policies (<a href="#chapter-09-policies">Chapter 9</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, Python 3 and AWS CLI, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 11.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>On Tuesday 8 December 2026, Dispatch's new least-privilege policy from <a href="#chapter-09-policies">Chapter 9</a> went to staging for its trial evening. At 18:00, Engine A started planning tomorrow's van routes, read its settings from <code>config/</code> without trouble, and then failed to write a single route plan to <code>routes/</code>: <code>AccessDenied</code>, for every van.</p>
+  <p>The policy plainly allowed <code>s3:PutObject</code> on <code>routes/*</code>. Ben's first suggestion in the chat was to put <code>s3:*</code> back “just for staging”. Eli asked for twenty minutes instead. Section 11.9 shows what he found, and it wasn't in the policy anyone was looking at.</p>
+</aside>
+
+<!-- ======================================================== 11.1 -->
+<h2 class="sec" id="s11-1"><span class="n">11.1</span>A method</h2>
+
+<p class="lead">“Access denied” is a symptom, and like any symptom it has several possible causes. Guessing (adding permissions until it works) usually fixes it by granting far more than needed, and sometimes doesn't fix it at all, because the cause was never a missing permission. Work through it in order:</p>
+
+<ol class="steps">
+  <li><strong>Who am I?</strong> Confirm the exact principal making the call: which role, which session, which account (11.2).</li>
+  <li><strong>What exactly was asked?</strong> The action, the resource ARN, the region. Not “S3”: <code>s3:PutObject</code> on <code>arn:aws:s3:::larder-dispatch-staging/routes/2026-12-09/van-1.json</code>.</li>
+  <li><strong>Read the error</strong> all the way to the end. It increasingly names the type of policy that said no (11.3).</li>
+  <li><strong>Find it in CloudTrail</strong>, including any calls made <em>on your behalf</em> by another service (11.4).</li>
+  <li><strong>Walk the evaluation order</strong> from <a href="#chapter-10-evaluation">Chapter 10</a> for that request: deny, RCP, SCP, resource policy, identity policy, boundary, session policy.</li>
+  <li><strong>Rule out look-alikes</strong>: expired credentials, the wrong account or region, clock skew, a missing object (11.6).</li>
+  <li><strong>Fix the one responsible policy</strong> with the smallest change, validate it, and test the original request again (11.7).</li>
+</ol>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Find out exactly who asked for exactly what, then let AWS tell you which policy said no. Don't add a permission until you know which one is missing.</p>
+</div>
+
+<!-- ======================================================== 11.2 -->
+<h2 class="sec" id="s11-2"><span class="n">11.2</span>Who am I, really?</h2>
+
+<p>A surprising share of permission problems are identity problems: the call wasn't made by who you think. Leftover environment variables from an earlier session, a default profile pointing at another account, a container that picked up the node's role instead of its own (<a href="#chapter-08-users-roles">Chapter 8</a>, 8.8). Always start with:</p>
+<pre><code>aws sts get-caller-identity
+{
+    "UserId": "AROAEXAMPLEID:engine-a-7f9c",
+    "Account": "444455556666",
+    "Arn": "arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c"
+}</code></pre>
+<p>This call always works, whatever your permissions. For code, log the same thing at start-up: the SDK has the same call. Check the account number as carefully as the role name: production and staging roles often share names.</p>
+
+<!-- ======================================================== 11.3 -->
+<h2 class="sec" id="s11-3"><span class="n">11.3</span>Read the error</h2>
+
+<p>AWS's access-denied messages have become much more helpful. Most services now say who was denied, what they tried, on which resource, and which <em>type</em> of policy is responsible:</p>
+
+<figure class="wide" id="fig11-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 200" role="img" aria-labelledby="fig11-1-t fig11-1-d">
+      <title id="fig11-1-t">The parts of an AWS access-denied message</title>
+      <desc id="fig11-1-d">The message reads: User: arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c is not authorized to perform: kms:GenerateDataKey on resource: arn:aws:kms:eu-central-1:444455556666:key/1234abcd… because no identity-based policy allows the kms:GenerateDataKey action. Its parts are: who was denied, the role session; what action, kms:GenerateDataKey, which is a KMS action, not S3; on which resource, a KMS key; and why, no identity-based policy allows it, which says where to look.</desc>
+      <rect class="priv" x="12" y="14" width="736" height="104" rx="6"/>
+      <text class="t-mono" x="24" y="38">User: <tspan class="t-accent">arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c</tspan></text>
+      <text class="t-mono" x="24" y="60">is not authorized to perform: <tspan class="t-accent">kms:GenerateDataKey</tspan></text>
+      <text class="t-mono" x="24" y="82">on resource: <tspan class="t-accent">arn:aws:kms:eu-central-1:444455556666:key/1234abcd-…</tspan></text>
+      <text class="t-mono" x="24" y="104"><tspan class="t-warn">because no identity-based policy allows</tspan> the kms:GenerateDataKey action</text>
+      <rect class="node" x="12" y="134" width="172" height="52" rx="4"/><text class="t-label" x="98" y="156" text-anchor="middle">who</text><text class="t-small" x="98" y="174" text-anchor="middle">this role, this session</text>
+      <rect class="node" x="200" y="134" width="172" height="52" rx="4"/><text class="t-label" x="286" y="156" text-anchor="middle">what</text><text class="t-small" x="286" y="174" text-anchor="middle">a KMS action, not S3</text>
+      <rect class="node" x="388" y="134" width="172" height="52" rx="4"/><text class="t-label" x="474" y="156" text-anchor="middle">on what</text><text class="t-small" x="474" y="174" text-anchor="middle">a KMS key</text>
+      <rect class="node-accent" x="576" y="134" width="172" height="52" rx="4"/><text class="t-label on-accent" x="662" y="156" text-anchor="middle">why</text><text class="t-small on-accent" x="662" y="174" text-anchor="middle">where to look</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 11.1</b> An access-denied message read in four parts. The last part names the type of policy that said no, which tells you where to look.</figcaption>
+</figure>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 11.1 · What the reason says, and where to look</caption>
+    <thead><tr><th>The message says</th><th>Look at</th></tr></thead>
+    <tbody>
+      <tr><td>because no identity-based policy allows</td><td>the user's or role's own policies (and its groups')</td></tr>
+      <tr><td>with an explicit deny in an identity-based policy</td><td>a <code>Deny</code> statement attached to the identity, such as a guardrail (<a href="#chapter-10-evaluation">Chapter 10</a>)</td></tr>
+      <tr><td>because no resource-based policy allows / with an explicit deny in a resource-based policy</td><td>the bucket, key, queue or trust policy; for cross-account calls, the other account's side</td></tr>
+      <tr><td>because no permissions boundary allows</td><td>the identity's permissions boundary</td></tr>
+      <tr><td>because no session policy allows</td><td>whatever created the session: a broker, a federation setup, an SSO permission set</td></tr>
+      <tr><td>…service control policy / …resource control policy</td><td>the organisation's guardrails; ask the platform team (<a href="index.html#ch20">Chapter 20</a>)</td></tr>
+      <tr><td>…VPC endpoint policy</td><td>the policy on the VPC endpoint the call went through (Handbook 1, Chapter 12)</td></tr>
+      <tr><td>a bare <code>Access Denied</code></td><td>common from S3 data calls: bucket policy, Block Public Access, object ownership, KMS, or a missing object (11.6)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Some services, notably EC2, return an <strong>encoded authorization failure message</strong> instead of the full detail, because it can reveal information about your policies. Someone with <code>sts:DecodeAuthorizationMessage</code> can decode it:</p>
+<pre><code>aws sts decode-authorization-message --encoded-message "$MSG" \
+  --query DecodedMessage --output text | python3 -m json.tool</code></pre>
+<p>The result shows whether the request was allowed, whether an explicit deny matched, any matched statements, and the request's full context: principal, action, resource and condition keys.</p>
+
+<!-- ======================================================== 11.4 -->
+<h2 class="sec" id="s11-4"><span class="n">11.4</span>Find it in CloudTrail</h2>
+
+<p><span class="term">CloudTrail</span> records API calls made in your account: who, what, when, from where, and whether it failed. Denied calls are recorded with an <code>errorCode</code> such as <code>AccessDenied</code> or <code>Client.UnauthorizedOperation</code> and, usually, the same <code>errorMessage</code> the caller saw. What to know before you go looking:</p>
+<ul>
+  <li><strong>Management events</strong> (creating, changing and deleting resources, and many reads) are recorded by default and searchable for 90 days in the console's <em>Event history</em> or with <code>aws cloudtrail lookup-events</code>, per region.</li>
+  <li><strong>Data events</strong> (S3 object reads and writes, Lambda invocations, DynamoDB item calls) are <em>not</em> recorded unless a trail is configured for them, because there are so many. Larder records S3 data events for its production buckets (<a href="index.html#ch23">Chapter 23</a>).</li>
+  <li><strong>Global services</strong> such as IAM and STS log in <code>us-east-1</code> (or the region of the STS endpoint used).</li>
+  <li><strong>Events appear after a delay</strong>, typically a few minutes and occasionally up to about 15.</li>
+</ul>
+
+<p>The most useful field for puzzles like Larder's is <code>userIdentity.invokedBy</code>. When S3 needs a KMS key to encrypt an object you upload, S3 calls KMS <em>as you</em>, and CloudTrail records that KMS call with <code>invokedBy: s3.amazonaws.com</code>. If that call is denied, your upload fails with an error from S3, but the cause lives in a different service's event.</p>
+
+<!-- ======================================================== 11.5 -->
+<h2 class="sec" id="s11-5"><span class="n">11.5</span>Tools that walk the flowchart for you</h2>
+
+<ul>
+  <li><strong>IAM policy simulator</strong> (<code>aws iam simulate-principal-policy</code>, or the console): evaluates an existing user's or role's policies for given actions, resources and context keys, and says which statement allowed or denied. It covers identity policies, boundaries and SCPs; resource policies only if you pass them in.</li>
+  <li><strong>IAM Access Analyzer policy validation</strong>: catches impossible policies before you blame AWS: misspelled actions, actions that don't support the resource you named (<a href="#chapter-09-policies">Chapter 9</a>).</li>
+  <li><strong>Last accessed information</strong> (in IAM's <em>Access Advisor</em> tab): shows which services a role has actually used, which helps when narrowing a policy without breaking it.</li>
+</ul>
+
+<!-- ======================================================== 11.6 -->
+<h2 class="sec" id="s11-6"><span class="n">11.6</span>It isn't always a permission</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 11.2 · Errors that look like permission problems</caption>
+    <thead><tr><th>You see</th><th>Usually means</th><th>Check</th></tr></thead>
+    <tbody>
+      <tr><td><code>ExpiredToken</code></td><td>the session ended</td><td>sign in again; for long jobs, refresh credentials (<a href="#chapter-08-users-roles">Chapter 8</a>)</td></tr>
+      <tr><td><code>InvalidClientTokenId</code></td><td>the access key doesn't exist (deleted, mistyped, or from another partition)</td><td><code>get-caller-identity</code>; which credentials the chain found</td></tr>
+      <tr><td><code>SignatureDoesNotMatch</code></td><td>wrong secret key, or the request was altered</td><td>the secret that goes with this key ID; proxies rewriting requests</td></tr>
+      <tr><td><code>RequestTimeTooSkewed</code> or “signature expired”</td><td>the machine's clock is more than about 15 minutes off</td><td>time sync on the host</td></tr>
+      <tr><td>S3 <code>AccessDenied</code> on <code>GetObject</code></td><td>possibly a missing object, if you lack <code>s3:ListBucket</code> (<a href="#chapter-09-policies">Chapter 9</a>, 9.4)</td><td>the exact key; list the prefix with someone who can</td></tr>
+      <tr><td>“not found” for something that exists</td><td>wrong region or wrong account</td><td><code>--region</code>, <code>AWS_REGION</code>, the account in <code>get-caller-identity</code></td></tr>
+      <tr><td><code>AccessDeniedException</code> from KMS</td><td>the key's own policy, not IAM</td><td>the key policy and grants (<a href="index.html#ch18">Chapter 18</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 11.7 -->
+<h2 class="sec" id="s11-7"><span class="n">11.7</span>Fixing it well</h2>
+
+<p>Once you know which policy said no, the fix is usually one statement. Keep it small:</p>
+<ul>
+  <li><strong>Add the exact action on the exact resource</strong>, not a wildcard. If the message says <code>kms:GenerateDataKey</code> on one key, that's what to allow, on that key.</li>
+  <li><strong>Fix it where it belongs.</strong> If a guardrail blocked something legitimate, change the guardrail's exception deliberately, or use the approved path (such as Larder's <code>db-change</code> role), rather than removing the guardrail.</li>
+  <li><strong>Sometimes the fix isn't a permission at all.</strong> A staging setting that doesn't match production, a request to the wrong region, a missing object.</li>
+  <li><strong>Validate, then repeat the original request.</strong> Also try one request that should still fail, so you know you didn't open more than you meant to.</li>
+  <li><strong>Write it down</strong> in the commit message or ticket: which call, which reason, which statement changed. The next person will thank you.</li>
+</ul>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: “just for now” wildcards</p>
+  <p>A wildcard added to make an error go away under pressure is almost never removed: the error is gone, so nobody looks again. Larder's <code>s3:*</code> on <code>*</code> started exactly that way in April. If you must unblock something urgently, add the narrowest statement you can, with a <code>Sid</code> that says it's temporary and a ticket to replace it.</p>
+</div>
+
+<!-- ======================================================== 11.8 -->
+<h2 class="sec" id="s11-8"><span class="n">11.8</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 11.3 · Debugging denied access at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>The error</td><td><code>AccessDenied</code>, with principal, action, resource and policy type</td><td><code>AuthorizationFailed</code>: the client's object ID, the action (<code>Microsoft.Storage/…/read</code>) and the scope</td><td><code>403 PERMISSION_DENIED</code>, naming the missing permission (<code>storage.objects.get</code>)</td></tr>
+      <tr><td>The log</td><td>CloudTrail (data events optional)</td><td>Activity log for management; resource logs for data</td><td>Cloud Audit Logs (Data Access logs must be enabled)</td></tr>
+      <tr><td>Explaining a decision</td><td>policy simulator; decoded authorization messages</td><td><em>Check access</em> in the portal: a principal's role assignments at a scope</td><td>Policy Troubleshooter: why a principal does or doesn't have a permission, including deny policies</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>Role assignments can take several minutes to take effect, and a cached token may not show a new group membership until it's refreshed. When a correct-looking assignment “doesn't work”, sign out and in again (or get a new token) before changing anything. For storage data, remember that management roles such as Contributor don't include data access: you need a data role such as Storage Blob Data Reader.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>Google's errors name the exact permission that was missing, which makes the first step easy. <strong>Policy Troubleshooter</strong> then shows every binding on the resource and its ancestors that could grant it, any deny policy that blocks it, and whether conditions matched. Like AWS, it can only explain what's in IAM; organisation policy constraints and VPC Service Controls produce their own, differently worded errors.</p>
+</div>
+
+<!-- ======================================================== 11.9 -->
+<h2 class="sec" id="s11-9"><span class="n">11.9</span>At Larder: the error was in another service</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Eli's twenty minutes went like this. Engine A's logs showed the identity was right (<code>dispatch-task</code>, in the staging account). The upload's error ended with the reason in Figure 11.1: the denied action was <code>kms:GenerateDataKey</code>, not anything in S3. CloudTrail in the staging account confirmed it: one denied KMS call per van, each <code>invokedBy: s3.amazonaws.com</code>. The staging bucket, it turned out, had been set in 2025 to encrypt new objects by default with a customer managed KMS key, during an experiment nobody remembered. Production's bucket uses S3-managed keys. The <code>config/</code> files read fine because the deploy pipeline uploads them with S3-managed encryption explicitly; Engine A's uploads took the bucket's default.</p>
+  <p>So the policy was right, and staging was wrong. Eli changed the staging bucket's default encryption to match production, the team re-ran the evening's planning, and every route plan was written. Ben's <code>s3:*</code> was never needed. Two follow-ups went on the list: compare staging and production bucket settings automatically, and decide properly whether Larder wants customer managed keys at all (<a href="index.html#ch18">Chapter 18</a>), in which case Dispatch's policy will need <code>kms:GenerateDataKey</code> and <code>kms:Decrypt</code> on that one key.</p>
+</aside>
+
+<!-- ======================================================== 11.10 -->
+<h2 class="sec" id="s11-10"><span class="n">11.10</span>Lab: from error to cause</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 11 · Find, read and decode denials</p>
+  <p><strong>You'll</strong> run a script that finds denied calls in CloudTrail events and says why, first on Larder's staging evening, then on denials you cause yourself; decode an encoded EC2 message; and ask the policy simulator. <strong>You need</strong> Python 3; for steps 3–7, the AWS CLI v2 signed in to a sandbox account as an administrator, and the role from Lab 8. <strong>Cost:</strong> free; no instances are created (the EC2 call is a dry run).</p>
+</div>
+
+<p class="code-title"><span>denied.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># denied.py · find the denied calls in CloudTrail events and say why</span>
+<span class="k">import</span> json, sys
+<span class="k">from</span> collections <span class="k">import</span> Counter
+
+<span class="k">def</span> events(path):
+    text = open(path).read().strip()
+    <span class="k">if</span> text.startswith(<span class="s">"["</span>):                             <span class="c"># aws cloudtrail lookup-events ... --output json</span>
+        <span class="k">return</span> [json.loads(x) <span class="k">if</span> isinstance(x, str) <span class="k">else</span> x <span class="k">for</span> x <span class="k">in</span> json.loads(text)]
+    <span class="k">if</span> <span class="s">'"Records"'</span> <span class="k">in</span> text[:200]:
+        <span class="k">return</span> json.loads(text)[<span class="s">"Records"</span>]               <span class="c"># a CloudTrail log file from S3</span>
+    <span class="k">return</span> [json.loads(line) <span class="k">for</span> line <span class="k">in</span> text.splitlines() <span class="k">if</span> line.strip()]   <span class="c"># one event per line</span>
+
+<span class="k">def</span> who(e):
+    u = e[<span class="s">"userIdentity"</span>]
+    name = u.get(<span class="s">"sessionContext"</span>, {}).get(<span class="s">"sessionIssuer"</span>, {}).get(<span class="s">"arn"</span>) <span class="k">or</span> u.get(<span class="s">"arn"</span>, u.get(<span class="s">"type"</span>))
+    <span class="k">return</span> name + (f<span class="s">" (via {u['invokedBy']})"</span> <span class="k">if</span> <span class="s">"invokedBy"</span> <span class="k">in</span> u <span class="k">else</span> <span class="s">""</span>)
+
+<span class="k">def</span> why(e):
+    msg = e.get(<span class="s">"errorMessage"</span>, <span class="s">""</span>)
+    <span class="k">if</span> <span class="s">" because "</span> <span class="k">in</span> msg:
+        <span class="k">return</span> msg.split(<span class="s">" because "</span>, 1)[1].split(<span class="s">". Encoded"</span>)[0]
+    <span class="k">if</span> <span class="s">" with an explicit deny "</span> <span class="k">in</span> msg:
+        <span class="k">return</span> <span class="s">"explicit deny "</span> + msg.split(<span class="s">" with an explicit deny "</span>, 1)[1]
+    <span class="k">if</span> <span class="s">"Encoded authorization failure message"</span> <span class="k">in</span> msg:
+        <span class="k">return</span> <span class="s">"encoded: run aws sts decode-authorization-message"</span>
+    <span class="k">return</span> msg <span class="k">or</span> <span class="s">"(no message)"</span>
+
+DENIED = (<span class="s">"AccessDenied"</span>, <span class="s">"UnauthorizedOperation"</span>, <span class="s">"Forbidden"</span>)
+counts, first = Counter(), {}
+<span class="k">for</span> e <span class="k">in</span> events(sys.argv[1] <span class="k">if</span> len(sys.argv) &gt; 1 <span class="k">else</span> <span class="s">"sample-events.jsonl"</span>):
+    <span class="k">if not</span> any(d <span class="k">in</span> e.get(<span class="s">"errorCode"</span>, <span class="s">""</span>) <span class="k">for</span> d <span class="k">in</span> DENIED):
+        <span class="k">continue</span>
+    key = (who(e), f<span class="s">"{e['eventSource'].split('.')[0]}:{e['eventName']}"</span>, why(e))
+    counts[key] += 1
+    first.setdefault(key, e[<span class="s">"eventTime"</span>])
+
+<span class="k">for</span> (principal, action, reason), n <span class="k">in</span> sorted(counts.items(), key=<span class="k">lambda</span> kv: first[kv[0]]):
+    print(f<span class="s">"{first[(principal, action, reason)]}  {n}×  {action}\n    who: {principal}\n    why: {reason}"</span>)</code></pre>
+
+<ol class="steps">
+  <li><strong>Save Larder's staging evening</strong> as <code>sample-events.jsonl</code>: five events from the staging account, one per line, trimmed to the fields the script reads.
+<pre><code>{"userIdentity": {"arn": "arn:aws:sts::444455556666:assumed-role/team-tool/dee", "sessionContext": {"sessionIssuer": {"arn": "arn:aws:iam::444455556666:role/team-tool"}}}, "eventTime": "2026-12-08T15:12:40Z", "eventSource": "ec2.amazonaws.com", "eventName": "RunInstances", "errorCode": "Client.UnauthorizedOperation", "errorMessage": "You are not authorized to perform this operation. User: arn:aws:sts::444455556666:assumed-role/team-tool/dee is not authorized to perform: ec2:RunInstances on resource: arn:aws:ec2:eu-central-1:444455556666:instance/* because no permissions boundary allows the ec2:RunInstances action. Encoded authorization failure message: Ws3Lb8EXAMPLE"}
+{"userIdentity": {"arn": "arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c", "sessionContext": {"sessionIssuer": {"arn": "arn:aws:iam::444455556666:role/dispatch-task"}}}, "eventTime": "2026-12-08T18:00:02Z", "eventSource": "s3.amazonaws.com", "eventName": "GetObject"}
+{"userIdentity": {"arn": "arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c", "sessionContext": {"sessionIssuer": {"arn": "arn:aws:iam::444455556666:role/dispatch-task"}}, "invokedBy": "s3.amazonaws.com"}, "eventTime": "2026-12-08T18:00:04Z", "eventSource": "kms.amazonaws.com", "eventName": "GenerateDataKey", "errorCode": "AccessDenied", "errorMessage": "User: arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c is not authorized to perform: kms:GenerateDataKey on resource: arn:aws:kms:eu-central-1:444455556666:key/1234abcd-12ab-34cd-56ef-1234567890ab because no identity-based policy allows the kms:GenerateDataKey action"}
+{"userIdentity": {"arn": "arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c", "sessionContext": {"sessionIssuer": {"arn": "arn:aws:iam::444455556666:role/dispatch-task"}}, "invokedBy": "s3.amazonaws.com"}, "eventTime": "2026-12-08T18:00:05Z", "eventSource": "kms.amazonaws.com", "eventName": "GenerateDataKey", "errorCode": "AccessDenied", "errorMessage": "User: arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c is not authorized to perform: kms:GenerateDataKey on resource: arn:aws:kms:eu-central-1:444455556666:key/1234abcd-12ab-34cd-56ef-1234567890ab because no identity-based policy allows the kms:GenerateDataKey action"}
+{"userIdentity": {"arn": "arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c", "sessionContext": {"sessionIssuer": {"arn": "arn:aws:iam::444455556666:role/dispatch-task"}}, "invokedBy": "s3.amazonaws.com"}, "eventTime": "2026-12-08T18:00:07Z", "eventSource": "kms.amazonaws.com", "eventName": "GenerateDataKey", "errorCode": "AccessDenied", "errorMessage": "User: arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c is not authorized to perform: kms:GenerateDataKey on resource: arn:aws:kms:eu-central-1:444455556666:key/1234abcd-12ab-34cd-56ef-1234567890ab because no identity-based policy allows the kms:GenerateDataKey action"}</code></pre></li>
+  <li><strong>Run it</strong> with <code>python3 denied.py</code>:
+<pre><code>2026-12-08T15:12:40Z  1×  ec2:RunInstances
+    who: arn:aws:iam::444455556666:role/team-tool
+    why: no permissions boundary allows the ec2:RunInstances action
+2026-12-08T18:00:04Z  3×  kms:GenerateDataKey
+    who: arn:aws:iam::444455556666:role/dispatch-task (via s3.amazonaws.com)
+    why: no identity-based policy allows the kms:GenerateDataKey action</code></pre>
+  The successful <code>GetObject</code> is skipped. Three uploads become one line, attributed to Dispatch's role but made <em>via S3</em>: Eli's answer in one glance. The other line is Dee, earlier that afternoon, discovering the <code>team-boundary</code> from <a href="#chapter-10-evaluation">Chapter 10</a> doesn't include EC2.</li>
+  <li><strong>Cause denials of your own.</strong> Recreate Lab 8's <code>iam-lab-reader</code> role (S3 read-only) and assume it, as in Lab 8, steps 1–2. As the role, run:
+<pre><code>aws ec2 describe-vpcs                                  <span class="c"># denied, with a readable reason</span>
+MSG=$(aws ec2 run-instances --dry-run --instance-type t3.micro \
+  --image-id resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
+  2&gt;&amp;1 | sed -n 's/.*Encoded authorization failure message: //p')
+echo "${MSG:0:60}…"</code></pre></li>
+  <li><strong>Decode the message</strong> as yourself (unset the role's variables first, since the role can't decode):
+<pre><code>unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+aws sts decode-authorization-message --encoded-message "$MSG" \
+  --query DecodedMessage --output text | python3 -m json.tool | head -30</code></pre>
+  Find <code>"allowed": false</code>, <code>"explicitDeny": false</code> (an implicit deny: nothing allowed it), and the action and resource in <code>context</code>.</li>
+  <li><strong>Find your denial in CloudTrail</strong>, after a few minutes:
+<pre><code>aws cloudtrail lookup-events --max-results 20 \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=DescribeVpcs \
+  --query 'Events[].CloudTrailEvent' --output json &gt; mine.json
+python3 denied.py mine.json</code></pre></li>
+  <li><strong>Ask the simulator</strong> what the role may do:
+<pre><code>ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+aws iam simulate-principal-policy \
+  --policy-source-arn arn:aws:iam::$ACCOUNT:role/iam-lab-reader \
+  --action-names ec2:DescribeVpcs s3:ListAllMyBuckets \
+  --query 'EvaluationResults[].[EvalActionName, EvalDecision]' --output text</code></pre>
+  Expect <code>implicitDeny</code> for EC2 and <code>allowed</code> for S3.</li>
+  <li><strong>Clean up</strong> the role as in Lab 8, step 6, and delete <code>mine.json</code>.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Extend <code>denied.py</code> to print <code>sourceIPAddress</code> and the session name, then run it over a day of real events from an account you work in (<code>lookup-events</code> with <code>--start-time</code>). Denials you don't recognise are worth a look: they're either a broken workload or someone exploring.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s11-11"><span class="n">11.11</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Adding wildcards until it works</td><td>Over-broad permissions that never get removed.</td><td>Find the exact action, resource and policy type first.</td></tr>
+      <tr><td>Not checking who's calling</td><td>Hours spent fixing the wrong role, or the wrong account.</td><td><code>aws sts get-caller-identity</code>, every time.</td></tr>
+      <tr><td>Stopping at “AccessDenied”</td><td>The reason at the end of the message is missed.</td><td>Read the whole message; decode encoded ones.</td></tr>
+      <tr><td>Looking only at the service you called</td><td>Denials in KMS, STS or another service on your behalf are missed.</td><td>Search CloudTrail for <code>invokedBy</code> and related services.</td></tr>
+      <tr><td>Expecting S3 object calls in Event history</td><td>“It's not in CloudTrail”, when data events were never recorded.</td><td>A trail with data events for important buckets.</td></tr>
+      <tr><td>Staging that differs from production</td><td>Denials (or successes) that don't happen in production.</td><td>Keep environments' settings the same, and compare them automatically.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum11">
+  <h2 class="sec" id="sum11"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Work in order: <strong>who, what, read the error, CloudTrail, the evaluation order, look-alikes, smallest fix</strong>.</li>
+    <li><code>aws sts get-caller-identity</code> settles “who am I?”, whatever your permissions.</li>
+    <li>Access-denied messages name the principal, action, resource and usually the <strong>type of policy</strong> responsible; EC2's encoded messages can be decoded.</li>
+    <li>CloudTrail records denials; data events need a trail; <code>invokedBy</code> reveals calls made for you by other services.</li>
+    <li>Expired tokens, wrong accounts or regions, clock skew and missing objects look like permission problems.</li>
+    <li>Fix the one responsible policy with the narrowest change, and test both what should and shouldn't work.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>CloudTrail</dt><dd>AWS's record of API calls in an account.</dd>
+    <dt>Management event</dt><dd>A control-plane call (create, change, delete, many reads); recorded by default.</dd>
+    <dt>Data event</dt><dd>A data-plane call such as S3 object access; recorded only if a trail asks for it.</dd>
+    <dt><code>invokedBy</code></dt><dd>The service that made a call on a principal's behalf.</dd>
+    <dt>Encoded authorization message</dt><dd>A denial's details in encoded form, decoded with <code>sts:DecodeAuthorizationMessage</code>.</dd>
+    <dt>Policy simulator</dt><dd>AWS's tool for evaluating a principal's policies against chosen requests.</dd>
+    <dt>Last accessed information</dt><dd>Which services and actions an identity has actually used, and when.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>What's the first command to run when a script gets “access denied”, and why? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p><code>aws sts get-caller-identity</code> (or its SDK equivalent from inside the script): it shows which principal, in which account, is really making the calls, and works regardless of permissions.</p></details>
+    </li>
+    <li>
+      <p>An error ends “with an explicit deny in a service control policy”. Will adding the action to the role's policy help? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>No. An explicit deny wins over any allow, and an SCP is set by the organisation. The fix is to use an approved path or ask the platform team for a deliberate exception.</p></details>
+    </li>
+    <li>
+      <p>An upload to S3 fails with “access denied”, and the role clearly has <code>s3:PutObject</code> on the prefix. Name two causes outside the role's S3 permissions. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The bucket encrypts with a customer managed KMS key, and the role lacks <code>kms:GenerateDataKey</code> on it (or the key policy doesn't allow it); a bucket policy, VPC endpoint policy, SCP or RCP denies the request; or the request comes from a different identity or account than expected.</p></details>
+    </li>
+    <li>
+      <p>You can't find a denied S3 <code>GetObject</code> in CloudTrail's Event history. Why might that be? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p><code>GetObject</code> is a data event, which isn't in Event history and is recorded only by a trail configured for S3 data events on that bucket. It might also simply not have arrived yet, or be in another region's history.</p></details>
+    </li>
+    <li>
+      <p>Design a weekly report that would have caught Larder's staging problem before the trial evening. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Run a denial summary like <code>denied.py</code> over each account's CloudTrail events daily and post new principal/action/reason combinations to the team channel; and compare key settings (bucket encryption, public access, versioning) between staging and production buckets, flagging differences.</p></details>
+    </li>
+    <li>
+      <p>Compare what you'd look at first for a denied call on AWS and on Google Cloud. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>AWS: the error's reason (which policy type) and the CloudTrail event, then the simulator. Google Cloud: the missing permission named in the error, then Policy Troubleshooter for that principal, permission and resource, which shows bindings and deny policies.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_access-denied.html">Troubleshoot access denied error messages</a>, <a href="https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-event-reference-user-identity.html">CloudTrail userIdentity element</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_testing-policies.html">IAM policy simulator</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/role-based-access-control/troubleshooting">Troubleshoot Azure RBAC</a>. Google Cloud: <a href="https://cloud.google.com/policy-intelligence/docs/troubleshoot-access">Policy Troubleshooter</a>.</li>
   </ul>
 </section>
 

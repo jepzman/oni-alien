@@ -1,8 +1,8 @@
 # Handoff: Handbook 2 · Identity and Access in the Cloud
 
-Status as of **2026-11-26**: **in progress, 7 of 25 chapters written: Part I (1–6) and Chapter 9 (the sample).**
-The owner approved everything in `docs/HANDOFF-handbooks.md` §6 and picked Chapter 9 as the sample. **Next: Chapter 7**,
-then 8, 10, 11 (the rest of Part II), then Parts III–VI in order (`BOOK["next"]` in `book.py` is 7).
+Status as of **2026-11-26**: **in progress, 11 of 25 chapters written: Parts I and II (1–11).** The owner approved
+everything in `docs/HANDOFF-handbooks.md` §6 and picked Chapter 9 as the sample. **Next: Chapter 12** (Part III),
+then Parts IV–VI in order (`BOOK["next"]` in `book.py` is 12).
 
 Read first: `docs/HANDOFF-handbooks.md` §1–2 (what a handbook is, the voice, the building blocks, the look). This
 book uses exactly the same style, blocks, CSS (`public/assets/book.css`) and build as Handbook 1. The best model to copy
@@ -13,7 +13,7 @@ from is `content/handbooks/cloud-networking/09-firewalls.html` (a chapter about 
 | What | Where |
 | --- | --- |
 | Outline (parts, chapters, summaries, topics, appendices) | `content/handbooks/cloud-identity/book.py` |
-| Chapter bodies | `content/handbooks/cloud-identity/<nn>-<slug>.html`; written: 01–06, 09 |
+| Chapter bodies | `content/handbooks/cloud-identity/<nn>-<slug>.html`; written: 01–11 |
 | Built contents page | `public/handbooks/cloud-identity/index.html` |
 | Build | `python3 scripts/build_notes.py` (builds everything, including both handbooks and the landing shelf) |
 | Preview | `npm run serve`, then http://localhost:8080/handbooks/cloud-identity/ |
@@ -172,6 +172,26 @@ Checks: no duplicate ids or broken `aria-labelledby`/marker references across `a
 **11 Oct 2027** (Ana, Vol. 5), not 2026; Part I avoids it (ch. 6 warns about object-level checks in general). Ch. 19
 should move forward in time to tell it.
 
+## 3b. Rest of Part II (chapters 7, 8, 10, 11): written 2026-11-26
+
+| Ch. | Story (all in the casebook) | Lab | Run here? |
+| --- | --- | --- | --- |
+| 7 | root key from 2024, root email on Jasper's closed mailbox; recovery | CLI checks + `credcheck.py` on a sample credential report | Python part **run**; CLI part not |
+| 8 | 11 IAM users, 3 leavers; `ops` becomes role `prod-operator` (MFA, source identity) | create, assume, inspect a role | **not run** (CLI only) |
+| 10 | `protect-orders-db` guardrail; Ben's “I'm an admin”; `deploy-bot` gap; `team-boundary` | `evaluate.py` (Figure 10.1 in Python, 8 cases) + optional `simulate-custom-policy` | Python **run** (incl. every “break it” edit); CLI not |
+| 11 | staging uploads denied on `kms:GenerateDataKey` via S3 | `denied.py` on sample CloudTrail events + CLI denials, decode, simulator | Python **run** (3 input formats); CLI not |
+
+Checks run for this batch: every lab script and sample file printed in chapters 1–11 was extracted from the HTML and
+compared byte for byte with the file that was executed (all match); every JSON example parses; no duplicate ids or
+broken references; figures inspected at 1280 px light/dark and pages at 375 px (no overflow); print clip check clean.
+
+Facts worth knowing for later chapters: Larder has **two standalone accounts** (prod `111122223333`, dev+staging
+`444455556666`) and no organisation yet (ch. 7). FIDO2 keys don't work for MFA-protected CLI/API calls; Larder's
+on-call engineers use an authenticator app for the CLI (ch. 8) until SSO (ch. 12). Ch. 12 must delete `ops` and the
+remaining IAM users; ch. 14 defines `break-glass-*`; ch. 17 replaces `deploy-bot`; ch. 18 decides on customer managed
+KMS keys; ch. 20 moves `protect-orders-db` into an SCP and makes `111122223333` the management account (which means
+moving production out of it); ch. 23 covers root-sign-in alerts and the S3 data-event trail.
+
 ## 4. Order of work after Chapter 9
 
 1. Chapter 9 (above). Update this file and `docs/HANDOFF-handbooks.md`.
@@ -184,4 +204,6 @@ should move forward in time to tell it.
 - [ ] Chapter 9 lab run once in a real AWS account (see §3).
 - [ ] Confirm the Pages workflow passes now that this book has PDFs (chapter 9 + whole book).
 - [x] Part I (1–6) written and checked.
-- [ ] Chapter 7 next, then 8, 10, 11.
+- [x] Rest of Part II (7, 8, 10, 11) written and checked.
+- [ ] AWS labs (ch. 7–11) run once in a real sandbox account; none could be run here.
+- [ ] Chapter 12 next.

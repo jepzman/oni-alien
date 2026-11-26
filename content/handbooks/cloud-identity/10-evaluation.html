@@ -1,0 +1,480 @@
+<!-- Handbook 2 · Identity and Access in the Cloud · Chapter 10. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part II · IAM on AWS</p>
+  <p class="chno">10</p>
+  <h1>How AWS decides: policy evaluation logic</h1>
+  <p class="promise">A single request to AWS can be touched by up to seven kinds of policy: the caller's own, the resource's, a permissions boundary, a session policy, and the organisation's guardrails. AWS combines them in a fixed order, and once you know that order, every “why was this allowed?” and “why was this denied?” has an answer. This chapter teaches the order, one policy type at a time, with a flowchart you'll use for the rest of your career.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Name every policy type that can affect a request, and say which can grant and which can only limit.</li>
+      <li>Walk a request through AWS's evaluation order and predict the result.</li>
+      <li>Explain why an explicit deny beats <code>AdministratorAccess</code>, and use that for guardrails.</li>
+      <li>Say what both sides must allow for cross-account access.</li>
+      <li>Use permissions boundaries to let teams create roles safely.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Reading policies (<a href="#ch9">Chapter 9</a>) and roles and trust policies (<a href="#ch8">Chapter 8</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 50 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, Python 3; optional AWS CLI step, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 10.9</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p><a href="#ch1">Chapter 1</a> left Eli with a promise: nobody should be able to shorten the orders database's backups, “whoever asks”. In the first week of December he writes a policy that <em>denies</em> changing or deleting the orders database, and deleting any database backup, and attaches it to the engineers' group and to the new <code>prod-operator</code> role (<a href="#ch8">Chapter 8</a>).</p>
+  <p>The next morning, Ben tries a harmless change to the database's maintenance window as <code>prod-operator</code>, a role with full production powers, and gets “access denied”. “I'm an admin,” he writes in the team chat, “how can anything deny me?” A week later Marco, the CFO, asks a sharper question: “So now it's impossible to shorten the backups?” It isn't, and section 10.10 explains why not.</p>
+</aside>
+
+<!-- ======================================================== 10.1 -->
+<h2 class="sec" id="s10-1"><span class="n">10.1</span>One request, many policies</h2>
+
+<p class="lead"><a href="#ch9">Chapter 9</a> looked at one policy at a time. In reality, every request is judged against all the policies that apply to it at once. There are seven kinds, and they divide into two groups: policies that can <strong>grant</strong> access, and policies that can only <strong>limit</strong> it.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 10.1 · The policy types AWS evaluates</caption>
+    <thead><tr><th>Type</th><th>Attached to</th><th>Can grant?</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Identity-based policy</strong></td><td>a user, group or role</td><td>yes</td><td>what this identity may do (<a href="#ch9">Chapter 9</a>)</td></tr>
+      <tr><td><strong>Resource-based policy</strong></td><td>a resource: bucket, key, queue, role trust</td><td>yes</td><td>who may use this resource</td></tr>
+      <tr><td><strong>Permissions boundary</strong></td><td>a user or role</td><td>no: a ceiling</td><td>the most an identity may ever have</td></tr>
+      <tr><td><strong>Session policy</strong></td><td>one role session, passed when it's created</td><td>no: a ceiling</td><td>narrowing a session below its role</td></tr>
+      <tr><td><strong>Service control policy (SCP)</strong></td><td>an organisation, OU or member account</td><td>no: a ceiling</td><td>the most any principal in those accounts may do</td></tr>
+      <tr><td><strong>Resource control policy (RCP)</strong></td><td>an organisation, OU or member account</td><td>no: a ceiling</td><td>the most anyone may do to resources in those accounts</td></tr>
+      <tr><td>ACLs</td><td>some older resources (S3, VPC endpoints for some services)</td><td>yes</td><td>legacy cross-account grants; avoid (<a href="#ch6">Chapter 6</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Two rules from <a href="#ch9">Chapter 9</a> still hold across all of them: nothing is allowed unless something allows it, and an explicit deny in <em>any</em> of them wins.</p>
+
+<!-- ======================================================== 10.2 -->
+<h2 class="sec" id="s10-2"><span class="n">10.2</span>The order of evaluation</h2>
+
+<p>For a request within one account, AWS asks these questions in order. The first one that decides, decides:</p>
+
+<figure class="wide" id="fig10-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 470" role="img" aria-labelledby="fig10-1-t fig10-1-d">
+      <title id="fig10-1-t">AWS's policy evaluation order within one account</title>
+      <desc id="fig10-1-d">Seven questions in order. One: is there an explicit deny in any policy? If yes, deny. Two: if the account is under resource control policies, does an RCP allow it? If no, deny. Three: if under service control policies, does an SCP allow it? If no, deny. Four: does a resource-based policy allow this principal? If yes, allow (in the same account). Five: does an identity-based policy allow it? If no, deny. Six: if the identity has a permissions boundary, does it allow it? If no, deny. Seven: if this is a session with a session policy, does it allow it? If no, deny. Otherwise, allow.</desc>
+      <defs><marker id="c10ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c10ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="150" y="12" width="360" height="40" rx="5"/><text class="t-label" x="166" y="37">① Explicit deny in any policy?</text>
+      <rect class="node" x="150" y="70" width="360" height="40" rx="5"/><text class="t-label" x="166" y="95">② Under RCPs: does an RCP allow it?</text>
+      <rect class="node" x="150" y="128" width="360" height="40" rx="5"/><text class="t-label" x="166" y="153">③ Under SCPs: does an SCP allow it?</text>
+      <rect class="pub" x="150" y="186" width="360" height="40" rx="5"/><text class="t-label" x="166" y="211">④ Does a resource-based policy allow it?</text>
+      <rect class="node-accent" x="150" y="244" width="360" height="40" rx="5"/><text class="t-label on-accent" x="166" y="269">⑤ Does an identity-based policy allow it?</text>
+      <rect class="node" x="150" y="302" width="360" height="40" rx="5"/><text class="t-label" x="166" y="327">⑥ Boundary set: does it allow it?</text>
+      <rect class="node" x="150" y="360" width="360" height="40" rx="5"/><text class="t-label" x="166" y="385">⑦ Session policy set: does it allow it?</text>
+      <rect class="pub" x="150" y="418" width="360" height="40" rx="20"/><text class="t-title" x="330" y="444" text-anchor="middle">ALLOW</text>
+      <path class="wire" d="M330 52 V66 M330 110 V124 M330 168 V182 M330 226 V240 M330 284 V298 M330 342 V356 M330 400 V414"/>
+      <text class="t-small" x="338" y="64">no</text><text class="t-small" x="338" y="122">yes / none</text><text class="t-small" x="338" y="180">yes / none</text>
+      <text class="t-small" x="338" y="238">no</text><text class="t-small" x="338" y="296">yes</text><text class="t-small" x="338" y="354">yes / none</text><text class="t-small" x="338" y="412">yes / none</text>
+      <rect class="ext" x="588" y="12" width="160" height="388" rx="8"/>
+      <text class="t-title t-warn" x="668" y="212" text-anchor="middle">DENY</text>
+      <path class="wire" d="M512 32 H584" marker-end="url(#c10ah)"/><text class="t-small" x="548" y="26" text-anchor="middle">yes</text>
+      <path class="wire" d="M512 90 H584" marker-end="url(#c10ah)"/><text class="t-small" x="548" y="84" text-anchor="middle">no</text>
+      <path class="wire" d="M512 148 H584" marker-end="url(#c10ah)"/><text class="t-small" x="548" y="142" text-anchor="middle">no</text>
+      <path class="wire" d="M512 264 H584" marker-end="url(#c10ah)"/><text class="t-small" x="548" y="258" text-anchor="middle">no</text>
+      <path class="wire" d="M512 322 H584" marker-end="url(#c10ah)"/><text class="t-small" x="548" y="316" text-anchor="middle">no</text>
+      <path class="wire" d="M512 380 H584" marker-end="url(#c10ah)"/><text class="t-small" x="548" y="374" text-anchor="middle">no</text>
+      <path class="wire-accent" d="M150 206 H40 V438 H146" marker-end="url(#c10ah2)"/>
+      <text class="t-small t-accent" x="48" y="200">yes</text>
+      <text class="t-small" x="48" y="330">same account:</text>
+      <text class="t-small" x="48" y="346">allowed here</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 10.1</b> AWS's evaluation order in one account, simplified. Steps ② ③ ⑥ ⑦ only apply when that kind of policy exists. Across accounts, step ④ doesn't short-cut: both ④ and ⑤ must allow (10.5).</figcaption>
+</figure>
+
+<p>Read it as two kinds of question. Steps ①, ②, ③, ⑥ and ⑦ can only say <em>no</em>: they're filters. Steps ④ and ⑤ are where a <em>yes</em> comes from. A request is allowed only if something grants it and nothing filters it out.</p>
+
+<aside class="side"><b>Simplified</b>The full rules have more detail, especially about how boundaries and session policies interact with resource-based policies that name a role rather than a session. AWS's documentation has the complete flowchart; this one is right for the cases you'll meet most.</aside>
+
+<!-- ======================================================== 10.3 -->
+<h2 class="sec" id="s10-3"><span class="n">10.3</span>Explicit deny: guardrails</h2>
+
+<p>Step ① is why Ben, with full production powers, was denied. <code>AdministratorAccess</code> is just an identity-based policy that allows <code>*</code> on <code>*</code>; it answers step ⑤. An explicit deny in any attached policy is checked first, at step ①, and nothing later can undo it. That makes explicit deny the tool for <span class="term">guardrails</span>: rules that hold however generous someone's other permissions are.</p>
+
+<p class="code-title"><span>protect-orders-db.json</span><span>customer managed policy, Larder</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [
+    {
+      <span class="k">"Sid"</span>: <span class="s">"OnlyDbChangeMayAlterOrdersDb"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+      <span class="k">"Action"</span>: [<span class="s">"rds:ModifyDBInstance"</span>, <span class="s">"rds:DeleteDBInstance"</span>],
+      <span class="k">"Resource"</span>: <span class="s">"arn:aws:rds:eu-central-1:111122223333:db:orders-prod"</span>,
+      <span class="k">"Condition"</span>: { <span class="k">"StringNotLike"</span>: { <span class="s">"aws:PrincipalArn"</span>: [
+        <span class="s">"arn:aws:iam::111122223333:role/db-change"</span>,
+        <span class="s">"arn:aws:iam::111122223333:role/break-glass-*"</span>
+      ] } }
+    },
+    {
+      <span class="k">"Sid"</span>: <span class="s">"NobodyDeletesBackups"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+      <span class="k">"Action"</span>: [<span class="s">"rds:DeleteDBSnapshot"</span>, <span class="s">"rds:DeleteDBInstanceAutomatedBackup"</span>],
+      <span class="k">"Resource"</span>: <span class="s">"*"</span>
+    }
+  ]
+}</code></pre>
+
+<p>Read aloud: “Deny changing or deleting the orders database, unless you're the <code>db-change</code> role or a break-glass role. Deny deleting any database snapshot or automated backup, for everyone.” The pattern in the first statement (deny, <em>except</em> for named principals through <code>aws:PrincipalArn</code>) is the standard way to write a guardrail with a controlled exception. Use <code>aws:PrincipalArn</code> rather than the session ARN, because it gives the role's ARN for any session of that role.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Allows add up; one deny ends the discussion. Grant with allows, and draw lines that nobody may cross with denies.</p>
+</div>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: a guardrail only guards what it's attached to</p>
+  <p>An identity-based deny protects only from the identities it's attached to. Every user, group and role you forget, including the next one somebody creates, is outside it. That's the gap Marco's question found. Guardrails that must hold for <em>everyone</em> in an account belong one level up, in an SCP (10.8, <a href="#ch20">Chapter 20</a>), or, for resources that support them, in a resource-based policy.</p>
+</div>
+
+<!-- ======================================================== 10.4 -->
+<h2 class="sec" id="s10-4"><span class="n">10.4</span>Resource-based policies in the same account</h2>
+
+<p>Step ④ is easy to miss. Within one account, if a resource-based policy (a bucket policy, a KMS key policy, a role's trust policy) allows a specific principal, that's enough: the principal doesn't also need an identity-based allow. That's why a trust policy that names <code>user/eli</code> lets Eli assume the role, while one that names the whole account (<code>…:root</code>) also needs Eli's own policies to allow <code>sts:AssumeRole</code> (<a href="#ch8">Chapter 8</a>, 8.6).</p>
+
+<p>It also means resource policies deserve the same review as identity policies: a bucket policy that grants <code>s3:*</code> to a role gives that role full access to the bucket, whatever its identity policies say.</p>
+
+<aside class="side"><b>KMS is different</b>KMS keys are stricter: a key policy must allow access, either directly or by delegating to IAM policies with a statement for the account. Without that, even an administrator can't use the key (<a href="#ch18">Chapter 18</a>).</aside>
+
+<!-- ======================================================== 10.5 -->
+<h2 class="sec" id="s10-5"><span class="n">10.5</span>Across accounts: both sides must agree</h2>
+
+<p>When the principal and the resource are in different accounts, there's no short cut at step ④. Each account controls its own side, and both must allow:</p>
+
+<figure class="wide" id="fig10-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 210" role="img" aria-labelledby="fig10-2-t fig10-2-d">
+      <title id="fig10-2-t">Cross-account access needs an allow on both sides</title>
+      <desc id="fig10-2-d">A role in StockPilot's account, 999988887777, wants to read an object in Larder's bucket in account 111122223333. StockPilot's account must allow it, through the role's identity-based policy and any SCPs and boundaries there. Larder's account must allow it, through the bucket policy naming StockPilot's role and any RCPs there. Only when both allow does the request succeed. An explicit deny on either side ends it.</desc>
+      <defs><marker id="c10ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="vpc" x="12" y="14" width="300" height="180" rx="8"/>
+      <text class="t-label" x="28" y="38">StockPilot · 999988887777</text>
+      <rect class="node" x="28" y="52" width="268" height="40" rx="4"/><text class="t-mono" x="162" y="77" text-anchor="middle">role/stock-sync</text>
+      <rect class="priv" x="28" y="104" width="268" height="74" rx="4"/>
+      <text class="t-small" x="40" y="124">must allow, on this side:</text>
+      <text class="t-small" x="40" y="144">identity policy: s3:GetObject on Larder's bucket</text>
+      <text class="t-small" x="40" y="164">and its SCPs, boundary, session policy</text>
+      <rect class="vpc" x="448" y="14" width="300" height="180" rx="8"/>
+      <text class="t-label" x="464" y="38">Larder · 111122223333</text>
+      <rect class="node" x="464" y="52" width="268" height="40" rx="4"/><text class="t-mono" x="598" y="77" text-anchor="middle">s3://larder-stock-exports</text>
+      <rect class="priv" x="464" y="104" width="268" height="74" rx="4"/>
+      <text class="t-small" x="476" y="124">must allow, on this side:</text>
+      <text class="t-small" x="476" y="144">bucket policy naming role/stock-sync</text>
+      <text class="t-small" x="476" y="164">and its RCPs</text>
+      <path class="wire-accent" d="M298 72 H460" marker-end="url(#c10ah3)"/>
+      <text class="t-small" x="380" y="64" text-anchor="middle">GetObject</text>
+      <text class="t-label" x="380" y="140" text-anchor="middle">both: allow</text>
+      <text class="t-small" x="380" y="160" text-anchor="middle">either: deny</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 10.2</b> Across accounts, each side holds a veto. That's what makes accounts such strong boundaries.</figcaption>
+</figure>
+
+<p>Assuming a role in another account works the same way: the caller's own account must allow <code>sts:AssumeRole</code> on that role's ARN, and the role's trust policy in the other account must trust the caller. Once assumed, the session lives in the role's account and only its permissions there count (<a href="#ch21">Chapter 21</a>).</p>
+
+<!-- ======================================================== 10.6 -->
+<h2 class="sec" id="s10-6"><span class="n">10.6</span>Permissions boundaries: safe delegation</h2>
+
+<p>A <span class="term">permissions boundary</span> is a managed policy set on a user or role as its <em>ceiling</em>: the identity can do only what both its own policies and the boundary allow. It grants nothing by itself.</p>
+
+<p>Boundaries exist to solve one problem well: <strong>letting teams create their own roles</strong> without letting them create roles more powerful than they should. Without a boundary, anyone allowed to create roles and attach policies can create an administrator role and assume it. With one, you allow role creation <em>only if</em> the new role carries the boundary:</p>
+
+<pre><code>{
+  <span class="k">"Sid"</span>: <span class="s">"CreateTeamRolesOnlyWithTheBoundary"</span>,
+  <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+  <span class="k">"Action"</span>: [<span class="s">"iam:CreateRole"</span>, <span class="s">"iam:AttachRolePolicy"</span>, <span class="s">"iam:PutRolePolicy"</span>],
+  <span class="k">"Resource"</span>: <span class="s">"arn:aws:iam::111122223333:role/team-*"</span>,
+  <span class="k">"Condition"</span>: { <span class="k">"StringEquals"</span>: {
+    <span class="s">"iam:PermissionsBoundary"</span>: <span class="s">"arn:aws:iam::111122223333:policy/team-boundary"</span> } }
+}</code></pre>
+
+<p>Pair it with a deny on <code>iam:DeleteRolePermissionsBoundary</code> and <code>iam:PutRolePermissionsBoundary</code>, and on editing the boundary policy itself, or the ceiling can simply be removed. Now a team can create <code>team-reporting</code> with <code>AdministratorAccess</code> attached and it still can only do what <code>team-boundary</code> allows. Put your guardrail denies inside the boundary too, and every role created this way carries them.</p>
+
+<!-- ======================================================== 10.7 -->
+<h2 class="sec" id="s10-7"><span class="n">10.7</span>Session policies</h2>
+
+<p>A <span class="term">session policy</span> is passed when a role session is created (<code>aws sts assume-role --policy …</code> or <code>--policy-arns …</code>). The session gets the <em>intersection</em> of the role's permissions and the session policy. It's how a broker service can hand out one shared role, narrowed per request: “this session may only read <code>tenant-42/</code>”. People rarely write session policies by hand, but they explain some surprising denials, and IAM Identity Center and other services use them behind the scenes.</p>
+
+<!-- ======================================================== 10.8 -->
+<h2 class="sec" id="s10-8"><span class="n">10.8</span>SCPs and RCPs: the organisation's ceiling</h2>
+
+<p>When accounts belong to an AWS Organization (<a href="#ch20">Chapter 20</a>), two more ceilings apply, set centrally:</p>
+<ul>
+  <li><strong>Service control policies</strong> limit what <em>principals in</em> member accounts may do, including those accounts' root users. A deny in an SCP applies to every role and user in the account, however created, which closes the gap from 10.3.</li>
+  <li><strong>Resource control policies</strong> limit what <em>anyone</em> may do to resources in member accounts, including principals from outside the organisation. They support a growing list of services, starting with S3, STS, KMS, SQS and Secrets Manager.</li>
+</ul>
+<p>Neither ever grants anything; by default each account has a policy allowing everything (<code>FullAWSAccess</code>, <code>RCPFullAWSAccess</code>), and you add denies or replace the default with an allow-list. Two exceptions to remember: SCPs and RCPs don't apply to the <strong>management account</strong>, and SCPs don't restrict <strong>service-linked roles</strong>.</p>
+
+<!-- ======================================================== 10.9 -->
+<h2 class="sec" id="s10-9"><span class="n">10.9</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 10.2 · How the big three combine permissions</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Grants combine by</td><td>union of allows, after filters</td><td>union of role assignments at the scope and above</td><td>union of allow-policy bindings on the resource and its ancestors</td></tr>
+      <tr><td>Explicit deny</td><td>any <code>Deny</code> statement, anywhere</td><td>deny assignments, created by Azure for managed applications and deployment stacks, not written directly</td><td>IAM deny policies, evaluated before allow policies</td></tr>
+      <tr><td>Organisation ceilings</td><td>SCPs (principals), RCPs (resources)</td><td>Azure Policy (resource configuration, not permissions); management group RBAC</td><td>deny policies at organisation or folder; organisation policy constraints (configuration)</td></tr>
+      <tr><td>Delegation ceiling</td><td>permissions boundaries</td><td>role assignment conditions limiting which roles a delegate may assign</td><td>conditions on who may grant which roles</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>Azure RBAC is additive: a principal's permissions are the union of its role assignments at every scope above the resource, and there's no way for you to write a general-purpose deny. Guardrails come from elsewhere: <strong>Azure Policy</strong> stops non-compliant resources being created or changed (no public storage accounts, only these regions), and resource <strong>locks</strong> (<code>CanNotDelete</code>, <code>ReadOnly</code>) protect critical resources from deletion by anyone, owners included.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>Google Cloud evaluates <strong>IAM deny policies</strong> first, then the union of allow-policy bindings inherited down the resource hierarchy. Deny policies attach to the organisation, folders or projects and can exempt principals, which makes them the nearest equivalent to an AWS guardrail with an exception. Configuration rules (such as “no external IPs”) are <strong>organisation policy constraints</strong>, a separate system.</p>
+</div>
+
+<!-- ======================================================== 10.10 -->
+<h2 class="sec" id="s10-10"><span class="n">10.10</span>At Larder: who can still shorten the backups?</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Ben's answer was step ①: an explicit deny in <code>protect-orders-db</code> beats the allow in his administrator policy. His maintenance-window change went through the new <code>db-change</code> role, which only Larder's two database owners may assume, with MFA, and whose sessions CloudTrail records like any other.</p>
+  <p>Marco's answer took Eli an afternoon with the lab's evaluator. The guardrail was attached to the engineers' group and <code>prod-operator</code>, but not to <code>deploy-bot</code>, the pipeline's IAM user with <code>AdministratorAccess</code>, which could still change the database. Nor would it be attached to any role created next month. Eli attached it to <code>deploy-bot</code> the same day, and added a rule for the team: every new role gets the <code>team-boundary</code> permissions boundary, which contains the same denies, and only roles with it can be created by anyone but the platform team. He told Marco the honest version: it's now very hard, not impossible, and it becomes impossible when the accounts join an organisation and the guardrail moves into an SCP (<a href="#ch20">Chapter 20</a>).</p>
+</aside>
+
+<!-- ======================================================== 10.11 -->
+<h2 class="sec" id="s10-11"><span class="n">10.11</span>Lab: an evaluator you can read</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 10 · Figure 10.1 in a hundred lines</p>
+  <p><strong>You'll</strong> run a small implementation of AWS's evaluation order on eight of Larder's requests, predict each result first, then change policies and see which step decides. Optionally, you'll check one case against AWS's own policy simulator. <strong>You need</strong> Python 3; for the last step, the AWS CLI. <strong>Cost:</strong> free. The evaluator supports only the policy features this chapter uses; it's for learning, not for checking real policies.</p>
+</div>
+
+<p class="code-title"><span>evaluate.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># evaluate.py · AWS policy evaluation logic for one request, simplified for learning</span>
+<span class="k">from</span> fnmatch <span class="k">import</span> fnmatchcase
+
+<span class="k">def</span> as_list(x):
+    <span class="k">return</span> x <span class="k">if</span> isinstance(x, list) <span class="k">else</span> [x]
+
+<span class="k">def</span> statement_matches(st, req, check_principal=False):
+    <span class="k">if not</span> any(fnmatchcase(req[<span class="s">"action"</span>].lower(), a.lower()) <span class="k">for</span> a <span class="k">in</span> as_list(st.get(<span class="s">"Action"</span>, []))):
+        <span class="k">return</span> False
+    <span class="k">if not</span> any(fnmatchcase(req[<span class="s">"resource"</span>], r) <span class="k">for</span> r <span class="k">in</span> as_list(st.get(<span class="s">"Resource"</span>, <span class="s">"*"</span>))):
+        <span class="k">return</span> False
+    <span class="k">if</span> check_principal:
+        allowed = as_list(st.get(<span class="s">"Principal"</span>, {}).get(<span class="s">"AWS"</span>, []))
+        account_root = f<span class="s">"arn:aws:iam::{req['principal_account']}:root"</span>
+        names = {req[<span class="s">"principal"</span>], req[<span class="s">"context"</span>][<span class="s">"aws:PrincipalArn"</span>], account_root, <span class="s">"*"</span>}
+        <span class="k">if not</span> names &amp; set(allowed):
+            <span class="k">return</span> False
+    <span class="k">for</span> op, tests <span class="k">in</span> st.get(<span class="s">"Condition"</span>, {}).items():
+        <span class="k">for</span> key, want <span class="k">in</span> tests.items():
+            have = req[<span class="s">"context"</span>].get(key)
+            <span class="k">if</span> op == <span class="s">"StringEquals"</span> <span class="k">and</span> have <span class="k">not in</span> as_list(want):
+                <span class="k">return</span> False
+            <span class="k">if</span> op == <span class="s">"StringNotLike"</span> <span class="k">and</span> (have <span class="k">is</span> None <span class="k">or</span> any(fnmatchcase(have, w) <span class="k">for</span> w <span class="k">in</span> as_list(want))):
+                <span class="k">return</span> False
+            <span class="k">if</span> op == <span class="s">"Bool"</span> <span class="k">and</span> str(have).lower() != str(want).lower():
+                <span class="k">return</span> False
+    <span class="k">return</span> True
+
+<span class="k">def</span> decide(req, identity=(), resource=None, boundary=None, session=None, scp=None, rcp=None):
+    policies = {<span class="s">"identity-based policy"</span>: identity, <span class="s">"resource-based policy"</span>: resource <span class="k">or</span> [],
+                <span class="s">"permissions boundary"</span>: boundary <span class="k">or</span> [], <span class="s">"session policy"</span>: session <span class="k">or</span> [],
+                <span class="s">"SCP"</span>: scp <span class="k">or</span> [], <span class="s">"RCP"</span>: rcp <span class="k">or</span> []}
+    <span class="k">def</span> hits(kind, effect):
+        <span class="k">return</span> any(st[<span class="s">"Effect"</span>] == effect <span class="k">and</span> statement_matches(st, req, kind == <span class="s">"resource-based policy"</span>)
+                   <span class="k">for</span> st <span class="k">in</span> policies[kind])
+    <span class="k">for</span> kind <span class="k">in</span> policies:                                         <span class="c"># 1. any explicit deny wins</span>
+        <span class="k">if</span> hits(kind, <span class="s">"Deny"</span>):
+            <span class="k">return</span> f<span class="s">"DENY   explicit deny in {kind}"</span>
+    <span class="k">if</span> rcp <span class="k">is not</span> None <span class="k">and not</span> hits(<span class="s">"RCP"</span>, <span class="s">"Allow"</span>):              <span class="c"># 2. RCPs must allow</span>
+        <span class="k">return</span> <span class="s">"DENY   no RCP allows it"</span>
+    <span class="k">if</span> scp <span class="k">is not</span> None <span class="k">and not</span> hits(<span class="s">"SCP"</span>, <span class="s">"Allow"</span>):              <span class="c"># 3. SCPs must allow</span>
+        <span class="k">return</span> <span class="s">"DENY   no SCP allows it"</span>
+    same_account = req[<span class="s">"principal_account"</span>] == req[<span class="s">"resource_account"</span>]
+    by_resource = hits(<span class="s">"resource-based policy"</span>, <span class="s">"Allow"</span>)
+    <span class="k">if</span> same_account <span class="k">and</span> by_resource:                              <span class="c"># 4. same account: resource policy is enough</span>
+        <span class="k">return</span> <span class="s">"ALLOW  by resource-based policy"</span>
+    <span class="k">if not</span> hits(<span class="s">"identity-based policy"</span>, <span class="s">"Allow"</span>):                <span class="c"># 5. identity policy must allow</span>
+        <span class="k">return</span> <span class="s">"DENY   no identity-based policy allows it"</span>
+    <span class="k">if</span> boundary <span class="k">is not</span> None <span class="k">and not</span> hits(<span class="s">"permissions boundary"</span>, <span class="s">"Allow"</span>):
+        <span class="k">return</span> <span class="s">"DENY   permissions boundary doesn't allow it"</span>     <span class="c"># 6. boundary caps it</span>
+    <span class="k">if</span> session <span class="k">is not</span> None <span class="k">and not</span> hits(<span class="s">"session policy"</span>, <span class="s">"Allow"</span>):
+        <span class="k">return</span> <span class="s">"DENY   session policy doesn't allow it"</span>           <span class="c"># 7. session policy caps it</span>
+    <span class="k">if not</span> same_account:                                          <span class="c"># cross-account needs both sides</span>
+        <span class="k">return</span> (<span class="s">"ALLOW  identity- and resource-based policies both allow it"</span> <span class="k">if</span> by_resource
+                <span class="k">else</span> <span class="s">"DENY   cross-account: no resource-based policy allows it"</span>)
+    <span class="k">return</span> <span class="s">"ALLOW  by identity-based policy"</span>
+
+<span class="c"># ---------------------------------------------------------------- Larder's policies</span>
+PROD, STOCKPILOT = <span class="s">"111122223333"</span>, <span class="s">"999988887777"</span>
+ADMIN = [{<span class="s">"Effect"</span>: <span class="s">"Allow"</span>, <span class="s">"Action"</span>: <span class="s">"*"</span>, <span class="s">"Resource"</span>: <span class="s">"*"</span>}]
+GUARDRAIL = [{<span class="s">"Effect"</span>: <span class="s">"Deny"</span>,
+              <span class="s">"Action"</span>: [<span class="s">"rds:ModifyDBInstance"</span>, <span class="s">"rds:DeleteDBInstance"</span>],
+              <span class="s">"Resource"</span>: f<span class="s">"arn:aws:rds:eu-central-1:{PROD}:db:orders-prod"</span>,
+              <span class="s">"Condition"</span>: {<span class="s">"StringNotLike"</span>: {<span class="s">"aws:PrincipalArn"</span>: [f<span class="s">"arn:aws:iam::{PROD}:role/db-change"</span>,
+                                                                   f<span class="s">"arn:aws:iam::{PROD}:role/break-glass-*"</span>]}}},
+             {<span class="s">"Effect"</span>: <span class="s">"Deny"</span>,
+              <span class="s">"Action"</span>: [<span class="s">"rds:DeleteDBSnapshot"</span>, <span class="s">"rds:DeleteDBInstanceAutomatedBackup"</span>], <span class="s">"Resource"</span>: <span class="s">"*"</span>}]
+DEV_BOUNDARY = [{<span class="s">"Effect"</span>: <span class="s">"Allow"</span>, <span class="s">"Action"</span>: [<span class="s">"s3:*"</span>, <span class="s">"logs:*"</span>, <span class="s">"dynamodb:*"</span>], <span class="s">"Resource"</span>: <span class="s">"*"</span>}]
+BUCKET = [{<span class="s">"Effect"</span>: <span class="s">"Allow"</span>, <span class="s">"Principal"</span>: {<span class="s">"AWS"</span>: f<span class="s">"arn:aws:iam::{STOCKPILOT}:role/stock-sync"</span>},
+           <span class="s">"Action"</span>: <span class="s">"s3:GetObject"</span>, <span class="s">"Resource"</span>: <span class="s">"arn:aws:s3:::larder-stock-exports/*"</span>}]
+READ_EXPORTS = [{<span class="s">"Effect"</span>: <span class="s">"Allow"</span>, <span class="s">"Action"</span>: <span class="s">"s3:GetObject"</span>, <span class="s">"Resource"</span>: <span class="s">"arn:aws:s3:::larder-stock-exports/*"</span>}]
+SCP_ALLOW_LIST = [{<span class="s">"Effect"</span>: <span class="s">"Allow"</span>, <span class="s">"Action"</span>: [<span class="s">"s3:*"</span>, <span class="s">"ec2:*"</span>, <span class="s">"ecs:*"</span>, <span class="s">"logs:*"</span>], <span class="s">"Resource"</span>: <span class="s">"*"</span>}]
+
+<span class="k">def</span> principal_arn(arn):
+    <span class="s">"""A role session's aws:PrincipalArn is its role's ARN; anything else is itself."""</span>
+    <span class="k">if</span> <span class="s">":assumed-role/"</span> <span class="k">not in</span> arn:
+        <span class="k">return</span> arn
+    <span class="k">return</span> f<span class="s">"arn:aws:iam::{arn.split(':')[4]}:role/{arn.split('/')[1]}"</span>
+
+<span class="k">def</span> req(principal, action, resource, resource_account=PROD):
+    <span class="k">return</span> {<span class="s">"principal"</span>: principal, <span class="s">"action"</span>: action, <span class="s">"resource"</span>: resource,
+            <span class="s">"principal_account"</span>: principal.split(<span class="s">":"</span>)[4], <span class="s">"resource_account"</span>: resource_account,
+            <span class="s">"context"</span>: {<span class="s">"aws:PrincipalArn"</span>: principal_arn(principal)}}
+
+DB = f<span class="s">"arn:aws:rds:eu-central-1:{PROD}:db:orders-prod"</span>
+cases = [
+    (<span class="s">"1 admin changes the orders DB, no guardrail"</span>,
+     req(f<span class="s">"arn:aws:sts::{PROD}:assumed-role/prod-operator/ben"</span>, <span class="s">"rds:ModifyDBInstance"</span>, DB), dict(identity=ADMIN)),
+    (<span class="s">"2 same, guardrail attached"</span>,
+     req(f<span class="s">"arn:aws:sts::{PROD}:assumed-role/prod-operator/ben"</span>, <span class="s">"rds:ModifyDBInstance"</span>, DB), dict(identity=ADMIN + GUARDRAIL)),
+    (<span class="s">"3 the db-change role, guardrail attached"</span>,
+     req(f<span class="s">"arn:aws:sts::{PROD}:assumed-role/db-change/pipeline"</span>, <span class="s">"rds:ModifyDBInstance"</span>, DB), dict(identity=ADMIN + GUARDRAIL)),
+    (<span class="s">"4 deploy-bot: guardrail forgotten"</span>,
+     req(f<span class="s">"arn:aws:iam::{PROD}:user/deploy-bot"</span>, <span class="s">"rds:ModifyDBInstance"</span>, DB), dict(identity=ADMIN)),
+    (<span class="s">"5 developer role inside a boundary"</span>,
+     req(f<span class="s">"arn:aws:sts::{PROD}:assumed-role/team-tool/dee"</span>, <span class="s">"iam:CreateUser"</span>, f<span class="s">"arn:aws:iam::{PROD}:user/x"</span>),
+     dict(identity=ADMIN, boundary=DEV_BOUNDARY)),
+    (<span class="s">"6 StockPilot reads an export, no bucket policy"</span>,
+     req(f<span class="s">"arn:aws:sts::{STOCKPILOT}:assumed-role/stock-sync/s1"</span>, <span class="s">"s3:GetObject"</span>, <span class="s">"arn:aws:s3:::larder-stock-exports/today.csv"</span>),
+     dict(identity=READ_EXPORTS)),
+    (<span class="s">"7 same, with the bucket policy"</span>,
+     req(f<span class="s">"arn:aws:sts::{STOCKPILOT}:assumed-role/stock-sync/s1"</span>, <span class="s">"s3:GetObject"</span>, <span class="s">"arn:aws:s3:::larder-stock-exports/today.csv"</span>),
+     dict(identity=READ_EXPORTS, resource=BUCKET)),
+    (<span class="s">"8 admin, under an allow-list SCP"</span>,
+     req(f<span class="s">"arn:aws:sts::{PROD}:assumed-role/prod-operator/eli"</span>, <span class="s">"rds:ModifyDBInstance"</span>, DB), dict(identity=ADMIN, scp=SCP_ALLOW_LIST)),
+]
+<span class="k">for</span> name, r, pols <span class="k">in</span> cases:
+    print(f<span class="s">"{name:&lt;48} {decide(r, **pols)}"</span>)</code></pre>
+
+<ol class="steps">
+  <li><strong>Predict, then run.</strong> Cover the output below, write down ALLOW or DENY and the step from Figure 10.1 for each case, then run <code>python3 evaluate.py</code>:
+<pre><code>1 admin changes the orders DB, no guardrail      ALLOW  by identity-based policy
+2 same, guardrail attached                       DENY   explicit deny in identity-based policy
+3 the db-change role, guardrail attached         ALLOW  by identity-based policy
+4 deploy-bot: guardrail forgotten                ALLOW  by identity-based policy
+5 developer role inside a boundary               DENY   permissions boundary doesn't allow it
+6 StockPilot reads an export, no bucket policy   DENY   cross-account: no resource-based policy allows it
+7 same, with the bucket policy                   ALLOW  identity- and resource-based policies both allow it
+8 admin, under an allow-list SCP                 DENY   no SCP allows it</code></pre>
+  Cases 1 and 2 are Ben's morning. Case 4 is Marco's question. Case 8 previews <a href="#ch20">Chapter 20</a>: even an administrator can't use a service the organisation hasn't allowed.</li>
+  <li><strong>Close the gap.</strong> Add <code>GUARDRAIL</code> to case 4's identity policies. Then add a case for a brand-new role with <code>AdministratorAccess</code> and no guardrail: it's allowed. Finally, give that role <code>boundary=DEV_BOUNDARY + GUARDRAIL</code>, the 10.10 fix, and run again.</li>
+  <li><strong>Break it on purpose.</strong> In the guardrail's exception list, change <code>role/break-glass-*</code> to <code>role/*</code>, a common slip, and run case 2 again: every role in the account is now an exception, and the guardrail protects nothing. In case 7, change the bucket policy's principal to StockPilot's whole account (<code>arn:aws:iam::999988887777:root</code>): still allowed, but now <em>any</em> identity there whose own policies allow it can read Larder's exports.</li>
+  <li><strong>Optional: ask AWS.</strong> Save the <code>GUARDRAIL</code> statements as <code>guardrail.json</code> (a full policy, with <code>Version</code>), then run AWS's simulator, which is free:
+<pre><code>aws iam simulate-custom-policy \
+  --policy-input-list file://guardrail.json '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"*","Resource":"*"}]}' \
+  --action-names rds:ModifyDBInstance \
+  --resource-arns arn:aws:rds:eu-central-1:111122223333:db:orders-prod \
+  --context-entries "ContextKeyName=aws:PrincipalArn,ContextKeyValues=arn:aws:iam::111122223333:role/prod-operator,ContextKeyType=string" \
+  --query 'EvaluationResults[].[EvalActionName, EvalDecision]' --output text</code></pre>
+  Expect <code>explicitDeny</code>. Change the context value to <code>…:role/db-change</code> and expect <code>allowed</code>.</li>
+</ol>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s10-12"><span class="n">10.12</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>“Admins can do anything”</td><td>Surprise at guardrails; or guardrails never written.</td><td>Explicit deny for lines nobody may cross.</td></tr>
+      <tr><td>Guardrails attached identity by identity</td><td>Every forgotten or new identity bypasses them.</td><td>Permissions boundaries for new roles; SCPs and RCPs for everyone.</td></tr>
+      <tr><td>Exceptions with wide wildcards (<code>role/*</code>)</td><td>The exception swallows the rule.</td><td>Exact role names or a narrow, reserved prefix.</td></tr>
+      <tr><td>Expecting a boundary or SCP to grant</td><td>Access still denied after adding one.</td><td>Ceilings only filter; grant with identity or resource policies.</td></tr>
+      <tr><td>Reviewing identity policies only</td><td>Bucket, key and trust policies grant access unnoticed.</td><td>Review resource-based policies too; use Access Analyzer (<a href="#ch23">Chapter 23</a>).</td></tr>
+      <tr><td>Granting cross-account to a whole account</td><td>Every admin in the other account gets in.</td><td>Name specific roles; add conditions.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum10">
+  <h2 class="sec" id="sum10"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Seven policy types can apply. <strong>Identity</strong> and <strong>resource</strong> policies grant; <strong>boundaries, session policies, SCPs and RCPs</strong> only limit.</li>
+    <li>Order: explicit deny anywhere → RCPs → SCPs → resource policy (same account) → identity policy → boundary → session policy.</li>
+    <li>An <strong>explicit deny</strong> beats every allow, including <code>AdministratorAccess</code>: use it for guardrails, with exceptions via <code>aws:PrincipalArn</code>.</li>
+    <li>In one account, a resource policy naming a principal is enough; <strong>across accounts, both sides must allow</strong>.</li>
+    <li><strong>Permissions boundaries</strong> let teams create roles safely, if the boundary can't be removed.</li>
+    <li>Identity-attached guardrails cover only what they're attached to; organisation-wide ones belong in SCPs and RCPs.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Explicit deny</dt><dd>A matching <code>Deny</code> statement in any policy; always wins.</dd>
+    <dt>Implicit deny</dt><dd>The default result when nothing allows a request.</dd>
+    <dt>Guardrail</dt><dd>A deny that holds regardless of other permissions.</dd>
+    <dt>Permissions boundary</dt><dd>A managed policy that caps an identity's maximum permissions.</dd>
+    <dt>Session policy</dt><dd>A policy passed at session creation that narrows a role session.</dd>
+    <dt>SCP</dt><dd>Service control policy: an organisation ceiling on principals in member accounts.</dd>
+    <dt>RCP</dt><dd>Resource control policy: an organisation ceiling on access to resources in member accounts.</dd>
+    <dt><code>aws:PrincipalArn</code></dt><dd>The ARN of the calling user or role (a role session's role), used for exceptions.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Which policy types can grant access, and which can only take it away? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Identity-based and resource-based policies (and legacy ACLs) can grant. Permissions boundaries, session policies, SCPs and RCPs can only limit.</p></details>
+    </li>
+    <li>
+      <p>A role has <code>AdministratorAccess</code> and a permissions boundary allowing only <code>s3:*</code>. Can it create an IAM user? Can it delete a bucket? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>No: the boundary doesn't allow <code>iam:CreateUser</code>. Yes: both the identity policy and the boundary allow <code>s3:DeleteBucket</code>, unless something denies it explicitly.</p></details>
+    </li>
+    <li>
+      <p>A bucket in account A has a policy allowing a role in account B to read it. The role's own policies allow nothing. Can it read the bucket? What if the role were in account A? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>From account B, no: across accounts both sides must allow, and B's side doesn't. In account A, yes: within one account a resource-based policy naming the principal is enough.</p></details>
+    </li>
+    <li>
+      <p>Why is an explicit deny in an identity policy a weaker guardrail than the same deny in an SCP? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The identity policy protects only from the identities it's attached to; any other or new identity bypasses it. An SCP applies to every principal in the member account, however it was created, including the root user.</p></details>
+    </li>
+    <li>
+      <p>Design a way for Larder's product teams to create roles for their own services without being able to give themselves more power than the platform team allows. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>A <code>team-boundary</code> policy with the services teams may use and the guardrail denies. Teams may create and modify roles named <code>team-*</code> only with that boundary (condition on <code>iam:PermissionsBoundary</code>), may pass only <code>team-*</code> roles, and are denied removing or changing boundaries and editing the boundary policy itself.</p></details>
+    </li>
+    <li>
+      <p>Compare how you'd stop anyone deleting a production database on AWS and on Azure. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>AWS: an explicit deny on the delete action (in an SCP to cover everyone, with an exception for a break-glass role), plus RDS deletion protection. Azure: a <code>CanNotDelete</code> resource lock, which blocks deletion even by owners until someone with permission removes the lock, and Azure Policy for configuration rules.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html">Policy evaluation logic</a> (the full flowchart), <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic-cross-account.html">cross-account evaluation</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html">permissions boundaries</a>, <a href="https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_rcps.html">RCPs</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/azure-resource-manager/management/lock-resources">resource locks</a>. Google Cloud: <a href="https://cloud.google.com/iam/docs/deny-overview">IAM deny policies</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="#ch9">9 · Reading and writing IAM policies</a></div>
+  <div><span>Next</span><a href="#ch11">11 · Debugging “access denied”</a></div>
+</nav>

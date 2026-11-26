@@ -566,8 +566,35 @@ and must not contradict, ADR 0021 (staff tools SSO/SCIM, May 2027) and the 11 Oc
   team; staging first, then attached alongside the old policy in prod for a day, then `s3:*` detached. The audit
   had 40 more findings. Roles carry a `team` tag (e.g. `team=dispatch`) used for ABAC; only the platform team may set it.
   Example account ID in the book: `111122223333` (prod, AWS documentation range).
+- **Root recovery (ch. 7):** audit started Mon 23 Nov 2026. Root access key created 11 Mar 2024 minutes after the
+  account, last used 4 Mar 2025 by S3 (a nightly export script on an old VM, retired that month); deleted. Root email
+  was `jasper@larder.example` (switched off Aug 2025); on 24 Nov IT restored it as an alias of the new group
+  `aws-root@larder.example` (Eli, Femke, Marco); MFA recovered with alternative factors: the account's primary phone
+  was Femke's mobile. Now: two FIDO2 keys (office safe; Femke), company phone number, alternate contacts = platform
+  team, password in the company vault. Root not used since.
+- **IAM users and `prod-operator` (ch. 8):** 11 IAM users with console passwords: 8 current engineers (read-only, a key
+  or two each) and 3 leavers (Jasper, two 2024 contractors). First week of Dec 2026: leavers' keys deactivated,
+  passwords removed, users deleted a week later. Role `prod-operator`: `ops`'s powers minus IAM changes, 1-hour max
+  session, trust = the six on-call engineers' IAM users, MFA required, `sts:SourceIdentity` must equal
+  `${aws:username}`. Each of the six: security key (console) + authenticator app (CLI). `ops`: password removed and
+  policies detached; deleted in ch. 12.
+- **Backup guardrail (ch. 10):** policy `protect-orders-db`: deny modifying/deleting `orders-prod` except roles
+  `db-change` (the two database owners, MFA) and `break-glass-*`; deny deleting any DB snapshot or automated backup.
+  Attached to the engineers' group and `prod-operator`; `deploy-bot` was missed, then added. New roles by anyone but
+  the platform team must carry permissions boundary `team-boundary` (contains the same denies; no EC2 at first).
+  Moves into an SCP in ch. 20. Dee works in staging through role `team-tool`.
+- **Staging KMS denial (ch. 11):** Tue 8 Dec 2026, Dispatch's new policy's trial evening in staging: Engine A's
+  uploads to `larder-dispatch-staging/routes/` denied on `kms:GenerateDataKey` (invoked by S3): the staging bucket
+  had defaulted to a customer managed KMS key since a 2025 experiment; production uses S3-managed keys; `config/`
+  files are uploaded by the pipeline with S3-managed encryption explicitly. Fixed by matching staging to production;
+  follow-ups: compare staging/production bucket settings automatically; decide on customer managed keys (ch. 18).
+  Larder records S3 data events for its production buckets (ch. 23).
+- **Example partner account:** StockPilot's role `stock-sync` in `999988887777` reads `larder-stock-exports` through
+  a bucket policy (ch. 10's lab; ch. 21 tells it properly).
 - **Deploy key (ch. 17):** CI deployed with a long-lived access key for IAM user `deploy-bot` with
   `AdministratorAccess`, stored as a repository secret; replaced by GitHub OIDC with one role per environment.
+- **Accounts today (ch. 7):** two standalone accounts in Nov 2026: Jasper's original `111122223333` (production, plus the
+  network hub) and `444455556666` (development and staging, opened by Eli in 2025). No organisation yet.
 - **Accounts (ch. 20–21):** the hub, dev, staging and prod accounts (Handbook 1 ch. 10) become OUs in one organisation;
   Jasper's original account becomes the management account and runs no workloads.
 - **People (ch. 12–14):** IAM Identity Center with the company IdP; permission sets `ReadOnly`, `Developer`,
