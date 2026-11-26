@@ -1,0 +1,366 @@
+<!-- Handbook 1 · Networking in the Cloud · Chapter 18. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part IV · Traffic in and out</p>
+  <p class="chno">18</p>
+  <h1>Controlling egress: NAT at scale, proxies and firewalls</h1>
+  <p class="promise">Most network security effort goes into what can get <em>in</em>. What gets <em>out</em> matters as much: stolen data leaves through outbound connections, malware calls home through them, and a poisoned library sends your secrets out through them. This chapter shows how to find out what your servers talk to, and then how to limit it by address, by name and at a central checkpoint, at a cost you can justify.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain what each egress control can see and stop, from security groups to proxies.</li>
+      <li>Build an inventory of outbound destinations before blocking anything.</li>
+      <li>Design centralised egress through a firewall VPC, with symmetric routing.</li>
+      <li>Filter outbound traffic by domain name, and know the limits of doing so.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>NAT gateways (<a href="#ch8">Chapter 8</a>) and security groups (<a href="#ch9">Chapter 9</a>).</li>
+      <li>Transit gateways and appliance mode (<a href="#ch11">Chapter 11</a>).</li>
+      <li>DNS query logs and DNS Firewall (<a href="#ch15">Chapter 15</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 50 minutes</dd>
+      <dt>Lab</dt><dd>40 minutes, AWS, under $0.20</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 18.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>A routine look at the DNS query logs (<a href="#ch15">Chapter 15</a>) turns up something odd: the nightly reporting job has been looking up <code>telemetry-collect.example</code> every night for nine days. Nobody at Larder has heard of it. The cause is a Python package the job depends on, recently updated by its compromised maintainer, which sends the job's environment variables, database password included, to that address. The job had a route to the internet through the NAT gateway, and nothing stopped it.</p>
+  <p>Eli rotates every secret the job could see that same morning. Then Lena asks the question that takes longer: “What else can our servers send data to?” Nobody can answer. This chapter is how Larder learned to.</p>
+</aside>
+
+<!-- ======================================================== 18.1 -->
+<h2 class="sec" id="s18-1"><span class="n">18.1</span>The big picture</h2>
+
+<p class="lead"><span class="term">Egress</span> is traffic leaving your network. A NAT gateway (<a href="#ch8">Chapter 8</a>) lets private servers reach the internet, but it doesn't choose <em>which</em> parts. Controlling egress means deciding what servers may reach, and enforcing it at points that can see enough to decide. Each tool sees a different amount:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 18.1 · What each egress control can see</caption>
+    <thead><tr><th>Control</th><th>Decides on</th><th>Can't do</th><th>Cost</th></tr></thead>
+    <tbody>
+      <tr><td>Security groups and NACLs (<a href="#ch9">Ch. 9</a>)</td><td>IP addresses and ports</td><td>names; cloud services' addresses change constantly</td><td>free</td></tr>
+      <tr><td>No route to the internet</td><td>everything: nothing leaves</td><td>allow some destinations</td><td>free; endpoints for AWS services (<a href="#ch12">Ch. 12</a>)</td></tr>
+      <tr><td>DNS Firewall (<a href="#ch15">Ch. 15</a>)</td><td>the names servers look up</td><td>stop connections made directly to an IP address</td><td>cheap, per query</td></tr>
+      <tr><td>Network firewall with domain rules</td><td>the name in the TLS handshake (SNI) or HTTP <code>Host</code></td><td>see inside encrypted traffic (without TLS inspection)</td><td>per endpoint hour and per GB</td></tr>
+      <tr><td>Forward proxy</td><td>full URLs and identity, if clients use it</td><td>see traffic that doesn't go through it</td><td>servers to run, or a managed service</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">The safest egress rule is no internet route at all. Where a workload truly needs the internet, allow the specific names it needs, and block the rest.</p>
+</div>
+
+<!-- ======================================================== 18.2 -->
+<h2 class="sec" id="s18-2"><span class="n">18.2</span>First, find out what's leaving</h2>
+
+<p>Block before you know, and you'll break something important on a Friday evening. Start with an <strong>inventory</strong>:</p>
+<ul>
+  <li><strong>DNS query logs</strong> show every name each VPC looks up: the closest thing to a list of intended destinations.</li>
+  <li><strong>VPC flow logs</strong> on NAT gateways show where connections actually went, by address and bytes (<a href="#ch22">Chapter 22</a>).</li>
+  <li>Group the results by <strong>workload</strong> and give each destination an owner and a reason: “payment provider, Cho, card payments”.</li>
+</ul>
+
+<p>Larder's two weeks of logs produced a list of 37 domains for production. Most were expected: the payment provider, StockPilot, the courier maps API, the email service, package mirrors for builds. Some were AWS services that could move to endpoints (<a href="#ch12">Chapter 12</a>). Three were surprises: two forgotten monitoring trials and, of course, <code>telemetry-collect.example</code>.</p>
+
+<!-- ======================================================== 18.3 -->
+<h2 class="sec" id="s18-3"><span class="n">18.3</span>Centralised egress</h2>
+
+<p>With many VPCs, putting a NAT gateway and a firewall in each one is expensive and hard to keep consistent. The common alternative is <strong>centralised egress</strong>: spoke VPCs have no NAT gateway or internet gateway at all. Their default route points to the transit gateway (<a href="#ch11">Chapter 11</a>), which sends internet-bound traffic to one <strong>egress VPC</strong> with the firewall, the NAT gateways and the internet gateway.</p>
+
+<figure class="wide" id="fig18-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 260" role="img" aria-labelledby="fig18-1-t fig18-1-d">
+      <title id="fig18-1-t">Centralised egress through a firewall VPC</title>
+      <desc id="fig18-1-d">Spoke VPCs for production and staging have a default route to the transit gateway and no internet access of their own. The transit gateway sends internet-bound traffic to the egress VPC. There it passes through a network firewall endpoint, then a NAT gateway, then the internet gateway. Return traffic follows the same path back. Appliance mode on the egress VPC's attachment keeps both directions of each connection on the same zone's firewall.</desc>
+      <defs><marker id="c18ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="priv" x="12" y="30" width="150" height="70" rx="5"/>
+      <text class="t-label" x="87" y="58" text-anchor="middle">prod VPC</text>
+      <text class="t-mono" x="87" y="80" text-anchor="middle">0.0.0.0/0 → tgw</text>
+      <rect class="priv" x="12" y="140" width="150" height="70" rx="5"/>
+      <text class="t-label" x="87" y="168" text-anchor="middle">staging VPC</text>
+      <text class="t-mono" x="87" y="190" text-anchor="middle">0.0.0.0/0 → tgw</text>
+      <rect class="node-accent" x="206" y="86" width="90" height="68" rx="5"/>
+      <text class="t-label on-accent" x="251" y="116" text-anchor="middle">TGW</text>
+      <text class="t-small on-accent" x="251" y="134" text-anchor="middle">0/0 → egress</text>
+      <path class="wire-accent" d="M164 70 L202 104" marker-end="url(#c18ah)"/>
+      <path class="wire-accent" d="M164 172 L202 140" marker-end="url(#c18ah)"/>
+      <rect class="vpc" x="330" y="20" width="330" height="220" rx="8"/>
+      <text class="t-title t-accent" x="344" y="44">egress VPC</text>
+      <text class="t-small" x="344" y="62">appliance mode on its TGW attachment</text>
+      <rect class="node" x="344" y="92" width="96" height="56" rx="4"/>
+      <text class="t-label" x="392" y="116" text-anchor="middle">firewall</text>
+      <text class="t-small" x="392" y="134" text-anchor="middle">endpoint</text>
+      <rect class="node" x="454" y="92" width="90" height="56" rx="4"/>
+      <text class="t-label" x="499" y="125" text-anchor="middle">NAT gw</text>
+      <rect class="node" x="558" y="92" width="88" height="56" rx="4"/>
+      <text class="t-label" x="602" y="116" text-anchor="middle">internet</text>
+      <text class="t-label" x="602" y="134" text-anchor="middle">gateway</text>
+      <path class="wire-accent" d="M298 120 H340" marker-end="url(#c18ah)"/>
+      <path class="wire-accent" d="M440 120 H450" />
+      <path class="wire-accent" d="M544 120 H554" />
+      <text class="t-small" x="344" y="176">domain allow-list: SNI / Host</text>
+      <text class="t-small" x="344" y="194">one firewall endpoint and one NAT per zone</text>
+      <text class="t-small" x="344" y="212">return routes: spoke ranges → firewall → TGW</text>
+      <rect class="ext" x="684" y="96" width="66" height="48" rx="24"/>
+      <text class="t-small" x="717" y="125" text-anchor="middle">internet</text>
+      <path class="wire-accent" d="M646 120 H680" marker-end="url(#c18ah)"/>
+    </svg>
+  </div>
+  <figcaption><b>Figure 18.1</b> Every spoke's internet traffic passes one checkpoint. The spokes can't bypass it, because they have no route to the internet of their own.</figcaption>
+</figure>
+
+<p>The routing has to be right in both directions (<a href="#ch4">Chapter 4</a>). Outbound: spoke → TGW → the egress VPC's attachment subnet → firewall endpoint → NAT gateway → internet gateway. Inbound replies: internet gateway → NAT gateway → a route in the NAT subnet sending spoke ranges back to the firewall endpoint → TGW → spoke. Turn on <strong>appliance mode</strong> for the egress VPC's TGW attachment, so both directions of a connection use the same zone's firewall endpoint; without it, the stateful firewall sees half a connection and drops it.</p>
+
+<aside class="side"><b>Don't forget DNS and endpoints</b>Centralised egress handles the internet. AWS services are better reached through interface endpoints, centralised the same way (<a href="#ch12">Chapter 12</a>), so that traffic never needs the firewall or NAT at all.</aside>
+
+<!-- ======================================================== 18.4 -->
+<h2 class="sec" id="s18-4"><span class="n">18.4</span>Filtering by name</h2>
+
+<p>Most destinations worth allowing are names, not addresses: <code>api.payments.example</code>, not a list of IPs that changes weekly. Three ways to filter by name, each with a limit you should know:</p>
+
+<ul>
+  <li><strong>DNS Firewall</strong> blocks (or allows only) the lookups. Cheap and easy, and it stops most malware, which looks up its servers by name. But a program that connects to an IP address directly never asks DNS, and isn't stopped. The lab demonstrates this.</li>
+  <li><strong>A network firewall with domain rules</strong> (AWS Network Firewall stateful rules) reads the server name a client sends in the TLS handshake (SNI, <a href="#ch6">Chapter 6</a>) or the HTTP <code>Host</code> header, and allows or drops the connection. It works on direct-IP connections too. Its limit: a malicious client can put an allowed name in its SNI while connecting to a different server's address. Stricter firewalls check that the name resolves to the address being connected to.</li>
+  <li><strong>A forward proxy</strong> makes clients send all requests through it, by configuration. It sees full URLs, can require authentication, and logs everything. Traffic that ignores the proxy must be blocked by the network, or the proxy is only a suggestion.</li>
+</ul>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: TLS inspection</p>
+  <p>Firewalls can also decrypt and re-encrypt TLS to see inside it. That requires installing your own certificate authority on every client, breaks certificate pinning and mTLS, adds cost and latency, and turns the firewall into a store of everyone's plaintext. Reach for it only when a regulation demands it, and never for traffic to payment providers or other systems that pin certificates.</p>
+</div>
+
+<!-- ======================================================== 18.5 -->
+<h2 class="sec" id="s18-5"><span class="n">18.5</span>Larder's egress, in phases</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Eli rolled out egress control in four steps, each safe on its own. <strong>Week 1:</strong> DNS Firewall on every VPC with AWS's managed lists of malicious domains, in alert mode, then block. <strong>Weeks 2–3:</strong> the inventory from 18.2; AWS service traffic moved to interface endpoints; the data tier lost its internet route entirely (<a href="#ch12">Chapter 12</a>). <strong>Week 4:</strong> centralised egress through a firewall VPC for production and staging, with the 37 domains as an allow-list in <em>alert</em> mode. <strong>Week 6:</strong> after two weeks of alerts showed only one missed domain (the courier app's crash reporter), the allow-list switched to drop.</p>
+  <p>The reporting job's poisoned package would now be stopped at the network firewall: <code>telemetry-collect.example</code> isn't on the allow-list, and neither is a bare IP address. If the domain is on one of the managed malicious lists, DNS Firewall stops the lookup even earlier. Either way the alert reaches Eli the same night, not nine days later.</p>
+</aside>
+
+<!-- ======================================================== 18.6 -->
+<h2 class="sec" id="s18-6"><span class="n">18.6</span>Third-party appliances</h2>
+
+<p>Many companies already use a firewall vendor on premises and want the same in the cloud. The <strong>Gateway Load Balancer</strong> exists for this: it sends traffic transparently through a fleet of appliance instances, wrapped in GENEVE encapsulation so the original packets are untouched, and keeps both directions of each flow on the same appliance. Spokes and egress VPCs route to <strong>Gateway Load Balancer endpoints</strong> as their next hop, much like the firewall endpoint in Figure 18.1. You manage the appliances' sizing, patching and licences yourself.</p>
+
+<!-- ======================================================== 18.7 -->
+<h2 class="sec" id="s18-7"><span class="n">18.7</span>What it costs</h2>
+
+<p>Centralised egress swaps many NAT gateways for one set, and adds two new charges: the transit gateway's per-GB processing for every byte that crosses it, and the firewall. At the time of writing, AWS Network Firewall costs roughly $0.40 an hour per zone endpoint (about $290 a month) plus about $0.065 per GB processed; three zones start near $900 a month before data.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 18.2 · Choosing an egress design</caption>
+    <thead><tr><th>Situation</th><th>Reasonable choice</th></tr></thead>
+    <tbody>
+      <tr><td>A few VPCs, low risk, small budget</td><td>NAT per VPC, DNS Firewall, endpoints for AWS services</td></tr>
+      <tr><td>Sensitive data, or a compliance requirement to restrict egress</td><td>Centralised egress with a domain allow-list</td></tr>
+      <tr><td>Workloads that need no internet at all</td><td>No route; endpoints only</td></tr>
+      <tr><td>Existing vendor firewalls and teams to run them</td><td>Gateway Load Balancer with those appliances</td></tr>
+      <tr><td>Very high egress volume to the internet</td><td>Check firewall and TGW per-GB costs first; consider filtering only what needs filtering</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 18.8 -->
+<h2 class="sec" id="s18-8"><span class="n">18.8</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 18.3 · Egress control at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Managed firewall with domain rules</td><td>Network Firewall</td><td>Azure Firewall (FQDN rules and tags)</td><td>Cloud Next Generation Firewall (FQDN objects)</td></tr>
+      <tr><td>Managed proxy</td><td>(partner products)</td><td>Azure Firewall application rules act as one</td><td>Secure Web Proxy</td></tr>
+      <tr><td>DNS-level blocking</td><td>Route 53 Resolver DNS Firewall</td><td>DNS security policy</td><td>Cloud DNS response policies</td></tr>
+      <tr><td>Central egress pattern</td><td>egress VPC behind a TGW</td><td>hub VNet with Azure Firewall; UDR <code>0.0.0.0/0</code> to it</td><td>hub VPC with NGFW and Cloud NAT; routes or NCC</td></tr>
+      <tr><td>Third-party appliances</td><td>Gateway Load Balancer</td><td>Gateway Load Balancer; Virtual WAN NVAs</td><td>internal load balancer as next hop</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 18.9 -->
+<h2 class="sec" id="s18-9"><span class="n">18.9</span>Lab: DNS Firewall, and its limit</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 18 · Block a domain, then go around the block</p>
+  <p><strong>You'll build</strong> a small instance you reach with Session Manager (no SSH), and a DNS Firewall rule that blocks <code>example.org</code>. Then you'll see the lookup fail, and the connection succeed anyway when you skip DNS. <strong>You need</strong> the AWS CLI and Terraform, and the console for Session Manager. <strong>Cost:</strong> a <code>t4g.nano</code> at about $0.005 an hour and a fraction of a cent of DNS Firewall queries.</p>
+</div>
+
+<p class="code-title"><span>main.tf</span><span>Terraform ≥ 1.5, AWS provider 5.x</span></p>
+<pre><code><span class="k">provider</span> <span class="s">"aws"</span> { region = <span class="s">"eu-central-1"</span> }
+
+<span class="k">data</span> <span class="s">"aws_availability_zones"</span> <span class="s">"z"</span> { state = <span class="s">"available"</span> }
+<span class="k">data</span> <span class="s">"aws_ssm_parameter"</span> <span class="s">"al2023"</span> {
+  name = <span class="s">"/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"</span>
+}
+
+<span class="c"># a public subnet, so Session Manager works without endpoints (Chapter 8)</span>
+<span class="k">resource</span> <span class="s">"aws_vpc"</span> <span class="s">"lab"</span> {
+  cidr_block           = <span class="s">"10.80.0.0/16"</span>
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+}
+<span class="k">resource</span> <span class="s">"aws_internet_gateway"</span> <span class="s">"igw"</span> { vpc_id = aws_vpc.lab.id }
+<span class="k">resource</span> <span class="s">"aws_subnet"</span> <span class="s">"pub"</span> {
+  vpc_id                  = aws_vpc.lab.id
+  cidr_block              = <span class="s">"10.80.0.0/24"</span>
+  availability_zone       = data.aws_availability_zones.z.names[0]
+  map_public_ip_on_launch = true
+}
+<span class="k">resource</span> <span class="s">"aws_route"</span> <span class="s">"out"</span> {
+  route_table_id         = aws_vpc.lab.main_route_table_id
+  destination_cidr_block = <span class="s">"0.0.0.0/0"</span>
+  gateway_id             = aws_internet_gateway.igw.id
+}
+
+<span class="c"># no inbound rules at all; Session Manager connects outbound</span>
+<span class="k">resource</span> <span class="s">"aws_security_group"</span> <span class="s">"vm"</span> { vpc_id = aws_vpc.lab.id }
+<span class="k">resource</span> <span class="s">"aws_vpc_security_group_egress_rule"</span> <span class="s">"vm"</span> {
+  security_group_id = aws_security_group.vm.id
+  cidr_ipv4         = <span class="s">"0.0.0.0/0"</span>
+  ip_protocol       = <span class="s">"-1"</span>
+}
+<span class="k">resource</span> <span class="s">"aws_iam_role"</span> <span class="s">"vm"</span> {
+  name = <span class="s">"handbook-lab18-vm"</span>
+  assume_role_policy = jsonencode({
+    Version   = <span class="s">"2012-10-17"</span>
+    Statement = [{ Effect = <span class="s">"Allow"</span>, Action = <span class="s">"sts:AssumeRole"</span>,
+                   Principal = { Service = <span class="s">"ec2.amazonaws.com"</span> } }]
+  })
+}
+<span class="k">resource</span> <span class="s">"aws_iam_role_policy_attachment"</span> <span class="s">"ssm"</span> {
+  role       = aws_iam_role.vm.name
+  policy_arn = <span class="s">"arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"</span>
+}
+<span class="k">resource</span> <span class="s">"aws_iam_instance_profile"</span> <span class="s">"vm"</span> { role = aws_iam_role.vm.name }
+<span class="k">resource</span> <span class="s">"aws_instance"</span> <span class="s">"vm"</span> {
+  ami                    = data.aws_ssm_parameter.al2023.insecure_value
+  instance_type          = <span class="s">"t4g.nano"</span>
+  subnet_id              = aws_subnet.pub.id
+  vpc_security_group_ids = [aws_security_group.vm.id]
+  iam_instance_profile   = aws_iam_instance_profile.vm.name
+  tags = { Name = <span class="s">"handbook-lab18"</span> }
+}
+
+<span class="c"># 18.4 · DNS Firewall: block example.org and everything under it</span>
+<span class="k">resource</span> <span class="s">"aws_route53_resolver_firewall_domain_list"</span> <span class="s">"blocked"</span> {
+  name    = <span class="s">"handbook-lab18-blocked"</span>
+  domains = [<span class="s">"example.org"</span>, <span class="s">"*.example.org"</span>]
+}
+<span class="k">resource</span> <span class="s">"aws_route53_resolver_firewall_rule_group"</span> <span class="s">"g"</span> { name = <span class="s">"handbook-lab18"</span> }
+<span class="k">resource</span> <span class="s">"aws_route53_resolver_firewall_rule"</span> <span class="s">"block"</span> {
+  name                    = <span class="s">"block-example-org"</span>
+  action                  = <span class="s">"BLOCK"</span>
+  block_response          = <span class="s">"NXDOMAIN"</span>
+  firewall_domain_list_id = aws_route53_resolver_firewall_domain_list.blocked.id
+  firewall_rule_group_id  = aws_route53_resolver_firewall_rule_group.g.id
+  priority                = 100
+}
+<span class="k">resource</span> <span class="s">"aws_route53_resolver_firewall_rule_group_association"</span> <span class="s">"a"</span> {
+  name                   = <span class="s">"handbook-lab18"</span>
+  firewall_rule_group_id = aws_route53_resolver_firewall_rule_group.g.id
+  priority               = 101
+  vpc_id                 = aws_vpc.lab.id
+}</code></pre>
+
+<ol class="steps">
+  <li><strong>Create it</strong> with <code>terraform init</code> and <code>terraform apply</code>. Wait two or three minutes for the instance to register with Session Manager.</li>
+  <li><strong>Connect.</strong> In the EC2 console, select <code>handbook-lab18</code>, choose <em>Connect</em>, then <em>Session Manager</em>. No SSH keys, no open ports.</li>
+  <li><strong>Before and after.</strong> Before blocking anything, you'd get an address for <code>example.org</code> from your laptop: run <code>dig +short example.org</code> there and note one address. On the instance, run <code>dig example.org</code>: <code>status: NXDOMAIN</code>, the firewall's answer. <code>dig +short example.com</code> still works.</li>
+  <li><strong>Go around it.</strong> On the instance: <code>curl -sI https://example.org --resolve example.org:443:&lt;address from your laptop&gt;</code>. It connects and returns headers. DNS Firewall stopped the lookup, not the connection: an attacker who knows an address doesn't need DNS. That gap is what network firewalls with SNI rules, or no internet route at all, close.</li>
+  <li><strong>Clean up</strong> with <code>terraform destroy</code>.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Turn on Resolver query logging for the VPC to CloudWatch Logs, repeat step 3, and find the blocked query in the log with the firewall rule's action. This is the alert that should have told Larder about <code>telemetry-collect.example</code> on day one.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s18-10"><span class="n">18.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Blocking before an inventory</td><td>Payments or a partner integration break in production.</td><td>Logs first, owners per destination, alert mode before drop.</td></tr>
+      <tr><td>Relying on DNS filtering alone</td><td>Direct-IP connections walk straight out.</td><td>Combine with SNI rules or no internet route.</td></tr>
+      <tr><td>Asymmetric routes through the firewall</td><td>Connections drop at random.</td><td>Appliance mode; per-zone return routes through the same endpoint.</td></tr>
+      <tr><td>AWS service traffic through the firewall</td><td>Big per-GB bills for traffic that never needed the internet.</td><td>Interface and gateway endpoints.</td></tr>
+      <tr><td>Spokes keeping their own NAT gateway</td><td>An easy way around the checkpoint.</td><td>Remove internet routes from spokes; enforce with policy.</td></tr>
+      <tr><td>TLS inspection by default</td><td>Broken pinned clients and mTLS; a vault of plaintext.</td><td>Only where required, with exceptions for pinned services.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum18">
+  <h2 class="sec" id="sum18"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Egress is how data leaks and malware calls home. NAT allows the internet; it doesn't choose destinations.</li>
+    <li>Each control sees a different layer: addresses (security groups), names looked up (DNS Firewall), names in the handshake (network firewall), full URLs (proxy).</li>
+    <li>Start with an <strong>inventory</strong> from DNS and flow logs; give every destination an owner.</li>
+    <li><strong>Centralised egress</strong> routes spokes through one firewall VPC; get both directions and appliance mode right.</li>
+    <li>DNS filtering is cheap but bypassable by direct IPs; combine it with SNI rules or no internet route.</li>
+    <li>Roll out in phases: alert, then block.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Egress</dt><dd>Traffic leaving your network.</dd>
+    <dt>Exfiltration</dt><dd>Data stolen by sending it out of the network.</dd>
+    <dt>Centralised egress</dt><dd>All spokes reaching the internet through one checkpoint VPC.</dd>
+    <dt>Domain allow-list</dt><dd>The names workloads may reach; everything else is blocked.</dd>
+    <dt>SNI filtering</dt><dd>Allowing or blocking TLS connections by the server name in the handshake.</dd>
+    <dt>Forward proxy</dt><dd>A server that makes outbound requests on clients' behalf.</dd>
+    <dt>TLS inspection</dt><dd>Decrypting and re-encrypting traffic to see inside it.</dd>
+    <dt>Gateway Load Balancer</dt><dd>Sends traffic transparently through a fleet of appliances.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Why can't security groups alone restrict a server to “only the payment provider's API”? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Security groups work on IP addresses, and the provider's API sits behind addresses that change and are shared with other services. Restricting by name needs DNS filtering, SNI-based firewall rules or a proxy.</p></details>
+    </li>
+    <li>
+      <p>A DNS Firewall blocks <code>bad.example</code>. Malware on a server connects to <code>203.0.113.66:443</code> directly. What stops it? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Not DNS Firewall: no lookup happens. A network firewall with an SNI/Host allow-list would drop it (the name won't be on the list), as would having no internet route at all. Security groups would only help if outbound traffic were restricted to known addresses.</p></details>
+    </li>
+    <li>
+      <p>After centralising egress, connections from staging to the internet fail about half the time. What do you check first? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Symmetric routing: whether appliance mode is on for the egress VPC's TGW attachment, and whether return routes in the NAT subnets send spoke ranges back through the same zone's firewall endpoint. A stateful firewall seeing only one direction drops the connection.</p></details>
+    </li>
+    <li>
+      <p>Why build an inventory and run in alert mode before blocking? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>So you know every legitimate destination and its owner before anything is blocked; otherwise you break critical integrations. Alert mode shows what the rules would have blocked, so misses can be fixed without an outage.</p></details>
+    </li>
+    <li>
+      <p>Your data tier needs Secrets Manager, KMS and S3, and nothing else. Design its egress. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>No internet route at all; an S3 gateway endpoint and interface endpoints for Secrets Manager and KMS with endpoint policies limited to your accounts; security groups allowing outbound 443 only to the endpoints' group and the S3 prefix list; DNS Firewall and query logging as a backstop.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/network-firewall/latest/developerguide/what-is-aws-network-firewall.html">What is AWS Network Firewall?</a> and <a href="https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resolver-dns-firewall.html">Route 53 Resolver DNS Firewall</a>.</li>
+    <li>AWS whitepaper: <a href="https://docs.aws.amazon.com/whitepapers/latest/building-scalable-secure-multi-vpc-network-infrastructure/centralized-egress-to-internet.html">Centralized egress to the internet</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/firewall/overview">What is Azure Firewall?</a></li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="#ch17">17 · The edge: CDNs, WAF and DDoS protection</a></div>
+  <div><span>Next</span><a href="#ch19">19 · Containers and Kubernetes networking</a></div>
+</nav>

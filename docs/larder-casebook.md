@@ -1153,3 +1153,10 @@ Network facts used by Handbook 1 (details and chapter references in `docs/HANDOF
   VPN connection on each, 4G prepended; MSS clamp after the stock-count MTU black hole (ch. 13). Direct Connect
   decided against: revisit above ~1 Gbps / 20 TB a month at one site (ch. 14). Private zone `internal.larder.example`
   (stock service `stock.internal.larder.example`); office DNS `10.1.0.53` for `office.larder.example` (ch. 15).
+- Part IV facts: ALB rules host `api.larder.example` → tg-api, `/checkout/*` → tg-checkout, default tg-web; 502s at
+  quiet times fixed by app keep-alive 75 s > ALB idle 60 s (ch. 16). Friday 17:00 newsletter to 400,000 subscribers,
+  12× traffic, >80 % identical requests → CloudFront with micro-caching, origin shield in Frankfurt, catalogue hit
+  ratio 93 %; credential stuffing on `/api/login` (~40,000 attempts/hour, ~600 addresses) stopped by WAF rate rules
+  (ch. 17). Reporting job's compromised Python package sent env vars to `telemetry-collect.example` for nine days;
+  found in DNS query logs; secrets rotated; 37 production egress domains; DNS Firewall, endpoints, then centralised
+  egress through a firewall VPC, allow-list in alert mode for two weeks then drop (ch. 18).
