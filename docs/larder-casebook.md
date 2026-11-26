@@ -1160,3 +1160,11 @@ Network facts used by Handbook 1 (details and chapter references in `docs/HANDOF
   (ch. 17). Reporting job's compromised Python package sent env vars to `telemetry-collect.example` for nine days;
   found in DNS query logs; secrets rotated; 37 production egress domains; DNS Firewall, endpoints, then centralised
   egress through a firewall VPC, allow-list in alert mode for two weeks then drop (ch. 18).
+- Part V facts: services move to EKS with nodes in the app subnets; a deploy surge exhausts zone a's `/20` (~100
+  nodes × ~28 addresses with default warm pools) → custom networking with secondary `100.64.0.0/16` (one `/18` pod subnet
+  per zone), prefix delegation, smaller warm targets; Gateway API owned by the platform team (ch. 19). WMS B webhook
+  receiver: API Gateway → Lambda in private app subnets (it had been put in public subnets and lost internet access)
+  → RDS Proxy → Postgres; calls back to WMS B through NAT (ch. 20). Lena's ADR 0021 review also found the leaver's VPN
+  profile still worked and reached all of `10.0.0.0/8`; staff tools moved behind AWS Verified Access with SSO and
+  device checks, staff VPN off for tools in October, kept for two engineers' incident access; mTLS in the payments
+  path, no service mesh yet (about twenty services, three teams; revisit at ~fifty) (ch. 21).

@@ -1,8 +1,8 @@
 # Handoff: Jef's Handbooks (Series 3). Draft for review
 
 Status as of 2026-11-26: **approved and in progress.** Owner decisions: title OK, AWS as the main provider, Larder as
-the running example, 25 chapters, labs may cost up to about $1 (with clean-up steps). Written: Parts I–IV
-(chapters 1–18). The book is on the landing page (a **Handbooks** section after Deep dives, added when main's
+the running example, 25 chapters, labs may cost up to about $1 (with clean-up steps). Written: Parts I–V
+(chapters 1–21). The book is on the landing page (a **Handbooks** section after Deep dives, added when main's
 format-based landing page was merged in) and in `journals.json` (chapter PDFs + whole-book PDF).
 
 - Contents page: `public/handbooks/cloud-networking/index.html`
@@ -109,14 +109,13 @@ NAT Elastic IP `198.51.100.7` (StockPilot allow-lists it). Chapter 9 should rete
 ## 5. Progress and checklist
 
 1. [x] Landing page: Handbooks section (`handbook_items()` in `build_notes.py`); `journals.json` entries for chapter and whole-book PDFs.
-2. [x] Part I: chapters 1–6. [x] Part II: chapters 7–10. [x] Part III: chapters 11–15. [x] Part IV: chapters 16–18.
-3. [ ] Part V (19–21), then Part VI (22–25), then the appendices. Forward references already promise:
-   ch. 19 pods in `100.64.0.0/10`, IP targets for load balancers, service discovery; ch. 20 serverless in VPCs;
+2. [x] Part I: chapters 1–6. [x] Part II: chapters 7–10. [x] Part III: chapters 11–15. [x] Part IV: chapters 16–18. [x] Part V: chapters 19–21.
+3. [ ] Part VI (22–25), then the appendices. Forward references already promise:
    ch. 22 flow logs, Reachability Analyzer, DNS query logs (used in ch. 18); ch. 23 network costs;
    ch. 24 networks as code, VPC sharing vs per-team VPCs; ch. 25 second region and DNS failover;
    ch. 21 identity-aware access instead of client VPN;
    ch. 22 flow logs and Reachability Analyzer; ch. 25 second region (`10.32.0.0/12`) and DNS failover.
-4. Lab code: the Python labs (ch. 2, 4, 10, 14) were run and print what the text says. The Terraform labs (ch. 8, 9, 11, 12, 13, 15, 16, 17, 18)
+4. Lab code: the Python labs (ch. 2, 4, 10, 14) and the openssl mTLS lab (ch. 21) were run and print what the text says. The Terraform labs (ch. 8, 9, 11, 12, 13, 15, 16, 17, 18, 20)
    were not run or validated (Terraform wasn't available in the session); run `terraform validate` and one real apply.
 5. Per chapter: figures checked at desktop and 375 px, light and dark (no horizontal overflow); labs not yet run in a
    real account (owner or a later session should run the AWS labs once); links checked.
