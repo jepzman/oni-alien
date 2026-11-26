@@ -2213,7 +2213,7 @@ Date: Wed, 25 Nov 2026 09:14:03 GMT
 <p>Larder terminates customer traffic at its Application Load Balancer, because it routes on paths and uses a WAF, and re-encrypts to the payment service, because card data must be encrypted on every hop. <a href="#chapter-16-load-balancers">Chapter 16</a> builds both.</p>
 
 <h3>Mutual TLS</h3>
-<p>In ordinary TLS only the server shows a certificate. With <span class="term">mutual TLS</span> (mTLS), the client shows one too, so both sides are authenticated. It's common for machine-to-machine traffic: partner APIs, service meshes (<a href="index.html#ch21">Chapter 21</a>), and devices such as Larder's store routers. Load balancers and API gateways at all three providers can now check client certificates for you.</p>
+<p>In ordinary TLS only the server shows a certificate. With <span class="term">mutual TLS</span> (mTLS), the client shows one too, so both sides are authenticated. It's common for machine-to-machine traffic: partner APIs, service meshes (<a href="#chapter-21-zero-trust">Chapter 21</a>), and devices such as Larder's store routers. Load balancers and API gateways at all three providers can now check client certificates for you.</p>
 
 <!-- ======================================================== 6.7 -->
 <h2 class="sec" id="s6-7"><span class="n">6.7</span>Lab: take a certificate apart</h2>
@@ -5077,7 +5077,7 @@ aws ec2 search-transit-gateway-routes --transit-gateway-route-table-id $RT \
 <p>Larder's stores have a fibre line and a 4G modem. Each line has its own VPN connection to the transit gateway, both using BGP. On the 4G connection the store router <strong>prepends</strong> its ASN twice, so AWS sees a longer path and prefers fibre; the router itself prefers the fibre tunnels for outbound traffic with a higher local preference. When the fibre drops, the fibre tunnels' BGP sessions go down, those routes disappear, and traffic moves to 4G in under a minute. Nobody has to do anything.</p>
 
 <h3>Remote users</h3>
-<p>Site-to-site VPNs connect networks. For individual people, AWS Client VPN and similar services give each laptop its own tunnel. Many companies now prefer identity-aware access proxies instead, which check who you are and what device you're on for each application rather than putting you on the network (<a href="index.html#ch21">Chapter 21</a>).</p>
+<p>Site-to-site VPNs connect networks. For individual people, AWS Client VPN and similar services give each laptop its own tunnel. Many companies now prefer identity-aware access proxies instead, which check who you are and what device you're on for each application rather than putting you on the network (<a href="#chapter-21-zero-trust">Chapter 21</a>).</p>
 
 <!-- ======================================================== 13.7 -->
 <h2 class="sec" id="s13-7"><span class="n">13.7</span>When a VPN isn't enough</h2>
@@ -6050,7 +6050,7 @@ print(<span class="s">"break-even: about"</span>, round(fixed / (net - dx) / 100
 <!-- ======================================================== 16.7 -->
 <h2 class="sec" id="s16-7"><span class="n">16.7</span>Internal load balancers</h2>
 
-<p>Not every load balancer faces the internet. An <strong>internal</strong> load balancer lives in private subnets, has only private addresses, and gives a service inside your network the same benefits: a stable name, health checks, spreading. Larder's payment service sits behind an internal ALB that re-encrypts to its targets (<a href="#chapter-06-http-tls">Chapter 6</a>), and the endpoint service Korenwolf uses is an internal NLB (<a href="#chapter-12-private-access">Chapter 12</a>). For many small internal services, a service mesh or the container platform's own service discovery can do this job instead (<a href="#chapter-19-kubernetes">Chapter 19</a>, <a href="index.html#ch21">Chapter 21</a>).</p>
+<p>Not every load balancer faces the internet. An <strong>internal</strong> load balancer lives in private subnets, has only private addresses, and gives a service inside your network the same benefits: a stable name, health checks, spreading. Larder's payment service sits behind an internal ALB that re-encrypts to its targets (<a href="#chapter-06-http-tls">Chapter 6</a>), and the endpoint service Korenwolf uses is an internal NLB (<a href="#chapter-12-private-access">Chapter 12</a>). For many small internal services, a service mesh or the container platform's own service discovery can do this job instead (<a href="#chapter-19-kubernetes">Chapter 19</a>, <a href="#chapter-21-zero-trust">Chapter 21</a>).</p>
 
 <!-- ======================================================== 16.8 -->
 <h2 class="sec" id="s16-8"><span class="n">16.8</span>Across providers</h2>
@@ -7665,6 +7665,330 @@ EOF</code></pre>
     <li>AWS: <a href="https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html">Giving Lambda functions access to resources in a VPC</a> and <a href="https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy.html">RDS Proxy</a>.</li>
     <li>Azure: <a href="https://learn.microsoft.com/azure/azure-functions/functions-networking-options">Azure Functions networking options</a>.</li>
     <li>Google Cloud: <a href="https://cloud.google.com/run/docs/configuring/vpc-direct-vpc">Direct VPC egress for Cloud Run</a>.</li>
+  </ul>
+</section>
+
+
+
+</article>
+<article class="sheet chapter" id="chapter-21-zero-trust">
+<header class="opener">
+  <p class="eyebrow">Part V · Networking for modern workloads</p>
+  <p class="chno">21</p>
+  <h1>Service mesh and zero-trust networking</h1>
+  <p class="promise">Everything so far has used the network to decide who may talk to whom: this subnet may reach that one, this security group may reach that port. Zero trust adds a second question to every connection: <em>who</em> is asking, proven by identity rather than by address. This chapter explains what that means for people reaching internal tools, for services calling each other, and where a service mesh fits, with honest notes on what each costs.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain the zero-trust model and how it differs from a trusted internal network.</li>
+      <li>Replace broad VPN access with per-application, identity-aware access.</li>
+      <li>Explain workload identity and mutual TLS between services.</li>
+      <li>Decide whether a service mesh, a managed service network, or neither, fits your system.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>TLS, certificates and mutual TLS (<a href="#chapter-06-http-tls">Chapter 6</a>).</li>
+      <li>Security groups and segmentation (<a href="#chapter-09-firewalls">Chapters 9</a>, <a href="#chapter-11-connecting-vpcs">11</a>).</li>
+      <li>Kubernetes services and network policies (<a href="#chapter-19-kubernetes">Chapter 19</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 50 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, your computer (openssl), free</dd>
+      <dt>Main provider</dt><dd>neutral, with AWS services in 21.4 and 21.6</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Lena's identity review (ADR 0021) found that a support agent who had left Larder still had helpdesk and billing access three weeks later. It also found something worse in the network: the agent's laptop VPN profile still worked, and anyone on the VPN could reach everything in <code>10.0.0.0/8</code>, including the internal refund tool, which trusted any request from inside the network. Nothing bad happened. Lena's conclusion was blunt: “Our internal tools are protected by being internal. That isn't protection.”</p>
+  <p>Section 21.3 shows what replaced the VPN for staff tools.</p>
+</aside>
+
+<!-- ======================================================== 21.1 -->
+<h2 class="sec" id="s21-1"><span class="n">21.1</span>The big picture</h2>
+
+<p class="lead">The traditional model is a castle with a moat: a strong <strong>perimeter</strong> around the network, and trust for anything inside it. It fails in two ways. Once an attacker is inside, through a phished laptop, a leaked VPN profile or a compromised server, everything is reachable. And “inside” has stopped meaning much: people work from home, services run in several clouds, and partners connect in.</p>
+
+<p><span class="term">Zero trust</span> (described in NIST SP 800-207) drops the idea of a trusted network. Its principles:</p>
+<ul>
+  <li><strong>Verify explicitly</strong>: every request is authenticated and authorised, using the identity of the user or service, and the state of the device, not the network it comes from.</li>
+  <li><strong>Least privilege</strong>: each identity gets only the access it needs, for as long as it needs it.</li>
+  <li><strong>Assume breach</strong>: design so that one compromised laptop or service reaches as little as possible, and is noticed.</li>
+</ul>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Zero trust doesn't remove network controls. It stops treating them as proof of who someone is. Keep the segments and security groups; add identity on every request.</p>
+</div>
+
+<!-- ======================================================== 21.2 -->
+<h2 class="sec" id="s21-2"><span class="n">21.2</span>What changes, and what doesn't</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 21.1 · Perimeter thinking and zero-trust thinking</caption>
+    <thead><tr><th>Question</th><th>Perimeter model</th><th>Zero trust</th></tr></thead>
+    <tbody>
+      <tr><td>Who may use the refund tool?</td><td>anyone on the office network or VPN</td><td>support staff with SSO and a managed laptop, checked per request</td></tr>
+      <tr><td>May orders call payments?</td><td>if the security group allows it</td><td>if the security group allows it <em>and</em> the caller proves it is the orders service, and policy allows that call</td></tr>
+      <tr><td>Is traffic inside the VPC encrypted?</td><td>often not</td><td>yes, everywhere</td></tr>
+      <tr><td>What does a stolen VPN profile reach?</td><td>the whole routed network</td><td>nothing: there's no network-level access to steal</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>What stays: address plans, segmentation with route tables, security groups and network policies, egress control. They limit the blast radius when identity checks fail. Zero trust is a layer on top, not a replacement.</p>
+
+<!-- ======================================================== 21.3 -->
+<h2 class="sec" id="s21-3"><span class="n">21.3</span>People reaching internal apps</h2>
+
+<p>A VPN puts a person's device <em>onto the network</em>; after that, routing and firewalls decide what it can reach, usually far more than the person needs. An <span class="term">identity-aware proxy</span> works per application instead: the person opens the tool's URL, the proxy checks their identity with the company's identity provider (SSO) and the device's posture (managed, encrypted, up to date), applies a policy for that application, and only then forwards the request. The device never joins the network.</p>
+
+<figure class="wide" id="fig21-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig21-1-t fig21-1-d">
+      <title id="fig21-1-t">A VPN and an identity-aware proxy</title>
+      <desc id="fig21-1-d">Top: with a VPN, the laptop joins the network and can reach every routed range, including the refund tool, the admin dashboard and the databases. Bottom: with an identity-aware proxy, the laptop reaches only the proxy. For each request the proxy checks the user's identity with single sign-on and the device's posture, applies the application's policy, and forwards only allowed requests to that one application.</desc>
+      <defs><marker id="c21ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+      <marker id="c21aha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <text class="t-label" x="20" y="22">VPN: the device joins the network</text>
+      <rect class="node" x="20" y="34" width="110" height="46" rx="4"/><text class="t-label" x="75" y="62" text-anchor="middle">laptop</text>
+      <path class="wire" d="M132 57 H186" marker-end="url(#c21ah)"/>
+      <text class="t-small" x="159" y="50" text-anchor="middle">VPN</text>
+      <rect class="priv" x="190" y="30" width="558" height="56" rx="5"/>
+      <text class="t-small" x="202" y="48">everything routed in 10.0.0.0/8</text>
+      <rect class="node" x="202" y="54" width="120" height="26" rx="3"/><text class="t-small" x="262" y="72" text-anchor="middle">refund tool</text>
+      <rect class="node" x="332" y="54" width="120" height="26" rx="3"/><text class="t-small" x="392" y="72" text-anchor="middle">admin dashboard</text>
+      <rect class="node" x="462" y="54" width="120" height="26" rx="3"/><text class="t-small" x="522" y="72" text-anchor="middle">databases</text>
+      <rect class="node" x="592" y="54" width="140" height="26" rx="3"/><text class="t-small" x="662" y="72" text-anchor="middle">every other host</text>
+
+      <text class="t-label" x="20" y="126">Identity-aware proxy: per app, per request</text>
+      <rect class="node" x="20" y="140" width="110" height="46" rx="4"/><text class="t-label" x="75" y="168" text-anchor="middle">laptop</text>
+      <path class="wire-accent" d="M132 163 H226" marker-end="url(#c21aha)"/>
+      <text class="t-small" x="179" y="156" text-anchor="middle">HTTPS</text>
+      <rect class="node-accent" x="230" y="134" width="190" height="60" rx="5"/>
+      <text class="t-label on-accent" x="325" y="158" text-anchor="middle">identity-aware proxy</text>
+      <text class="t-small on-accent" x="325" y="178" text-anchor="middle">SSO · device · policy</text>
+      <path class="wire-accent" d="M422 163 H516" marker-end="url(#c21aha)"/>
+      <rect class="node" x="520" y="144" width="140" height="40" rx="4"/><text class="t-small" x="590" y="169" text-anchor="middle">refund tool only</text>
+      <rect class="ext" x="250" y="210" width="150" height="30" rx="15"/><text class="t-small" x="325" y="230" text-anchor="middle">identity provider</text>
+      <path class="wire-dash" d="M325 196 V208"/>
+      <text class="t-small" x="520" y="214">the laptop never gets</text>
+      <text class="t-small" x="520" y="230">a route into the network</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 21.1</b> A VPN grants a network; an identity-aware proxy grants one application, one request at a time, to a known person on a known device.</figcaption>
+</figure>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Larder's 14 staff tools moved behind <strong>AWS Verified Access</strong>, one application at a time. Each tool's policy names the identity provider group that may use it (“support” for the refund tool, “platform” for the admin dashboard) and requires a managed laptop. Because ADR 0021 connected the identity provider to HR (SCIM), a leaver's access to all 14 tools ends when HR closes their record. The staff VPN was switched off for tools in October; it remains only for the two engineers who need to reach databases during incidents, with short-lived credentials. The refund tool also stopped trusting “inside” requests: it now reads the signed identity header the proxy adds and checks it on every request.</p>
+</aside>
+
+<!-- ======================================================== 21.4 -->
+<h2 class="sec" id="s21-4"><span class="n">21.4</span>Services calling services</h2>
+
+<p>The same idea applies between services: the payments service shouldn't trust a call because it came from <code>sg-app</code>, but because the caller proved it's the orders service. That needs <span class="term">workload identity</span>: a credential issued to each service, automatically, short-lived, that it can present on every call. Common forms:</p>
+<ul>
+  <li><strong>Certificates for mutual TLS</strong> (<a href="#chapter-06-http-tls">Chapter 6</a>): each service has a certificate naming it, often in the SPIFFE format (<code>spiffe://larder.example/ns/orders/sa/api</code>), and both ends of every connection verify each other.</li>
+  <li><strong>Cloud IAM identities</strong>: requests signed with the caller's role, checked against a policy, as AWS's own APIs do. VPC Lattice uses this for service-to-service calls (21.6).</li>
+  <li><strong>Tokens</strong>: signed tokens (JWTs) from an identity service, checked by the callee.</li>
+</ul>
+
+<p>Identity enables <strong>authorisation policies</strong> that read like intent: “orders may call payments <code>POST /charges</code>; nothing else may call payments at all”. Combined with the network controls from earlier chapters, an attacker who takes over one service still can't use it to reach others it was never meant to call.</p>
+
+<!-- ======================================================== 21.5 -->
+<h2 class="sec" id="s21-5"><span class="n">21.5</span>Service meshes</h2>
+
+<p>Adding mTLS, policies, retries and metrics to every service's code is a lot of work in many languages. A <span class="term">service mesh</span> moves that work into the network path. A <strong>data plane</strong> of proxies sits next to each workload, either a sidecar container in every pod (Envoy with Istio, Linkerd's own proxy) or a shared proxy per node (Istio's ambient mode), and a <strong>control plane</strong> issues certificates and pushes configuration to them.</p>
+
+<figure class="wide" id="fig21-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 210" role="img" aria-labelledby="fig21-2-t fig21-2-d">
+      <title id="fig21-2-t">A service mesh with sidecar proxies</title>
+      <desc id="fig21-2-d">The orders pod and the payments pod each contain the application and a sidecar proxy. The application talks plain HTTP to its own sidecar. The two sidecars talk to each other with mutual TLS, using certificates issued by the control plane, which also sends them policies, retry and timeout settings, and collects metrics.</desc>
+      <defs><marker id="c21ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="priv" x="20" y="60" width="260" height="100" rx="6"/>
+      <text class="t-small" x="32" y="153">orders pod</text>
+      <rect class="node" x="34" y="88" width="100" height="48" rx="4"/><text class="t-label" x="84" y="117" text-anchor="middle">app</text>
+      <rect class="node-accent" x="160" y="88" width="106" height="48" rx="4"/><text class="t-label on-accent" x="213" y="117" text-anchor="middle">proxy</text>
+      <path class="wire-dash" d="M136 112 H158"/>
+      <rect class="priv" x="480" y="60" width="260" height="100" rx="6"/>
+      <text class="t-small" x="492" y="153">payments pod</text>
+      <rect class="node-accent" x="494" y="88" width="106" height="48" rx="4"/><text class="t-label on-accent" x="547" y="117" text-anchor="middle">proxy</text>
+      <rect class="node" x="626" y="88" width="100" height="48" rx="4"/><text class="t-label" x="676" y="117" text-anchor="middle">app</text>
+      <path class="wire-dash" d="M602 112 H624"/>
+      <path class="wire-accent" d="M268 112 H490" marker-end="url(#c21ah2)"/>
+      <text class="t-small t-accent" x="380" y="104" text-anchor="middle">mTLS · identities checked · policy</text>
+      <rect class="node" x="300" y="10" width="160" height="34" rx="4"/>
+      <text class="t-label" x="380" y="32" text-anchor="middle">control plane</text>
+      <path class="wire-dash" d="M330 46 L213 86 M430 46 L547 86"/>
+      <text class="t-small" x="380" y="190" text-anchor="middle">apps speak plain HTTP to their own proxy; the proxies do encryption, retries, timeouts and metrics</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 21.2</b> A sidecar mesh. Every call between services gets mTLS and the same policy enforcement, whatever language each service is written in.</figcaption>
+</figure>
+
+<p>What a mesh gives you: <strong>mTLS everywhere</strong> with automatic certificate rotation; <strong>authorisation policies</strong> by service identity; <strong>traffic control</strong> (retries, timeouts, circuit breaking, canary splits); and uniform <strong>metrics and traces</strong> for every call. What it costs: another distributed system to run and upgrade; extra memory and CPU for proxies; a little latency per hop (usually around a millisecond); and new ways to fail, such as expired certificates or a broken control plane.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: a mesh for five services</p>
+  <p>A mesh pays off with dozens of services, several teams and real requirements for encryption and per-call policy. For a handful of services, TLS in the apps, security groups or network policies, and a good HTTP client library usually give most of the benefit at a fraction of the effort.</p>
+</div>
+
+<!-- ======================================================== 21.6 -->
+<h2 class="sec" id="s21-6"><span class="n">21.6</span>Managed service networking</h2>
+
+<p>Providers now offer some of a mesh's benefits as managed services, without proxies to run:</p>
+<ul>
+  <li><strong>Amazon VPC Lattice</strong> connects services across VPCs and accounts through a <em>service network</em>: services are registered by name, callers in associated VPCs reach them through Lattice, and <strong>auth policies</strong> decide, using IAM, which callers may use which paths. Overlapping address ranges don't matter, and no transit gateway routes are needed for service traffic.</li>
+  <li><strong>ECS Service Connect</strong> gives ECS services discovery, retries and metrics with a managed proxy.</li>
+  <li>AWS is retiring <strong>App Mesh</strong>, its earlier managed mesh; new designs use VPC Lattice, Service Connect, or an open-source mesh on EKS.</li>
+</ul>
+
+<h3>Choosing</h3>
+<div class="table-wrap">
+  <table>
+    <caption>Table 21.2 · What fits</caption>
+    <thead><tr><th>Situation</th><th>Reasonable choice</th></tr></thead>
+    <tbody>
+      <tr><td>Staff reaching internal web tools</td><td>Identity-aware proxy (Verified Access, Entra, Google IAP) with SSO and device checks</td></tr>
+      <tr><td>A few services, one team</td><td>TLS in apps, security groups and network policies</td></tr>
+      <tr><td>Services across many VPCs and accounts, mostly HTTP</td><td>VPC Lattice with IAM auth policies</td></tr>
+      <tr><td>Dozens of services on Kubernetes, strict mTLS and per-call policy</td><td>A service mesh (Istio, Linkerd, Cilium)</td></tr>
+      <tr><td>Engineers needing database access in incidents</td><td>Just-in-time, audited access (Session Manager port forwarding, short-lived credentials), not a standing VPN</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Larder chose identity-aware access for staff, mTLS in the payments path (where it was required), network policies on EKS, and no mesh yet: about twenty services and three teams didn't justify running one. The decision record names the trigger to revisit: the first time a second service needs per-call authorisation, or when service count passes about fifty.</p>
+
+<!-- ======================================================== 21.7 -->
+<h2 class="sec" id="s21-7"><span class="n">21.7</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 21.3 · Zero-trust building blocks</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Identity-aware access to apps</td><td>Verified Access</td><td>Entra Private Access / Application Proxy (Global Secure Access)</td><td>Identity-Aware Proxy; BeyondCorp</td></tr>
+      <tr><td>Managed service-to-service</td><td>VPC Lattice; ECS Service Connect</td><td>(Container Apps environments); Istio-based add-on for AKS</td><td>Cloud Service Mesh</td></tr>
+      <tr><td>Workload identity</td><td>IAM roles (EKS Pod Identity, IRSA)</td><td>managed identities; workload identity federation</td><td>service accounts; Workload Identity</td></tr>
+      <tr><td>Just-in-time admin access</td><td>Session Manager; IAM Identity Center</td><td>Bastion; Privileged Identity Management</td><td>IAP TCP forwarding</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 21.8 -->
+<h2 class="sec" id="s21-8"><span class="n">21.8</span>Lab: mutual TLS by hand</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 21 · A tiny certificate authority and two identities</p>
+  <p><strong>You'll</strong> create a private certificate authority, issue certificates to a “payments” server and an “orders” client, and see a server accept a client because of its identity, and refuse one without it. A mesh does exactly this, automatically, for every pair of services. <strong>You need</strong> <code>openssl</code> and two terminals. <strong>Cost:</strong> nothing.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>A certificate authority</strong> (in an empty folder):
+<pre><code>openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+  -keyout ca.key -out ca.crt -days 1 -subj "/CN=Larder lab CA"</code></pre></li>
+  <li><strong>Two workload identities</strong>, signed by the CA:
+<pre><code>for name in payments orders; do
+  openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+    -keyout $name.key -out $name.csr -subj "/CN=$name.larder.internal"
+  openssl x509 -req -in $name.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+    -out $name.crt -days 1
+done</code></pre></li>
+  <li><strong>A server that requires a client certificate.</strong> In terminal 1:
+<pre><code>openssl s_server -accept 8443 -cert payments.crt -key payments.key \
+  -CAfile ca.crt -Verify 1 -www</code></pre></li>
+  <li><strong>Call it as “orders”.</strong> In terminal 2:
+<pre><code>openssl s_client -connect localhost:8443 -cert orders.crt -key orders.key \
+  -CAfile ca.crt -quiet &lt;&lt;&lt; $'GET / HTTP/1.0\r\n\r\n' | grep 'Subject:'</code></pre>
+  The server's status page lists the certificate the client presented: <code>Subject: CN=orders.larder.internal</code>. The server knows who is calling, whatever its IP address.</li>
+  <li><strong>Call it without an identity.</strong> Repeat step 4 without <code>-cert</code> and <code>-key</code>. The handshake fails: no certificate, no connection. Then make a certificate signed by a <em>different</em> CA and try again; it fails too.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Add a check in your head (or a small script around <code>s_server</code>): accept only <code>CN=orders.larder.internal</code>. That's an authorisation policy by identity, the step after authentication.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s21-9"><span class="n">21.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Internal tools that trust “inside” traffic</td><td>A stolen VPN profile or compromised server reaches them.</td><td>Identity on every request; identity-aware proxy for people.</td></tr>
+      <tr><td>A VPN that routes everything</td><td>Every connected device reaches every system.</td><td>Per-app access; VPN only where unavoidable, narrowly routed.</td></tr>
+      <tr><td>Dropping network controls “because zero trust”</td><td>One identity mistake exposes everything.</td><td>Keep segmentation and security groups as a second layer.</td></tr>
+      <tr><td>A service mesh for a handful of services</td><td>Operational load with little benefit.</td><td>TLS in apps and network policies until scale demands more.</td></tr>
+      <tr><td>Long-lived workload certificates</td><td>Expiry outages, or stolen certificates valid for a year.</td><td>Short-lived, automatically rotated identities.</td></tr>
+      <tr><td>Access not tied to HR</td><td>Leavers keep access for weeks.</td><td>SSO with SCIM provisioning and deprovisioning.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum21">
+  <h2 class="sec" id="sum21"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li><strong>Zero trust</strong>: verify identity and device on every request, grant least privilege, assume breach. Network location proves nothing.</li>
+    <li>Keep network controls as a second layer; add identity on top.</li>
+    <li>For people, replace broad VPNs with <strong>identity-aware proxies</strong> per application, tied to SSO and device checks.</li>
+    <li>For services, use <strong>workload identity</strong> (certificates, IAM, tokens) and authorisation policies by identity.</li>
+    <li>A <strong>service mesh</strong> adds mTLS, policy, traffic control and telemetry through proxies, at real operational cost.</li>
+    <li>Managed options such as VPC Lattice cover many needs without running proxies.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Zero trust</dt><dd>A model in which no network location is trusted; every request is verified.</dd>
+    <dt>Perimeter security</dt><dd>Trusting everything inside a protected network boundary.</dd>
+    <dt>Identity-aware proxy</dt><dd>A proxy that checks user identity and device before forwarding to one app.</dd>
+    <dt>Device posture</dt><dd>The state of a device (managed, encrypted, patched) used in access decisions.</dd>
+    <dt>Workload identity</dt><dd>A credential that proves which service a request comes from.</dd>
+    <dt>SPIFFE</dt><dd>A standard format for workload identities in certificates.</dd>
+    <dt>Service mesh</dt><dd>Proxies beside each workload, managed by a control plane, handling service-to-service traffic.</dd>
+    <dt>Sidecar</dt><dd>A helper container running next to the application in the same pod.</dd>
+    <dt>VPC Lattice</dt><dd>AWS's managed service-to-service networking with IAM auth policies.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>In one sentence each: what does a VPN grant, and what does an identity-aware proxy grant? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>A VPN grants the device a place on the network, from which routing and firewalls decide what it can reach. An identity-aware proxy grants a verified person on a checked device access to one application, request by request.</p></details>
+    </li>
+    <li>
+      <p>Why keep security groups if every service authenticates every call with mTLS? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Defence in depth: if a certificate is stolen, a policy is wrong, or a service has a bug that skips checks, network controls still limit what a compromised workload can even connect to. They also reduce noise and attack surface for things that shouldn't talk at all.</p></details>
+    </li>
+    <li>
+      <p>A team of six runs eight services on EKS and wants encryption between them. Do they need a service mesh? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Probably not. TLS between services (certificates from a private CA or cert-manager), network policies and security groups for pods cover encryption and reachability at much lower operational cost. Revisit when service count, teams or per-call authorisation needs grow.</p></details>
+    </li>
+    <li>
+      <p>What did the lab's failed connection without a client certificate demonstrate? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>That the server decided whom to talk to by cryptographic identity, not by network position: a client on the same machine, with full network access, was refused because it couldn't prove an identity signed by the trusted CA.</p></details>
+    </li>
+    <li>
+      <p>How does SSO with SCIM fix the leaver problem from Larder's review? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Access to every tool is granted through the identity provider, which HR's system updates automatically. When HR closes a record, SCIM removes the account and groups everywhere, and the identity-aware proxy refuses the next request; there's no separate VPN profile or tool account left behind.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>NIST: <a href="https://csrc.nist.gov/pubs/sp/800/207/final">SP 800-207, Zero Trust Architecture</a>.</li>
+    <li>AWS: <a href="https://docs.aws.amazon.com/verified-access/latest/ug/what-is-verified-access.html">What is AWS Verified Access?</a> and <a href="https://docs.aws.amazon.com/vpc-lattice/latest/ug/what-is-vpc-lattice.html">What is Amazon VPC Lattice?</a></li>
+    <li>SPIFFE: <a href="https://spiffe.io/docs/latest/spiffe-about/overview/">SPIFFE overview</a>.</li>
   </ul>
 </section>
 
