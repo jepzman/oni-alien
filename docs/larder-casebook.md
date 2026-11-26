@@ -1145,3 +1145,11 @@ Network facts used by Handbook 1 (details and chapter references in `docs/HANDOF
   TTL cutover (ch. 5); missing intermediate on `hooks.larder.example` (ch. 6); cross-zone Kafka traffic ≈ €700/month
   (ch. 7); 29 Oct 2026 Dispatch outage (PR 233, 18:10–18:35): the removed rule allowed Dispatch by CIDR; tracked connections kept the old copies looking healthy while new copies failed (ch. 9); Korenwolf overlaps `10.20.0.0/16` →
   PrivateLink (ch. 10).
+- Part III facts: hub VPC `10.16.0.0/16` holds CI runners, store VPN attachments' DNS and the Resolver endpoints
+  (inbound `10.16.1.10`, `10.16.2.10`); TGW route tables `tgw-rt-prod`, `tgw-rt-nonprod`, `tgw-rt-shared` (ch. 11);
+  early design was hub-and-peering, replaced by the TGW when stores needed prod (peering isn't transitive). Korenwolf
+  calls `orders.partner.larder.example` through a PrivateLink endpoint service (NLB, proxy protocol v2, mTLS); data-tier
+  jobs use interface endpoints and have no internet route (ch. 12). Store routers: ASN 65008 at Noord, fibre + 4G, a
+  VPN connection on each, 4G prepended; MSS clamp after the stock-count MTU black hole (ch. 13). Direct Connect
+  decided against: revisit above ~1 Gbps / 20 TB a month at one site (ch. 14). Private zone `internal.larder.example`
+  (stock service `stock.internal.larder.example`); office DNS `10.1.0.53` for `office.larder.example` (ch. 15).
