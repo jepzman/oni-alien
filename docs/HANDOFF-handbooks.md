@@ -117,3 +117,50 @@ NAT Elastic IP `198.51.100.7` (StockPilot allow-lists it). Chapter 9 should rete
    were not run or validated (Terraform wasn't available in the session); run `terraform validate` and one real apply.
 5. Per chapter: figures checked at desktop and 375 px, light and dark (no horizontal overflow); labs not yet run in a
    real account (owner or a later session should run the AWS labs once); links checked.
+
+## 6. Handbook 2 · Identity and Access in the Cloud (DRAFT for owner review, 2026-11-26)
+
+Outline: `content/handbooks/cloud-identity/book.py` (same format as Handbook 1). Not yet in `BOOKS` in
+`scripts/build_handbooks.py`, so nothing is built or shown on the landing page until it is approved.
+
+Audience: developers, operators and new cloud engineers who copy IAM policies and hope. Outcome: design
+least-privilege access for people and workloads on AWS, debug any “access denied”, and read the same on Azure/GCP.
+Same style, blocks and look as Handbook 1 (§2). Labs are nearly free (IAM costs nothing); a few touch KMS
+(~$1/key/month, delete at the end) or Secrets Manager (~$0.40/secret/month).
+
+| Part | Chapters |
+| --- | --- |
+| I · How access works | 1 Who are you, and what may you do? · 2 Passwords, MFA and passkeys · 3 Sessions and tokens · 4 OAuth 2.0 and OpenID Connect · 5 SAML and federation · 6 Access models: roles, attributes and relationships |
+| II · IAM on AWS | 7 The AWS account and its root user · 8 Users, groups and roles · **9 Reading and writing IAM policies (sample)** · 10 How AWS decides: policy evaluation logic · 11 Debugging “access denied” |
+| III · Access for people | 12 Single sign-on with IAM Identity Center · 13 Joiners, movers and leavers · 14 Privileged access and break-glass |
+| IV · Access for software | 15 Identities for workloads · 16 Kubernetes and workload identity · 17 CI/CD without long-lived keys · 18 Secrets and encryption keys · 19 Service-to-service and API access |
+| V · Many accounts | 20 AWS Organizations and guardrails · 21 Cross-account access and resource sharing · 22 Data perimeters |
+| VI · Running it | 23 Auditing and detecting misuse · 24 Identity as code and least privilege at scale · 25 Capstone: Larder's identity end to end |
+| Appendices | A Policy cookbook · B AWS/Azure/GCP translation table · C Lab setup and safety · D Glossary · E Answers |
+
+Links to the rest of the shelf: ch. 4 and 6 go deeper than the Security Patterns notebook (OAuth + PKCE, Least
+Privilege, Short-Lived Tokens, Zero Trust) and cite it; ch. 16 pairs with Handbook 1 ch. 19; ch. 22 builds on
+Handbook 1 ch. 12 (endpoint policies) and ch. 24 (landing zones); ch. 21 picks up the account layout from Handbook 1 ch. 10.
+
+### Proposed Larder storyline (new facts: confirm, then add to `docs/larder-casebook.md`)
+
+Must not contradict the casebook: ADR 0021 (24 May 2027, staff tools SSO/SCIM) and the 11 Oct 2026 security review
+(non-expiring business API keys, unsigned webhooks) are reused, not rewritten.
+
+- **The starting point (Nov 2026 audit, ch. 7–8):** the original account Jasper opened in 2024 still has a root
+  access key from that year and root MFA on a phone nobody can find; 11 IAM users with console passwords, 3 of them
+  for people who have left; engineers share an `ops` user for production fixes.
+- **The deploy key (ch. 17):** CI deploys with a long-lived access key for `deploy-bot` with `AdministratorAccess`,
+  stored as a repository secret; replaced by GitHub OIDC with one role per environment.
+- **Accounts (ch. 20–21):** the hub/dev/staging/prod accounts from Handbook 1 ch. 10 become OUs in one
+  organisation; Jasper's account becomes the management account and runs no workloads.
+- **People (ch. 12–14):** Identity Center with the company IdP; permission sets `ReadOnly`, `Developer`,
+  `ProdOperator` (just-in-time, approved by a tech lead); two break-glass users in a safe. Ch. 13 links to ADR 0021.
+- **Partners (ch. 19, 21):** StockPilot and the PSP use cross-account roles with external IDs or signed requests;
+  Korenwolf's business API keys expire after 90 days (from the Oct 2026 review).
+
+### Owner decisions needed
+
+1. Title and subtitle. 2. 25 chapters in six parts, as above. 3. AWS main provider again. 4. The Larder storyline
+facts above. 5. Sample chapter: 9 (policies) or 10 (evaluation logic). 6. Show it on the Series 3 shelf as
+“coming” now, or only once the first part is written.
