@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from doodle import Doodle, esc, highlight  # noqa: E402
 import cheatsheet  # noqa: E402
+import build_handbooks  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC = ROOT / "public"
@@ -1291,7 +1292,26 @@ def book_items(journals, planned, series=1, book=1, casefile=False):
     return "\n".join(books)
 
 
-def render_landing(sheets=()):
+def handbook_items(books):
+    items = []
+    for b in books:
+        k = b["key"]
+        n, total = len(b["written"]), b["n_chapters"]
+        count = f"{n} of {total} chapters" if n < total else f"{total} chapters"
+        items.append(f'''    <li class="book book--handbook">
+      <a class="book-cover" href="handbooks/{k}/index.html" aria-label="Open handbook {b['no']}: {esc(b['title'])}">
+        <span class="book-band" aria-hidden="true"></span>
+        <span class="book-label"><small>handbook {b['no']}</small><b>{esc(b['title'])}</b><i>{count}</i></span>
+      </a>
+      <div class="book-meta">
+        <p>{esc(b['subtitle'])}. {esc(b['shelf_blurb'])}</p>
+        <p class="book-actions"><a class="btn" href="handbooks/{k}/index.html">Open book</a><a class="btn btn--ghost" href="handbooks/{k}/pdf/{k}-handbook.pdf">{DL}PDF</a></p>
+      </div>
+    </li>''')
+    return "\n".join(items)
+
+
+def render_landing(sheets=(), books=()):
     series1 = [j for j in shelf() if j.get("series", 1) == 1]
     series2 = [j for j in shelf() if j.get("series", 1) == 2]
     months = []
@@ -1300,7 +1320,7 @@ def render_landing(sheets=()):
         months.append(f'    <div class="month"><h3>{month}</h3><ul>{lis}</ul></div>')
     total = sum(len(j["catalogue"]) for j in shelf())
     return "\n".join([
-        head("Jef’s Notes", "A shelf of student bullet journals on software design patterns and the work around the code, with doodles, analogies, trade-offs and ratings.", 0, "Architects+Daughter&family=Permanent+Marker&family=IBM+Plex+Sans+Condensed:wght@700"),
+        head("Jef’s Notes", "A shelf of student bullet journals on software design patterns and the work around the code, with doodles, analogies, trade-offs and ratings, plus long-form handbooks.", 0, "Architects+Daughter&family=Permanent+Marker&family=IBM+Plex+Sans+Condensed:wght@700&family=Archivo:wght@800"),
         body_open(),
         '<a class="skip-link" href="#main">Skip to the shelf</a>',
         bar(None, 0, "shelf"),
@@ -1318,6 +1338,9 @@ def render_landing(sheets=()):
         f'  <ul class="shelf shelf-series">\n{book_items([j for j in series2 if j.get("book_no", 1) == 1], PLANNED_2, series=2, book=1, casefile=True)}\n  </ul>',
         '  <h3 class="shelf-book">Book 2 · The Product Owner\'s Notebook <span>narrated by Grace</span></h3>',
         f'  <ul class="shelf shelf-series">\n{book_items([j for j in series2 if j.get("book_no", 1) == 2], PLANNED_PRODUCT, series=2, book=2)}\n  </ul>',
+        '  <h2 id="series-3"><span class="num">✎</span>Series 3 · Jef’s Handbooks <span class="side">long-form, chapter by chapter</span></h2>',
+        '  <p>Books, not notes: one big topic, taught from the ground up for readers who know a little and want to be <b>competent</b> by the end. Each chapter explains one idea at a time with precise diagrams, worked examples, a hands-on lab and questions to check yourself.</p>',
+        f'  <ul class="shelf shelf-series">\n{handbook_items(books)}\n  </ul>',
         '  <h2 id="cheatsheets"><span class="num">⌘</span>Cheat sheets <span class="side">laminated reference cards</span></h2>',
         '  <p>Short, dense, printable: the commands and decisions you look up twice a week, on a few A4 cards. Reads fine on a phone too.</p>',
         f'  <ul class="shelf shelf-series">\n{cheatsheet_items(sheets)}\n  </ul>',
@@ -1593,7 +1616,9 @@ def main():
         listing.append(dict(key=f"cheatsheets/{cs.SLUG}", title=f"{cs.TITLE} cheat sheet", all=f"cheatsheets/{cs.SLUG}/index.html",
                             pdf=f"cheatsheets/{cs.SLUG}/pdf/{cheatsheet_pdf(cs)}", notes=[]))
         print(f"[cheatsheets] wrote {cs.SLUG} ({len(cs.PAGES)} cards)")
-    (PUBLIC / "index.html").write_text(render_landing(sheets), encoding="utf-8")
+    books, hb_listing = build_handbooks.build()
+    listing.extend(hb_listing)
+    (PUBLIC / "index.html").write_text(render_landing(sheets, books), encoding="utf-8")
     (PUBLIC / "journals.json").write_text(json.dumps(listing, indent=1), encoding="utf-8")
     # old links from before the shelf existed (everything was the distributed journal)
     old = PUBLIC / "notes"

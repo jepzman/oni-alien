@@ -1,0 +1,1049 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Networking in the Cloud · the whole book</title>
+<meta name="description" content="Twenty-five chapters in six parts. Part I is provider-neutral: how networks actually work. Parts II to V build a real cloud network piece by piece, with AWS as the main example and Azure and Google Cloud compared in every chapter. Part VI is about running it: troubleshooting, cost and networks as code. Every chapter ends with a lab and questions to check yourself.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=14ff46171f">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 1</a> · <a href="index.html">Networking in the Cloud</a></span><span>the whole book</span></header>
+<main class="page">
+<header class="opener"><p class="eyebrow">Jef’s Handbooks · Handbook 1</p><h1>Networking in the Cloud</h1><p class="promise">From packets to landing zones</p></header>
+<article class="sheet chapter" id="chapter-01-what-happens">
+<header class="opener">
+  <p class="eyebrow">Part I · How networks work</p>
+  <p class="chno">1</p>
+  <h1>What happens when you open a web page</h1>
+  <p class="promise">You type an address, press Enter, and less than a second later a page appears. In that second your laptop finds a server it has never heard of, opens a conversation with it across a dozen networks owned by different companies, and gets an answer back. This chapter follows that trip from start to finish. Every later chapter zooms in on one part of it.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Describe the steps of a page load, from typing a name to seeing the page.</li>
+      <li>Explain packets, layers and encapsulation in your own words.</li>
+      <li>Say which address (MAC, IP, port) is used for what, and which ones change on the way.</li>
+      <li>Tell from an error message which layer has the problem.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Nothing. This is where the book starts.</li>
+      <li>A terminal on your own computer for the lab (macOS, Linux or Windows).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, your own computer, free</dd>
+      <dt>Provider</dt><dd>none; this chapter is about the internet itself</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Friday, 18:05. A customer in Rotterdam opens <code>www.larder.example</code> to order dinner. The page appears in 0.4 seconds. In Larder's office, Grace, the product owner, asks Eli, the platform engineer, a fair question: “That page is served from Frankfurt. What actually happens in those 0.4 seconds, and which parts could make it slow?”</p>
+  <p>Eli's answer is this chapter. In section 1.8 we'll take his stopwatch to it.</p>
+</aside>
+
+<!-- ======================================================== 1.1 -->
+<h2 class="sec" id="s1-1"><span class="n">1.1</span>The big picture</h2>
+
+<p class="lead">A network moves data from one program to another program on a different machine. Everything else in this book, from subnets to load balancers, is a way of doing that reliably, securely, cheaply or quickly. When you open a web page, the two programs are your browser and a web server, and the data has to cross several networks owned by different organisations: your home network, your internet provider, the internet's backbone, and finally the network where the server lives.</p>
+
+<figure class="wide" id="fig1-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 220" role="img" aria-labelledby="fig1-1-t fig1-1-d">
+      <title id="fig1-1-t">The trip from a laptop to Larder's servers</title>
+      <desc id="fig1-1-d">A laptop with address 192.168.1.23 connects over Wi-Fi to a home router. The router connects to the customer's internet provider, which connects to the internet, a mesh of many networks. The internet connects to Larder's network in Frankfurt, where a load balancer passes the request to an app server.</desc>
+      <defs><marker id="c1ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="10" y="64" width="112" height="56" rx="5"/>
+      <text class="t-label" x="66" y="88" text-anchor="middle">your laptop</text>
+      <text class="t-mono" x="66" y="107" text-anchor="middle">192.168.1.23</text>
+      <rect class="node" x="156" y="64" width="112" height="56" rx="5"/>
+      <text class="t-label" x="212" y="88" text-anchor="middle">home router</text>
+      <text class="t-small" x="212" y="107" text-anchor="middle">Wi-Fi, NAT</text>
+      <rect class="node" x="302" y="64" width="112" height="56" rx="5"/>
+      <text class="t-label" x="358" y="88" text-anchor="middle">your ISP</text>
+      <text class="t-small" x="358" y="107" text-anchor="middle">internet provider</text>
+      <ellipse class="ext" cx="502" cy="92" rx="48" ry="38"/>
+      <text class="t-label" x="502" y="88" text-anchor="middle">the internet</text>
+      <text class="t-small" x="502" y="107" text-anchor="middle">many networks</text>
+      <rect class="region" x="572" y="22" width="178" height="150" rx="8"/>
+      <text class="t-small" x="584" y="40">Larder · Frankfurt</text>
+      <rect class="node-accent" x="588" y="54" width="146" height="38" rx="5"/>
+      <text class="t-label on-accent" x="661" y="78" text-anchor="middle">load balancer</text>
+      <rect class="node" x="588" y="118" width="146" height="38" rx="5"/>
+      <text class="t-label" x="661" y="142" text-anchor="middle">app server</text>
+      <path class="wire" d="M124 92 H152" marker-start="url(#c1ah)" marker-end="url(#c1ah)"/>
+      <path class="wire" d="M270 92 H298" marker-start="url(#c1ah)" marker-end="url(#c1ah)"/>
+      <path class="wire" d="M416 92 H450" marker-start="url(#c1ah)" marker-end="url(#c1ah)"/>
+      <path class="wire" d="M552 84 H584" marker-start="url(#c1ah)" marker-end="url(#c1ah)"/>
+      <path class="wire" d="M661 94 V114" marker-start="url(#c1ah)" marker-end="url(#c1ah)"/>
+      <text class="t-small" x="138" y="58" text-anchor="middle">Wi-Fi</text>
+      <text class="t-small" x="284" y="58" text-anchor="middle">fibre</text>
+      <text class="t-small" x="20" y="200">Each arrow is a separate network link. The data crosses all of them, there and back, for every request.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 1.1</b> The trip from a customer's laptop to Larder's servers. You control only the two ends: your own device and, in the cloud, the network around your servers. Everything in between belongs to someone else.</figcaption>
+</figure>
+
+<p>Here is the whole trip in eight steps. Don't worry if some words are new; each step gets a chapter of its own.</p>
+<ol class="steps">
+  <li><strong>Find the address.</strong> Computers don't route by names like <code>www.larder.example</code>; they route by IP addresses. The browser asks DNS, the internet's address book, to turn the name into an address (<a href="index.html#ch5">Chapter 5</a>).</li>
+  <li><strong>Open a connection.</strong> The browser asks the operating system for a TCP connection to that address on port 443. TCP makes sure data arrives complete and in order (<a href="index.html#ch3">Chapter 3</a>).</li>
+  <li><strong>Secure it.</strong> Browser and server agree on encryption keys with TLS, and the server proves it really is <code>www.larder.example</code> with a certificate (<a href="index.html#ch6">Chapter 6</a>).</li>
+  <li><strong>Ask.</strong> The browser sends an HTTP request: “<code>GET /</code>, please”.</li>
+  <li><strong>Cross the networks.</strong> The request travels as packets. Every router on the way reads each packet's destination address and passes it one step closer (<a href="index.html#ch4">Chapter 4</a>).</li>
+  <li><strong>Arrive and answer.</strong> At Larder, a load balancer picks a healthy app server (<a href="index.html#ch16">Chapter 16</a>), which builds the page and sends it back.</li>
+  <li><strong>Come back.</strong> The reply crosses the same kinds of links in the other direction, not always along exactly the same path.</li>
+  <li><strong>Repeat.</strong> The page refers to stylesheets, scripts and images. The browser fetches each one, reusing the connection it already has where it can.</li>
+</ol>
+
+<!-- ======================================================== 1.2 -->
+<h2 class="sec" id="s1-2"><span class="n">1.2</span>Packets: data in small pieces</h2>
+
+<p>Networks don't send a web page as one long stream. They cut it into <span class="term">packets</span>: small pieces, usually at most about 1,500 bytes each, that travel independently. A 200 KB page is roughly 140 packets.</p>
+
+<aside class="side"><b>Where 1,500 comes from</b>It's the largest payload a classic Ethernet frame carries, called the <em>MTU</em> (maximum transmission unit). Inside cloud networks it's often larger (AWS allows 9,001 bytes within a VPC), which matters for VPNs in <a href="index.html#ch13">Chapter 13</a>.</aside>
+
+<p>Every packet carries a <strong>header</strong> and a <strong>payload</strong>. The payload is a slice of your data. The header is the label on the outside: where the packet is from, where it's going, and a few more fields that help the network handle it.</p>
+
+<p>Why bother cutting data up? Because it lets many conversations share the same cables fairly. A link carrying your page can, in the gaps between your packets, carry somebody's video call and somebody else's backup. If one packet is lost, only that piece needs to be sent again. And because each packet is routed on its own, the network can steer around a broken link in the middle of a conversation.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">A network only ever moves packets. Connections, web pages and video calls are things the two ends build on top of packets.</p>
+</div>
+
+<!-- ======================================================== 1.3 -->
+<h2 class="sec" id="s1-3"><span class="n">1.3</span>Layers: each one does one job</h2>
+
+<p>Getting a web page across the world involves a lot of separate problems: radio signals on Wi-Fi, finding a path across networks, recovering lost packets, encrypting data, and asking for a page. Networks deal with that by splitting the work into <span class="term">layers</span>. Each layer solves one problem and relies on the layer below it for everything else.</p>
+
+<p>The model the internet actually uses is the <strong>TCP/IP model</strong>, with four layers:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 1.1 · The four layers of the internet</caption>
+    <thead><tr><th>Layer</th><th>Its job</th><th>Address it uses</th><th>Examples</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Application</strong></td><td>What the programs say to each other</td><td>names, like <code>www.larder.example</code></td><td>HTTP, DNS, TLS, SSH</td></tr>
+      <tr><td><strong>Transport</strong></td><td>Which program on the machine; reliability if needed</td><td>port, like <code>443</code></td><td>TCP, UDP, QUIC</td></tr>
+      <tr><td><strong>Internet</strong></td><td>Getting a packet from one machine to another, across networks</td><td>IP address, like <code>198.51.100.20</code></td><td>IPv4, IPv6, ICMP</td></tr>
+      <tr><td><strong>Link</strong></td><td>Getting a frame across one physical link to the next device</td><td>MAC address, like <code>a4:83:e7:1f:02:9c</code></td><td>Ethernet, Wi-Fi</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<aside class="side"><b>Layer 4, layer 7</b>You'll also hear about the seven-layer <em>OSI model</em>. Nobody builds networks with it, but its numbers stuck: “layer 3” means IP, “layer 4” means TCP/UDP, and “layer 7” means the application, as in “a layer 7 load balancer” that reads HTTP.</aside>
+
+<h3>Encapsulation: envelopes inside envelopes</h3>
+<p>When your browser sends a request, each layer wraps what it got from the layer above in its own header, like putting a letter in an envelope, then that envelope in a bigger one. This is called <span class="term">encapsulation</span>.</p>
+
+<figure class="wide" id="fig1-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 210" role="img" aria-labelledby="fig1-2-t fig1-2-d">
+      <title id="fig1-2-t">Encapsulation of an HTTPS request</title>
+      <desc id="fig1-2-d">A frame on the wire, from left to right: a link header addressed to the router's MAC address, an IP header from 192.168.1.23 to 198.51.100.20, a TCP header from port 52814 to port 443, and the data, an encrypted TLS record holding the HTTP request, followed by a link trailer. Brackets above show that the HTTP message is inside the TCP segment, which is inside the IP packet, which is inside the frame.</desc>
+      <path class="wire-dash" d="M10 30 V22 H750 V30"/>
+      <text class="t-small" x="380" y="16" text-anchor="middle">frame (link layer): only for this one hop</text>
+      <path class="wire-dash" d="M122 54 V46 H688 V54"/>
+      <text class="t-small" x="405" y="40" text-anchor="middle">IP packet (internet layer): end to end</text>
+      <path class="wire-dash" d="M244 78 V70 H688 V78"/>
+      <text class="t-small" x="466" y="64" text-anchor="middle">TCP segment (transport layer)</text>
+      <path class="wire-accent" d="M366 102 V94 H688 V102"/>
+      <text class="t-small t-accent" x="527" y="88" text-anchor="middle">application data</text>
+      <rect class="priv" x="10" y="108" width="112" height="44" rx="3"/>
+      <text class="t-label" x="66" y="135" text-anchor="middle">link header</text>
+      <rect class="priv" x="122" y="108" width="122" height="44" rx="3"/>
+      <text class="t-label" x="183" y="135" text-anchor="middle">IP header</text>
+      <rect class="priv" x="244" y="108" width="122" height="44" rx="3"/>
+      <text class="t-label" x="305" y="135" text-anchor="middle">TCP header</text>
+      <rect class="pub" x="366" y="108" width="322" height="44" rx="3"/>
+      <text class="t-label" x="527" y="135" text-anchor="middle">TLS record: encrypted HTTP request</text>
+      <rect class="priv" x="688" y="108" width="62" height="44" rx="3"/>
+      <text class="t-small" x="719" y="135" text-anchor="middle">trailer</text>
+      <text class="t-mono" x="16" y="174">→ router's MAC</text>
+      <text class="t-mono" x="128" y="174">192.168.1.23</text>
+      <text class="t-mono" x="128" y="192">→ 198.51.100.20</text>
+      <text class="t-mono" x="250" y="174">52814 → 443</text>
+      <text class="t-mono" x="372" y="174">GET / HTTP/1.1</text>
+      <text class="t-mono" x="372" y="192">Host: www.larder.example</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 1.2</b> One packet of the customer's request as it leaves the laptop. Each layer reads only its own header. A router looks at the IP header and never at the HTTP request, which it couldn't read anyway: TLS has encrypted it.</figcaption>
+</figure>
+
+<p>At the other end the envelopes are opened in reverse order: the link layer removes the frame, the internet layer checks the IP address is its own, the transport layer hands the data to the program listening on port 443, and the program reads the request.</p>
+
+<p>The practical value of layers is that you can reason about one at a time. A firewall rule that allows “TCP port 443 from anywhere” works on the transport and internet layers and doesn't care whether the data is a web page or a video. A load balancer that routes <code>/api</code> requests to one group of servers works at the application layer and doesn't care how packets got to it.</p>
+
+<!-- ======================================================== 1.4 -->
+<h2 class="sec" id="s1-4"><span class="n">1.4</span>Three addresses, three jobs</h2>
+
+<p>Every packet in Figure 1.2 carries three kinds of address. Mixing them up is the source of a great deal of confusion, so it's worth being precise.</p>
+
+<ul>
+  <li><strong>The MAC address</strong> identifies a network interface on one local link. It says “which device on this cable or this Wi-Fi network should pick this frame up?”. It's only meaningful for one hop, so <strong>every router replaces it</strong>.</li>
+  <li><strong>The IP address</strong> identifies a machine (strictly, an interface) across all networks. It says “where is this packet ultimately going?”. It normally <strong>stays the same from end to end</strong>; the one exception is NAT, which rewrites it on purpose (8.6 in <a href="#chapter-08-inside-a-vpc">Chapter 8</a>).</li>
+  <li><strong>The port</strong> identifies a program on that machine. Port 443 is the web server's HTTPS port; port 52814 is a temporary port the laptop picked for this one connection, so the reply finds its way back to the right browser tab.</li>
+</ul>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">The MAC address gets the packet to the next hop. The IP address gets it to the right machine. The port gets it to the right program.</p>
+</div>
+
+<aside class="side"><b>In the cloud</b>You'll almost never see a MAC address in a cloud network. The provider runs the link layer for you, and the VPC router answers for every next hop. IP addresses and ports are what you'll work with all day.</aside>
+
+<p>To see how they fit, picture the laptop's first packet. The laptop knows the server's IP address (from DNS) but the server isn't on the home network, so the laptop sends the frame to the <strong>home router's MAC address</strong> with the <strong>server's IP address</strong> inside. How does it know to do that? Its own route table says “anything not on my local network goes to the router”. That's a default route, and you'll see the same idea again in every cloud network you build.</p>
+
+<!-- ======================================================== 1.5 -->
+<h2 class="sec" id="s1-5"><span class="n">1.5</span>Hops, routers and the speed of light</h2>
+
+<p>A <span class="term">router</span> is a device that connects networks and passes packets between them. Each time a packet passes through one, that's a <span class="term">hop</span>. A packet from Rotterdam to Frankfurt typically makes 10 to 20 hops. At each one, the router:</p>
+<ol>
+  <li>removes the link-layer frame it arrived in,</li>
+  <li>reads the destination IP address and looks it up in its route table to choose the next hop (<a href="index.html#ch4">Chapter 4</a>),</li>
+  <li>lowers the packet's <strong>TTL</strong> (time to live) by one, and drops the packet if it reaches zero, so that packets caught in a routing loop don't circle forever,</li>
+  <li>wraps it in a new frame addressed to the next hop, and sends it on.</li>
+</ol>
+
+<p>No router knows the whole path. Each one only knows the best next step, the way a road sign shows the direction to the next town and not your whole route. The internet is tens of thousands of separately run networks, called <strong>autonomous systems</strong>, that tell each other which addresses they can reach, using a protocol called BGP. You'll meet BGP properly in <a href="index.html#ch13">Chapter 13</a>, because it's also how your office network and your cloud network learn about each other.</p>
+
+<h3>Latency: distance costs time</h3>
+<p>Light in glass fibre covers about 200 km per millisecond. Fibre rarely runs in straight lines, and every router adds a little delay, so real round trips are slower than the straight-line distance suggests. Some typical round-trip times:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 1.2 · Typical round-trip times</caption>
+    <thead><tr><th>Between</th><th class="num">Round trip</th></tr></thead>
+    <tbody>
+      <tr><td>Two servers in the same cloud zone</td><td class="num">well under 1 ms</td></tr>
+      <tr><td>Two zones in the same cloud region</td><td class="num">about 1–2 ms</td></tr>
+      <tr><td>Rotterdam and Frankfurt</td><td class="num">about 8–12 ms</td></tr>
+      <tr><td>Home Wi-Fi to the internet provider</td><td class="num">about 2–20 ms</td></tr>
+      <tr><td>Frankfurt and Virginia, USA</td><td class="num">about 90 ms</td></tr>
+      <tr><td>Frankfurt and Sydney</td><td class="num">about 250–300 ms</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>These numbers matter more than they look, because loading a page takes several round trips before the first byte of content arrives: one for DNS (if the answer isn't cached), one for TCP, one for TLS, and one for the request itself. Four round trips to Sydney is over a second before anything happens. You can't make light faster, so the fixes are to need fewer round trips (connection reuse, TLS 1.3, HTTP/3) and to move content closer to users (CDNs, <a href="index.html#ch17">Chapter 17</a>).</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Watch out: latency is not bandwidth</p>
+  <p><strong>Bandwidth</strong> is how much data a link can carry per second; <strong>latency</strong> is how long one trip takes. A faster connection gives you more bandwidth but barely changes latency. For web pages and API calls, which are lots of small exchanges, latency usually matters more. When someone says “the network is slow”, ask which one they mean.</p>
+</div>
+
+<!-- ======================================================== 1.6 -->
+<h2 class="sec" id="s1-6"><span class="n">1.6</span>Where the cloud fits</h2>
+
+<p>In the cloud you don't plug in cables or configure routers, but every idea in this chapter is still there. The provider runs the physical network; you configure a virtual one on top of it. Here is where each step of the page load lands in a cloud network, and where this book covers it:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 1.3 · The page load, seen from the cloud</caption>
+    <thead><tr><th>Step</th><th>In the cloud you configure</th><th>Chapter</th></tr></thead>
+    <tbody>
+      <tr><td>Find the address</td><td>DNS zones and records (Route 53, Azure DNS, Cloud DNS)</td><td>5, 15</td></tr>
+      <tr><td>Secure it</td><td>certificates on load balancers and CDNs</td><td>6, 16</td></tr>
+      <tr><td>Arrive at the edge</td><td>CDN, web application firewall, DDoS protection</td><td>17</td></tr>
+      <tr><td>Pick a server</td><td>load balancers and health checks</td><td>16</td></tr>
+      <tr><td>Route inside your network</td><td>VPCs, subnets, route tables, gateways</td><td>7, 8, 10</td></tr>
+      <tr><td>Allow or block</td><td>security groups, network ACLs, firewalls</td><td>9, 18</td></tr>
+      <tr><td>Reach other networks</td><td>peering, transit gateways, VPNs, private links</td><td>11–14</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 1.7 -->
+<h2 class="sec" id="s1-7"><span class="n">1.7</span>Worked example: timing a page load</h2>
+
+<p>Back to Grace's question. Eli runs one command from a laptop in Rotterdam. <code>curl</code> fetches the page, and the <code>-w</code> option prints how long each step took, measured from the start:</p>
+
+<p class="code-title"><span>terminal</span><span>macOS, Linux, or Windows with curl</span></p>
+<pre><code>curl -s -o /dev/null https://www.larder.example/ -w '
+dns lookup:    %{time_namelookup}s
+tcp connect:   %{time_connect}s
+tls done:      %{time_appconnect}s
+first byte:    %{time_starttransfer}s
+total:         %{time_total}s
+'</code></pre>
+
+<pre><code>dns lookup:    0.012s
+tcp connect:   0.023s
+tls done:      0.046s
+first byte:    0.201s
+total:         0.388s</code></pre>
+
+<p>The times are cumulative, so subtract each from the next to see each step on its own:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 1.4 · Where the 388 ms went</caption>
+    <thead><tr><th>Step</th><th class="num">Took</th><th>What it tells Eli</th></tr></thead>
+    <tbody>
+      <tr><td>DNS lookup</td><td class="num">12 ms</td><td>The resolver had the answer cached. A cold lookup could take 50 ms or more.</td></tr>
+      <tr><td>TCP connect</td><td class="num">11 ms</td><td>One round trip to Frankfurt. This is the network's distance, and the floor for everything else.</td></tr>
+      <tr><td>TLS handshake</td><td class="num">23 ms</td><td>About two round trips: a little slower than TLS 1.3's one. Worth checking the load balancer's settings (<a href="index.html#ch6">Chapter 6</a>).</td></tr>
+      <tr><td>Waiting for the first byte</td><td class="num">155 ms</td><td>One round trip plus the server's thinking time. Most of this is the application, not the network.</td></tr>
+      <tr><td>Downloading the page</td><td class="num">187 ms</td><td>The HTML is large and not compressed. A size problem, not a distance problem.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Eli's answer to Grace: the network part, the distance to Frankfurt, costs about 11 ms per round trip and four round trips in total. The rest is the server building the page and the page's size. Moving the servers closer would save maybe 30 ms; compressing the page and caching it would save more than 150. Measuring each step turned a vague “is Frankfurt too far?” into two concrete tasks.</p>
+
+<!-- ======================================================== 1.8 -->
+<h2 class="sec" id="s1-8"><span class="n">1.8</span>Lab: watch it happen on your own machine</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 1 · The trip, step by step</p>
+  <p><strong>You'll see</strong> your own addresses, your default route, a DNS lookup, the hops to a real server, and the timing of a real page load. <strong>You need</strong> a terminal. On Windows, use the commands in brackets. <strong>Cost:</strong> nothing.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Your addresses.</strong> Run <code>ip addr</code> on Linux, <code>ifconfig</code> on macOS (<code>ipconfig /all</code> on Windows). Find your IP address, probably starting with <code>192.168.</code> or <code>10.</code>, and your MAC address. Both are private to your home network.</li>
+  <li><strong>Your default route.</strong> Run <code>ip route</code> on Linux, <code>netstat -rn</code> on macOS (<code>route print</code>). Find the line for <code>default</code> or <code>0.0.0.0</code>: its gateway is your home router. That one line is how every packet leaves your home.</li>
+  <li><strong>Your public address.</strong> Run <code>curl https://checkip.amazonaws.com</code>. The address it prints is different from step 1: your home router translates your private address into its public one (NAT, which you'll build yourself in <a href="#chapter-08-inside-a-vpc">Chapter 8</a>).</li>
+  <li><strong>A DNS lookup.</strong> Run <code>dig +short www.wikipedia.org</code> (<code>nslookup www.wikipedia.org</code>). You get back one or more IP addresses, possibly after a <code>CNAME</code> line. Run it twice: the second answer is usually faster, because it's cached.</li>
+  <li><strong>The hops.</strong> Run <code>traceroute www.wikipedia.org</code> (<code>tracert www.wikipedia.org</code>). Each line is a router. The first is your home router; watch the times grow as the hops get further away. Lines of <code>* * *</code> are routers that don't answer traceroute, which is normal.</li>
+  <li><strong>The timing.</strong> Run the <code>curl -w</code> command from section 1.7 against any HTTPS site you like. Work out each step's own time as in Table 1.4. Try a site hosted on another continent and compare the TCP connect time.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Run <code>curl -v https://www.wikipedia.org -o /dev/null</code> and find, in the output, the IP address it connected to, the TLS version, the certificate's subject, the HTTP request line and the response status. You've just seen four layers in one command.</p>
+
+<!-- ======================================================== 1.9 -->
+<h2 class="sec" id="s1-9"><span class="n">1.9</span>When it doesn't work: read the error's layer</h2>
+
+<p>Because each step depends on the one before, the error message usually tells you how far the request got. Learn to read these and you'll skip most of the guessing in every later troubleshooting session.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 1.5 · What the error tells you</caption>
+    <thead><tr><th>You see</th><th>It got as far as</th><th>Usual causes</th></tr></thead>
+    <tbody>
+      <tr><td><code>Could not resolve host</code></td><td>Nowhere: no address</td><td>DNS: wrong name, missing record, resolver unreachable (<a href="index.html#ch5">Ch. 5</a>)</td></tr>
+      <tr><td><code>Connection timed out</code></td><td>Packets left, nothing came back</td><td>No route, or a firewall silently dropping packets (<a href="#chapter-08-inside-a-vpc">Ch. 8</a>, <a href="index.html#ch9">9</a>)</td></tr>
+      <tr><td><code>Connection refused</code></td><td>The machine answered “no”</td><td>Reached the machine, but nothing listens on that port, or the app is down (<a href="index.html#ch3">Ch. 3</a>)</td></tr>
+      <tr><td>Certificate errors</td><td>Connected, but TLS failed</td><td>Wrong or expired certificate, wrong name (<a href="index.html#ch6">Ch. 6</a>)</td></tr>
+      <tr><td>HTTP <code>502</code>, <code>503</code>, <code>504</code></td><td>Reached a proxy or load balancer</td><td>The servers behind it are down, unhealthy or slow (<a href="index.html#ch16">Ch. 16</a>)</td></tr>
+      <tr><td>HTTP <code>4xx</code></td><td>Reached the application</td><td>Not a network problem: the request itself was wrong or unauthorised</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">A timeout means silence: something dropped the packets. A refusal means an answer: you reached the machine. That one difference halves the search.</p>
+</div>
+
+<h2 class="sec" id="s1-10"><span class="n">1.10</span>Common misconceptions</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Belief</th><th>Reality</th></tr></thead>
+    <tbody>
+      <tr><td>“Ping fails, so the server is down.”</td><td>Many networks block ping (ICMP), including cloud defaults. Test the real port: <code>curl</code> or <code>nc -vz host 443</code>.</td></tr>
+      <tr><td>“The internet is one big network.”</td><td>It's tens of thousands of independent networks that agree to pass traffic. Any of them can be the slow or broken one.</td></tr>
+      <tr><td>“A faster connection makes pages load faster.”</td><td>Only if size is the problem. Most page loads are limited by round trips, which bandwidth doesn't shorten.</td></tr>
+      <tr><td>“Packets of one request all take the same path.”</td><td>Usually, but not always, and replies often return by a different path. Tools only ever show you one direction.</td></tr>
+      <tr><td>“HTTPS hides where I'm connecting.”</td><td>It hides the content. The destination IP address, and usually the name (in the TLS handshake's SNI), are still visible.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum1">
+  <h2 class="sec" id="sum1"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>A page load is a chain: DNS, TCP, TLS, HTTP, then routing across many networks and back.</li>
+    <li>Networks move <strong>packets</strong>: small, independently routed pieces with a header and a payload.</li>
+    <li>Work is split into <strong>layers</strong> (application, transport, internet, link), each wrapping the one above: <strong>encapsulation</strong>.</li>
+    <li><strong>MAC</strong> addresses get frames across one hop, <strong>IP</strong> addresses get packets end to end, <strong>ports</strong> pick the program.</li>
+    <li>Routers forward hop by hop, each knowing only the next step. <strong>Latency</strong> grows with distance and round trips, not bandwidth.</li>
+    <li>The error message tells you how far a request got: no address, timeout, refusal, TLS error, or an HTTP status.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Packet</dt><dd>A small unit of data with a header (addresses and control fields) and a payload.</dd>
+    <dt>Layer</dt><dd>One level of the network's work, using only the layer below.</dd>
+    <dt>Encapsulation</dt><dd>Each layer wrapping the data from the layer above in its own header.</dd>
+    <dt>MAC address</dt><dd>A link-layer address, meaningful only on one local link.</dd>
+    <dt>IP address</dt><dd>An internet-layer address that identifies an interface across networks.</dd>
+    <dt>Port</dt><dd>A number that picks the program on a machine, like 443 for HTTPS.</dd>
+    <dt>Router / hop</dt><dd>A device that forwards packets between networks; each pass is one hop.</dd>
+    <dt>TTL</dt><dd>A counter in every IP packet, lowered at each hop, that stops endless loops.</dd>
+    <dt>Latency</dt><dd>How long a trip takes; usually given as a round trip in milliseconds.</dd>
+    <dt>Bandwidth</dt><dd>How much data a link can carry per second.</dd>
+    <dt>MTU</dt><dd>The largest packet a link can carry without splitting it, typically 1,500 bytes.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Put these in the order they happen when you open <code>https://www.larder.example</code>: TLS handshake, DNS lookup, HTTP request, TCP connection. <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>DNS lookup, TCP connection, TLS handshake, HTTP request. Each needs the one before: you can't connect without an address, and you can't encrypt without a connection.</p></details>
+    </li>
+    <li>
+      <p>As a packet travels from the laptop to the server, which of these change at each router: the source MAC address, the destination IP address, the destination port? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Only the MAC addresses change at every hop, because each frame is for one link only. The destination IP address and port stay the same end to end, unless a NAT device rewrites them on purpose.</p></details>
+    </li>
+    <li>
+      <p>A colleague's API call fails with <code>Connection refused</code>. Another says it must be a firewall. Are they likely right? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Probably not. A refusal is an answer from the target machine, so the packets got there. Most cloud firewalls drop packets silently, which gives a timeout. Check whether the program is running and listening on the right port and address.</p></details>
+    </li>
+    <li>
+      <p>A page makes four round trips before content starts to arrive. How long does that take at minimum for a user in Sydney if the servers are in Frankfurt? What are two ways to improve it? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>At about 280 ms per round trip, roughly 1.1 seconds. Improvements: fewer round trips (TLS 1.3, connection reuse, HTTP/3), or serving content from closer to the user with a CDN or a second region.</p></details>
+    </li>
+    <li>
+      <p>Why does the internet cut data into packets instead of reserving a line for each conversation, like old telephone networks? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Packets let many conversations share the same links, use capacity only when there is data to send, resend only the pieces that were lost, and route around failures in the middle of a conversation.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>Cloudflare Learning Center: <a href="https://www.cloudflare.com/learning/network-layer/what-is-a-packet/">What is a packet?</a> and <a href="https://www.cloudflare.com/learning/network-layer/how-does-the-internet-work/">How does the internet work?</a></li>
+    <li>Julia Evans' networking zines and blog posts are a friendly second explanation of almost everything in Part I.</li>
+  </ul>
+</section>
+
+
+
+</article>
+<article class="sheet chapter" id="chapter-08-inside-a-vpc">
+<header class="opener">
+  <p class="eyebrow">Part II · Your network in the cloud</p>
+  <p class="chno">8</p>
+  <h1>Inside a VPC: subnets, route tables and gateways</h1>
+  <p class="promise">A cloud network looks like a pile of resources with odd names. Underneath it is a small set of ideas: a private address range, cut into subnets, where every packet follows a route table to its next hop. Once you see that, “public subnet”, “NAT gateway” and “why can't my server reach the internet?” all have short answers.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain what a VPC, a subnet and a route table each do.</li>
+      <li>Read a route table and predict where any packet goes.</li>
+      <li>Build public and private subnets, with internet access going out only.</li>
+      <li>Find the cause when a server can't reach the internet.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>CIDR notation, like <code>10.20.0.0/16</code> (<a href="index.html#ch2">Chapter 2</a>).</li>
+      <li>Routes, next hops and the default route (<a href="index.html#ch4">Chapter 4</a>).</li>
+      <li>Regions and availability zones (<a href="index.html#ch7">Chapter 7</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, AWS, under $1 if you clean up</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud compared in 8.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Eli, Larder's platform engineer, adds a new subnet in Frankfurt for the nightly reporting jobs. The first job starts at 02:00 and stops ten minutes later with <code>connection timed out</code> while calling StockPilot, the warehouse system Larder rents as a service. The same code runs fine in the old subnet next door. Same VPC, same security group, same container image. What's different?</p>
+  <p>By section 8.9 you'll know, and you'll be able to find it in under five minutes.</p>
+</aside>
+
+<!-- ======================================================== 8.1 -->
+<h2 class="sec" id="s8-1"><span class="n">8.1</span>The big picture</h2>
+
+<p class="lead">A <span class="term">virtual private cloud</span> (VPC) is your own private network inside a cloud provider's data centres. You choose its address range, you decide how it's divided, and you decide which traffic may enter or leave. No other customer can see into it, even though you all share the same physical cables and switches.</p>
+
+<aside class="side"><b>Names</b>AWS and Google Cloud call it a <em>VPC</em>. Azure calls it a <em>virtual network</em> or <em>VNet</em>. This book says VPC for all three unless the difference matters.</aside>
+
+<p>Three building blocks do almost all of the work:</p>
+<ul>
+  <li>The <strong>VPC</strong> owns a block of private IP addresses, such as <code>10.20.0.0/16</code> (65,536 addresses).</li>
+  <li><strong>Subnets</strong> cut that block into smaller pieces, such as <code>10.20.0.0/24</code>. Every server, container or database you start gets its address from a subnet.</li>
+  <li><strong>Route tables</strong> say where packets go next. Every subnet uses exactly one route table.</li>
+</ul>
+<p>Around those three sit <strong>gateways</strong>, the doors to the outside: an internet gateway for the public internet, a NAT gateway for going out without letting anyone in, and others you'll meet in Part III for other networks and cloud services.</p>
+
+<figure class="wide" id="fig8-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 490" role="img" aria-labelledby="fig8-1-t fig8-1-d">
+      <title id="fig8-1-t">Anatomy of a VPC</title>
+      <desc id="fig8-1-d">A region contains a VPC with the range 10.20.0.0/16. An internet gateway sits on the VPC's edge and connects it to the internet. The VPC spans two availability zones. Each zone has a public subnet containing a NAT gateway, whose route table sends 0.0.0.0/0 to the internet gateway, and a private subnet containing an app server and a database, whose route table sends 0.0.0.0/0 to the NAT gateway in the same zone. Every route table also has the local route 10.20.0.0/16.</desc>
+      <defs>
+        <marker id="c8ah1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c8ah1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker>
+      </defs>
+      <rect class="ext" x="300" y="8" width="160" height="40" rx="20"/>
+      <text class="t-label" x="380" y="33" text-anchor="middle">Internet</text>
+      <path class="wire" d="M380 48 V92" marker-start="url(#c8ah1)" marker-end="url(#c8ah1)"/>
+
+      <rect class="region" x="10" y="66" width="740" height="414" rx="8"/>
+      <text class="t-small" x="24" y="86">Region: eu-central-1 (Frankfurt)</text>
+
+      <rect class="vpc" x="30" y="112" width="700" height="356" rx="8"/>
+      <text class="t-title t-accent" x="46" y="136">VPC 10.20.0.0/16</text>
+
+      <rect class="node-accent" x="310" y="95" width="140" height="34" rx="5"/>
+      <text class="t-label on-accent" x="380" y="117" text-anchor="middle">Internet gateway</text>
+
+      <!-- zone a -->
+      <rect class="az" x="48" y="150" width="318" height="290" rx="6"/>
+      <text class="t-small" x="60" y="168">Availability zone a</text>
+      <rect class="pub" x="62" y="178" width="290" height="96" rx="5"/>
+      <text class="t-label" x="76" y="198">Public subnet 10.20.0.0/24</text>
+      <text class="t-mono" x="76" y="216">0.0.0.0/0 → internet gateway</text>
+      <rect class="node" x="76" y="226" width="130" height="36" rx="4"/>
+      <text class="t-label" x="141" y="249" text-anchor="middle">NAT gateway</text>
+      <rect class="priv" x="62" y="290" width="290" height="136" rx="5"/>
+      <path class="wire-accent" d="M131 368 V266" marker-end="url(#c8ah1a)"/>
+      <text class="t-label halo-priv" x="76" y="310">Private subnet 10.20.16.0/20</text>
+      <text class="t-mono halo-priv" x="76" y="328">0.0.0.0/0 → NAT gateway (a)</text>
+      <rect class="node" x="76" y="370" width="110" height="38" rx="4"/>
+      <text class="t-label" x="131" y="394" text-anchor="middle">app server</text>
+      <rect class="node" x="210" y="370" width="110" height="38" rx="4"/>
+      <text class="t-label" x="265" y="394" text-anchor="middle">database</text>
+
+      <!-- zone b -->
+      <rect class="az" x="394" y="150" width="318" height="290" rx="6"/>
+      <text class="t-small" x="406" y="168">Availability zone b</text>
+      <rect class="pub" x="408" y="178" width="290" height="96" rx="5"/>
+      <text class="t-label" x="422" y="198">Public subnet 10.20.1.0/24</text>
+      <text class="t-mono" x="422" y="216">0.0.0.0/0 → internet gateway</text>
+      <rect class="node" x="422" y="226" width="130" height="36" rx="4"/>
+      <text class="t-label" x="487" y="249" text-anchor="middle">NAT gateway</text>
+      <rect class="priv" x="408" y="290" width="290" height="136" rx="5"/>
+      <path class="wire-accent" d="M477 368 V266" marker-end="url(#c8ah1a)"/>
+      <text class="t-label halo-priv" x="422" y="310">Private subnet 10.20.32.0/20</text>
+      <text class="t-mono halo-priv" x="422" y="328">0.0.0.0/0 → NAT gateway (b)</text>
+      <rect class="node" x="422" y="370" width="110" height="38" rx="4"/>
+      <text class="t-label" x="477" y="394" text-anchor="middle">app server</text>
+      <rect class="node" x="556" y="370" width="110" height="38" rx="4"/>
+      <text class="t-label" x="611" y="394" text-anchor="middle">database</text>
+
+      <text class="t-mono" x="46" y="458">every route table also has: 10.20.0.0/16 → local   (any address inside the VPC)</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 8.1</b> The pattern you'll build in this chapter. Each zone has a public subnet (for the NAT gateway and, later, load balancers) and a private subnet (for everything else). The blue arrows show the way out for private servers.</figcaption>
+</figure>
+
+<p>Hold on to Figure 8.1. Nearly every production network you'll see, at any provider, is a variation of it: more zones, more tiers of subnets, more gateways. The rest of the chapter takes it apart one piece at a time.</p>
+
+<!-- ======================================================== 8.2 -->
+<h2 class="sec" id="s8-2"><span class="n">8.2</span>The VPC: an address range with a boundary</h2>
+
+<p>When you create a VPC you give it one thing that's hard to change later: its <span class="term">CIDR block</span>, the range of private addresses it owns. On AWS that's anything from a <code>/16</code> (65,536 addresses) down to a <code>/28</code> (16). Use the private ranges from <a href="index.html#ch2">Chapter 2</a>: <code>10.0.0.0/8</code>, <code>172.16.0.0/12</code> or <code>192.168.0.0/16</code>.</p>
+
+<aside class="side"><b>Rule of thumb</b>Start with a <code>/16</code> per VPC unless your company already has an IP plan. Addresses inside a VPC are free; running out is not.</aside>
+
+<p>A VPC lives in one <strong>region</strong> and stretches across all of that region's availability zones. It's a boundary: by default, nothing gets in or out. Two servers in the same VPC can reach each other (if their firewalls allow it, <a href="index.html#ch9">Chapter 9</a>), but they can't reach the internet, another VPC, or your office until you add a gateway and a route to it.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Watch out</p>
+  <p>Pick a range that <strong>doesn't overlap</strong> with your other VPCs, your office network or your partners. Two networks that use the same addresses can't be connected with simple routing later, and renumbering a live VPC means rebuilding it. <a href="index.html#ch10">Chapter 10</a> shows how to plan a range for a whole company.</p>
+</div>
+
+<!-- ======================================================== 8.3 -->
+<h2 class="sec" id="s8-3"><span class="n">8.3</span>Subnets: where your resources live</h2>
+
+<p>A <span class="term">subnet</span> is a slice of the VPC's range. On AWS each subnet sits in <strong>exactly one availability zone</strong>, so a subnet is also a statement about where things run. That's why Figure 8.1 has the same pair of subnets in each zone: if zone a fails, zone b still has everything it needs.</p>
+
+<p>Subnets do three jobs at once:</p>
+<ol>
+  <li><strong>They hand out addresses.</strong> Every network interface gets a private IP from its subnet's range.</li>
+  <li><strong>They place resources in a zone.</strong> Choosing a subnet is choosing a zone.</li>
+  <li><strong>They group resources that should be treated the same way.</strong> Every resource in a subnet shares one route table (8.4) and one network ACL (<a href="index.html#ch9">Chapter 9</a>).</li>
+</ol>
+<p>The third job is the one that shapes your design. You don't make a subnet per application. You make a subnet per <em>kind of reachability</em>: “can be reached from the internet”, “can go out but not be reached”, “can't go out at all”. Those kinds are called <strong>tiers</strong>, and a typical VPC has two or three of them, repeated in each zone.</p>
+
+<h3>Not every address is yours</h3>
+<p>The provider keeps a few addresses in every subnet for its own use. On AWS it's five: in <code>10.20.0.0/24</code> those are <code>.0</code> (the network address), <code>.1</code> (the VPC router), <code>.2</code> (the DNS resolver), <code>.3</code> (reserved for future use) and <code>.255</code> (the last address). That leaves 251 for you.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 8.1 · Subnet sizes on AWS</caption>
+    <thead><tr><th>Prefix</th><th class="num">Addresses</th><th class="num">Usable</th><th>Good for</th></tr></thead>
+    <tbody>
+      <tr><td><code>/28</code></td><td class="num">16</td><td class="num">11</td><td>The smallest allowed; a couple of appliances</td></tr>
+      <tr><td><code>/26</code></td><td class="num">64</td><td class="num">59</td><td>NAT gateways and load balancers in one zone</td></tr>
+      <tr><td><code>/24</code></td><td class="num">256</td><td class="num">251</td><td>A tier of VMs or managed databases</td></tr>
+      <tr><td><code>/20</code></td><td class="num">4,096</td><td class="num">4,091</td><td>Containers and Kubernetes pods, which each take an address</td></tr>
+      <tr><td><code>/18</code></td><td class="num">16,384</td><td class="num">16,379</td><td>Large container platforms</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<aside class="side"><b>Why containers are hungry</b>On AWS's managed Kubernetes, every pod gets a real VPC address by default. A node running 30 pods uses 31 addresses. <a href="index.html#ch19">Chapter 19</a> covers this and the ways around it.</aside>
+
+<p>Size subnets for what will run in them in two years, not today. A subnet can't be resized after creation; when one fills up, new servers and containers simply fail to start, usually during a busy deploy.</p>
+
+<!-- ======================================================== 8.4 -->
+<h2 class="sec" id="s8-4"><span class="n">8.4</span>Route tables: how a packet picks its next hop</h2>
+
+<p>Every subnet is associated with one <span class="term">route table</span>. When a packet leaves a server, the VPC looks at the packet's destination address and checks it against the routes in that subnet's table. Each route has two parts:</p>
+<ul>
+  <li>a <strong>destination</strong>, written as a CIDR block, and</li>
+  <li>a <strong>target</strong>, the next hop: <code>local</code>, an internet gateway, a NAT gateway, a peering connection and so on.</li>
+</ul>
+
+<p>If several routes match, the VPC picks the <strong>most specific</strong> one, the route with the longest prefix. This is the <span class="term">longest prefix match</span> rule from <a href="index.html#ch4">Chapter 4</a>, and it is the only rule you need to read any route table.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">The route table doesn't care where a packet came from. It only asks “where is it going?”, and the longest matching prefix wins.</p>
+</div>
+
+<h3>A worked example</h3>
+<p>Here is the route table for Larder's private app subnets in zone a. Larder also has a connection to its stores and office through a transit gateway (<a href="index.html#ch11">Chapter 11</a>), which carries everything in <code>10.0.0.0/8</code> that isn't in the VPC itself.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 8.2 · Route table <code>rt-app-a</code></caption>
+    <thead><tr><th>Destination</th><th>Target</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>10.20.0.0/16</code></td><td><code>local</code></td><td>Anything inside this VPC</td></tr>
+      <tr><td><code>10.0.0.0/8</code></td><td><code>tgw-…</code></td><td>Other Larder networks: stores, office, other VPCs</td></tr>
+      <tr><td><code>pl-6ea54007</code></td><td><code>vpce-…</code></td><td>Amazon S3, through a gateway endpoint (8.6)</td></tr>
+      <tr><td><code>0.0.0.0/0</code></td><td><code>nat-…a</code></td><td>Everything else: the internet, via the NAT gateway</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Now follow four packets from an app server at <code>10.20.17.8</code>:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 8.3 · Which route wins?</caption>
+    <thead><tr><th>Destination</th><th>Routes that match</th><th>Winner</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><code>10.20.64.12</code> (the database)</td><td>/16, /8, /0</td><td><code>local</code></td><td>/16 is the longest match</td></tr>
+      <tr><td><code>10.8.3.40</code> (Noord store)</td><td>/8, /0</td><td><code>tgw</code></td><td>Not in the VPC; /8 beats /0</td></tr>
+      <tr><td><code>52.219.170.10</code> (S3)</td><td>prefix list, /0</td><td><code>vpce</code></td><td>The S3 prefix list holds S3's ranges, all longer than /0</td></tr>
+      <tr><td><code>203.0.113.50</code> (StockPilot)</td><td>/0</td><td><code>nat-a</code></td><td>Only the default route matches</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Two things in this table deserve a second look.</p>
+<p>First, the <strong>local route</strong>. Every route table has it, it always covers the whole VPC range, and you can't delete it. It's why servers in different subnets of the same VPC can talk to each other with no setup at all.</p>
+<p>Second, the <strong>default route</strong>, <code>0.0.0.0/0</code>. It matches every address, so it only wins when nothing else does. Where your default route points decides what kind of subnet you have. That's the next section.</p>
+
+<h3>Main and custom route tables</h3>
+<p>Each VPC comes with a <span class="term">main route table</span>. Any subnet you don't explicitly associate with another table uses the main one, silently. Most teams leave the main table with only the local route and create a <strong>custom route table</strong> per tier, then associate every subnet explicitly. That way, a forgotten association gives you a subnet that can't reach anything, which you notice in minutes, instead of one that's accidentally public, which you might never notice.</p>
+
+<aside class="side"><b>Remember Eli?</b>You've just read the clue. Hold that thought until 8.9.</aside>
+
+<!-- ======================================================== 8.5 -->
+<h2 class="sec" id="s8-5"><span class="n">8.5</span>Public subnets and the internet gateway</h2>
+
+<p>An <span class="term">internet gateway</span> connects a VPC to the internet. You create one, attach it to the VPC, and then point routes at it. It's managed by the provider, spread across every zone, and doesn't limit bandwidth; there is nothing to size or patch.</p>
+
+<p>A <span class="term">public subnet</span> is simply a subnet whose route table sends <code>0.0.0.0/0</code> to an internet gateway. There is no “public” checkbox on the subnet itself. Public is a routing decision.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Public or private is not a property of a subnet. It's a property of the subnet's route table.</p>
+</div>
+
+<p>A route alone isn't quite enough, though. The internet only understands public IP addresses, and your server has a private one. The internet gateway does a one-to-one translation: a server with a <strong>public IP</strong> (or an <strong>Elastic IP</strong>, a public address you own and can move) has its private address swapped for the public one on the way out, and back on the way in. The server's operating system never sees its public address; run <code>ip addr</code> on it and you'll see only <code>10.20.0.x</code>.</p>
+
+<p>So a server is reachable from the internet only when all three are true:</p>
+<ol class="steps">
+  <li>Its subnet's route table sends <code>0.0.0.0/0</code> to an internet gateway.</li>
+  <li>It has a public or Elastic IP address.</li>
+  <li>Its security group and network ACL allow the traffic (<a href="index.html#ch9">Chapter 9</a>).</li>
+</ol>
+
+<p>What should live in public subnets? As little as possible: load balancers (<a href="index.html#ch16">Chapter 16</a>), NAT gateways, and the occasional bastion host if you can't use a managed alternative. Application servers and databases belong in private subnets, behind a load balancer.</p>
+
+<!-- ======================================================== 8.6 -->
+<h2 class="sec" id="s8-6"><span class="n">8.6</span>Private subnets: going out without letting in</h2>
+
+<p>A <span class="term">private subnet</span> has no route to an internet gateway. Nothing on the internet can start a connection to its servers. But those servers still need to <em>start</em> connections out: Larder's servers call the payment provider, sync stock with StockPilot every five minutes, and download security patches.</p>
+
+<p>A <span class="term">NAT gateway</span> solves this. It sits in a public subnet with an Elastic IP, and private subnets send their default route to it. It rewrites the source address of outgoing packets to its own, remembers the connection, and sends replies back to the right server. Anything arriving that doesn't match a connection it remembers is dropped.</p>
+
+<figure class="wide" id="fig8-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig8-2-t fig8-2-d">
+      <title id="fig8-2-t">A packet's trip out through a NAT gateway</title>
+      <desc id="fig8-2-d">An app server at 10.20.17.8 sends a packet to StockPilot at 203.0.113.50 port 443. The NAT gateway rewrites the source to its own private address 10.20.0.40 and a new port. The internet gateway then maps 10.20.0.40 to the Elastic IP 198.51.100.7. StockPilot sees only 198.51.100.7. Replies follow the same path backwards.</desc>
+      <defs>
+        <marker id="c8ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+      </defs>
+      <rect class="priv" x="16" y="24" width="150" height="64" rx="5"/>
+      <text class="t-label" x="91" y="50" text-anchor="middle">app server</text>
+      <text class="t-mono" x="91" y="70" text-anchor="middle">10.20.17.8</text>
+
+      <rect class="pub" x="214" y="24" width="150" height="64" rx="5"/>
+      <text class="t-label" x="289" y="50" text-anchor="middle">NAT gateway</text>
+      <text class="t-mono" x="289" y="70" text-anchor="middle">10.20.0.40</text>
+
+      <rect class="node-accent" x="412" y="24" width="150" height="64" rx="5"/>
+      <text class="t-label on-accent" x="487" y="50" text-anchor="middle">internet gateway</text>
+      <text class="t-mono on-accent" x="487" y="70" text-anchor="middle">↔ 198.51.100.7</text>
+
+      <rect class="ext" x="610" y="24" width="134" height="64" rx="32"/>
+      <text class="t-label" x="677" y="50" text-anchor="middle">StockPilot</text>
+      <text class="t-mono" x="677" y="70" text-anchor="middle">203.0.113.50</text>
+
+      <path class="wire" d="M166 56 H208" marker-end="url(#c8ah2)"/>
+      <path class="wire" d="M364 56 H406" marker-end="url(#c8ah2)"/>
+      <path class="wire" d="M562 56 H604" marker-end="url(#c8ah2)"/>
+
+      <text class="t-small" x="91" y="124" text-anchor="middle">① leaves the server</text>
+      <rect class="pkt" x="16" y="134" width="186" height="52" rx="4"/>
+      <text class="t-mono" x="28" y="155">src 10.20.17.8:51544</text>
+      <text class="t-mono" x="28" y="175">dst 203.0.113.50:443</text>
+
+      <text class="t-small" x="315" y="124" text-anchor="middle">② after the NAT gateway</text>
+      <rect class="pkt" x="222" y="134" width="186" height="52" rx="4"/>
+      <text class="t-mono t-accent" x="234" y="155">src 10.20.0.40:20112</text>
+      <text class="t-mono" x="234" y="175">dst 203.0.113.50:443</text>
+
+      <text class="t-small" x="560" y="124" text-anchor="middle">③ on the internet</text>
+      <rect class="pkt" x="467" y="134" width="186" height="52" rx="4"/>
+      <text class="t-mono t-accent" x="479" y="155">src 198.51.100.7:20112</text>
+      <text class="t-mono" x="479" y="175">dst 203.0.113.50:443</text>
+
+      <text class="t-small" x="16" y="226">Replies retrace the path: 198.51.100.7 → 10.20.0.40 → the NAT's translation table → 10.20.17.8:51544.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 8.2</b> Two translations on the way out. The NAT gateway changes the source to its own private address (many servers share it, told apart by port). The internet gateway then swaps that for the Elastic IP. StockPilot only ever sees <code>198.51.100.7</code>, which is handy: it's the one address Larder asks StockPilot to allow.</figcaption>
+</figure>
+
+<aside class="side"><b>Port numbers</b>The NAT gateway picks a new source port for each connection so it can tell replies apart. That's why one NAT gateway can serve thousands of servers through one public address. Ports and connections are in <a href="index.html#ch3">Chapter 3</a>.</aside>
+
+<h3>One NAT gateway per zone</h3>
+<p>A NAT gateway lives in one zone. If you put a single NAT gateway in zone a and point every private subnet at it, two bad things happen:</p>
+<ul>
+  <li>When zone a has trouble, servers in zones b and c lose internet access too, even though they're healthy.</li>
+  <li>Traffic from zones b and c crosses zones to reach it, and AWS charges for data that crosses zones.</li>
+</ul>
+<p>So production networks put <strong>one NAT gateway in each zone's public subnet</strong>, and give each zone's private subnets their own route table pointing to the local NAT gateway. That's why Figure 8.1 has <code>NAT gateway (a)</code> and <code>NAT gateway (b)</code>, and why Larder has three app route tables, not one.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Watch out: NAT gateways cost money twice</p>
+  <p>You pay per hour for each NAT gateway, and again for <strong>every gigabyte</strong> it processes. In Frankfurt, at the time of writing, both are about five US cents. Three NAT gateways cost roughly $115 a month before any data. A job that pulls 2 TB a month of backups from S3 through NAT adds about $100 more, for traffic that never needed to leave AWS. The fix is in the next section; the full story of network costs is <a href="index.html#ch23">Chapter 23</a>.</p>
+</div>
+
+<h3>Shortcuts to cloud services: gateway endpoints</h3>
+<p>Many packets leaving your private subnets aren't going to the internet at all; they're going to the provider's own services, like object storage. On AWS, a <span class="term">gateway endpoint</span> for S3 or DynamoDB adds a route to the service's address ranges (the <code>pl-…</code> prefix list in Table 8.2) that goes straight there, skipping the NAT gateway. Gateway endpoints are free. Add them to every VPC that uses S3.</p>
+<p>A third tier often follows from this: <strong>isolated subnets</strong> with no default route at all, for databases. They can reach other subnets in the VPC (the local route) and S3 through the endpoint, and nothing else. <a href="index.html#ch12">Chapter 12</a> covers the other kind of endpoint, which reaches almost any service privately.</p>
+
+<!-- ======================================================== 8.7 -->
+<h2 class="sec" id="s8-7"><span class="n">8.7</span>Across providers</h2>
+
+<p>Every major provider gives you the same ideas: a private range, subnets, routes, a way out to the internet, and a managed NAT. They draw the boundaries in different places, and those differences catch people moving between clouds.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 8.4 · The same ideas at AWS, Azure and Google Cloud</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>The network</td><td>VPC, one region</td><td>VNet, one region</td><td>VPC network, <strong>global</strong></td></tr>
+      <tr><td>A subnet lives in</td><td>one zone</td><td>the whole region</td><td>the whole region</td></tr>
+      <tr><td>Reserved addresses per subnet</td><td>5</td><td>5</td><td>4</td></tr>
+      <tr><td>Routes belong to</td><td>a route table, associated with subnets</td><td>system routes, plus route tables associated with subnets</td><td>the VPC network, optionally scoped to VMs by network tags</td></tr>
+      <tr><td>Way to the internet</td><td>internet gateway object</td><td>built-in “Internet” next hop</td><td>built-in default internet gateway</td></tr>
+      <tr><td>What makes a server reachable</td><td>route to internet gateway + public IP</td><td>public IP (or a load balancer)</td><td>external IP (or a load balancer)</td></tr>
+      <tr><td>Managed outbound NAT</td><td>NAT gateway, one per zone</td><td>NAT Gateway, attached to subnets</td><td>Cloud NAT, configured on a Cloud Router</td></tr>
+      <tr><td>Free path to object storage</td><td>S3 gateway endpoint</td><td>service endpoint for Storage</td><td>Private Google Access, per subnet</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>Subnets span all zones, so you don't repeat them per zone. Every subnet gets <em>system routes</em> automatically; you override them with a <strong>route table</strong> (user-defined routes). Older VNets also gave VMs a hidden “default outbound access” to the internet. Microsoft is retiring it, and new subnets are private by default, so plan an explicit NAT Gateway either way.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>The VPC network is global and subnets are regional, so one network can have subnets in Frankfurt and Iowa without peering. Routes belong to the network, not to subnets, so there's no “public subnet”: a VM is reachable if it has an external IP and a firewall rule allows it. VMs without external IPs reach the internet through <strong>Cloud NAT</strong>, which is a setting on a Cloud Router rather than a box in a subnet.</p>
+</div>
+
+<!-- ======================================================== 8.8 -->
+<h2 class="sec" id="s8-8"><span class="n">8.8</span>Worked example: Larder's network in Frankfurt</h2>
+
+<p>Larder runs in one region across three zones. Its platform team settled on three tiers, each repeated per zone, and left half of the VPC's range empty for later.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 8.5 · Larder's subnet plan, VPC <code>10.20.0.0/16</code></caption>
+    <thead><tr><th>Tier</th><th>Zone a</th><th>Zone b</th><th>Zone c</th><th>Route table</th><th>Holds</th></tr></thead>
+    <tbody>
+      <tr><td>Public</td><td><code>10.20.0.0/24</code></td><td><code>10.20.1.0/24</code></td><td><code>10.20.2.0/24</code></td><td><code>rt-public</code>: 0/0 → igw</td><td>Load balancers, NAT gateways</td></tr>
+      <tr><td>App (private)</td><td><code>10.20.16.0/20</code></td><td><code>10.20.32.0/20</code></td><td><code>10.20.48.0/20</code></td><td><code>rt-app-a/b/c</code>: 0/0 → nat-a/b/c</td><td>Containers, Larder Core VMs</td></tr>
+      <tr><td>Data (isolated)</td><td><code>10.20.64.0/24</code></td><td><code>10.20.65.0/24</code></td><td><code>10.20.66.0/24</code></td><td><code>rt-data</code>: local + S3 endpoint</td><td>Postgres, Kafka brokers</td></tr>
+      <tr><td>Spare</td><td colspan="3"><code>10.20.128.0/17</code>, kept free</td><td>none</td><td>A future Kubernetes cluster, new tiers</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>A few choices in this plan are worth copying:</p>
+<ul>
+  <li><strong>Tiers start on round boundaries.</strong> Public lives in <code>10.20.0.x</code>–<code>10.20.2.x</code>, app in <code>10.20.16</code>–<code>63</code>, data in <code>10.20.64</code>–<code>66</code>. Anyone can tell a server's tier from its address, and a firewall rule can name a whole tier with one CIDR.</li>
+  <li><strong>The app tier is big.</strong> Containers each take an address and deploys briefly double the count (old and new copies run side by side), so each zone gets 4,091 addresses.</li>
+  <li><strong>The data tier has no default route.</strong> A compromised database server can't send data to the internet, because there's no route to send it on.</li>
+  <li><strong>Only one public route table</strong> is needed: the internet gateway is the same in every zone. The private tiers need one table per zone, so each zone uses its own NAT gateway.</li>
+</ul>
+
+<!-- ======================================================== 8.9 -->
+<h2 class="sec" id="s8-9"><span class="n">8.9</span>When it doesn't work</h2>
+
+<p>“My server can't reach the internet” is the most common VPC problem there is. The cause is almost always one of a handful of things, and checking them in order, from the server outward, finds it quickly.</p>
+
+<ol class="steps">
+  <li><strong>Which route table does the subnet actually use?</strong> Open the subnet and look. If it says <em>main</em>, it isn't using the table you think it is.</li>
+  <li><strong>Does that table have <code>0.0.0.0/0</code>, and to what?</strong> Private subnets: a NAT gateway in the <em>same zone</em>. Public subnets: the internet gateway. A target shown as <em>blackhole</em> points at something that was deleted.</li>
+  <li><strong>Is the NAT gateway healthy and in a public subnet?</strong> Its state should be <em>Available</em>, and <em>its</em> subnet's table must send <code>0.0.0.0/0</code> to the internet gateway.</li>
+  <li><strong>Is the internet gateway attached to this VPC?</strong></li>
+  <li><strong>Do the firewalls allow it?</strong> Security group outbound rules, and network ACLs in both directions, including the return ports (<a href="index.html#ch9">Chapter 9</a>).</li>
+  <li><strong>Does DNS work?</strong> <code>dig stockpilot.example</code> failing looks a lot like the network failing (<a href="index.html#ch5">Chapter 5</a>).</li>
+</ol>
+
+<p>AWS's <strong>Reachability Analyzer</strong> automates steps 1 to 5: give it a source and a destination and it shows the hop where the path breaks. <strong>VPC flow logs</strong> show which packets were accepted or rejected. Both are in <a href="index.html#ch22">Chapter 22</a>.</p>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Eli created the reporting subnet but never associated it with a route table, so it used the VPC's <strong>main route table</strong>. Larder's main table has only the local route, on purpose. The job could reach Postgres (local) but had no route to StockPilot, so its connection attempts went nowhere and timed out. Step 1 of the checklist found it. Eli associated the subnet with <code>rt-app-a</code>, and added a check to the team's Terraform pipeline that fails if any subnet is left on the main table.</p>
+  <p>The fix took one minute. The design choice that made it a <em>timeout</em> instead of an accidentally public subnet was made a year earlier, and it's the reason the story is boring rather than a security incident.</p>
+</aside>
+
+<!-- ======================================================== 8.10 -->
+<h2 class="sec" id="s8-10"><span class="n">8.10</span>Lab: build it yourself</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 8 · A two-zone VPC with Terraform</p>
+  <p><strong>You'll build</strong> the network in Figure 8.1: a VPC, public and private subnets in two zones, an internet gateway, a NAT gateway and an S3 gateway endpoint. <strong>You need</strong> an AWS account you're allowed to experiment in, the AWS CLI logged in, and Terraform or OpenTofu (setup in Appendix C). <strong>Cost:</strong> the NAT gateway is the only paid part, about $0.05 an hour. Run step 5 when you're done.</p>
+</div>
+
+<p>To keep the lab cheap it uses <strong>one</strong> NAT gateway for both zones. You now know why production uses one per zone; the stretch goal fixes it.</p>
+
+<p class="code-title"><span>main.tf</span><span>Terraform ≥ 1.5, AWS provider 5.x</span></p>
+<pre><code><span class="k">terraform</span> {
+  required_providers {
+    aws = { source = <span class="s">"hashicorp/aws"</span>, version = <span class="s">"~> 5.0"</span> }
+  }
+}
+
+<span class="k">provider</span> <span class="s">"aws"</span> {
+  region = <span class="s">"eu-central-1"</span>
+}
+
+<span class="k">data</span> <span class="s">"aws_availability_zones"</span> <span class="s">"zones"</span> {
+  state = <span class="s">"available"</span>
+}
+
+<span class="k">locals</span> {
+  azs = slice(data.aws_availability_zones.zones.names, 0, 2)
+}
+
+<span class="c"># 8.2 · the VPC: one address range</span>
+<span class="k">resource</span> <span class="s">"aws_vpc"</span> <span class="s">"lab"</span> {
+  cidr_block           = <span class="s">"10.20.0.0/16"</span>
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+  tags = { Name = <span class="s">"lab-vpc"</span> }
+}
+
+<span class="c"># 8.3 · subnets: a public /24 and a private /20 in each zone</span>
+<span class="k">resource</span> <span class="s">"aws_subnet"</span> <span class="s">"public"</span> {
+  count             = 2
+  vpc_id            = aws_vpc.lab.id
+  <span class="c"># 10.20.0.0/24, 10.20.1.0/24</span>
+  cidr_block        = cidrsubnet(aws_vpc.lab.cidr_block, 8, count.index)
+  availability_zone = local.azs[count.index]
+  tags = { Name = <span class="s">"lab-public-${count.index}"</span> }
+}
+
+<span class="k">resource</span> <span class="s">"aws_subnet"</span> <span class="s">"private"</span> {
+  count             = 2
+  vpc_id            = aws_vpc.lab.id
+  <span class="c"># 10.20.16.0/20, 10.20.32.0/20</span>
+  cidr_block        = cidrsubnet(aws_vpc.lab.cidr_block, 4, count.index + 1)
+  availability_zone = local.azs[count.index]
+  tags = { Name = <span class="s">"lab-private-${count.index}"</span> }
+}
+
+<span class="c"># 8.5 · the way to the internet</span>
+<span class="k">resource</span> <span class="s">"aws_internet_gateway"</span> <span class="s">"igw"</span> {
+  vpc_id = aws_vpc.lab.id
+}
+
+<span class="c"># 8.6 · going out without letting in (lab: one NAT; production: one per zone)</span>
+<span class="k">resource</span> <span class="s">"aws_eip"</span> <span class="s">"nat"</span> {
+  domain = <span class="s">"vpc"</span>
+}
+
+<span class="k">resource</span> <span class="s">"aws_nat_gateway"</span> <span class="s">"nat"</span> {
+  allocation_id = aws_eip.nat.id
+  <span class="c"># a NAT gateway lives in a PUBLIC subnet</span>
+  subnet_id     = aws_subnet.public[0].id
+  depends_on    = [aws_internet_gateway.igw]
+}
+
+<span class="c"># 8.4 · route tables: one per tier, every subnet associated explicitly</span>
+<span class="k">resource</span> <span class="s">"aws_route_table"</span> <span class="s">"public"</span> {
+  vpc_id = aws_vpc.lab.id
+  route {
+    cidr_block = <span class="s">"0.0.0.0/0"</span>
+    gateway_id = aws_internet_gateway.igw.id
+  }
+  tags = { Name = <span class="s">"rt-public"</span> }
+}
+
+<span class="k">resource</span> <span class="s">"aws_route_table"</span> <span class="s">"private"</span> {
+  vpc_id = aws_vpc.lab.id
+  route {
+    cidr_block     = <span class="s">"0.0.0.0/0"</span>
+    nat_gateway_id = aws_nat_gateway.nat.id
+  }
+  tags = { Name = <span class="s">"rt-private"</span> }
+}
+
+<span class="k">resource</span> <span class="s">"aws_route_table_association"</span> <span class="s">"public"</span> {
+  count          = 2
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public.id
+}
+
+<span class="k">resource</span> <span class="s">"aws_route_table_association"</span> <span class="s">"private"</span> {
+  count          = 2
+  subnet_id      = aws_subnet.private[count.index].id
+  route_table_id = aws_route_table.private.id
+}
+
+<span class="c"># 8.6 · free shortcut to S3 (adds a prefix-list route to rt-private)</span>
+<span class="k">resource</span> <span class="s">"aws_vpc_endpoint"</span> <span class="s">"s3"</span> {
+  vpc_id            = aws_vpc.lab.id
+  service_name      = <span class="s">"com.amazonaws.eu-central-1.s3"</span>
+  vpc_endpoint_type = <span class="s">"Gateway"</span>
+  route_table_ids   = [aws_route_table.private.id]
+}
+
+<span class="k">output</span> <span class="s">"vpc_id"</span> {
+  value = aws_vpc.lab.id
+}</code></pre>
+
+<ol class="steps">
+  <li><strong>Create it.</strong> In an empty folder with <code>main.tf</code>, run <code>terraform init</code>, then <code>terraform plan</code>. Read the plan: you should see 15 resources to add. Then run <code>terraform apply</code>. The NAT gateway takes a minute or two.</li>
+  <li><strong>Read your route tables.</strong> Run the command below and match every line to a row of Figure 8.1. Find the local route you never wrote, and the <code>pl-…</code> route the endpoint added for you.
+<pre><code>aws ec2 describe-route-tables \
+  --filters Name=vpc-id,Values=$(terraform output -raw vpc_id) \
+  --query 'RouteTables[].{name:Tags[?Key==`Name`]|[0].Value, routes:Routes[].[DestinationCidrBlock||DestinationPrefixListId, GatewayId||NatGatewayId]}' \
+  --output json</code></pre></li>
+  <li><strong>Break it on purpose.</strong> Comment out the <code>aws_route_table_association</code> <code>"private"</code> block and run <code>terraform apply</code>. Run step 2 again: which table do the private subnets use now? This is Eli's bug.</li>
+  <li><strong>Put it back</strong> by restoring the block and applying again.</li>
+  <li><strong>Clean up.</strong> Run <code>terraform destroy</code> and check in the console that the NAT gateway and the Elastic IP are gone. An Elastic IP left behind is billed too.</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (a) Change the lab to one NAT gateway per zone with a private route table each; use <code>count</code> on the NAT gateway, Elastic IP and private route table. (b) Launch a small instance in a private subnet with Session Manager access, run <code>curl https://checkip.amazonaws.com</code>, and confirm it prints your NAT gateway's Elastic IP, not anything starting with <code>10.</code>.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s8-11"><span class="n">8.11</span>Common mistakes</h2>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>NAT gateway placed in a private subnet</td><td>The NAT has no route to the internet itself; everything behind it times out.</td><td>NAT gateways always go in a public subnet.</td></tr>
+      <tr><td>One NAT gateway for all zones</td><td>One zone's outage cuts every zone off; you pay for cross-zone traffic.</td><td>One NAT gateway and one private route table per zone.</td></tr>
+      <tr><td>Relying on the main route table</td><td>New subnets silently inherit whatever it holds, sometimes a route to the internet.</td><td>Keep main local-only; associate every subnet explicitly.</td></tr>
+      <tr><td>Subnets sized for today</td><td>Deploys fail with “no free addresses” once containers arrive.</td><td>Size for two years; give container tiers <code>/20</code> or more.</td></tr>
+      <tr><td>Overlapping ranges</td><td>The VPC can't be peered or connected to the office later.</td><td>Use a company IP plan (<a href="index.html#ch10">Chapter 10</a>).</td></tr>
+      <tr><td>S3 traffic through NAT</td><td>A large, silent line on the bill.</td><td>Add an S3 gateway endpoint to every VPC.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum8">
+  <h2 class="sec" id="sum8"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>A <strong>VPC</strong> is a private address range in one region, closed to the outside until you add gateways and routes.</li>
+    <li><strong>Subnets</strong> slice that range. On AWS each lives in one zone, so you repeat each tier per zone.</li>
+    <li>Every subnet uses one <strong>route table</strong>, and the <strong>longest matching prefix</strong> decides each packet's next hop.</li>
+    <li>A subnet is <strong>public</strong> when its default route goes to an internet gateway. Servers in it also need a public IP.</li>
+    <li><strong>Private</strong> subnets go out through a <strong>NAT gateway</strong> in a public subnet, one per zone. Nothing can connect in.</li>
+    <li><strong>Gateway endpoints</strong> send S3 traffic directly and for free. Isolated subnets have no default route at all.</li>
+    <li>When something can't connect, check from the server outward: route table, default route, NAT, gateway, firewalls, DNS.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>VPC / VNet</dt><dd>A private network in a cloud region with its own address range.</dd>
+    <dt>CIDR block</dt><dd>A range of addresses written as address/prefix, like <code>10.20.0.0/16</code>.</dd>
+    <dt>Subnet</dt><dd>A slice of a VPC's range; on AWS, tied to one availability zone.</dd>
+    <dt>Route table</dt><dd>The list of destination → next-hop rules a subnet uses.</dd>
+    <dt>Local route</dt><dd>The automatic route covering the whole VPC range.</dd>
+    <dt>Default route</dt><dd><code>0.0.0.0/0</code>: matches anything nothing more specific matches.</dd>
+    <dt>Longest prefix match</dt><dd>When several routes match, the most specific wins.</dd>
+    <dt>Internet gateway</dt><dd>The VPC's door to the internet; maps private IPs to public ones.</dd>
+    <dt>Public subnet</dt><dd>A subnet whose default route points at an internet gateway.</dd>
+    <dt>NAT gateway</dt><dd>Lets private servers start outbound connections; drops unsolicited inbound ones.</dd>
+    <dt>Elastic IP</dt><dd>A static public IPv4 address you own and can move between resources.</dd>
+    <dt>Gateway endpoint</dt><dd>A free route straight to S3 or DynamoDB, bypassing NAT.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>A server sits in a subnet whose route table sends <code>0.0.0.0/0</code> to an internet gateway, but the server has no public IP. Can it download a package from the internet? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>No. The internet gateway only translates for resources that have a public or Elastic IP. Without one, the packet has a private source address the internet can't reply to. Give it a public IP, or better, move it to a private subnet that goes out through a NAT gateway.</p></details>
+    </li>
+    <li>
+      <p>A route table has <code>10.20.0.0/16 → local</code>, <code>10.0.0.0/8 → tgw</code> and <code>0.0.0.0/0 → nat</code>. Where do packets to <code>10.30.4.4</code> and to <code>10.20.99.1</code> go? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>10.30.4.4</code> isn't in <code>10.20.0.0/16</code>, so the longest match is <code>/8</code>: the transit gateway. <code>10.20.99.1</code> is inside the VPC range, so <code>local</code> wins, even if no subnet uses that address. The packet stays in the VPC and is dropped there.</p></details>
+    </li>
+    <li>
+      <p>How many addresses can you use in a <code>/26</code> subnet on AWS? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>59. A <code>/26</code> has 64 addresses and AWS reserves 5.</p></details>
+    </li>
+    <li>
+      <p>Give two reasons to run one NAT gateway per availability zone instead of one for the whole VPC. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Resilience: a problem in one zone doesn't cut internet access for the others. Cost: traffic doesn't cross zones to reach the NAT gateway, so you don't pay cross-zone data charges.</p></details>
+    </li>
+    <li>
+      <p>Your database subnet has no default route. Nightly backups to S3 now fail. What are two ways to fix it, and which would you choose? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Add a default route to a NAT gateway, or add an S3 gateway endpoint to the subnet's route table. Choose the endpoint: it's free, keeps traffic on AWS's network, and keeps the subnet isolated from the internet.</p></details>
+    </li>
+    <li>
+      <p>A colleague coming from AWS asks you to “create the public subnets” in Google Cloud. What do you explain? <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Google Cloud has no public subnets. Routes belong to the whole VPC network, and the default route to the internet gateway exists for every subnet. A VM is reachable when it has an external IP and a firewall rule allows the traffic. VMs without external IPs go out through Cloud NAT.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/vpc/latest/userguide/how-it-works.html">How Amazon VPC works</a> and <a href="https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Route_Tables.html">Configure route tables</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/virtual-network/virtual-networks-udr-overview">Virtual network traffic routing</a>.</li>
+    <li>Google Cloud: <a href="https://cloud.google.com/vpc/docs/routes">Routes</a> and <a href="https://cloud.google.com/nat/docs/overview">Cloud NAT overview</a>.</li>
+  </ul>
+</section>
+
+
+
+</article>
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 1 · Networking in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

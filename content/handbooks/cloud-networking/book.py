@@ -1,6 +1,6 @@
 # Handbook 1 · Networking in the Cloud. The outline (parts → chapters) and book metadata.
 # Rendered by scripts/build_handbooks.py into public/handbooks/cloud-networking/.
-# A chapter with `file` set has been written (content/handbooks/cloud-networking/<file>); the rest are planned.
+# A chapter is written when content/handbooks/cloud-networking/<nn>-<slug>.html exists; the rest show as “coming”.
 
 BOOK = dict(
     key="cloud-networking",
@@ -8,7 +8,7 @@ BOOK = dict(
     no=1,
     title="Networking in the Cloud",
     subtitle="From packets to landing zones",
-    draft=True,
+    shelf_blurb="Subnets, routing, DNS, VPNs, load balancers, Kubernetes and costs, with AWS as the main provider and Azure and Google Cloud compared.",
     audience=("Developers, operations people and new cloud engineers who have used the cloud but find networking "
               "a black box. You know roughly what an IP address is; by the end you can design, build and debug "
               "a production network on AWS, and read one on Azure or Google Cloud."),
@@ -127,5 +127,4 @@ BOOK = dict(
         ("D", "Glossary", "Every key term from every chapter."),
         ("E", "Answers to the exercises", "Worked answers to every “check your understanding” question."),
     ],
-    files={8: "08-inside-a-vpc.html"},
 )
