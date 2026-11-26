@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>What happens when you open a web page · Networking in the Cloud</title>
+<meta name="description" content="The whole journey in one chapter: name lookup, connection, routing, the reply. The mental model the book uses throughout.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=d919b2d2a4">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 1</a> · <a href="index.html">Networking in the Cloud</a></span><span>Part I · Chapter 1</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part I · How networks work</p>
+  <p class="chno">1</p>
+  <h1>What happens when you open a web page</h1>
+  <p class="promise">You type an address, press Enter, and less than a second later a page appears. In that second your laptop finds a server it has never heard of, opens a conversation with it across a dozen networks owned by different companies, and gets an answer back. This chapter follows that trip from start to finish. Every later chapter zooms in on one part of it.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Describe the steps of a page load, from typing a name to seeing the page.</li>
+      <li>Explain packets, layers and encapsulation in your own words.</li>
+      <li>Say which address (MAC, IP, port) is used for what, and which ones change on the way.</li>
+      <li>Tell from an error message which layer has the problem.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Nothing. This is where the book starts.</li>
+      <li>A terminal on your own computer for the lab (macOS, Linux or Windows).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, your own computer, free</dd>
+      <dt>Provider</dt><dd>none; this chapter is about the internet itself</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Friday, 18:05. A customer in Rotterdam opens <code>www.larder.example</code> to order dinner. The page appears in 0.4 seconds. In Larder's office, Grace, the product owner, asks Eli, the platform engineer, a fair question: “That page is served from Frankfurt. What actually happens in those 0.4 seconds, and which parts could make it slow?”</p>
+  <p>Eli's answer is this chapter. In section 1.8 we'll take his stopwatch to it.</p>
+</aside>
+
+<!-- ======================================================== 1.1 -->
+<h2 class="sec" id="s1-1"><span class="n">1.1</span>The big picture</h2>
+
+<p class="lead">A network moves data from one program to another program on a different machine. Everything else in this book, from subnets to load balancers, is a way of doing that reliably, securely, cheaply or quickly. When you open a web page, the two programs are your browser and a web server, and the data has to cross several networks owned by different organisations: your home network, your internet provider, the internet's backbone, and finally the network where the server lives.</p>
+
+<figure class="wide" id="fig1-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 220" role="img" aria-labelledby="fig1-1-t fig1-1-d">
+      <title id="fig1-1-t">The trip from a laptop to Larder's servers</title>
+      <desc id="fig1-1-d">A laptop with address 192.168.1.23 connects over Wi-Fi to a home router. The router connects to the customer's internet provider, which connects to the internet, a mesh of many networks. The internet connects to Larder's network in Frankfurt, where a load balancer passes the request to an app server.</desc>
+      <defs><marker id="c1ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="10" y="64" width="112" height="56" rx="5"/>
+      <text class="t-label" x="66" y="88" text-anchor="middle">your laptop</text>
+      <text class="t-mono" x="66" y="107" text-anchor="middle">192.168.1.23</text>
+      <rect class="node" x="156" y="64" width="112" height="56" rx="5"/>
+      <text class="t-label" x="212" y="88" text-anchor="middle">home router</text>
+      <text class="t-small" x="212" y="107" text-anchor="middle">Wi-Fi, NAT</text>
+      <rect class="node" x="302" y="64" width="112" height="56" rx="5"/>
+      <text class="t-label" x="358" y="88" text-anchor="middle">your ISP</text>
+      <text class="t-small" x="358" y="107" text-anchor="middle">internet provider</text>
+      <ellipse class="ext" cx="502" cy="92" rx="48" ry="38"/>
+      <text class="t-label" x="502" y="88" text-anchor="middle">the internet</text>
+      <text class="t-small" x="502" y="107" text-anchor="middle">many networks</text>
+      <rect class="region" x="572" y="22" width="178" height="150" rx="8"/>
+      <text class="t-small" x="584" y="40">Larder · Frankfurt</text>
+      <rect class="node-accent" x="588" y="54" width="146" height="38" rx="5"/>
+      <text class="t-label on-accent" x="661" y="78" text-anchor="middle">load balancer</text>
+      <rect class="node" x="588" y="118" width="146" height="38" rx="5"/>
+      <text class="t-label" x="661" y="142" text-anchor="middle">app server</text>
+      <path class="wire" d="M124 92 H152" marker-start="url(#c1ah)" marker-end="url(#c1ah)"/>
+      <path class="wire" d="M270 92 H298" marker-start="url(#c1ah)" marker-end="url(#c1ah)"/>
+      <path class="wire" d="M416 92 H450" marker-start="url(#c1ah)" marker-end="url(#c1ah)"/>
+      <path class="wire" d="M552 84 H584" marker-start="url(#c1ah)" marker-end="url(#c1ah)"/>
+      <path class="wire" d="M661 94 V114" marker-start="url(#c1ah)" marker-end="url(#c1ah)"/>
+      <text class="t-small" x="138" y="58" text-anchor="middle">Wi-Fi</text>
+      <text class="t-small" x="284" y="58" text-anchor="middle">fibre</text>
+      <text class="t-small" x="20" y="200">Each arrow is a separate network link. The data crosses all of them, there and back, for every request.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 1.1</b> The trip from a customer's laptop to Larder's servers. You control only the two ends: your own device and, in the cloud, the network around your servers. Everything in between belongs to someone else.</figcaption>
+</figure>
+
+<p>Here is the whole trip in eight steps. Don't worry if some words are new; each step gets a chapter of its own.</p>
+<ol class="steps">
+  <li><strong>Find the address.</strong> Computers don't route by names like <code>www.larder.example</code>; they route by IP addresses. The browser asks DNS, the internet's address book, to turn the name into an address (<a href="05-dns.html">Chapter 5</a>).</li>
+  <li><strong>Open a connection.</strong> The browser asks the operating system for a TCP connection to that address on port 443. TCP makes sure data arrives complete and in order (<a href="03-tcp-udp-ports.html">Chapter 3</a>).</li>
+  <li><strong>Secure it.</strong> Browser and server agree on encryption keys with TLS, and the server proves it really is <code>www.larder.example</code> with a certificate (<a href="06-http-tls.html">Chapter 6</a>).</li>
+  <li><strong>Ask.</strong> The browser sends an HTTP request: “<code>GET /</code>, please”.</li>
+  <li><strong>Cross the networks.</strong> The request travels as packets. Every router on the way reads each packet's destination address and passes it one step closer (<a href="04-routing.html">Chapter 4</a>).</li>
+  <li><strong>Arrive and answer.</strong> At Larder, a load balancer picks a healthy app server (<a href="index.html#ch16">Chapter 16</a>), which builds the page and sends it back.</li>
+  <li><strong>Come back.</strong> The reply crosses the same kinds of links in the other direction, not always along exactly the same path.</li>
+  <li><strong>Repeat.</strong> The page refers to stylesheets, scripts and images. The browser fetches each one, reusing the connection it already has where it can.</li>
+</ol>
+
+<!-- ======================================================== 1.2 -->
+<h2 class="sec" id="s1-2"><span class="n">1.2</span>Packets: data in small pieces</h2>
+
+<p>Networks don't send a web page as one long stream. They cut it into <span class="term">packets</span>: small pieces, usually at most about 1,500 bytes each, that travel independently. A 200 KB page is roughly 140 packets.</p>
+
+<aside class="side"><b>Where 1,500 comes from</b>It's the largest payload a classic Ethernet frame carries, called the <em>MTU</em> (maximum transmission unit). Inside cloud networks it's often larger (AWS allows 9,001 bytes within a VPC), which matters for VPNs in <a href="index.html#ch13">Chapter 13</a>.</aside>
+
+<p>Every packet carries a <strong>header</strong> and a <strong>payload</strong>. The payload is a slice of your data. The header is the label on the outside: where the packet is from, where it's going, and a few more fields that help the network handle it.</p>
+
+<p>Why bother cutting data up? Because it lets many conversations share the same cables fairly. A link carrying your page can, in the gaps between your packets, carry somebody's video call and somebody else's backup. If one packet is lost, only that piece needs to be sent again. And because each packet is routed on its own, the network can steer around a broken link in the middle of a conversation.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">A network only ever moves packets. Connections, web pages and video calls are things the two ends build on top of packets.</p>
+</div>
+
+<!-- ======================================================== 1.3 -->
+<h2 class="sec" id="s1-3"><span class="n">1.3</span>Layers: each one does one job</h2>
+
+<p>Getting a web page across the world involves a lot of separate problems: radio signals on Wi-Fi, finding a path across networks, recovering lost packets, encrypting data, and asking for a page. Networks deal with that by splitting the work into <span class="term">layers</span>. Each layer solves one problem and relies on the layer below it for everything else.</p>
+
+<p>The model the internet actually uses is the <strong>TCP/IP model</strong>, with four layers:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 1.1 · The four layers of the internet</caption>
+    <thead><tr><th>Layer</th><th>Its job</th><th>Address it uses</th><th>Examples</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Application</strong></td><td>What the programs say to each other</td><td>names, like <code>www.larder.example</code></td><td>HTTP, DNS, TLS, SSH</td></tr>
+      <tr><td><strong>Transport</strong></td><td>Which program on the machine; reliability if needed</td><td>port, like <code>443</code></td><td>TCP, UDP, QUIC</td></tr>
+      <tr><td><strong>Internet</strong></td><td>Getting a packet from one machine to another, across networks</td><td>IP address, like <code>198.51.100.20</code></td><td>IPv4, IPv6, ICMP</td></tr>
+      <tr><td><strong>Link</strong></td><td>Getting a frame across one physical link to the next device</td><td>MAC address, like <code>a4:83:e7:1f:02:9c</code></td><td>Ethernet, Wi-Fi</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<aside class="side"><b>Layer 4, layer 7</b>You'll also hear about the seven-layer <em>OSI model</em>. Nobody builds networks with it, but its numbers stuck: “layer 3” means IP, “layer 4” means TCP/UDP, and “layer 7” means the application, as in “a layer 7 load balancer” that reads HTTP.</aside>
+
+<h3>Encapsulation: envelopes inside envelopes</h3>
+<p>When your browser sends a request, each layer wraps what it got from the layer above in its own header, like putting a letter in an envelope, then that envelope in a bigger one. This is called <span class="term">encapsulation</span>.</p>
+
+<figure class="wide" id="fig1-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 210" role="img" aria-labelledby="fig1-2-t fig1-2-d">
+      <title id="fig1-2-t">Encapsulation of an HTTPS request</title>
+      <desc id="fig1-2-d">A frame on the wire, from left to right: a link header addressed to the router's MAC address, an IP header from 192.168.1.23 to 198.51.100.20, a TCP header from port 52814 to port 443, and the data, an encrypted TLS record holding the HTTP request, followed by a link trailer. Brackets above show that the HTTP message is inside the TCP segment, which is inside the IP packet, which is inside the frame.</desc>
+      <path class="wire-dash" d="M10 30 V22 H750 V30"/>
+      <text class="t-small" x="380" y="16" text-anchor="middle">frame (link layer): only for this one hop</text>
+      <path class="wire-dash" d="M122 54 V46 H688 V54"/>
+      <text class="t-small" x="405" y="40" text-anchor="middle">IP packet (internet layer): end to end</text>
+      <path class="wire-dash" d="M244 78 V70 H688 V78"/>
+      <text class="t-small" x="466" y="64" text-anchor="middle">TCP segment (transport layer)</text>
+      <path class="wire-accent" d="M366 102 V94 H688 V102"/>
+      <text class="t-small t-accent" x="527" y="88" text-anchor="middle">application data</text>
+      <rect class="priv" x="10" y="108" width="112" height="44" rx="3"/>
+      <text class="t-label" x="66" y="135" text-anchor="middle">link header</text>
+      <rect class="priv" x="122" y="108" width="122" height="44" rx="3"/>
+      <text class="t-label" x="183" y="135" text-anchor="middle">IP header</text>
+      <rect class="priv" x="244" y="108" width="122" height="44" rx="3"/>
+      <text class="t-label" x="305" y="135" text-anchor="middle">TCP header</text>
+      <rect class="pub" x="366" y="108" width="322" height="44" rx="3"/>
+      <text class="t-label" x="527" y="135" text-anchor="middle">TLS record: encrypted HTTP request</text>
+      <rect class="priv" x="688" y="108" width="62" height="44" rx="3"/>
+      <text class="t-small" x="719" y="135" text-anchor="middle">trailer</text>
+      <text class="t-mono" x="16" y="174">→ router's MAC</text>
+      <text class="t-mono" x="128" y="174">192.168.1.23</text>
+      <text class="t-mono" x="128" y="192">→ 198.51.100.20</text>
+      <text class="t-mono" x="250" y="174">52814 → 443</text>
+      <text class="t-mono" x="372" y="174">GET / HTTP/1.1</text>
+      <text class="t-mono" x="372" y="192">Host: www.larder.example</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 1.2</b> One packet of the customer's request as it leaves the laptop. Each layer reads only its own header. A router looks at the IP header and never at the HTTP request, which it couldn't read anyway: TLS has encrypted it.</figcaption>
+</figure>
+
+<p>At the other end the envelopes are opened in reverse order: the link layer removes the frame, the internet layer checks the IP address is its own, the transport layer hands the data to the program listening on port 443, and the program reads the request.</p>
+
+<p>The practical value of layers is that you can reason about one at a time. A firewall rule that allows “TCP port 443 from anywhere” works on the transport and internet layers and doesn't care whether the data is a web page or a video. A load balancer that routes <code>/api</code> requests to one group of servers works at the application layer and doesn't care how packets got to it.</p>
+
+<!-- ======================================================== 1.4 -->
+<h2 class="sec" id="s1-4"><span class="n">1.4</span>Three addresses, three jobs</h2>
+
+<p>Every packet in Figure 1.2 carries three kinds of address. Mixing them up is the source of a great deal of confusion, so it's worth being precise.</p>
+
+<ul>
+  <li><strong>The MAC address</strong> identifies a network interface on one local link. It says “which device on this cable or this Wi-Fi network should pick this frame up?”. It's only meaningful for one hop, so <strong>every router replaces it</strong>.</li>
+  <li><strong>The IP address</strong> identifies a machine (strictly, an interface) across all networks. It says “where is this packet ultimately going?”. It normally <strong>stays the same from end to end</strong>; the one exception is NAT, which rewrites it on purpose (8.6 in <a href="08-inside-a-vpc.html">Chapter 8</a>).</li>
+  <li><strong>The port</strong> identifies a program on that machine. Port 443 is the web server's HTTPS port; port 52814 is a temporary port the laptop picked for this one connection, so the reply finds its way back to the right browser tab.</li>
+</ul>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">The MAC address gets the packet to the next hop. The IP address gets it to the right machine. The port gets it to the right program.</p>
+</div>
+
+<aside class="side"><b>In the cloud</b>You'll almost never see a MAC address in a cloud network. The provider runs the link layer for you, and the VPC router answers for every next hop. IP addresses and ports are what you'll work with all day.</aside>
+
+<p>To see how they fit, picture the laptop's first packet. The laptop knows the server's IP address (from DNS) but the server isn't on the home network, so the laptop sends the frame to the <strong>home router's MAC address</strong> with the <strong>server's IP address</strong> inside. How does it know to do that? Its own route table says “anything not on my local network goes to the router”. That's a default route, and you'll see the same idea again in every cloud network you build.</p>
+
+<!-- ======================================================== 1.5 -->
+<h2 class="sec" id="s1-5"><span class="n">1.5</span>Hops, routers and the speed of light</h2>
+
+<p>A <span class="term">router</span> is a device that connects networks and passes packets between them. Each time a packet passes through one, that's a <span class="term">hop</span>. A packet from Rotterdam to Frankfurt typically makes 10 to 20 hops. At each one, the router:</p>
+<ol>
+  <li>removes the link-layer frame it arrived in,</li>
+  <li>reads the destination IP address and looks it up in its route table to choose the next hop (<a href="04-routing.html">Chapter 4</a>),</li>
+  <li>lowers the packet's <strong>TTL</strong> (time to live) by one, and drops the packet if it reaches zero, so that packets caught in a routing loop don't circle forever,</li>
+  <li>wraps it in a new frame addressed to the next hop, and sends it on.</li>
+</ol>
+
+<p>No router knows the whole path. Each one only knows the best next step, the way a road sign shows the direction to the next town and not your whole route. The internet is tens of thousands of separately run networks, called <strong>autonomous systems</strong>, that tell each other which addresses they can reach, using a protocol called BGP. You'll meet BGP properly in <a href="index.html#ch13">Chapter 13</a>, because it's also how your office network and your cloud network learn about each other.</p>
+
+<h3>Latency: distance costs time</h3>
+<p>Light in glass fibre covers about 200 km per millisecond. Fibre rarely runs in straight lines, and every router adds a little delay, so real round trips are slower than the straight-line distance suggests. Some typical round-trip times:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 1.2 · Typical round-trip times</caption>
+    <thead><tr><th>Between</th><th class="num">Round trip</th></tr></thead>
+    <tbody>
+      <tr><td>Two servers in the same cloud zone</td><td class="num">well under 1 ms</td></tr>
+      <tr><td>Two zones in the same cloud region</td><td class="num">about 1–2 ms</td></tr>
+      <tr><td>Rotterdam and Frankfurt</td><td class="num">about 8–12 ms</td></tr>
+      <tr><td>Home Wi-Fi to the internet provider</td><td class="num">about 2–20 ms</td></tr>
+      <tr><td>Frankfurt and Virginia, USA</td><td class="num">about 90 ms</td></tr>
+      <tr><td>Frankfurt and Sydney</td><td class="num">about 250–300 ms</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>These numbers matter more than they look, because loading a page takes several round trips before the first byte of content arrives: one for DNS (if the answer isn't cached), one for TCP, one for TLS, and one for the request itself. Four round trips to Sydney is over a second before anything happens. You can't make light faster, so the fixes are to need fewer round trips (connection reuse, TLS 1.3, HTTP/3) and to move content closer to users (CDNs, <a href="index.html#ch17">Chapter 17</a>).</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Watch out: latency is not bandwidth</p>
+  <p><strong>Bandwidth</strong> is how much data a link can carry per second; <strong>latency</strong> is how long one trip takes. A faster connection gives you more bandwidth but barely changes latency. For web pages and API calls, which are lots of small exchanges, latency usually matters more. When someone says “the network is slow”, ask which one they mean.</p>
+</div>
+
+<!-- ======================================================== 1.6 -->
+<h2 class="sec" id="s1-6"><span class="n">1.6</span>Where the cloud fits</h2>
+
+<p>In the cloud you don't plug in cables or configure routers, but every idea in this chapter is still there. The provider runs the physical network; you configure a virtual one on top of it. Here is where each step of the page load lands in a cloud network, and where this book covers it:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 1.3 · The page load, seen from the cloud</caption>
+    <thead><tr><th>Step</th><th>In the cloud you configure</th><th>Chapter</th></tr></thead>
+    <tbody>
+      <tr><td>Find the address</td><td>DNS zones and records (Route 53, Azure DNS, Cloud DNS)</td><td>5, 15</td></tr>
+      <tr><td>Secure it</td><td>certificates on load balancers and CDNs</td><td>6, 16</td></tr>
+      <tr><td>Arrive at the edge</td><td>CDN, web application firewall, DDoS protection</td><td>17</td></tr>
+      <tr><td>Pick a server</td><td>load balancers and health checks</td><td>16</td></tr>
+      <tr><td>Route inside your network</td><td>VPCs, subnets, route tables, gateways</td><td>7, 8, 10</td></tr>
+      <tr><td>Allow or block</td><td>security groups, network ACLs, firewalls</td><td>9, 18</td></tr>
+      <tr><td>Reach other networks</td><td>peering, transit gateways, VPNs, private links</td><td>11–14</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 1.7 -->
+<h2 class="sec" id="s1-7"><span class="n">1.7</span>Worked example: timing a page load</h2>
+
+<p>Back to Grace's question. Eli runs one command from a laptop in Rotterdam. <code>curl</code> fetches the page, and the <code>-w</code> option prints how long each step took, measured from the start:</p>
+
+<p class="code-title"><span>terminal</span><span>macOS, Linux, or Windows with curl</span></p>
+<pre><code>curl -s -o /dev/null https://www.larder.example/ -w '
+dns lookup:    %{time_namelookup}s
+tcp connect:   %{time_connect}s
+tls done:      %{time_appconnect}s
+first byte:    %{time_starttransfer}s
+total:         %{time_total}s
+'</code></pre>
+
+<pre><code>dns lookup:    0.012s
+tcp connect:   0.023s
+tls done:      0.046s
+first byte:    0.201s
+total:         0.388s</code></pre>
+
+<p>The times are cumulative, so subtract each from the next to see each step on its own:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 1.4 · Where the 388 ms went</caption>
+    <thead><tr><th>Step</th><th class="num">Took</th><th>What it tells Eli</th></tr></thead>
+    <tbody>
+      <tr><td>DNS lookup</td><td class="num">12 ms</td><td>The resolver had the answer cached. A cold lookup could take 50 ms or more.</td></tr>
+      <tr><td>TCP connect</td><td class="num">11 ms</td><td>One round trip to Frankfurt. This is the network's distance, and the floor for everything else.</td></tr>
+      <tr><td>TLS handshake</td><td class="num">23 ms</td><td>About two round trips: a little slower than TLS 1.3's one. Worth checking the load balancer's settings (<a href="06-http-tls.html">Chapter 6</a>).</td></tr>
+      <tr><td>Waiting for the first byte</td><td class="num">155 ms</td><td>One round trip plus the server's thinking time. Most of this is the application, not the network.</td></tr>
+      <tr><td>Downloading the page</td><td class="num">187 ms</td><td>The HTML is large and not compressed. A size problem, not a distance problem.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Eli's answer to Grace: the network part, the distance to Frankfurt, costs about 11 ms per round trip and four round trips in total. The rest is the server building the page and the page's size. Moving the servers closer would save maybe 30 ms; compressing the page and caching it would save more than 150. Measuring each step turned a vague “is Frankfurt too far?” into two concrete tasks.</p>
+
+<!-- ======================================================== 1.8 -->
+<h2 class="sec" id="s1-8"><span class="n">1.8</span>Lab: watch it happen on your own machine</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 1 · The trip, step by step</p>
+  <p><strong>You'll see</strong> your own addresses, your default route, a DNS lookup, the hops to a real server, and the timing of a real page load. <strong>You need</strong> a terminal. On Windows, use the commands in brackets. <strong>Cost:</strong> nothing.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Your addresses.</strong> Run <code>ip addr</code> on Linux, <code>ifconfig</code> on macOS (<code>ipconfig /all</code> on Windows). Find your IP address, probably starting with <code>192.168.</code> or <code>10.</code>, and your MAC address. Both are private to your home network.</li>
+  <li><strong>Your default route.</strong> Run <code>ip route</code> on Linux, <code>netstat -rn</code> on macOS (<code>route print</code>). Find the line for <code>default</code> or <code>0.0.0.0</code>: its gateway is your home router. That one line is how every packet leaves your home.</li>
+  <li><strong>Your public address.</strong> Run <code>curl https://checkip.amazonaws.com</code>. The address it prints is different from step 1: your home router translates your private address into its public one (NAT, which you'll build yourself in <a href="08-inside-a-vpc.html">Chapter 8</a>).</li>
+  <li><strong>A DNS lookup.</strong> Run <code>dig +short www.wikipedia.org</code> (<code>nslookup www.wikipedia.org</code>). You get back one or more IP addresses, possibly after a <code>CNAME</code> line. Run it twice: the second answer is usually faster, because it's cached.</li>
+  <li><strong>The hops.</strong> Run <code>traceroute www.wikipedia.org</code> (<code>tracert www.wikipedia.org</code>). Each line is a router. The first is your home router; watch the times grow as the hops get further away. Lines of <code>* * *</code> are routers that don't answer traceroute, which is normal.</li>
+  <li><strong>The timing.</strong> Run the <code>curl -w</code> command from section 1.7 against any HTTPS site you like. Work out each step's own time as in Table 1.4. Try a site hosted on another continent and compare the TCP connect time.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Run <code>curl -v https://www.wikipedia.org -o /dev/null</code> and find, in the output, the IP address it connected to, the TLS version, the certificate's subject, the HTTP request line and the response status. You've just seen four layers in one command.</p>
+
+<!-- ======================================================== 1.9 -->
+<h2 class="sec" id="s1-9"><span class="n">1.9</span>When it doesn't work: read the error's layer</h2>
+
+<p>Because each step depends on the one before, the error message usually tells you how far the request got. Learn to read these and you'll skip most of the guessing in every later troubleshooting session.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 1.5 · What the error tells you</caption>
+    <thead><tr><th>You see</th><th>It got as far as</th><th>Usual causes</th></tr></thead>
+    <tbody>
+      <tr><td><code>Could not resolve host</code></td><td>Nowhere: no address</td><td>DNS: wrong name, missing record, resolver unreachable (<a href="05-dns.html">Ch. 5</a>)</td></tr>
+      <tr><td><code>Connection timed out</code></td><td>Packets left, nothing came back</td><td>No route, or a firewall silently dropping packets (<a href="08-inside-a-vpc.html">Ch. 8</a>, <a href="09-firewalls.html">9</a>)</td></tr>
+      <tr><td><code>Connection refused</code></td><td>The machine answered “no”</td><td>Reached the machine, but nothing listens on that port, or the app is down (<a href="03-tcp-udp-ports.html">Ch. 3</a>)</td></tr>
+      <tr><td>Certificate errors</td><td>Connected, but TLS failed</td><td>Wrong or expired certificate, wrong name (<a href="06-http-tls.html">Ch. 6</a>)</td></tr>
+      <tr><td>HTTP <code>502</code>, <code>503</code>, <code>504</code></td><td>Reached a proxy or load balancer</td><td>The servers behind it are down, unhealthy or slow (<a href="index.html#ch16">Ch. 16</a>)</td></tr>
+      <tr><td>HTTP <code>4xx</code></td><td>Reached the application</td><td>Not a network problem: the request itself was wrong or unauthorised</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">A timeout means silence: something dropped the packets. A refusal means an answer: you reached the machine. That one difference halves the search.</p>
+</div>
+
+<h2 class="sec" id="s1-10"><span class="n">1.10</span>Common misconceptions</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Belief</th><th>Reality</th></tr></thead>
+    <tbody>
+      <tr><td>“Ping fails, so the server is down.”</td><td>Many networks block ping (ICMP), including cloud defaults. Test the real port: <code>curl</code> or <code>nc -vz host 443</code>.</td></tr>
+      <tr><td>“The internet is one big network.”</td><td>It's tens of thousands of independent networks that agree to pass traffic. Any of them can be the slow or broken one.</td></tr>
+      <tr><td>“A faster connection makes pages load faster.”</td><td>Only if size is the problem. Most page loads are limited by round trips, which bandwidth doesn't shorten.</td></tr>
+      <tr><td>“Packets of one request all take the same path.”</td><td>Usually, but not always, and replies often return by a different path. Tools only ever show you one direction.</td></tr>
+      <tr><td>“HTTPS hides where I'm connecting.”</td><td>It hides the content. The destination IP address, and usually the name (in the TLS handshake's SNI), are still visible.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum1">
+  <h2 class="sec" id="sum1"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>A page load is a chain: DNS, TCP, TLS, HTTP, then routing across many networks and back.</li>
+    <li>Networks move <strong>packets</strong>: small, independently routed pieces with a header and a payload.</li>
+    <li>Work is split into <strong>layers</strong> (application, transport, internet, link), each wrapping the one above: <strong>encapsulation</strong>.</li>
+    <li><strong>MAC</strong> addresses get frames across one hop, <strong>IP</strong> addresses get packets end to end, <strong>ports</strong> pick the program.</li>
+    <li>Routers forward hop by hop, each knowing only the next step. <strong>Latency</strong> grows with distance and round trips, not bandwidth.</li>
+    <li>The error message tells you how far a request got: no address, timeout, refusal, TLS error, or an HTTP status.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Packet</dt><dd>A small unit of data with a header (addresses and control fields) and a payload.</dd>
+    <dt>Layer</dt><dd>One level of the network's work, using only the layer below.</dd>
+    <dt>Encapsulation</dt><dd>Each layer wrapping the data from the layer above in its own header.</dd>
+    <dt>MAC address</dt><dd>A link-layer address, meaningful only on one local link.</dd>
+    <dt>IP address</dt><dd>An internet-layer address that identifies an interface across networks.</dd>
+    <dt>Port</dt><dd>A number that picks the program on a machine, like 443 for HTTPS.</dd>
+    <dt>Router / hop</dt><dd>A device that forwards packets between networks; each pass is one hop.</dd>
+    <dt>TTL</dt><dd>A counter in every IP packet, lowered at each hop, that stops endless loops.</dd>
+    <dt>Latency</dt><dd>How long a trip takes; usually given as a round trip in milliseconds.</dd>
+    <dt>Bandwidth</dt><dd>How much data a link can carry per second.</dd>
+    <dt>MTU</dt><dd>The largest packet a link can carry without splitting it, typically 1,500 bytes.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Put these in the order they happen when you open <code>https://www.larder.example</code>: TLS handshake, DNS lookup, HTTP request, TCP connection. <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>DNS lookup, TCP connection, TLS handshake, HTTP request. Each needs the one before: you can't connect without an address, and you can't encrypt without a connection.</p></details>
+    </li>
+    <li>
+      <p>As a packet travels from the laptop to the server, which of these change at each router: the source MAC address, the destination IP address, the destination port? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Only the MAC addresses change at every hop, because each frame is for one link only. The destination IP address and port stay the same end to end, unless a NAT device rewrites them on purpose.</p></details>
+    </li>
+    <li>
+      <p>A colleague's API call fails with <code>Connection refused</code>. Another says it must be a firewall. Are they likely right? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Probably not. A refusal is an answer from the target machine, so the packets got there. Most cloud firewalls drop packets silently, which gives a timeout. Check whether the program is running and listening on the right port and address.</p></details>
+    </li>
+    <li>
+      <p>A page makes four round trips before content starts to arrive. How long does that take at minimum for a user in Sydney if the servers are in Frankfurt? What are two ways to improve it? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>At about 280 ms per round trip, roughly 1.1 seconds. Improvements: fewer round trips (TLS 1.3, connection reuse, HTTP/3), or serving content from closer to the user with a CDN or a second region.</p></details>
+    </li>
+    <li>
+      <p>Why does the internet cut data into packets instead of reserving a line for each conversation, like old telephone networks? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Packets let many conversations share the same links, use capacity only when there is data to send, resend only the pieces that were lost, and route around failures in the middle of a conversation.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>Cloudflare Learning Center: <a href="https://www.cloudflare.com/learning/network-layer/what-is-a-packet/">What is a packet?</a> and <a href="https://www.cloudflare.com/learning/network-layer/how-does-the-internet-work/">How does the internet work?</a></li>
+    <li>Julia Evans' networking zines and blog posts are a friendly second explanation of almost everything in Part I.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Networking in the Cloud</a></div>
+  <div><span>Next</span><a href="02-ip-and-cidr.html">2 · IP addresses and CIDR without fear</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 1 · Networking in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

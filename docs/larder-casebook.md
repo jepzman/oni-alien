@@ -1130,3 +1130,18 @@ Book 5 follows ITIL 4 (practices, value chain, four dimensions, guiding principl
   Eli becomes reliability lead.
 - **Closing note, Mon 30 Oct 2028**: useful pages 2 % → ≈ 80 %, change failures 6 % → 3 %, restore 3 h 40 → 22 min,
   toil 41 % → 19 %, Eli's night pages in October 2028: none. **Book 5 is complete.**
+
+## Series 3 · Networking in the Cloud (handbook facts)
+
+Network facts used by Handbook 1 (details and chapter references in `docs/HANDOFF-handbooks.md`):
+
+- Address plan in `10.0.0.0/8`: offices `10.0.0.0/13` (Amsterdam office `10.1.0.0/24`), stores `10.8.0.0/13`, one
+  `/16` per city (Amsterdam `10.8`, Rotterdam `10.9`, Antwerp `10.10`; Noord `10.8.3.0/24`), Frankfurt `10.16.0.0/12`
+  (prod VPC `10.20.0.0/16`), second region `10.32.0.0/12`. Jasper's first VPC was `172.17.0.0/16` (clashed with Docker).
+- Prod VPC subnets: public `10.20.0–2.0/24`, app `10.20.16.0/20`, `.32.0/20`, `.48.0/20`, data `10.20.64–66.0/24`;
+  one NAT gateway per zone; NAT Elastic IP `198.51.100.7` is allow-listed by StockPilot.
+- Incidents told in the book: reporting subnet left on the main route table (ch. 8); Rotterdam store replies with no
+  route back (ch. 4, then BGP for store VPNs); payment resets after NAT idle timeout (ch. 3); `api.larder.example`
+  TTL cutover (ch. 5); missing intermediate on `hooks.larder.example` (ch. 6); cross-zone Kafka traffic ≈ €700/month
+  (ch. 7); 29 Oct 2026 Dispatch outage (PR 233, 18:10–18:35): the removed rule allowed Dispatch by CIDR; tracked connections kept the old copies looking healthy while new copies failed (ch. 9); Korenwolf overlaps `10.20.0.0/16` →
+  PrivateLink (ch. 10).
