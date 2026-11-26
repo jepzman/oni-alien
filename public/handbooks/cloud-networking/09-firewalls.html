@@ -51,8 +51,8 @@
 
 <aside class="box box-story" aria-label="Larder">
   <p class="label">At Larder</p>
-  <p>On Thursday 29 October 2026, at 16:40, an engineer tidied up the database's firewall rules: a few address ranges looked unused, so they went. Nothing broke. At 17:05, as the evening rush began, Dispatch, the service that assigns couriers to orders, scaled from two copies to six. The four new copies couldn't reach Postgres. The two old ones limped on, overloaded. For 25 minutes, Joost's operations team assigned couriers by hand.</p>
-  <p>The rule change was wrong, but the interesting question is why it took 25 minutes to show up. Section 9.6 answers it.</p>
+  <p>On Thursday 29 October 2026, at 18:10, the deploy pipeline applied a network rule tidy-up that Eli had written and had approved that afternoon (PR 233): a few address ranges on the database's security group looked unused, so they went. Within minutes Dispatch, the service that assigns couriers to orders, was struggling. Bram, on call, checked Dispatch, the database and the containers, and all of them looked healthy. At 18:35 he found PR 233 in the pipeline's history and reverted it. For 25 minutes, Joost's operations team assigned couriers by hand.</p>
+  <p>The rule change was wrong, but the interesting questions are why the review didn't catch it, and why everything Bram checked looked healthy. Section 9.6 answers both.</p>
 </aside>
 
 <!-- ======================================================== 9.1 -->
@@ -231,14 +231,14 @@
 
 <aside class="box box-story" aria-label="Larder, solved">
   <p class="label">At Larder: solved</p>
-  <p>The database's security group still allowed Dispatch by address range, from before the move to containers, and the range that looked unused was the one Dispatch's tasks were now getting addresses from. When the rule went at 16:40, Dispatch's two running copies kept their pooled connections open: already tracked, so still allowed. Nothing looked wrong. At 17:05 four new copies started, tried to open connections, and timed out. The cause was 25 minutes and one scale-up away from the change.</p>
-  <p>The fixes, in order: put the rule back; replace every address-based rule inside the VPC with security group references (<code>sg-dispatch</code> in Figure 9.2); make all firewall changes through Terraform with the plan reviewed; and add a check in the pipeline that runs Reachability Analyzer for the paths that matter, such as Dispatch → Postgres on 5432, before and after every network change.</p>
+  <p>The database's security group still allowed Dispatch by address range, from before the move to containers, and the range that looked unused was the one Dispatch's tasks had recently started getting addresses from. The plan in PR 233 showed the removal clearly; it just didn't show who depended on it. When the rule went at 18:10, Dispatch's two running copies kept their pooled connections open: already tracked, so still allowed, which is why they looked healthy. But it was the start of the evening peak, so Dispatch scaled up, and every new copy timed out connecting to Postgres while the two old ones were swamped.</p>
+  <p>The network fixes, after the revert: replace every address-based rule inside the VPC with security group references (<code>sg-dispatch</code> in Figure 9.2), so a rule says <em>who</em> it's for; and add a step to the pipeline that runs Reachability Analyzer for the paths that matter, such as Dispatch → Postgres on 5432, after every network change. (The operations side of this incident, a change feed and no changes in the evening peak, is in Eli's IT Operations Notebook.)</p>
 </aside>
 
 <p>The general lessons:</p>
 <ul>
   <li><strong>A change that “didn't break anything” hasn't been tested yet.</strong> Test with a new connection, not with an existing one.</li>
-  <li><strong>Manage rules as code</strong>, reviewed like any other change, so the plan shows exactly what's removed (<a href="index.html#ch24">Chapter 24</a>).</li>
+  <li><strong>Manage rules as code</strong>, reviewed like any other change, so the plan shows exactly what's removed (<a href="index.html#ch24">Chapter 24</a>). A reviewed plan still can't tell you who depends on a rule; that's what role-based rules and reachability checks are for.</li>
   <li><strong>Automate reachability checks</strong> for critical paths. AWS Reachability Analyzer works out from configuration alone, without sending traffic, whether a path is open, and which rule blocks it if not.</li>
   <li><strong>Name and describe every rule.</strong> “Why is this here?” should be answerable from the rule's own description.</li>
 </ul>

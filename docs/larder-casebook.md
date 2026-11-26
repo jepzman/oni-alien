@@ -3,7 +3,7 @@
 The running case study for **The Solution Architect's Notebook**. Every note's “situation”, template card
 and example uses these facts. Add to this file whenever a note invents something new, and never contradict
 it. Book 1 (architect, Ana) and book 2 (product, Grace) run in parallel from October 2025; book 3 (project, Sanne) from
-January 2026; book 4 (client, Mo) from March 2026. The public version is the case file page, `public/larder/index.html`,
+January 2026; book 4 (client, Mo) from March 2026; book 5 (IT operations, Eli) from 30 March 2026. The public version is the case file page, `public/larder/index.html`,
 built from `content/larder/casefile.py`.
 
 ## The company
@@ -45,7 +45,7 @@ built from `content/larder/casefile.py`.
 | Ben | Tech lead, orders team | |
 | Cho | Engineer, payments | |
 | Dee | Tech lead, mobile apps | |
-| Eli | Platform and operations engineer | |
+| Eli | Platform and operations engineer (he/him; narrator of book 5) | that Larder keeps running, and doesn't need him at 3 a.m. |
 | Jasper | Co-founder and first CTO (left August 2025) | appears only in old code, old chats and old decisions |
 | Sanne | Delivery manager (joins January 2026; narrator of book 3) | the Rotterdam launch: dates, risks, dependencies |
 | Mo | Key account manager, Larder for Business (joins March 2026; narrator of book 4) | Korenwolf, the first business client |
@@ -535,6 +535,602 @@ Bounded contexts (Vol. 1, note on bounded contexts): **Catalogue**, **Pricing & 
 - **Architects**: Cho (payments + data) and Dee (mobile + customer apps) grown from May; Cho led ADR 0029 alone in Sep;
   guild every other Thursday; architecture path on the career ladder from Oct.
 
+## Book 3, Vol. 1: Sanne's facts (January → February 2026)
+
+Book 3 follows the PMBOK Guide, eighth edition (6 principles, 7 performance domains, 5 focus areas, 40 processes).
+Plan: `docs/HANDOFF-project-manager.md`. Every number below carries into later volumes (the project file grows).
+
+- **Sanne** joins Monday **12 January 2026** as delivery manager. Her last job: fitting out warehouses (all predictive).
+  Larder's first project manager. Opening is **15 weeks** away (27 April).
+- **Desk sort** (14 Jan): 11 requests → 4 projects (Rotterdam launch, Zuid cold-room replacement, new helpdesk tool for Sam,
+  summer courier hiring drive), 3 products (approvals, customer app, picker app), 4 operations.
+- **Joost's spreadsheet** “Rotterdam v7”: 140 rows, 31 without an owner.
+- **Value chain** (16 Jan, signed by Joost and Femke): outputs = store open and stocked, city set up in the platform,
+  ~40 pickers and couriers trained. Benefits: **500 orders a day by the end of May** (owner Joost), **90 % express on time
+  by the end of the summer** (Joost), **a launch playbook: next city in ≤ 8 weeks** (Femke). Checked at +4 weeks, +12 weeks
+  and the start of Utrecht.
+- **Role card** (19 Jan): **Joost is the sponsor**; steering group Femke, Marco, Priya, Joost, fortnightly. Three triggers go to
+  Joost: date at risk by more than 3 days, a change over €5,000, a change to what customers get at launch.
+- **Environment scan** (21 Jan): cold room and fridges take 8 weeks from order; food-safety registration needed before the
+  first delivery (Tomás with Lena); the lease allows no deliveries before 07:30.
+- **Whole-launch map** (23 Jan): seven workstreams: store fit-out (Joost), people (Joost), stock and suppliers (Tomás),
+  platform set-up (Eli, Ana), apps (Ben, Dee), payments and legal (Cho, Lena), launch marketing (Priya). Orphans found:
+  food-safety registration, charging for 40 e-bikes. Opening hours stay 08:00–22:00 at launch (Tomás proposed 07:00–23:00).
+  The map had **no line for store IT and internet** (see Ana's Vol. 2: the line was ordered 30 March, too late).
+- **Value test** (26 Jan): 71 must-have rows, 47 that help, 22 parked (tote bags, an app animation). Progress is counted as
+  must-haves done / 71 (24 on 26 Jan).
+- **Quality built in** (28 Jan): nightly script for prices, VAT and zones (Eli); label scanned at the shelf; 20 practice orders
+  per new picker at Noord; a weekly end-to-end order through RTM-0; a rehearsal week before go / no-go.
+- **First status report** (30 Jan, 12½ weeks to go): **amber**. Commitments: fridge order by 13 Feb (placed 13 Feb), a first
+  plan by 20 Feb. **Budget €380k** (fit-out and equipment €260k, hiring and training €60k, launch marketing €40k,
+  reserve €20k), confirmed by Marco.
+- **Long view** (2 Feb): fridges with doors, +€14k, ≈ €6k a year less electricity → **reserve €20k → €6k**; first deliveries
+  07:30; unsold food to a Rotterdam food bank daily from week 1.
+- **Planning session** (4 Feb, Ben, Dee, Eli, Tomás, Joost's operations lead): Sanne's own 96-task plan thrown away; the team
+  plans and estimates its own work; three decision levels (team, Sanne, sponsor).
+- **Approach** (9 Feb): fit-out, people, stock, payments and legal predictive; platform, apps and marketing adaptive (two-week
+  sprints). **Shared milestones: fit-out complete 3 Apr, stock on shelves 17 Apr, app ready 20 Apr, go / no-go 24 Apr,
+  opening 27 Apr.**
+- **Seven tabs** (13 Feb, 10 weeks to go): €61k of €380k spent or committed; amber on scope (→ the MoSCoW session of 3 March),
+  stakeholders (neighbours, landlord) and risk (top three: cold-room delivery, hiring on time, StockPilot's rate limit).
+- **Tailoring** (18 Feb): one-page charter and plan, top-15 risk list, one-page status on Fridays, one meeting (Thursdays
+  09:30, 30 min); no communications plan, procurement plan or earned value. Review of the fit: 20 March.
+- **Launch desk** (25 Feb): a supportive PMO of two hours a week (templates, lessons page, launch playbook, a quarterly sheet of
+  all projects for Femke); agreed until Utrecht.
+- Meanwhile links: focus on value ↔ Grace's strategy on a page; build quality in ↔ Ana's walking skeleton; let the team
+  decide ↔ Grace's product trio; plan it all or learn as we go ↔ Grace's now / next / later roadmap.
+- Open threads for Vol. 2 (Governance): the charter, the plan of 20 Feb, phase gates around the five milestones, the decision
+  log shared with Ana (16 Mar), the scope misread corrected 9 Mar, the tailoring review of 20 Mar and the missed internet line.
+
+## Book 3, Vol. 2: Sanne's facts (February → May 2026)
+
+Vol. 2 covers the Governance domain (nine processes). Every template card is a page of **the Rotterdam project file**
+(`/rotterdam/`); the numbers below are that file's numbers.
+
+- **Charter** (19 Feb, signed by Joost and Femke): in = store fitted, stocked, staffed; city in the platform and apps; ~40
+  staff trained; launch marketing; two weeks of hypercare. Out = new app features for Rotterdam, Larder for Business, changes
+  to Amsterdam. Done when: hypercare exit, handover to the store manager, closing report accepted.
+- **Plan on a page** (20 Feb; to the steering group 27 Feb). Budget by line: fit-out **€226k** (builder €148k fixed price;
+  cold room and fridges €78k incl. the €14k door upgrade), equipment and store IT **€48k**, people **€60k**, marketing
+  **€40k**, reserve **€6k** = €380k. Cross-checks failed on: pickers starting a week after stocking (first group of 15 moved
+  to **30 March**), handhelds ordered too late (moved to 23 Feb), no reserve for the top risks (stated as the weak point).
+- **Sourcing** (24 Feb): builder fixed price €148k, handover 3 April, €1,000 off per late day (max 10), 5 % retention;
+  cold room supply-and-install (ordered 13 Feb, 8 weeks); e-bikes leased by operations; training and city set-up in-house;
+  adverts time and materials, cap €12k.
+- **Governance** (27 Feb): teams → Sanne → sponsor (the three triggers, answer in 2 working days) → steering group
+  (date, total budget, go / no-go, closing). Vetoes: Marco (spend), Lena (contracts, personal data). Steering Fridays:
+  27 Feb, 13 Mar, 27 Mar, 10 Apr, 24 Apr, 8 May, 22 May. Sunday opening: not at launch (Joost).
+- **Yara**, Rotterdam store manager, starts **2 March 2026** (reports to Joost).
+- **Gates** (criteria written 2 Mar): G1 3 Apr fit-out, G2 17 Apr stock, G3 20 Apr app, G4 24 Apr go / no-go (steering group),
+  G5 11 May hypercare exit. **G1: go with conditions**: 14 snags, 2 blocking (cold-room door seal, fire-safety sign), fixed by
+  7 April; dry goods stocked from 6 April, chilled from 8 April. G4: go with two conditions (Grace's two reds, fixed 26 Apr).
+- **Weekly rhythm** (from 5 Mar): Monday decision log with Ana, Thursday 09:30 leads, Friday status. Must-haves done (of 71):
+  26 Feb 33 · 5 Mar 34 · 12 Mar 41 · 27 Mar 49 (plan 52) · then +6, +5, +9 a week · 24 Apr 69 · 26 Apr 71.
+- **Baseline v1** (13 Mar, steering group): scope signed by Grace (6 app Musts) and Joost (65 others); €335k committed
+  (builder 148, cold room 78, equipment 48, recruiting and marketing contracts 61). The 9 March misread (“approvals at launch”) was Sanne restating a promise
+  Grace never made. **Baseline v2** on 31 Mar after C-03.
+- **Quality review** (20 Mar): the nightly script had failed silently 8–11 March (issue I-05; 212 products listed when it ran
+  again); 12 of 15 pickers had done their 20 practice orders; RTM-0's weekly order had caught 2 faults. Next review 17 Apr.
+- **Issue log** (from 20 Mar): **I-07 internet line** raised by Eli on 20 Mar, ordered 30 Mar, live 13 May; workaround a 4G
+  router with backup SIM (€600). I-09 builder late; I-14 two blocking snags; I-19 / I-20 Grace's two reds. Totals at closing:
+  23 raised, 21 closed, 2 handed over (I-21 street numbers in zone RTM-2, I-23 Saturday slots).
+- **Escalation** (23 Mar): builder forecast handover 8 April (electrical inspection re-booked). Option B chosen by Joost at
+  16:00: work on the weekend of 28–29 March, €5k, handover held on 3 April.
+- **Status of 27 Mar**: amber; 49 of 71 done; €355.5k committed; forecast 65 of 71 at 4 a week. Colour rules: schedule red if
+  more than 3 days late; scope amber at 4–8 behind the plan line; finance amber when the reserve is in use.
+- **Change log**: C-01 fridges with doors +€14k (Marco, 2 Feb) · C-02 weekend work +€5k (Joost, 23 Mar) · C-03 approvals in
+  Rotterdam from launch to June (steering group, 31 Mar; same session as Ana's trade-off sliders) · C-04 4G router +€0.6k
+  (Sanne, 1 Apr) · C-05 in-store launch event, rejected (Joost) · C-06 second cold-room door, deferred to after opening.
+  Reserve: 20 → 6 → 1 → 0.4.
+- **Handover** (walk-round 12 May, signed by Yara 15 May): retention released 15 May; Sanne answers within a day until 29 May.
+- **Lessons** (18 May): 41 lines → 12 playbook changes, 9 template changes, 20 dropped. Top: store IT is an eighth workstream;
+  order long-lead items in week 1; the product owner signs the launch scope.
+- **Closing report** (22 May, steering group: closed): opened 27 April; 71 of 71; **€379.6k of €380k**; **590 orders a day in
+  week 4** (target 500 by end May: met); on time 84 % in May (target 90 % by end of summer: open, Joost); playbook v1 written.
+- Meanwhile links: gates ↔ Grace's launch checklist; baselines ↔ Grace's MoSCoW; directing the work ↔ Ana's decision log;
+  change control ↔ Ana's trade-off sliders; handover ↔ Grace's hypercare.
+- Open threads for Vol. 3 (Scope and Schedule): goes back into the same months for the 71 must-haves as a work breakdown,
+  the estimates behind the 4 February plan, the network and critical path of the fit-out, the release plan of 9 March.
+
+## Book 3, Vol. 3: Sanne's facts (February → April 2026, Scope and Schedule)
+
+Vol. 3 goes back over the same weeks as Vol. 2 for the scope and schedule work behind the plan. Template cards are
+project-file pages 16–30. Two Vol. 2 slips were corrected on the way: the builder's extra work was **one weekend
+(28–29 March)**, not two; and on 10 April the last three weeks had finished **4, 6 and 5** (not 6, 5 and 9).
+
+- **Estimating session** (4 Feb): Sanne anchored the platform estimate (“Zuid took about two weeks?”) → all said 10.
+  Redone as wideband Delphi: 8, 10, 12, 24 (Eli: deposits need their own VAT rate; zone edges cut through streets) →
+  round 2: 10, 12, 12, 14. **Apps: 14 Musts = 61 story points; capacity for Rotterdam 8–10 points a sprint** (approvals
+  runs alongside) ≈ 7 sprints, 5 available → to Grace → her MoSCoW of 3 Mar: 6 Musts = **26 points ≈ 3 sprints**.
+- **First estimates** (5 Feb, answer to Femke: “it fits, with no spare week; the fit-out is the long pole”):
+  fit-out analogous from **Zuid (6 weeks, 520 m², incl. 1 week floor re-work)** → Rotterdam **600 m²**: 5–7 weeks;
+  stocking parametric **2,500 products × 2½ min ≈ 104 h** (15 person-days) but deliveries over 10 working days;
+  training ≈ 50 person-days; platform set-up bottom-up, 9 pieces, 12 days.
+- **Cold room**: the supplier quoted “up to 8 weeks”; on ordering (13 Feb) it **confirmed delivery for Fri 27 March**
+  (panels leave the factory on the 26th; an earlier date was refused).
+- **Three-point** (6 Feb): **Kees**, the builder's site manager: fit-out **22 / 25 / 34** working days (worst: inspection
+  re-booked, materials late, slow curing) → PERT **26 ± 2**; P(25) ≈ 31 %, expected Tue 7 Apr, 84 % by Thu 9 Apr.
+  Eli: platform **8 / 12 / 24** → 13⅓ ± 2⅔. Weekend work priced on **12 Feb: one weekend ≈ €5,000**.
+- **Rules for scope and schedule** (10 Feb): unit = a must-have with owner and “done means”; predictive work in working
+  days (Mon–Fri), adaptive in two-week sprints; rolling wave (detail 4 weeks ahead); calendar: **builder off on Easter
+  Monday 6 Apr**; **27 April, opening day, is King's Day** (store and couriers work; offices and builders don't).
+- **Requirements** (Noord's Friday peak walked; workshop 12 Feb with Tomás, Joost's ops lead, Sam, Lena; Grace's
+  prototype findings; Zuid's opening): **96 requirements → 71 must-haves (each traced), 18 “helps”, 7 rejected**.
+  Examples: R-08 ≤ 2 pickers waiting at the cold room at peak (→ wider door + layout; second door deferred, C-06);
+  R-12 cold room 2–4 °C, alarm > 5 °C for 15 min; R-23 100 % prices + VAT before stocking; R-31 40 e-bikes charged by 07:30
+  (three-phase supply, must-have F-09); R-44 buttons ≥ 12 mm; R-57 food-safety registration.
+- **Scope statement** (16 Feb): result = a dark store serving zones **RTM-1 to RTM-3**; 8 deliverable groups; hypercare IN;
+  a separate Rotterdam landing page OUT (the waitlist page gets a city field; the promo code came back as extra E1).
+- **WBS** (17 Feb; app branch cut 6 Mar; baselined 13 Mar): 1.0 project management (no must-haves, ≈ 6 % of effort);
+  fit-out 16 · people 9 · stock 10 · platform 12 · apps 6 · payments + legal 9 · marketing 5 · opening + hypercare 4 = 71.
+  Fit-out level 3: building works, cold room + fridges, shelving, e-bike charging, **1.1.5 store systems online** (Eli).
+  The builder's quote said **“data cabling to the comms cabinet; connectivity by client”**: the internet line was a
+  missing work package in 1.1.5 (Sanne's mistake: she skipped the “small print” check). Added 23 Mar; count stays 71.
+- **Fit-out network** (with Kees, 19 Feb; working days, day 1 = Mon 2 Mar): A strip-out 3 · B first fix 4 (A) ·
+  C plumbing 3 (A) · D screed + curing 7 (C) · E walls, ceiling 5 (B) · F second fix 4 (E) · G inspection 1 (F; booked
+  **Tue 24 Mar**) · H paint 3 (G, D) · I cold-room build 3 (D; delivery 27 Mar) · J energise + 48 h test 2 (I, G) ·
+  K shelving, fridges, chargers 3 (H) · L snags 2 (K) · handover after J, L. Sanne's first chart (12 Feb) had bars and no
+  links (her mistake in the schedule collection).
+- **Critical path** (20 Feb): **A-B-E-F-G-H-K-L = 25 days → Fri 3 Apr**. C and D: 4 days' total float (C has no free
+  float). I-J: zero float, held by the delivery date. **23 Mar**: inspection re-booked to **Thu 26 Mar** (+2 working
+  days) → handover **Wed 8 Apr** (Easter Monday off) = 5 calendar days → escalated → crash: builder works **Sat 28 and
+  Sun 29 Mar** on paint (C-02, €5,000 = €2,500 a day) → back to 3 Apr. Afterwards both chains end on day 25.
+- **Float** (24 Feb): the plumber asked to start a week late; allowed **two days (starts Mon 9 Mar, done Wed 11 Mar)**,
+  leaving two for the screed. No project buffer; feeding buffer for the cold room refused → confirmation call 20 Mar.
+- **Three views** (from 20 Feb / 13 Mar): milestone chart for the steering group (6 milestones incl. G5), summary for the
+  leads, detailed Gantt for the builder; sprint boards and the burn-up for adaptive teams.
+- **Schedule tracking**: must-haves done 26 Feb 33 · 5 Mar 34 · 12 Mar 41 · **19 Mar 45** · 27 Mar 49 (plan 52) · 3 Apr 55 ·
+  10 Apr 60 · 17 Apr 69 · 24 Apr 69 · 26 Apr 71; plan line 33 → 71 (26 Feb → 24 Apr). Forecast on 27 Mar: weeks of 7, 4, 4
+  → 17 Apr to 3 May. Milestone forecasts: G1 3 Apr except 8 Apr on 23 Mar; G3 app ready off the chart (“mid-May”) on
+  20 and 27 Feb, 20 Apr from 6 Mar, 22 Apr on 20–27 Mar, 20 Apr from 3 Apr.
+- **Acceptance**: G2 (17 Apr) the scan check was 100 %, but **aisles 14 and 15 carried Noord's aisle codes**; Tomás
+  rejected them; relabelled 18–19 Apr; accepted **20 Apr**. Lena accepted payments + legal 13 Apr; Grace the app 20 Apr
+  (real orders in RTM-1, -2, -3); Priya marketing 24 Apr.
+- **Scope creep** (27 Mar, Sanne's mistake in the control collection): nine unlogged extras since the baseline, ≈ 7
+  team-days (5 from Ben, Dee, Eli): E1 promo code (kept) · E2 Friday 21:00–22:00 slot (after opening) · E3 neighbourhood
+  names (after) · E4 English shelf labels (kept) · E5 tour video (kept) · E6 store dashboard for Yara (after) · E7 Rotterdam
+  test data (kept) · E8 courier route cards (kept) · E9 waitlist email variants (after). Rule: every addition on the extras
+  list, decided Thursdays.
+- Meanwhile links: requirements ↔ Grace's prototype testing; WBS ↔ Grace's story mapping; critical path ↔ Ana's last
+  responsible moment; Gantt and milestones ↔ Grace's roadmap vs release plan; acceptance ↔ Grace's definition of done;
+  scope creep ↔ Grace's request triage.
+- Open threads for Vol. 4 (Finance and Resources): the €380k budget built bottom-up from the WBS, the reserve (20 → 0.4),
+  cash flow of the builder's payments and retention, earned value on the fit-out, hiring 40 people under a cap of four
+  new office hires, training at Noord, the electrician crew shared by B and F, the e-bike lease.
+
+## Book 3, Vol. 4: Sanne's facts (January → May 2026, Finance and Resources)
+
+Vol. 4 follows the same launch through its money and its people. Template cards are project-file pages 31–45.
+Vol. 2's committed figures were corrected on the way (the €48k of equipment, ordered 23 Feb, had been left out):
+**€335k committed on 27 Feb and at the 13 Mar baseline; €355.5k on 27 Mar** (was €287k and €322k).
+
+- **Money rules** (27 Jan, signed by Marco): € excluding VAT; covers external spend and new store staff until opening;
+  not Larder's own people's time (≈ 170 person-days, tracked by Marco), the e-bike lease or rent (operations); Sanne may
+  commit up to €5,000 within a line, Joost above, Marco vetoes outside the budget; counted as committed, spent, forecast.
+- **Cost estimate** (28 Jan, bottom-up against the top-down €380k per city set in Sept 2025): builder €148k (indicative,
+  ± 10 %; fixed price 26 Feb at the same figure) · cold room + fridges €64k (firm) · equipment + store IT €48k ·
+  people **40 × €1,500** (€500 recruiting + €1,000 paid induction and training) = €60k · marketing €40k → **€360k**.
+- **Budget** (30 Jan, confirmed 6 Feb): baseline €360k + **reserve €20k** (risk list ≈ €10k, doubled by Marco for a
+  first city); no management reserve. S-curve: end Jan 4 · end Feb 64 · end Mar 238 · end Apr 352 · end May 360 (€k).
+- **Cash** (terms table 27 Feb): builder 20 % on signing / 40 % first fix / 35 % handover / 5 % retention (paid 15 May);
+  cold room 30 % with order / 70 % on delivery; equipment on delivery, net 30. Sanne agreed 20 % on signing without
+  checking Larder's monthly 30-day payment run → Kees: “no money, no start”; Marco paid an exception on Mon 2 Mar.
+  Cash paid by month: Jan 4 · Feb 58 · Mar 141 · Apr 129 · May 47.6 = **€379.6k** (planned 4 / 58 / 138 / 132 / 48).
+- **Committed** (Sanne said “€61k spent” at the steering group of 27 Feb; it was the recruiting €30k and marketing €31k
+  contracts of mid-Feb): committed was **€335k** (+ cold room 78, equipment 48, builder 148).
+- **Money table 27 Mar** (budget / committed / spent / forecast, €k): builder 153 / 153 / 96 / 153 · cold room 78 all ·
+  equipment 48 / 48.5 / 48.5 / 48.5 · people 60 / 45 / 21 / **62.5** (agency €575 a hire, not €500) · marketing
+  40 / 31 / 22 / **37** · total 379 / 355.5 / 265.5 / 379; reserve €1k.
+- **Earned value, 20 Mar** (BAC €374k = 360 + the €14k fridge upgrade): **PV 178 · EV 175 · AC 178** → SV −3, CV −3,
+  SPI and CPI 0.98, both in the people line (34 of 40 hired). Agency then fixed its fee for the last 6 hires at €500.
+- **Forecast**: formula 374 ÷ 0.983 ≈ €380k (the whole reserve); owners' lines on 27 Mar: €379k; actual **€379.6k**:
+  fit-out 231 · equipment + IT 49.1 · people 62.5 · marketing 37. The reserve went on C-02 and C-04, not on hiring.
+- **Payback** (22 May, Marco): ≈ €4 contribution per order; 550 orders a day assumed from June ≈ €66k a month →
+  **paid back about December 2026**. A week earlier for a city ≈ €15k; Utrecht in 8 weeks, not 15, ≈ €100k.
+- **RACI** (2 Feb): one A per row; shelving layout → Tomás (A); launch messages → Priya (A), Grace (C).
+- **Resource estimate** (10 Feb): ≈ 350 orders a day in the first month; pickers 9 an hour (Noord 6:40 an order) →
+  **15 pickers**; couriers 2.5 deliveries an hour → **25 couriers**; 40 e-bikes, 30 handhelds. Joost's first answer:
+  “60, like Zuid” (€90k). Second wave (+5 pickers, +12 couriers) for 500 a day, operations budget.
+- **Acquiring**: hired via agency 22, job boards 10, referrals 4, internal moves 4; last hire 17 Apr. Marco's cap of
+  four salaried central hires in 2026: Rotterdam used one (Sanne). **Borrowed**: Sanne agreed 4 Noord pickers from
+  27 Apr with Tomás (30 Mar); Joost caught the King's Day clash (2 Apr) → **2 from Noord + 2 from Zuid, 28 Apr–8 May**.
+  Opening day: Rotterdam's own team, Yara and Grace on the floor, Tomás at Noord for King's Day.
+- **Levelling** (24 Mar): Eli at **160 %** in the week of 23 Mar (platform 2½ d, RFC-003 1½, on call 1, internet line 1,
+  extras 1½, alert fix ½); after: on-call swapped (Ana), Ben does the Dispatch code, alert fix and zone checks moved
+  within float, dashboard paused → 80 / 100 / 100 / 100 / 95 / 75 %. Key people planned at 80 % from then on.
+- **Leading without authority** (16 Mar): Dee's store-page texts from Priya's team were waiting 9 days; Sanne got them
+  next day; Yara's new pickers test approvals for Grace; Dee's team named in the status; both items done 3 Apr.
+- **Rehearsal week conflict** (20–24 Apr): Tomás needs no wrong items; Ben no risky changes; rule: log it, triage at
+  16:00, code if it can cause a wrong item, else a training note → **14 problems: 4 code fixes (2 caused wrong items),
+  7 training notes, 3 parked**.
+- **Availability check** (08:30 daily in hypercare; 29 Apr): orders 470 (plan 350); 3 couriers sick → **Zuid lends 3,
+  29 Apr–2 May**; 4 e-bikes with flat tyres, lease supplier held to 24 h repair with a credit; 2 handhelds broken (4
+  spares left); **second hiring wave pulled forward to 4 May**. Borrowed pickers home on 8 May.
+- Meanwhile links: cost estimates ↔ Grace's business case; payback ↔ Ana's total cost of ownership; levelling ↔ Ana's
+  RFC-003; leading without authority ↔ Ana's influencing without authority; team conflict ↔ Grace's disagree and commit.
+- Open threads for Vol. 5 (Stakeholders and Risk): the neighbours and landlord (not contacted until 2 Mar), the risk
+  register's top three (cold-room delivery, hiring on time, StockPilot's limit), the reserve sized from a risk list,
+  the rival already in Rotterdam, and Antwerp (September 2027) as the next big launch.
+
+## Book 3, Vol. 5: Sanne's facts (October 2026 → October 2027, Stakeholders and Risk: Antwerp)
+
+Vol. 5 covers the Stakeholders (7) and Risk (6) domains through **the Antwerp launch**, the first city abroad. Template
+cards are the **Antwerp** pages of the project file (`antwerp/01`–`15`; the page `/rotterdam/` is now “The Project File”,
+grouped by project). Every number below was checked by script (weekdays, sums, the simulation); the block at the top of
+`content/project-5/01_involved.py` holds them in one place. **Chosen on purpose (no other book said): why Antwerp
+slipped.** It was risk R-07, the city's environmental permit, on the register from November 2026, scored low by people
+who knew Rotterdam, with no Larder owner.
+
+- **Project** starts Mon **5 Oct 2026**; sponsor **Femke**; steering group Femke, Marco, Joost, Priya, Lena (first Friday
+  monthly). Sanne runs Utrecht (12 Apr 2027) and The Hague (14 Jun 2027) from the playbook alongside.
+- **Store**: a former tyre depot in Berchem, **640 m²**, a terrace of **46 houses** behind the loading yard, a school on the
+  corner (drop-off 07:30–08:30). Lease signed **Tue 15 Dec 2026**, keys **Tue 1 Jun 2027**.
+- **New people**: **Maarten** (Antwerp lawyer, works with Lena from Oct 2026) · **Pieter** (site manager, the Belgian
+  builder) · **Hilde** (permit agent, from Mon 8 Mar 2027, €6k) · **Koen** (sales manager, a produce wholesaler at the early
+  market) · **Inès** (Antwerp store manager, starts Mon 7 Jun 2027).
+- **Stakeholder register** (2 Nov): v0 copied Rotterdam's (14) → **31** from four sources (charter, Rotterdam lessons, a walk
+  round on Sat 31 Oct with Joost, Lena + Maarten): Larder 12, partners 8, authorities 5 (permit office, FAVV-AFSCA, fire
+  service, VAT office, mobility department), community 6 (46 households, school, shops, **3,100 waitlist**, a rival, press).
+- **Grid** (9 Nov, Sanne's mistake in “Who's involved”): permit office placed **keep informed** (power “low”: in Rotterdam
+  the cold room needed nothing), owner “builder”; moved to **manage closely**, unaware → supportive, on **8 Feb 2027**.
+- **Communications plan** (23 Nov): Dutch (Flemish) for city, landlord, street; French or Dutch by choice for customers;
+  English inside Larder; one owner per audience; outside Dutch texts written or checked by a Flemish writer (the first
+  landlord letter, drafted in Amsterdam, came back “correct, but blunt”).
+- **Neighbours' meeting** (Thu 21 Jan 2027, community centre, 19:00): **28 people** of 46 households + the school's head.
+  Raised: lorries before 07:00 **12**, e-bikes on the pavement 9, condenser noise 5, litter 2. Promised: e-bikes by the back
+  lane, a named contact, a quarterly meeting, a daily litter walk; lorry times not promised (“answer by 31 March”). The
+  lorry concern was logged but **not linked to R-07**. Investor wording (Femke, 25 Jan): “planning date September 2027,
+  confirmed when the store's permits are in.”
+- **Supplier meetings** (Sanne's mistake in “Abroad”): Wed 3 Feb, English, no agenda → Sanne heard 07:00 and free crates,
+  Koen's proposal (12 Feb) said **05:30** and a **€2 deposit** a crate. Re-run Wed 17 Feb in Dutch (agenda Mon 15 Feb,
+  read-backs, summary within 24 h, confirmed Thu 18 Feb): deliveries 05:30 at the back door Mon–Sat; €2 deposit credited on
+  return; order by 14:00 the day before; a trial week before opening. The 05:30 delivery needs the permit's early hours.
+- **Belgian differences** (Mon 8 Feb, Lena, Maarten, Sanne): environmental permit (cooling plant + deliveries before 07:00,
+  30-day public inquiry), food-safety registration (Lena), VAT 6 % / 21 % (Marco, Mar), Bancontact (Cho, Jul), staff
+  documents in Dutch (Joost), sector pay scales (Joost), courier contracts (Joost + Lena), alcohol 16 / 18 (Grace), structured
+  e-invoices (Ana, later). Habits: formal letters; meet the city informally before applying; confirm decisions in writing.
+- **Engagement review** monthly from Fri 5 Mar: permit office U → N (pre-application meeting **Thu 11 Mar**); Koen R → S;
+  neighbours scored N in May from low attendance (9 at the April meeting) → **14 objections** in the inquiry (closed 22 Jun) →
+  R → door to door with Inès **26–30 Jul** → N in Sep; nine came to the opening. Rule from June: no evidence, no score.
+  Waitlist emails opened nl 58 % / fr 31 % → French subject lines rewritten → fr 44 % in August.
+- **Risk approach** (16 Nov, signed by Femke): appetite ≤ 2 weeks' slip, money within budget + contingency, no rent before
+  1 Jun (Femke refused €9k for keys on 1 May); thresholds to Femke: slip > 2 weeks, beyond contingency, score ≥ 20; scales
+  P 1–5 (<10 % … >70 %), I 1–5 (<1 week/€2k … >8 weeks/€50k); red ≥ 12; every risk a **Larder** owner; leads review every
+  other Thursday. Missing: the price of a week late (≈ €15k contribution + ≈ €2k rent), added to playbook v3.
+- **Risk register** (workshop Thu 26 Nov, written Mon 30 Nov; Sanne's mistake in “What could happen”): 23 rows (19 threats,
+  4 opportunities). Top: R-02 hiring 9, R-03 builder 9, R-08 couriers 9; **R-07 permit 1 × 3 = 3, owner “builder”**; R-09
+  neighbours 2 × 2, no owner. O-01 Rotterdam shelving design (Tomás), O-02 landlord insulation (Femke), O-04 bakery offer.
+- **Re-score** (Wed 10 Feb, after Maarten and Pieter: “the permit is yours, not ours; four to six months is normal”): R-07
+  → **4 × 4 = 16**, owner Sanne, R-09 merged in as a cause; R-03 → 2 × 3 = 6 (Pieter's second crew); R-08 → 6.
+- **Responses** (Mon 22 Feb): avoid (no early deliveries + a smaller plant) rejected by Joost; transfer: Hilde; mitigate:
+  city meeting 11 Mar, cooling drawings by **Mon 15 Mar**, lodge by **Fri 26 Mar**; accept the rest with a trigger. Before
+  60 % × €40k = €24k, after 30 % × €40k = €12k, responses €8k (agent 6, early drawings 2). R-04 Bancontact escalated to
+  Cho's payments roadmap; R-10 rival accepted; O-01 exploited (≈ €6k saved), O-02 enhanced (landlord said no), O-04 shared.
+- **Budget** (Mon 1 Mar): builder 160 · cold room + fridges 84 · equipment + IT 52 · people 68 (40 × €1.7k) · marketing
+  fr + nl 46 · Belgian set-up 20 = **€430k**; EMV threats 23.1 − opportunities 4.0 = 19.1 → **contingency €20k** (Sanne)
+  → €450k; **management reserve €15k** (Femke) → **€465k** authorised.
+- **Simulation** (1 Mar, 1,000 runs, **seed 2027**; script with Eli): P10 6 Sep · **P50 13 Sep** (51 %) · **P80 27 Sep** ·
+  P90 11 Oct; 18 Oct ≈ P96. Late runs (after 27 Sep) 162, the permit set the date in 157. Steering group Fri 5 Mar: planning
+  date stays 13 Sep; investors told “September or early October”; no earlier keys. Re-runs: 9 Apr (lodging 19 Apr) P50 20 Sep,
+  P80 11 Oct; July (objections in) P50 11 Oct, P80 25 Oct.
+- **The response with no owner** (risk review Fri 2 Apr; Sanne's mistake in “Doing something about it”): drawings owner
+  “cooling supplier”, waiting for Larder's 640 m² layout; trigger of 26 Mar watched by nobody. Layout sent Tue 6 Apr,
+  drawings Fri 9 Apr, **lodged Mon 19 Apr**, complete Mon 10 May, **public inquiry Mon 24 May–Tue 22 Jun**. Rules: every
+  action a task in the plan; every owner at Larder; every trigger in the Friday status with a watcher. Told the steering
+  group on Fri 7 May.
+- **Risk → issue** (Thu 15 Jul): the city's case officer: 14 objections, change the hours or bring a noise study, no decision
+  before September → R-07 closed, **I-12** opened. Extra steering group **Fri 23 Jul**: A wait (rejected), **B deliveries from
+  07:00 + an acoustic screen, open Mon 18 Oct (chosen)**, C dry goods only (rejected, Lena). Cost in the project **€27k**
+  (staff starts held 11, marketing re-booked 9, installer re-booked 4, screen 3): contingency 14 → 0 (earlier draws: hiring
+  4, translation rework 2), management reserve 15 → 2. Outside: rent ≈ €10k, ≈ €75k contribution (5 × €15k).
+- **Permit granted Mon 6 Sep** · cold room tested Fri 17 Sep · food-safety visit Wed 29 Sep · stocking 4–15 Oct ·
+  **opened Mon 18 Oct 2027**; week 1 2.4 tickets per 100 (Utrecht 2.9). Forecast final cost **€457k** of €465k.
+- **Playbook v3** (Oct): regulators are stakeholders (manage closely until the permit is granted); score risks with people who
+  have done it in that country; every response action has a Larder owner and a trigger with a watcher; price a week late in
+  every appetite statement (≈ €15k + ≈ €2k).
+- Meanwhile links: register ↔ Ana's stakeholder map; stakeholders abroad ↔ Grace's localisation; risk register ↔ Ana's risk
+  register and Grace's pre-mortem; risk monitoring ↔ Grace's launching a new city (playbook v3).
+- Open threads for Vol. 6 (tailoring, models, artefacts, growing): Eindhoven (22 Nov 2027) from playbook v4; the 2028
+  programme (eight cities); which of the 73 project-file pages were used again; a second project manager; the Antwerp
+  closing report (final cost vs €457k forecast) and its benefits check.
+
+## Book 3, Vol. 6: Sanne's facts (September 2027 → September 2028, tailoring, methods, growing)
+
+Vol. 6 adds no PMBOK processes; it covers tailoring, models / methods / artefacts, the newer topics and the project
+manager's growth. Template cards are the **programme** pages of the project file (`programme/01`–`15`).
+
+- **Eindhoven** tailoring sheet Mon **27 Sep 2027** (five dials; keep gates, risk register with Larder owners, store IT in
+  week 1, go / no-go; drop communications plan, separate quality review, earned value, Monday decision log; one meeting,
+  Thu 09:30; steering note every other Friday; fit check Mon 25 Oct put back a 10-minute call before go / no-go). File
+  **20 pages** (Rotterdam 58). Opened **Mon 22 Nov 2027**, eight weeks from the sheet.
+- **Artefact review** Mon **6 Dec 2027** (Sanne, Grace): 73 pages → used as is 21 · shortened 14 · merged 12 · not used 26
+  → **launch kit of 18 templates**. Nothing deleted.
+- **Playbook v4** Mon **13 Dec 2027** (Sanne + Grace merged): v1 Utrecht Apr 2027, v2 The Hague Jun, v3 Antwerp Oct, v4
+  Eindhoven; 11 pages shorter than v3 + Grace's; fixed vs local marked; v4.1 after Nadia plans Ghent (Feb); v4.2 adds a
+  sustainability line (Mar). Lessons → changes: Rotterdam 41 → 12, Antwerp 33 → 4.
+- **Programme Cities 2028** Mon **10 Jan 2028** (Sanne programme manager, sponsor Femke): Ghent, Haarlem, launch office,
+  courier renewal; lockers pilot (Ana) outside with one dependency; board every 4 weeks; benefit = eight cities and 60,000
+  orders a day by end 2028 (board plan Mon 20 Mar 2028).
+- **Rotterdam benefits check** Mon **17 Jan 2028** (Sanne's mistake: the +12-week check of Aug 2026 was never held): 500 a
+  day met (590 week 4); 90 % on time missed (86 % Sep 2026, 90 % Nov 2026, after courier wave 2 and the RTM-2 fix, I-21);
+  next city ≤ 8 weeks met (Utrecht 15 Feb → 12 Apr 2027, The Hague 8, Eindhoven 8); payback ≈ Dec 2026 forecast, Jan 2027
+  actual. Rule in v4: checks at +4 and +12 weeks by the benefit owner, booked before closing. Antwerp +12 weeks 10 Jan
+  2028, Eindhoven 14 Feb.
+- **Two-year review** Wed **12 Jan 2028** with Joost (Sanne's manager); feedback from Joost, Femke, Grace, Ana, Eli, Yara;
+  work on: outside stakeholders, letting go, programme thinking. **PMP passed Fri 21 Apr 2028**. The notebook: ~90 pages.
+- **Hiring** (role card Mon 8 Nov 2027): 34 applicants → 9 screening calls → 4 work samples (6–10 Dec; Antwerp's status
+  and issue log of 15 Jul 2027, names removed; panel Sanne, Joost, Yara; scoring sheet written 1 Dec) → offer Fri 17 Dec.
+  **Nadia** (six years opening stores for a retail chain) starts **Mon 7 Feb 2028**: one of Marco's four central hires for
+  2028.
+- **Launch office** Tue **1 Feb 2028**: supportive, one mandatory rule (gates, go / no-go); owns playbook + kit, people
+  booking, Femke's portfolio sheet, lessons; monthly peer review; kick-off → agreed plan Rotterdam ≈ 35 days, Ghent 14;
+  Ghent used 16 of 18 templates; Nadia keeps the kit from April.
+- **AI trial** 1 Feb → 10 Mar 2028 (approved assistant, Lena's rules): status 90 → 30 min; Ghent risks 23 suggested, 9
+  kept, 2 new, 1 wrong (“no permit needed”); 3 date clashes found. Sanne's mistake Fri **11 Feb**: unchecked draft said
+  “Ghent lease signed” (agreed in principle; **signed Thu 2 Mar**). Rules: approved tool; every fact checked; sender owns
+  it; say when AI drafted it.
+- **Toolbox page** Mon 14 Feb 2028 (with Nadia): tools sorted by question; Ghent uses 9.
+- **Coaching Nadia** (Sanne's mistake Fri **25 Feb**: rewrote Nadia's first Ghent status at 22:00); from Mon 28 Feb weekly
+  1:1 Tuesdays, three status questions, delegate fit-out, coach Larder and Belgium.
+- **Ghent**: pre-application meeting Tue 7 Feb; lease signed Thu 2 Mar; permit lodged Mon 13 Mar, **granted Fri 12 May**
+  (deliveries from 07:00 by design, CO₂ cooling, no objections). Sustainability (6–13 Mar; Korenwolf questionnaire
+  answered Mon 13 Mar): CO₂ cooling +€7k, ≈ €1.8k a year back; shelving reused from Zuid ≈ €5k saved; batteries back to
+  the lease supplier; food bank from week 1. G1 planned Fri 2 Jun, forecast Thu 8 Jun on Mon **22 May** (amber; Femke asked
+  for green before the investor update of Thu 25 May; Sanne gave amber with recovery: stocking 12 → 8 days, second shift
+  +€2.1k); G1 passed Wed 7 Jun; **opened Mon 19 Jun 2028**.
+- **Haarlem handover**: plan Mon 26 Jun; shadow 19–30 Jun; Nadia leads from Mon 3 Jul; **17 Jul** Nadia and Ana move the
+  opening 4 → 11 Sep (new ordering database); Sanne's mistake Wed **26 Jul** (agreed the chargers move on the builder's
+  call), fixed Fri 28 Jul (letter to every supplier); Sanne steps out Mon 7 Aug; **Haarlem opened Mon 11 Sep 2028**.
+- **Closing note** Mon **25 Sep 2028**: eight cities; ≈ 51,000 orders a day in September, on course for 60,000 by December;
+  one line for 12 Jan 2026: “the plan is the team's, the truth is yours, and the thing that sets your date is usually
+  outside the room.”
+- Meanwhile links: tailoring ↔ Ana's just-enough design; playbook ↔ Grace's launching a new city; sustainability ↔ Ana's
+  green software; servant leadership ↔ Ana's growing architects; ethics ↔ Grace's bad news; growing ↔ Grace's growing as a
+  PO; hiring ↔ Grace's hiring a PO; handover ↔ Grace's handing over and Ana's handover to operations.
+- **Book 3 is complete.** Open threads for Book 4 (Mo): Korenwolf's supplier questionnaire (Mar 2028) and the renewal.
+
+## Book 5, Vol. 1: Eli's facts (30 March → July 2026)
+
+Book 5 follows ITIL 4 (practices, value chain, four dimensions, guiding principles) with SRE habits. Narrator: **Eli**
+(he/him), platform and operations engineer since before Oct 2025. Plan: `docs/HANDOFF-it-operations.md`.
+
+- **What it's for** (Mon 30 Mar): 23 jobs in the 160 % week, 9 traceable to a customer. A bad hour ≈ €15k of orders.
+- **Catalogue v1** (Thu 2 Apr, signed at tech leads): 47 components → 11 services in 3 tiers. Critical: ordering (Ben),
+  payments (Cho), Dispatch (Eli + Ben), picker app (Dee). Important: stock sync, store network (Eli), courier app (Dee),
+  helpdesk (Sam). Normal: accounts + laptops, price script, domain + email (Eli). Eli owns 6 of 11; 4 were orphans.
+- **Checkout dependency map** (7 Apr): 11 dependencies. Address lookup SaaS on a free plan (10k calls/day; Amsterdam ≈ 9k,
+  with Rotterdam ≈ 14k) → paid plan €49/month from 8 Apr. Nightly price script runs on VM 2 only.
+- **Assets** (9 Apr): 92 handhelds on paper (Noord 31, Zuid 31, Rotterdam 30), 4 at Zuid missing (3 found, 1 written off);
+  21 laptops, 3 routers, 6 label printers; 46 SaaS subscriptions, 9 seats for leavers (≈ €340/month, cancelled).
+  **larder.nl renewed on 23 Apr on Jasper's expired personal card** → moved to the company card 10 Apr.
+- **Joiners, movers, leavers** (13–14 Apr): Rotterdam's 40 starters at ≈ 25 min each by hand (≈ 17 h). Role groups
+  (picker, courier, store lead, office), HR's hiring form in, last day out; < 6 min per person. First monthly check
+  closed 9 accounts incl. **Jasper's admin account** and 3 couriers who left in March.
+- **On-call rota v1** (from Mon 20 Apr): Eli, Ben, Cho, Dee, Ana, one week in five; primary + secondary (= next week's
+  primary); handover Mon 10:00, 15 min; €200/week (Marco, 17 Apr); paged after midnight → start at noon; Eli is
+  escalation until 20 Jun.
+- **Monitoring** (from 14 Apr): orders per 5 min per city vs last week, checkout errors, checkout p95, Dispatch delay,
+  store heartbeat (picker app last sync). 9 Apr: iDEAL failing, support found out first. **27 Apr 12:10**: Rotterdam
+  heartbeat alert, 4G router dropped 6 min, picker app offline-first, orders continued.
+- **Alert review** (Wed 15 Apr, the ½-day alert fix): March 63 rules, 410 pages, 9 useful → 6 paging rules, 8 tickets,
+  49 deleted. May: 22 pages, 17 useful.
+- **Runbooks**: 8 by Fri 8 May, six parts each. **Sat 9 May 02:40**: Cho fixes "db connections > 90 %" alone with RB-06
+  in 11 minutes.
+- **Service desk** (from Mon 11 May): "IT & stores" queue in Sam's helpdesk, QR poster per store, on-call number for
+  stopped picking. April: 146 messages to Eli's phone (Noord 61, Zuid 52, Rotterdam 33). June: 128 tickets, median
+  first response 12 min, 9 personal messages.
+- **Standard requests** (from 1 Jun): 6 (PIN reset by store lead, broken handheld from a spare pool of 3 per store,
+  label printer, laptop 3 days, tool access 1 day, new starter via JML). 46 of the first 74 tickets were these.
+- **Store network**: Noord Wi-Fi survey Thu 14 May (freezer aisle −82 dBm), +2 access points 21 May (€900); "offline"
+  tickets 23 (Apr) → 2 (Jun). Rotterdam line live 13 May; **failover test Tue 19 May 15:00: 4G in 40 s**; repeated on
+  the first Tuesday of each month. Noord and Zuid get 4G backup routers in June.
+- **Store IT kit v1** (Mon 25 May, after Sanne's lesson of 18 May): 34 items in three phases; device management (MDM)
+  live 26 May, €3/device/month (≈ €280); handheld set-up 20 min → 2 min. Workstream 8 in the launch playbook, owner Eli.
+- **Knowledge** (1 Jun): wiki 312 pages, 40 % older than a year; ops docs move to `ops/services/` with five headings;
+  120 archived, 61 rewritten. `legacy_rw` DB user explained (a 2024 data import) and removed in July. Dee's test: 3 → 8
+  of 10 questions (30 Jun).
+- **Toil** (week of 8–12 Jun): 16.5 of 40 h = 41 %. Cap 50 %, target 30 % by Dec. Removed: store figures → dashboard
+  (Jun), certificates → auto-renew (Jul). End of July: 33 %. The log supports **a second platform engineer, approved by
+  Femke in August**.
+
+## Book 5, Vol. 2: Eli's facts (June → December 2026)
+
+- **Bram** (he/him), second platform engineer, joins **Mon 5 Oct 2026**; on call from week 4 (the 29 Oct incident).
+- **Severity levels** (Mon 15 Jun, tech leads + Femke + Sam): SEV1 city stopped or > 10 % failing (Femke told ≤ 15 min,
+  updates 15 min); SEV2 one store / payment method / client delivery or 2–10 % (updates 30 min); SEV3 degraded with
+  workaround; SEV4 no impact. Trigger: **Fri 12 Jun 18:02** iDEAL ≈ 30 % failing at PSP, 14 min arguing, ≈ 160 orders.
+- **Incident roles** (from 13 Jul): lead (doesn't fix), fixers, comms, scribe. Trigger: **Fri 3 Jul 17:40** stock sync,
+  4 engineers at once, Tomás found out at 18:20, 70 min. First use **Fri 17 Jul**: Dee lead, stores told at minute 6,
+  23 min.
+- **Communication** (August, with Sam): four audiences (support pinned in #incident, store leads' group, Femke for SEV1,
+  business clients on a **status page from 1 Sep**); four lines per update. Femke had heard of 3 Jul from a tweet.
+- **Escalation** (from Mon 3 Aug): primary → +secondary at 5 min → +Eli by page and phone call at 15 min; specialist
+  list; test page on the first on-call morning. Trigger: **Sun 2 Aug 07:20** Rotterdam heartbeat, Ana's phone silenced
+  by an OS update, 22 min until Yara phoned Eli.
+- **Vendors** (`ops/vendors.md`, 24–28 Aug): trigger **Fri 21 Aug 17:30** StockPilot API down 2 h 10 (support 09–17
+  weekdays, status page "operational" for 40 min), ≈ 140 orders with out-of-stock items. Plan B: **low-stock switch**
+  when stale > 15 min (Ben, 18 Sep). No premium support (contract ends Jun 2027).
+- **Tiers and swarming** (Mon 14 Sep): Sam's team first line for store tickets from 1 Sep; known → fixed from the list;
+  new → #help-stores, one owner. Oct: 38 % fixed at first line; median hops 2.4 → 1.1.
+- **Post-incident review** of 21 Aug on **Wed 26 Aug**, facilitator Ana; RB-09 split by Cho. Every SEV1–2 reviewed
+  within a week.
+- **PRB-003 stock sync** (opened 7 Sep): 13 of 41 incidents Jun–Sep; retry storm against StockPilot's 600 req/min
+  limit; backoff + jitter + one batch per store shipped **Mon 14 Sep**; 0 restarts in October; closed 2 Nov.
+- **Known errors**: 11 by October (KE-03 sync, retired 14 Sep; KE-04 picker app frozen after an Android system update,
+  fix = defer system updates to 23:30, A-23, due 3 Nov; KE-07 blank labels, permanent).
+- **Actions** (Tue 6 Oct cleanup): 37 actions from 9 reviews, 11 done; 26 open → 9 dropped, 17 kept; by 30 Nov 15 of
+  17 done. Rules: ≤ 3 per review, owner, date, size, done test, Tuesday 15 min.
+- **Incident page for Femke** (from November): count by SEV, orders affected, time to acknowledge (median 14 min in
+  June → 4 in November), recovery median + longest by SEV, learning. No overall MTTR (a 4-hour SEV3 made it 48 min).
+- **29 Oct 2026, 18:10**: network rule tidy-up (PR 233, Eli's) applied by the pipeline at the start of the evening peak;
+  Bram (on call, week 4) found it at 18:35; Eli on a train. **Change feed** in #incident live **30 Oct** (A-19, open
+  since July); "what changed in the last 2 hours?" is section 0 of every runbook. November: 4 of 9 incidents followed
+  a change, each found in < 2 min.
+- **Korenwolf pilot incident, Tue 14 Jul**: an app update pushed at 06:00 failed on 9 of 31 Zuid handhelds; restock
+  arrived 09:35. Client report sent by Mo Thu 16 Jul (four parts); app updates on store devices at 23:30 from 20 Jul;
+  Korenwolf's order picked first at 06:00; Mo calls before 08:00 if late. Client reports within 2 working days; Ruben
+  asks for them in the September contract.
+- **18 Dec 2026, 18:05** (detail): managed Postgres failed over in ≈ 90 s; Core's connection pools kept pointing at the
+  old primary until each VM was restarted (18:22–18:43). Dee on call, declared SEV1 18:09, Eli lead; Femke called Eli 3
+  times; 300 chats at support. **Major incident procedure** written 21–23 Dec (SEV1 in a critical window, > 30 min or
+  > 1 city; senior lead, leadership liaison, customer messages, decision log, protected fix team); review **22 Dec** with
+  Femke → Ana's options page → ADR 0017 (12 Jan 2027). First drill: January 2027.
+- **Near misses** (#near-miss from 1 Dec): 9 in December. 3 Dec DB log disk 91 % (→ 80 % ticket alert); 10 Dec canary
+  rolled back core v431 (good save); 21 Dec courier API certificate (set up by Dee's team in November outside auto-renew)
+  3 days from expiry (→ auto-renew, every new cert registers in the expiry check, 8 Jan 2027).
+
+## Book 5, Vol. 3: Eli's facts (January → June 2027)
+
+(Book 5's second platform engineer is **Bram**, not Pieter: Pieter is the Belgian builder's site manager in Book 3.)
+
+- **Changes in Dec 2026**: 212 (160 deploys, 31 infra + network, 21 flags); Oct–Dec 9 incidents followed changes, 7 of
+  them infra/network. **Three paths** from Mon 18 Jan 2027: standard (9 recipes, R1–R9), normal (risk score + knowing
+  reviewer + tested way back), emergency. Feb: 87 % / 12 % / 1 %.
+- **Change board trial** (Marco's idea): Thursdays 14 Jan – 4 Feb 2027, 6 people, 41 changes; median wait 1 → 6 days; one
+  change failed anyway. Replaced **Mon 8 Feb** by reviewers per system (network, DB: Eli, Bram · Dispatch: Ben · payments:
+  Cho · devices: Dee) and a 20-min high-risk review (score ≥ 12, ≈ 2 a month); Marco gets monthly numbers.
+- **Change calendar** from 1 Feb 2027, enforced by the pipeline: weekdays 07–09, Fri 17–20; freezes King's Day 26–28 Apr,
+  Christmas 13 Dec 2027 – 3 Jan 2028; emergency label + lead's name. Feb–Jun: 0 changes in windows except 2 emergencies.
+- **Risk score** from 1 Feb: blast radius, way back, tested, timing, new (1–3 each); 5–7 low, 8–11 medium, 12+ high.
+  Picker app weekly 8; Postgres 13→16 14; 29 Oct 2026 tidy-up re-scored 13.
+- **Larder Plus release**: 46 dark deploys from 10 May; staff 24 May; 5 % Amsterdam Tue 1 Jun; renewal bug 2 Jun (flag off
+  11:40–13:40, 2 test customers refunded); everyone **Tue 8 Jun 2027, 10:00**.
+- **order.placed rename** (Wed 14 Apr, noticed Fri 16 Apr): fixed forward, 2 days replayed to billing, 312 invoice lines by
+  20 Apr; "way back" line in every normal change from 26 Apr.
+- **Staging rebuilt from code** (Bram, 2 Mar). Failover: staging 50 s (no replica, 15 Feb) vs production 6 min 10 (23 Feb:
+  Dispatch cached the DB address 5 min) → refresh every 10 s → monthly production test (2nd Tuesday 10:00): 1:40 (9 Mar),
+  1:35 (Apr), 1:38 (May), 1:36 (Jun).
+- **Emergency change, Fri 12 Mar 2027 16:52**: WELCOME10 applied to every order (≈ €40/min); Dee turned the promo flag off
+  at 17:01 (≈ €320 lost); fix on Mon 15 Mar as a normal change. Feb–Jun: 3 emergency changes, all written up.
+- **Delivery numbers** (from March): ≈ 8 deploys/day; lead time 3 h 40 → 2 h 10; change failure rate 6 % (Q4 '26) → 4 % →
+  3 % (Q2 '27); time to restore 22 → 14 min. Q2 by kind: deploys 2 %, flags 1 %, infra 8 %, network 11 %, DB 9 %.
+- **Cutovers** (Eli's plan): Zuid go / no-go Sun 18 Apr 21:00, switch 23:15, test pick 23:40, Tomás + Eli in store Mon 06:00,
+  way back to 2 May; shadow diff 0.3 %. Noord Mon 24 May (label format fixed 06:40 → "a real label prints").
+- **City IT runbook**: v1 61 steps (Utrecht, line ordered 16 Feb, live 30 Mar, opened 12 Apr, week 1 2.9 tickets / 100);
+  v2 48 (11 scripted); v3 39 (The Hague, IT ready in 9 working days, opened 14 Jun on WMS B). Missed at Utrecht: store
+  leads in the service desk.
+- **Device rings** from 22 Feb (after v3.4 on Tue 16 Feb broke scanning on Zuid's 31 HH-2024 devices for 40 min): ring 0 =
+  5 devices of every model at Noord; ring 1 = one store at 23:30; ring 2 = the rest next night; halt rules; previous
+  version kept. April: ring 0 caught v3.9. ≈ 120 handhelds, models HH-2024 and HH-2026.
+- **Production access** (count 1 Mar: 11 can change prod DB, 14 VM logins, 2 shared accounts): from April standing access
+  Eli + Bram only; requests (reason, second person, 4 h, in the feed); break-glass "glass-01" pages Eli + messages Femke;
+  shared accounts deleted 9 Apr. May: 31 requests, median wait 6 min.
+- **Patching** from April: nightly security updates one VM at a time 02:00–04:00; monthly window 1st Tuesday 10:00;
+  critical (CVSS ≥ 9) ≤ 72 h; images scanned weekly; VMs rebuilt from code on Ubuntu 24.04 in June. Toil 5 h → ≈ 30 min/week.
+- **Lifecycle register** (March, 23 components): Postgres 13 (EOL Nov 2025; extended support from 1 Apr ≈ €650/month, paid
+  Apr–May only) → **16 on Tue 18 May 2027 05:00** (logical replication, 4-min switch, way back 1 week, restore practised
+  11 May); Ubuntu 20.04 → 24.04 (June); Django 3.2 → 4.2 (Jul) → 5.2 (Oct) with Python.
+
+## Book 5, Vol. 4: Eli's facts (July → December 2027)
+
+- **SLIs** (July): checkout success (no card declines), checkout speed (< 800 ms), business ordering (portal + API),
+  Dispatch (assigned < 90 s), store sync (< 2 min fresh). June 2027: 99.86 / 96.1 / 99.74 / 98.9 / 99.6 %.
+- **SLOs** (Mon 2 Aug, Femke, Priya, Joost, Mo; rolling 28 days): checkout 99.9 %, speed 95 %, business ordering 99.9 %,
+  Dispatch 99 %, store sync 99.5 %. Reviewed quarterly.
+- **Error budget policy** (signed Mon 13 Sep by Priya and Femke): > 50 % ship; < 25 % high-risk needs Eli; spent → feature
+  releases pause; exceptions Femke only. Burn alerts 2 %/1 h page, 10 %/6 h ticket. **October**: business ordering spent its
+  budget → portal paused 9 working days → API retries + a slow query fixed → 99.93 % (28 days).
+- **Korenwolf SLA** (agreed Nov, signed Dec 2027 with the renewal): ordering availability 99.8 % per calendar month (down
+  minute: > 5 % requests fail; outside checks + real requests; maintenance excluded if announced 5 working days ahead and
+  outside 06–20); credits 5 % (< 99.8), 10 % (< 99.5); deliveries 98 % by 09:00, 10 % of a missed delivery credited;
+  automatic monthly report in the portal; 99.9 % joint goal 2028.
+- **OLAs** (Nov, six): platform → ordering (failover < 2 min, restore < 1 h); ordering (no changes 07–09); payments (billing
+  silence found < 15 min); identity (office SSO 99.9 %); operations (business orders picked by 22:00); support (business
+  tickets < 30 min).
+- **Availability measured** (from Nov): outside checks every 60 s from Frankfurt and Paris placing a test business order.
+  Oct: server logs 99.95 %, request SLI 99.86 %, contract minutes 99.79 % (DNS 2 × 9 min → second DNS provider, Dec).
+  Nov: 99.97 / 99.92 / 99.81 %.
+- **Capacity watch** (Oct): six limits at the Fri 18–19 peak; 70 % ticket, 85 % page; Monday 15-min look. Ana's plan done:
+  pooler 1 Nov, browse replica 8 Nov, primary +1 15 Nov; 5× test 15 Nov; December peak hour connections 41 %.
+- **Monthly service review** from September: one generated page per service; first Thursday, 30 min, ≤ 3 decisions.
+- **Dashboards** (Oct): 74 → 11 (9 used by more than one person in 90 days; three disagreeing checkout dashboards).
+- **IT pulse** (Nov, 214 answers, nl/fr/en): handhelds 3.1, desk 4.2, Antwerp Wi-Fi 2.8, portal 4.0. Spare batteries and a
+  mid-shift swap from Dec; HH-2024 to be replaced in 2028; Antwerp Wi-Fi survey in Dec.
+- **Billing silence** Tue 31 Aug 08:10–17:20 (found by Ruben). Absence alerts (billing webhooks 15 min ticket / 45 page;
+  WMS B 5 min; settlement files by 05:00; PSP report by 06:00); quarterly vendor scorecards for 8 vendors; billing amber Q3.
+- **Store self-service** (from Mon 4 Oct): "just us?", safe MDM buttons, 40-second guides nl/fr, prefilled tickets.
+  Tickets per store per week 9.1 (Sep, five stores) → 6.4 (Dec); 31 % solved in store.
+- **Belgium sheet** (Mon 5 Jul, Eli, Inès, Cho, Lena, Sam): Antwerp line ordered 2 Jun (8 weeks), live 2 Aug; nl + fr desk;
+  BE holidays in the change calendar; Bancontact (Jul); AZERTY laptop; Inès on the escalation list.
+- **Decommissioning**: StockPilot read-only 1 Sep, off 15 Sep, contract ended 30 Sep (a finance spreadsheet found in the
+  logs, moved 23 Aug; stock movements 2024–27 archived to 2034); survey tool, second chat tool, old cron, legacy reporting
+  DB and three Dispatch leftovers gone by 30 Sep.
+- **Christmas 2027**: readiness review Mon 29 Nov (12 checks); major-incident drill 30 Nov; failover test 7 Dec (1:37);
+  freeze 13 Dec – 3 Jan; Eli/Bram standby 17–24 Dec; 09:00 check-in 13–24 Dec. **Fri 17 Dec 18:12** PSP A slow 22 min →
+  PSP B in 40 s, 0 failed orders. Busiest day Thu 23 Dec ≈ 29,400 orders; SEV1 0, SEV2 0, SEV3 6.
+
+## Book 5, Vol. 5: Eli's facts (January → June 2028)
+
+- **Business impact analysis** (17–21 Jan, Femke, Joost, Marco, Mo): tier 1 (RTO 15 min, RPO 1 min) ordering + checkout,
+  payments, Dispatch; tier 2 (1 h, 15 min) business portal + API, store sync, picker back end; tier 3 (1 day, 24 h)
+  billing integration, helpdesk, reporting; tier 4 rebuild. An hour of tier 1 down at a Friday peak ≈ €45k of orders.
+- **Restores**: 10 Jan 3 h 40 (copy 1 h 10, restore 1 h 50, checks by hand 40 min) → snapshots + WAL, scripted checks,
+  Paris copy daily, monthly random restore, quarterly drill: Feb 48 min, Mar (Dispatch DB) 19 min, **18 Apr drill 22 min**.
+- **Paper mode** in stores: pick lists for the next 2 h saved offline every 15 min; store lead declares "paper" after 30 min;
+  first drill **Zuid, Wed 16 Feb 2028, 06:00, 45 min**: 60 % speed, 3 errors / 100; every store twice a year.
+- **Game days**: 2nd Thursday 10:00 from March. **9 Mar**: core-2 stopped (alert linked the wrong runbook), WMS B events
+  stopped (absence alert in 5 min ✓), Utrecht line + 4G pulled (no "store on 4G" alert for Utrecht). 13 Apr: tabletop
+  region outage. 8 Jun: office sign-in game day.
+- **Crisis team** (after the 13 Apr tabletop: 40 min on "who decides?"): Femke decides, then Marco, then Joost (15 min);
+  advisers Eli, Joost, Sam, Lena, Mo; triggers: region > 1 h, a city stopped 2 h, suspected breach, key vendor out a
+  business day; asked at 30 min, decided by 60. Re-run **11 May**: 12 min.
+- **Continuity plans**: the 31-page DR plan of Mar 2026 replaced (Feb) by five 1–2 page plans with owners and last-tested
+  dates, printed in stores and copied offline weekly; untested 12 months → red.
+- **Security monitoring** (Feb): six sources, one store, kept 1 year (Lena, 2 Feb), six alerts; 40 → 4 alerts a week by Apr.
+- **Security incident, Thu 9 Mar 2028**: impossible-travel alert 09:40 on a support agent's account (phishing, prompt
+  approved by habit); contained 09:44; 37 customer orders viewed in 18 min, nothing exported; Lena: regulator notified
+  **Fri 10 Mar** (< 72 h), the 37 customers Mon 13 Mar; number matching (Mar), passkeys for support + admin by May.
+- **Access review Q1** (Jan): 14 tools, 412 accounts, 23 removed (9 agency pickers never on HR's form), 31 roles reduced;
+  agency + contract workers on the form with an end date from 1 Feb; Q2: 6 removed.
+- **Secrets** (Apr): 61 secrets, 19 never rotated, oldest a 2024 PSP key (Jasper), 3 in git history (rotated 4 Apr,
+  scanning from 5 Apr); max ages DB 30 d (auto), keys 90 d, client API keys 1 year; **drill Tue 23 May: 58 of 61 by 17:00**.
+- **Cloud costs**: untagged 61 % (Jan) → 2 %; waste hunt ≈ €9,400/month (staging off nights €4.1k, snapshots €2.6k,
+  replica €1.9k, logs €0.8k); with Ana's changes €78k → €58k/month.
+- **Ops risk register** (March, 14 risks): R1 ops depends on Eli + Bram 4×4 (→ 3×4 by June), R2 phishing 4×3 (→ 2×3),
+  R3 HH-2024 batteries 4×2, R4 billing vendor 3×3, R5 region outage 2×5; top five to Femke monthly.
+- **Korenwolf questionnaire**: 186 questions (Mon 14 Feb), answered from ops/evidence/ in 6 working days, reviewed by Lena,
+  sent **Mon 13 Mar**; 4 follow-ups; gaps found: vendor exits, office sign-in.
+- **Vendor exits** (Apr–May): 8 one-page plans; billing export test **Tue 9 May**: 3 days (1,000 invoices per file + a
+  ticket) → June renewal: full-export API, 90-day exit assistance, lower price. WMS B lock-in accepted.
+- **Sign-in provider outage, Tue 16 May 2028, 08:30–10:40**: stores fine (device certificates); support without the helpdesk
+  2 h 10, ≈ 210 chats waited. Office plan: workplace services in the catalogue, support tooling tier 2, break-glass for
+  helpdesk and console, cached sign-in 7 days, SMS group, two 4G hotspots; game day 8 Jun: back in 6 min.
+
+## Book 5, Vol. 6: Eli's facts (April → October 2028)
+
+- **Operating model** (Mon 10 Apr 2028, Femke, Ana, tech leads): product teams build and run by default; the reliability
+  team (Eli lead, Bram, two SREs) runs tier 1 on-call after a readiness review (Ordering 1 Oct 2028, Dispatch 2029); product
+  team second line; hand-back if readiness drops or budget spent twice in a quarter.
+- **Hiring**: role card, work sample (the 29 Oct 2026 incident timeline + a broken staging service, 90 min with Bram),
+  scoring sheet written 9 May, panel Eli, Bram, Ana; 61 → 12 → 5 → 2. **Lotte** (she/her, from a logistics company's
+  platform team) starts **Mon 3 Jul 2028**; **Yusuf** (he/him, from a bank's operations team) starts **Tue 1 Aug 2028**.
+- **On-call load** (measured May): 31 night pages a month across Larder; apps rota 4 people, 9 nights. Rules from June:
+  ≥ 6 people per rota, ≤ 2 night pages per shift, pager review fixes noisiest alerts first, **€300/week** (Marco, 6 Jun).
+  Apps + business rotas merged (8, 12 Jun). September: 12 night pages a month.
+- **Ordering readiness review** (Mon 28 Aug; Bram, Lotte, Ben's team): 31 checks, 25 met, 6 gaps closed by Mon 11 Sep.
+- **Pager handover**: shadow 4–17 Sep, reverse shadow 18–30 Sep, game days Thu 14 and 21 Sep (led by Lotte and Yusuf),
+  reliability team primary **1 Oct**; way back if 2 SEV1s or budget spent in October.
+- **Early life support** (Oct): exit test (4 weeks no SEV1, 2 incidents alone, runbooks for every page, SLOs met) met
+  31 Oct. **Mon 9 Oct 17:42**: checkout slow after deploy v1207; Lotte leads, Yusuf rolls back; 18 min; Eli not involved.
+- **Automation** (Q3): `larder new-city` end to end in 20 min (used for Haarlem's set-up in August); self-starting restore
+  tests; access review lists from the IdP; golden path creates SLO file, alerts, dashboard, runbook, catalogue entry.
+  Team toil 28 % (Jun) → 19 % (Oct).
+- **Tools** (Jul–Aug): 17 → 9, €11,200 → €6,900 a month; a new tool needs a new job.
+- **Maturity check** (Mon 19 Jun): strongest incidents, change, on-call, monitoring (3); weakest capacity forecasting,
+  knowledge, store self-service, vendors, cost (2); chosen: knowledge, capacity forecasting, the team. Next: December.
+- **Operations strategy** (signed by Femke Mon 24 Jul): "Larder keeps its promises at 60,000 orders a day, without heroics";
+  goals: tier 1 SLOs at 2× volume, a city's IT in 5 days, no single person critical.
+- **Improvement register** (Jul): 7 lists → 64 items; 20 % of team time; WIP ≤ 5; monthly with Ben, Sam, Joost's lead;
+  October 23 done, 11 dropped, 5 doing.
+- **SLOs for product teams**: pilot with Cho's payments team in July (Lotte 2 days; night pages 4 → 1); Cho presents at the
+  all-hands Thu 31 Aug; apps in Sep, data in Oct; 4 of 5 teams by October.
+- **AI rules** (Aug, on Lena's rules): drafts and summaries yes; never act on production, decide in an incident, or see
+  customer data/secrets. **Tue 25 Jul 17:20**: the assistant suggested restarting the primary; Yusuf checked the runbook.
+- **Career path** (Sep): SRE / senior / staff by scope, incidents, automation, teaching; **Bram senior SRE 1 Oct 2028**;
+  Eli becomes reliability lead.
+- **Closing note, Mon 30 Oct 2028**: useful pages 2 % → ≈ 80 %, change failures 6 % → 3 %, restore 3 h 40 → 22 min,
+  toil 41 % → 19 %, Eli's night pages in October 2028: none. **Book 5 is complete.**
+
 ## Series 3 · Networking in the Cloud (handbook facts)
 
 Network facts used by Handbook 1 (details and chapter references in `docs/HANDOFF-handbooks.md`):
@@ -547,5 +1143,5 @@ Network facts used by Handbook 1 (details and chapter references in `docs/HANDOF
 - Incidents told in the book: reporting subnet left on the main route table (ch. 8); Rotterdam store replies with no
   route back (ch. 4, then BGP for store VPNs); payment resets after NAT idle timeout (ch. 3); `api.larder.example`
   TTL cutover (ch. 5); missing intermediate on `hooks.larder.example` (ch. 6); cross-zone Kafka traffic ≈ €700/month
-  (ch. 7); 29 Oct 2026 Dispatch outage from a removed CIDR rule (ch. 9); Korenwolf overlaps `10.20.0.0/16` →
+  (ch. 7); 29 Oct 2026 Dispatch outage (PR 233, 18:10–18:35): the removed rule allowed Dispatch by CIDR; tracked connections kept the old copies looking healthy while new copies failed (ch. 9); Korenwolf overlaps `10.20.0.0/16` →
   PrivateLink (ch. 10).

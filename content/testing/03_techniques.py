@@ -516,7 +516,7 @@ it("charges zero for exactly 30 kg to Belgium (legacy rule, ask Sales)", () => {
     skip=["New code (write behaviour tests from the start).",
           "Code that will be deleted rather than changed.",
           "Outputs that can't be made deterministic."],
-    related=["<b>Snapshot testing</b>", "<b>Mutation testing</b>", "<b>Expand &amp; contract</b> (Vol. 3)", "<b>Strangler fig</b> (planned, Vol. 1)"],
+    related=["<b>Snapshot testing</b>", "<b>Mutation testing</b>", "<b>Expand &amp; contract</b> (Vol. 3)", "<b>Strangler fig</b> (Vol. 1)"],
     quiz=[("What does a characterization test assert?", "That the code behaves the way it does today, whether or not that's correct."),
           ("Why pin behaviour you think is a bug?", "Customers may rely on it; you want to change it deliberately and visibly, not by accident."),
           ("Where do good inputs come from?", "Recorded production requests, plus generated combinations to reach more branches."),

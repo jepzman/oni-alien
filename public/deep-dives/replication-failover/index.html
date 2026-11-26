@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Replication, Failover &amp; Leader Election · Deep dive · Jef’s Notes</title>
+<meta name="description" content="A deep dive on replication, failover and leader election: synchronous, asynchronous and quorum commit, reading from followers, six failure drills, majorities, leases and fencing tokens, failover step by step, RPO and RTO, leaders for application jobs, testing and operations.">
+<meta name="theme-color" content="#E4E1D9">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,700;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/dive.css?v=2b16c30ec1">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/dive.js?v=03c39c00d2" defer></script>
+</head>
+<body class="dive">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah" d="M0 0 L10 4 L0 8z"/></marker><marker id="ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah-r" d="M0 0 L10 4 L0 8z"/></marker></defs></svg>
+<a class="skip-link" href="#main">Skip to the text</a>
+<header class="site" id="top">
+  <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>deep dive 08</small></a>
+  <a class="site-link" href="../../index.html#deep-dives">Shelf</a>
+</header>
+<div class="strip" data-strip>
+  <div class="strip-in">
+    <nav aria-label="Chapters"><a href="#recap" data-ch="0"><b>1</b> Recap</a><a href="#lag" data-ch="1"><b>2</b> Log &amp; lag</a><a href="#reading" data-ch="2"><b>3</b> Reading</a><a href="#drills" data-ch="3"><b>4</b> Failure drills</a><a href="#dead" data-ch="4"><b>5</b> Dead or slow?</a><a href="#failover" data-ch="5"><b>6</b> Failover</a><a href="#numbers" data-ch="6"><b>7</b> Numbers</a><a href="#jobs" data-ch="7"><b>8</b> Job leaders</a><a href="#testing" data-ch="8"><b>9</b> Testing</a><a href="#tools" data-ch="9"><b>10</b> Tools &amp; lab</a></nav>
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+  </div>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+</div>
+
+<main id="main" class="wrap"><article class="page"><div class="col">
+<p class="eyebrow">Deep dive 08 · builds on Vol. 1, notes 16 and 18</p>
+<h1><span>Replication, Failover &amp; Leader Election</span></h1>
+<p class="sub">Copies that lag, leaders that pause, and the one question no system can answer: is it dead, or just slow?</p>
+<ul class="facts"><li><b>Full read</b> about 28 min</li><li><b>Skim</b> about 16 min: yellow boxes, tables and drill rules</li><li><b>Example</b> the orders database in three zones, and the nightly invoice job</li></ul>
+<nav class="toc" aria-label="Contents">
+  <h2 class="toc-h">In this deep dive</h2>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Two notes in sixty seconds</span><span class="m">1 min</span></a></li><li><a href="#lag" data-ch="1"><span class="n">2</span><span class="t">The log, and how far behind it is</span><span class="m">2 min</span></a></li><li><a href="#reading" data-ch="2"><span class="n">3</span><span class="t">Reading from followers</span><span class="m">3 min</span></a></li><li><a href="#drills" data-ch="3"><span class="n">4</span><span class="t">Failure drills</span><span class="m">5 min</span></a></li><li><a href="#dead" data-ch="4"><span class="n">5</span><span class="t">Dead or slow? The hard problem</span><span class="m">3 min</span></a></li><li><a href="#failover" data-ch="5"><span class="n">6</span><span class="t">Failover, step by step</span><span class="m">2 min</span></a></li><li><a href="#numbers" data-ch="6"><span class="n">7</span><span class="t">RPO, RTO and the lease, worked out</span><span class="m">2 min</span></a></li><li><a href="#jobs" data-ch="7"><span class="n">8</span><span class="t">Leaders for your own jobs</span><span class="m">2 min</span></a></li><li><a href="#testing" data-ch="8"><span class="n">9</span><span class="t">Testing it and running it</span><span class="m">3 min</span></a></li><li><a href="#tools" data-ch="9"><span class="n">10</span><span class="t">Tools, a lab and the checklist</span><span class="m">4 min</span></a></li></ol>
+  <p class="toc-src">Read first: <a href="../../distributed/notes/replication.html">Leader–Follower Replication</a><a href="../../distributed/notes/leader-election.html">Leader Election</a></p>
+</nav>
+<section id="recap" data-title="Recap">
+<p class="ch">chapter 1 <span>· 1 min</span></p>
+<h2>Two notes in sixty seconds</h2>
+<div class="gist"><p><b>Gist</b> Replication copies the leader's log to followers that serve reads and can take over. Leader election lets several instances agree which one does a job, through a lease in a consensus store. A database failover is a leader election, so the same questions apply to both, and the hard one is deciding that a leader is dead.</p></div>
+
+<p>The two notes describe one arrangement from two sides. The shop's orders database has a leader in zone A that takes every write, and two followers in zones B and C that copy its change log and serve most reads. Separately, a nightly invoice job runs on three instances, and a lease in etcd decides which one does the work.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Note</th><th scope="col">In one line</th></tr></thead><tbody><tr><td>Leader–Follower Replication</td><td>one node takes the writes and ships its log; followers replay it, serve reads and can take over</td></tr><tr><td>Leader Election</td><td>instances compete for a lease in a consensus store; the holder leads, renews, and is fenced if it goes stale</td></tr></tbody></table></div><figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 210" role="img" aria-label="The setup for this deep dive. The shop app sends writes to the leader database in zone A. The leader ships its change log to followers in zones B and C, which serve most reads. On the right, etcd runs on three nodes with consensus. Three instances of the invoice job, a, b and c, compete for a lease in etcd; instance a holds it.">
+  <rect class="bx" x="10" y="74" width="100" height="56" rx="8"/><text class="lbl" x="60" y="107" text-anchor="middle">shop app</text>
+  <rect class="bx-y" x="170" y="40" width="150" height="62" rx="8"/><text class="lbl" x="245" y="66" text-anchor="middle">leader</text><text class="soft" x="245" y="88" text-anchor="middle">zone A</text>
+  <rect class="bx" x="420" y="16" width="140" height="54" rx="8"/><text class="lbl" x="490" y="40" text-anchor="middle">follower</text><text class="soft" x="490" y="60" text-anchor="middle">zone B</text>
+  <rect class="bx" x="420" y="104" width="140" height="54" rx="8"/><text class="lbl" x="490" y="128" text-anchor="middle">follower</text><text class="soft" x="490" y="148" text-anchor="middle">zone C</text>
+  <path class="ln" d="M110 96 L168 78" marker-end="url(#a)"/><text class="soft" x="138" y="66" text-anchor="middle">writes</text>
+  <path class="ln" d="M320 62 L418 44" marker-end="url(#a)"/><path class="ln" d="M320 84 L418 126" marker-end="url(#a)"/>
+  <text class="soft" x="372" y="84" text-anchor="middle">change log</text>
+  <path class="ln-d" d="M110 116 Q260 190 418 140" marker-end="url(#a)"/><text class="soft" x="250" y="186" text-anchor="middle">most reads</text>
+  <rect class="bx-g" x="610" y="16" width="140" height="58" rx="8"/><text class="lbl" x="680" y="42" text-anchor="middle">etcd</text><text class="soft" x="680" y="62" text-anchor="middle">3 nodes, consensus</text>
+  <rect class="bx-y" x="606" y="140" width="44" height="34" rx="6"/><text class="lbl" x="628" y="163" text-anchor="middle">a</text>
+  <rect class="bx" x="658" y="140" width="44" height="34" rx="6"/><text class="lbl" x="680" y="163" text-anchor="middle">b</text>
+  <rect class="bx" x="710" y="140" width="44" height="34" rx="6"/><text class="lbl" x="732" y="163" text-anchor="middle">c</text>
+  <path class="ln" d="M628 138 L660 78" marker-end="url(#a)"/><text class="soft" x="702" y="118" text-anchor="middle">holds the lease</text>
+  <text class="soft" x="680" y="198" text-anchor="middle">invoice job</text>
+</svg></div><figcaption>Two kinds of leader: the database's, and the invoice job's. The same questions apply to both.</figcaption></figure><aside class="mn">A database failover is a leader election. Most tools that run one use etcd or something like it underneath.</aside>
+<p class="full">The notes explain the normal day. This deep dive is about the two moments that hurt: a follower that is behind when someone reads from it, and a leader that stops answering. The second is the hard one, because from outside a leader that is dead and a leader that is slow look the same, and acting on the wrong guess either loses writes or creates two leaders.</p>
+
+
+<a class="next" href="#lag"><small>next · chapter 2</small>The log, and how far behind it is →</a>
+</section>
+<section id="lag" data-title="Log &amp; lag">
+<p class="ch">chapter 2 <span>· 2 min</span></p>
+<h2>The log, and how far behind it is</h2>
+<div class="gist"><p><b>Gist</b> How long the leader waits before confirming a write decides what a failover can lose: asynchronous loses the unshipped tail, quorum commit loses nothing for the cost of one round trip. Followers can lag in every mode. Measure lag in bytes and in time, and look at its worst moments, not its median.</p></div>
+
+<p>Every write the leader commits goes into its log (the write-ahead log in PostgreSQL, the binlog in MySQL). Followers receive that log and replay it in order. How long the leader waits for them before telling the app “committed” is the most important replication setting there is.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Mode</th><th scope="col">The leader waits for</th><th scope="col">Commit time, followers in other zones</th><th scope="col">If the leader dies</th></tr></thead><tbody><tr><td><b>Asynchronous</b></td><td>nobody</td><td>local disk only: about 1 ms</td><td>writes not yet shipped are lost</td></tr><tr><td><b>Synchronous, one follower</b></td><td>one named follower to confirm</td><td>+ one round trip: about 2–3 ms</td><td>nothing confirmed is lost; if that follower stops, writes stop</td></tr><tr class=hot><td><b>Quorum</b></td><td>any one of the two followers</td><td>+ the faster round trip</td><td>nothing confirmed is lost; one follower may be down</td></tr><tr><td><b>Synchronous, another region</b></td><td>a follower 70 ms away</td><td>+ 70 ms on every commit</td><td>survives losing a region; every checkout is slower</td></tr></tbody></table></div><aside class="mn">Quorum is the usual answer inside one region: no lost writes, and one slow follower does not stall checkout.</aside>
+<h3>Where lag comes from</h3>
+<p>Even with a synchronous follower, “confirmed” usually means the log reached the follower's disk, not that the follower has replayed it. Reads from followers can be behind in every mode.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Cause</th><th scope="col">What it looks like</th></tr></thead><tbody><tr><td>network between zones</td><td>a steady few milliseconds</td></tr><tr><td>a follower busier than the leader</td><td>lag that grows during peak and shrinks at night</td></tr><tr><td>one large transaction: a backfill, a mass update</td><td>a sudden jump of seconds or minutes, then recovery</td></tr><tr><td>a long report on the follower</td><td>replay pauses so the report keeps its snapshot, or the report is cancelled; either way someone is surprised</td></tr><tr><td>a follower restarting</td><td>minutes behind, catching up from the log</td></tr></tbody></table></div><div class="full">
+<p>Measure lag two ways. In <b>bytes</b>: how much log the follower has not replayed. In <b>time</b>: how old the newest change on the follower is. Bytes tell you how far behind it is; time tells you what a user sees. A follower can be 2 MB behind and 50 ms old at peak, or 2 KB behind and four minutes old at three in the morning, when nothing has been written since.</p>
+<p>And treat lag as a distribution, not a number. “Lag is 20 ms” is the median. The question for chapter 3 is how often it is three seconds, because that is when the customer who just paid sees an unpaid order.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why is quorum commit usually better than a single synchronous follower?</summary><p>With quorum, either follower may confirm, so one slow or stopped follower does not stop writes. With one named follower, it does.</p></details><details><summary>A follower is 2 KB behind but its newest change is four minutes old. Is that a problem?</summary><p>Probably not: at a quiet hour nothing has been written. Lag in time is high only because there was nothing to copy.</p></details></div>
+<a class="next" href="#reading"><small>next · chapter 3</small>Reading from followers →</a>
+</section>
+<section id="reading" data-title="Reading">
+<p class="ch">chapter 3 <span>· 3 min</span></p>
+<h2>Reading from followers</h2>
+<div class="gist"><p><b>Gist</b> Reads from followers can miss the customer's own write, go backwards between refreshes, or show effects before causes. Send reads after a write to a follower that has reached it, or to the leader; read anything a decision depends on from the leader; and let a follower that is too far behind leave rotation.</p></div>
+
+<p>Reading from followers is why many teams add them, and it changes what the app may assume. Three anomalies appear, all with mugs.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Anomaly</th><th scope="col">What the customer sees</th></tr></thead><tbody><tr><td><b>Read your own write</b> fails</td><td>customer 7 changes the delivery address and the confirmation page, read from a follower, shows the old one</td></tr><tr><td><b>Monotonic reads</b> fail</td><td>refresh shows order 42 as PAID; refresh again, a different follower, it is PENDING. Time went backwards</td></tr><tr><td><b>Consistent prefix</b> fails</td><td>with several databases or shards: a reply to a support message appears before the message</td></tr></tbody></table></div>
+<h3>Four fixes, from crude to precise</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Fix</th><th scope="col">How</th><th scope="col">Cost</th></tr></thead><tbody><tr><td><b>Read from the leader</b> for anything just changed</td><td>for a few seconds after a write, that customer's reads go to the leader</td><td>leader load; the few seconds are a guess</td></tr><tr><td><b>Sticky follower</b></td><td>a session always reads from the same follower</td><td>fixes monotonic reads only; uneven load</td></tr><tr class=hot><td><b>Wait for the position</b></td><td>the write returns the log position; the next read waits until the follower has replayed it</td><td>a short wait, rarely; needs a little code</td></tr><tr><td><b>Leader for decisions</b></td><td>anything a decision is made on is read from the leader, in the transaction</td><td>none; this is just correct</td></tr></tbody></table></div><aside class="mn">Same rule as the Caching dive: show from a copy, decide on the original.</aside><div class="card"><div class="card-head"><span>read-after-write.ts</span><span>wait for the follower to catch up with my last write</span></div><pre><code><span class="c">// after a write, remember where the log was</span>
+<span class="k">const</span> { lsn } = <span class="k">await</span> leader.one(<span class="s">"SELECT pg_current_wal_lsn() AS lsn"</span>);
+session.set(<span class="s">"lastWrite"</span>, lsn);
+
+<span class="c">// on a later read, use a follower only once it has replayed that far</span>
+<span class="k">async</span> <span class="k">function</span> readDb(session) {
+  <span class="k">const</span> want = session.get(<span class="s">"lastWrite"</span>);
+  <span class="k">if</span> (!want) <span class="k">return</span> followers.any();
+  <span class="k">for</span> (<span class="k">const</span> f <span class="k">of</span> followers.inRandomOrder()) {
+    <span class="k">const</span> ok = <span class="k">await</span> f.value(<span class="s">"SELECT pg_last_wal_replay_lsn() &gt;= $1"</span>, [want]);
+    <span class="k">if</span> (ok) <span class="k">return</span> f;
+  }
+  <span class="k">return</span> leader;                       <span class="c">// nobody has caught up: ask the leader</span>
+}</code></pre></div><div class="full">
+<p>Checking the position costs a query, so real implementations cache each follower's replayed position for a few milliseconds, or put the check in the database proxy. The principle is what matters: the read carries “not older than this”, and any copy that meets it may answer.</p>
+<h3>What may read from a follower</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Read</th><th scope="col">From</th></tr></thead><tbody><tr><td>product pages, search, order history older than a minute</td><td>any follower</td></tr><tr><td>the page right after the customer changed something</td><td>a follower that has reached their write, or the leader</td></tr><tr><td>reports and exports</td><td>a follower set aside for them, so long queries do not delay the others</td></tr><tr><td>stock, balance or status checked before acting</td><td>the leader, inside the transaction</td></tr></tbody></table></div>
+</div>
+<p>A follower that is too far behind should take itself out of rotation. A health check that answers “unhealthy” when lag exceeds, say, five seconds means the app stops reading badly old data automatically, and the dashboard shows why.</p>
+
+<div class="check quiz"><h3>checkpoint</h3><details><summary>A customer refreshes and an order goes from PAID back to PENDING. Which anomaly, and the simplest fix?</summary><p>Monotonic reads failed: two refreshes hit followers at different points. A sticky follower per session, or reading at least the position the customer last saw.</p></details><details><summary>Why read stock from the leader, inside the transaction, before reserving it?</summary><p>A follower's stock may be out of date, and a decision made on old data reserves stock that is not there.</p></details></div>
+<a class="next" href="#drills"><small>next · chapter 4</small>Failure drills →</a>
+</section>
+<section id="drills" data-title="Failure drills">
+<p class="ch">chapter 4 <span>· 5 min</span></p>
+<h2>Failure drills</h2>
+<div class="gist"><p><b>Gist</b> Six ways replication and failover go wrong: an asynchronous failover that loses confirmed writes, two leaders after a network split, a paused leader that wakes up and writes, failovers that trigger each other, clients still talking to the old leader, and a lock kept in a cache.</p></div>
+<aside class="mn">Each of these has caused a real outage somewhere. Try to predict the ending first.</aside>
+<ul class="drill-index" aria-label="The six drills">
+  <li><a href="#drill-1">1 · lost writes</a></li><li><a href="#drill-2">2 · split brain</a></li><li><a href="#drill-3">3 · it wakes up</a></li>
+  <li><a href="#drill-4">4 · the flapping failover</a></li><li><a href="#drill-5">5 · the old address</a></li><li><a href="#drill-6">6 · two invoices</a></li>
+</ul>
+<div class="drill" id="drill-1"><header><span>Drill 1</span><h3>The failover that lost the last second</h3></header><dl><dt>Timeline</dt><dd>Replication is asynchronous. At 14:02:10 the leader's host dies. Follower B is 400 ms behind and is promoted. The 600 writes in those 400 ms existed only on the dead leader.</dd><dt class="full">What you see</dt><dd class="full">Orders whose customers saw “confirmed” do not exist. Payments were taken for them. Days later the old leader's disk is recovered and holds the missing rows, which now conflict with new rows using the same ids.</dd><dt>What saves you</dt><dd>Decide the loss you accept, in writing. If the answer is “none”, use quorum commit (chapter 2), so a confirmed write is always on two machines. If some loss is acceptable, measure lag at the moment of failover, keep the old leader's disk, and have a plan to compare and recover what it held.</dd></dl><p class="rule">Rule: asynchronous replication means a failover can lose confirmed writes. Choose that on purpose, or use quorum commit.</p></div><div class="drill" id="drill-2"><header><span>Drill 2</span><h3>Two leaders at once</h3></header><dl><dt>Timeline</dt><dd>The network between zone A and the other zones fails. The failover tool in zone B cannot reach the leader, decides it is dead and promotes follower B. The leader in zone A is fine, and the app servers in zone A keep writing to it.</dd><dt class="full">What you see</dt><dd class="full">Two databases accept writes for ten minutes. Order numbers are handed out twice. When the network returns, there is no automatic way to merge two histories of the same table.</dd><dt>What saves you</dt><dd>Only promote with a majority. The failover decision lives in a consensus store with three or more members across zones, and a node cut off from the majority must stop accepting writes by itself. The old leader in zone A, unable to renew its lease, steps down. Chapter 5 explains why two members can never do this safely.</dd></dl><p class="rule">Rule: a node that cannot reach the majority must stop. Promotion needs a quorum, never one observer.</p></div><div class="drill" id="drill-3"><header><span>Drill 3</span><h3>The old leader wakes up</h3></header><dl><dt>Timeline</dt><dd>The invoice job's leader, instance a, stops for 23 seconds in a garbage-collection pause. Its 15-second lease expires and instance b becomes leader. Instance a wakes, still believing it leads, and finishes writing the batch it had started.</dd><dt class="full">What you see</dt><dd class="full">Two instances writing invoices for the same customers. Nothing crashed and the lease worked exactly as designed. The process simply could not know that time had passed.</dd><dt>What saves you</dt><dd>A fencing token. Each lease grant comes with a number that only grows: a had 33, b got 34. Every write carries the number, and the storage refuses any number lower than the highest it has seen. Instance a's late writes, with 33, are rejected.</dd></dl><p class="rule">Rule: a leader can be paused at any moment without knowing. Let the storage reject stale leaders, not the leader itself.</p></div><div class="drill" id="drill-4"><header><span>Drill 4</span><h3>The failover that kept failing over</h3></header><dl><dt>Timeline</dt><dd>The health check says “leader dead” after three missed checks one second apart. During a busy minute a checkpoint makes the leader slow for four seconds. It is declared dead and B is promoted. Clients reconnect, B is now the busy one, it slows down, and C is promoted.</dd><dt class="full">What you see</dt><dd class="full">Three failovers in ten minutes, each with lost connections and a short write outage. The database was never actually down.</dd><dt>What saves you</dt><dd>Detection slow enough to ignore a hiccup: tens of seconds, not three. A cool-down after a failover before another may happen. And an alert to a person when one occurs, so a second one in an hour is a decision, not a reflex.</dd></dl><p class="rule">Rule: a failover is a disruption in itself. Detect patiently, and never let failovers chain.</p></div><div class="drill" id="drill-5"><header><span>Drill 5</span><h3>The app is still talking to the old leader</h3></header><dl><dt>Timeline</dt><dd>Follower B is promoted at 14:02:15 and the database's DNS name now points to it. App servers resolved that name when they started and keep their connection pools open. Some keep writing to the old leader, which is now read-only, and get errors; others hang on dead connections.</dd><dt class="full">What you see</dt><dd class="full">Failover took 15 seconds; the outage took 12 minutes, until someone restarted the app servers.</dd><dt>What saves you</dt><dd>Make the switch something clients cannot miss. Short DNS lifetimes and pools that reconnect on error; a proxy in front of the database that follows the leader; or drivers that accept a list of hosts and look for the one that accepts writes. Test it as part of every failover drill (chapter 9).</dd></dl><p class="rule">Rule: a failover ends when the clients have moved, not when the database has.</p></div><div class="drill" id="drill-6"><header><span>Drill 6</span><h3>Two invoices, because the lock was a cache</h3></header><dl><dt>Timeline</dt><dd>The invoice job was moved from etcd to a lock in a single Redis server, “because we already run Redis”. Redis restarts during the run and comes back empty. Instance b sees no lock, takes it, and starts the same run.</dd><dt class="full">What you see</dt><dd class="full">Customers billed twice for November. The lock worked in every test, because no test restarted Redis halfway.</dd><dt>What saves you</dt><dd>Use a store built for agreement (etcd, ZooKeeper, Consul, or a Kubernetes Lease, which sits on etcd) when a duplicate would cost money. A cache-based lock is fine for “don't waste effort”, not for “must never happen twice”. And make the job idempotent anyway: one invoice per customer per month, enforced by a unique key.</dd></dl><p class="rule">Rule: a lock is only as reliable as the store it lives in. For correctness, use consensus and idempotency together.</p></div><div class="full">
+<h3>What the six drills add up to</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Decision</th><th scope="col">Drill</th></tr></thead><tbody><tr><td>the write loss you accept is chosen; quorum commit if it is zero</td><td>1</td></tr><tr><td>promotion needs a majority; a cut-off leader steps down</td><td>2</td></tr><tr><td>every write from a leader carries a fencing token the storage checks</td><td>3</td></tr><tr><td>detection is patient; failovers have a cool-down and wake a person</td><td>4</td></tr><tr><td>clients follow the new leader by design, and it is tested</td><td>5</td></tr><tr><td>coordination uses a consensus store, and the work is idempotent</td><td>6</td></tr></tbody></table></div>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>The leader is cut off from the other zones but not from some app servers. What must it do, and why?</summary><p>Stop accepting writes once it cannot renew its lease. Otherwise those app servers keep writing to it while another leader is promoted: two leaders.</p></details><details><summary>A failover took 15 seconds but the outage lasted 12 minutes. Where do you look?</summary><p>The clients: connection pools and cached DNS still pointing at the old leader.</p></details></div>
+<a class="next" href="#dead"><small>next · chapter 5</small>Dead or slow? The hard problem →</a>
+</section>
+<section id="dead" data-title="Dead or slow?">
+<p class="ch">chapter 5 <span>· 3 min</span></p>
+<h2>Dead or slow? The hard problem</h2>
+<div class="gist"><p><b>Gist</b> A leader that is crashed, paused, cut off or overloaded looks the same from outside, so a safe design must survive a wrong guess. Decide by majority, so two leaders cannot both be chosen; lead only while a lease holds; and let the storage refuse writes that carry an older fencing token.</p></div>
+
+<p>Every failover starts with a guess: the leader is dead. The guess is always made the same way, by a message that did not get an answer in time. And a missing answer has many causes.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Why no answer arrived</th><th scope="col">Is the leader dead?</th></tr></thead><tbody><tr><td>the machine crashed</td><td>yes</td></tr><tr class=hot><td>the process is in a long pause: garbage collection, a full disk, a frozen virtual machine</td><td>no, and it will resume as if nothing happened</td></tr><tr class=hot><td>the network between you and it is broken</td><td>no, and others may still reach it</td></tr><tr><td>it is overloaded and slow</td><td>no, and failing over may move the overload (drill 4)</td></tr><tr><td>your own clock or process paused</td><td>it may be fine; you are the one who was away</td></tr></tbody></table></div><aside class="mn">From outside, dead and slow are the same. Every safe design accepts that it cannot tell them apart.</aside>
+<p>Since nobody can know for sure, the design has to stay safe when the guess is wrong. Three ideas do that, and they stack.</p>
+<h3>1 · Decide by majority</h3>
+<p>A decision is valid only if more than half of a fixed group agrees. With three members, two must agree; with five, three. Two different majorities of the same group always share at least one member, so two conflicting decisions can never both win. A member cut off from the others cannot form a majority and therefore cannot promote anyone, or keep leading.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Members</th><th scope="col">Majority</th><th scope="col">Survives losing</th></tr></thead><tbody><tr class=hot><td>2</td><td>2</td><td>nobody. Two is worse than one: either failure stops everything</td></tr><tr><td>3</td><td>2</td><td>1 member</td></tr><tr><td>5</td><td>3</td><td>2 members</td></tr></tbody></table></div><div class="full">
+<p>That is why consensus stores are run with three or five members, in different zones, and why a two-zone database setup cannot fail over safely on its own: it needs a third member somewhere, even a small one that only votes.</p>
+<h3>2 · Lead only on a lease</h3>
+<p>The leader holds a lease that expires unless renewed: 15 seconds, renewed every 5. If the leader cannot renew, because it is cut off or paused, it must stop acting as leader before the lease runs out. Others wait for the full lease before taking over. On a normal day, the old leader has stopped before the new one starts.</p>
+<p>But a lease is a promise about time, and a process cannot keep a promise during a pause it does not notice. Instance a in drill 3 checked its lease, saw 12 seconds left, and was frozen for 23 before its next instruction ran.</p>
+</div>
+<h3>3 · Let the storage check: fencing tokens</h3>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 216" role="img" aria-label="Timeline of drill 3 with fencing. Instance a works with token 33, then pauses for 23 seconds without knowing. Its lease, last renewed at 3 seconds, expires at 18 seconds and is granted to instance b with token 34. Instance b writes with 34, which the storage accepts. At 26 seconds instance a wakes and writes with 33; the storage refuses it because it has already seen 34.">
+  <text x="140" y="44" text-anchor="end">instance a</text>
+  <rect class="bx-g" x="150" y="26" width="60" height="26" rx="4"/>
+  <rect class="bx-r" x="210" y="26" width="392" height="26" rx="4"/><text class="soft" x="406" y="45" text-anchor="middle">paused for 23 s, unaware</text>
+  <rect class="bx" x="602" y="26" width="138" height="26" rx="4"/><text class="soft" x="671" y="45" text-anchor="middle">writes with 33</text>
+  <text x="140" y="84" text-anchor="end">lease</text>
+  <rect class="bx-y" x="150" y="66" width="354" height="26" rx="4"/><text class="soft" x="327" y="85" text-anchor="middle">held by a, token 33: last renewed at 3 s</text>
+  <rect class="bx-g" x="504" y="66" width="236" height="26" rx="4"/><text class="soft" x="622" y="85" text-anchor="middle">held by b, token 34</text>
+  <text x="140" y="124" text-anchor="end">instance b</text>
+  <rect class="bx-g" x="510" y="106" width="230" height="26" rx="4"/><text class="soft" x="625" y="125" text-anchor="middle">leads, writes with 34</text>
+  <text x="140" y="164" text-anchor="end">storage</text>
+  <text class="soft good" x="516" y="164">accepts 34</text><text class="soft bad" x="606" y="164">refuses 33</text>
+  <path class="ln" d="M150 186 H740"/>
+  <text class="soft" x="150" y="206" text-anchor="middle">0 s</text><text class="soft" x="504" y="206" text-anchor="middle">18 s</text><text class="soft" x="602" y="206" text-anchor="middle">26 s</text>
+</svg></div><figcaption>The lease cannot stop a paused leader. The number on its writes can.</figcaption></figure><div class="card"><div class="card-head"><span>write-invoice.sql</span><span>the storage refuses a stale leader</span></div><pre><code><span class="k">UPDATE</span> invoice_runs
+<span class="k">SET</span> status = <span class="s">'WRITING'</span>, fencing_token = $1, updated_at = now()
+<span class="k">WHERE</span> month = <span class="s">'2026-11'</span>
+  <span class="k">AND</span> fencing_token &lt;= $1;        <span class="c">-- 0 rows: a newer leader exists, stop at once</span></code></pre></div><div class="full">
+<p>The check has to happen where the damage would happen: in the database row, the storage bucket, the downstream service. A leader that checks its own lease before writing is still exposed to a pause between the check and the write. A storage that compares numbers is not.</p>
+<p>Databases do the same internally. A promoted follower starts a new term or timeline, and the old leader, if it comes back, is told it belongs to an older one and must rejoin as a follower. That is a fencing token under another name.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why does a two-member setup not help with failover?</summary><p>A majority of two is two. If either member fails, the other cannot form a majority, so nothing can be decided.</p></details><details><summary>The leader checks its lease right before every write. Why is a fencing token still needed?</summary><p>The process can pause between the check and the write. Only a check at the storage, at the moment of the write, is safe.</p></details></div>
+<a class="next" href="#failover"><small>next · chapter 6</small>Failover, step by step →</a>
+</section>
+<section id="failover" data-title="Failover">
+<p class="ch">chapter 6 <span>· 2 min</span></p>
+<h2>Failover, step by step</h2>
+<div class="gist"><p><b>Gist</b> Detect, choose the most up-to-date follower, fence the old leader, promote, repoint clients, rebuild the old leader. Fencing is the step people skip, and the one that prevents two leaders. Practise with planned switchovers every month so the unplanned failover follows a familiar path.</p></div>
+
+<p>A failover is a short sequence of steps, and each one is a place where it can go wrong. Here is the shop's, from the moment the leader stops answering.</p>
+<div class="tbl"><table><thead><tr><th scope="col">#</th><th scope="col">Step</th><th scope="col">Done by</th><th scope="col">Time</th></tr></thead><tbody><tr><td>1</td><td><b>Detect</b>: the leader has not renewed its lease in the consensus store</td><td>the failover tool on every node</td><td>up to 15 s</td></tr><tr><td>2</td><td><b>Choose</b>: the follower with the most of the log</td><td>the tool, by majority</td><td>1 s</td></tr><tr class=hot><td>3</td><td><b>Fence</b>: make sure the old leader cannot accept writes, even if it is alive</td><td>the old leader itself, on losing its lease; or by cutting its network</td><td>already done</td></tr><tr><td>4</td><td><b>Promote</b>: the chosen follower starts accepting writes</td><td>the database</td><td>2–5 s</td></tr><tr><td>5</td><td><b>Repoint</b>: the other follower follows the new leader; clients move</td><td>the tool, proxies, drivers</td><td>5–30 s</td></tr><tr><td>6</td><td><b>Rebuild</b>: the old leader rejoins as a follower, after discarding anything the new leader never had</td><td>a person or the tool, later</td><td>minutes to hours</td></tr></tbody></table></div><aside class="mn">Step 3 is the one people skip. Without it, step 4 is how drill 2 starts.</aside><div class="full">
+<h3>Automatic or manual?</h3>
+<div class="tbl"><table><thead><tr><th scope="col"></th><th scope="col">Automatic</th><th scope="col">Manual</th></tr></thead><tbody><tr><td>Write outage</td><td>seconds to a minute</td><td>until someone wakes up: often 20–40 minutes</td></tr><tr><td>Risk of a wrong failover</td><td>real (drill 4), managed by patient detection</td><td>low</td></tr><tr><td>Fits</td><td>a team with a tested setup and good monitoring</td><td>a team still learning the setup; very small systems</td></tr></tbody></table></div><p>Most teams end up automatic, after having been manual long enough to trust it. Whichever you choose, the person on call must be able to see that a failover happened, why, and what the data loss was.</p>
+<h3>Switchover is the friendly twin</h3>
+<p>A planned switch, for patching or moving a server, uses the same steps with one difference: the old leader is healthy and can stop taking writes and wait until a follower has every last change. Nothing is lost and the write pause is a few seconds. Do this regularly, every month or with every patch round, and the unplanned failover will be a path the team has walked many times.</p>
+<h3>After the failover</h3>
+<p>The old leader may hold writes that never reached the new one (drill 1). Before it rejoins, those writes are rolled back on it, in PostgreSQL with <code>pg_rewind</code> or by copying it fresh. Keep a record of what was rolled back. Someone in finance may need that list.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>What is the difference between a switchover and a failover?</summary><p>In a switchover the old leader is healthy: it stops taking writes and waits until a follower has everything, so nothing is lost.</p></details><details><summary>Before the old leader rejoins, why must some of its writes be rolled back?</summary><p>It may hold writes the new leader never received. The new leader's history is now the truth, so those writes are removed and recorded.</p></details></div>
+<a class="next" href="#numbers"><small>next · chapter 7</small>RPO, RTO and the lease, worked out →</a>
+</section>
+<section id="numbers" data-title="Numbers">
+<p class="ch">chapter 7 <span>· 2 min</span></p>
+<h2>RPO, RTO and the lease, worked out</h2>
+<div class="gist"><p><b>Gist</b> The business chooses how much data may be lost and for how long writes may stop. Zero loss rules out asynchronous replication. The outage is detection plus promotion plus clients moving, about 30 seconds for the shop. Leases are longer than a normal hiccup and renewed three times per lease.</p></div>
+
+<p>Two numbers describe what a failure costs, and the business should choose them before the engineers do.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Term</th><th scope="col">Means</th><th scope="col">Shop's target</th></tr></thead><tbody><tr><td><b>RPO</b>, recovery point</td><td>how much recent data you may lose</td><td>zero confirmed orders</td></tr><tr><td><b>RTO</b>, recovery time</td><td>how long writes may be unavailable</td><td>one minute</td></tr></tbody></table></div>
+<h3>Working them out for the shop</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Question</th><th scope="col">Reasoning</th><th scope="col">Answer</th></tr></thead><tbody><tr><td>Can asynchronous replication meet RPO zero?</td><td>no: lag at failure is lost. At 200 ms and 1,500 writes a second, about 300 writes</td><td>use quorum commit</td></tr><tr><td>What does quorum commit cost?</td><td>the faster of two cross-zone round trips on each commit</td><td>about +2 ms per write</td></tr><tr><td>How long to detect?</td><td>the lease: 15 s, renewed every 5 s, so three missed renewals</td><td>15 s</td></tr><tr><td>How long to promote?</td><td>replay what was received but not applied, then switch mode</td><td>about 5 s</td></tr><tr><td>How long for clients to move?</td><td>proxy health checks every 2 s; pools reconnect on error</td><td>about 10 s</td></tr><tr><td>Total write outage</td><td>15 + 5 + 10</td><td>about 30 s: inside the minute</td></tr></tbody></table></div><aside class="mn">If the sum had been 90 s, the fix is a faster detection or a proxy, and a conversation about whether 90 s is acceptable.</aside><div class="full">
+<h3>The lease numbers</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Setting</th><th scope="col">Rule</th><th scope="col">Shop</th></tr></thead><tbody><tr><td>lease length</td><td>longer than the longest normal hiccup (a checkpoint, a short network blip)</td><td>15 s</td></tr><tr><td>renew every</td><td>a third of the lease, so two renewals can fail before it lapses</td><td>5 s</td></tr><tr><td>stop leading</td><td>as soon as one renewal fails, not when the lease runs out</td><td>at the first failure</td></tr><tr><td>cool-down after a failover</td><td>long enough for a person to look</td><td>5 min</td></tr></tbody></table></div><h3>Lag budget for reads</h3>
+<p>The follower health check from chapter 3 needs a number too. Ask what the oldest acceptable answer is for the reads that go to followers. For order history, five seconds is fine. A follower beyond that leaves rotation, and if both are beyond it, reads go to the leader, which must be sized to take them for a while: 8,000 reads a second on top of 1,500 writes. Check that it can, or decide which reads may fail instead.</p>
+<h3>Across regions</h3>
+<p>A second region is 70 ms away. Synchronous commit there adds 70 ms to every write: a checkout that makes ten writes is 0.7 s slower. Most teams replicate asynchronously across regions and accept that a whole-region loss may lose seconds of data, with a much longer RTO, because a region failover also moves the app servers, caches and everything else. That is a disaster-recovery plan, not a failover, and it is practised as one.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Asynchronous replication, 300 ms of lag, 1,500 writes a second. How many writes could a failover lose?</summary><p>About 450.</p></details><details><summary>Why renew a 15-second lease every 5 seconds rather than every 14?</summary><p>So two renewals can fail, for example during a short network blip, before the lease lapses.</p></details></div>
+<a class="next" href="#jobs"><small>next · chapter 8</small>Leaders for your own jobs →</a>
+</section>
+<section id="jobs" data-title="Job leaders">
+<p class="ch">chapter 8 <span>· 2 min</span></p>
+<h2>Leaders for your own jobs</h2>
+<div class="gist"><p><b>Gist</b> Application jobs need their own election: campaign for a lease in a consensus store, check it between batches, pass the fencing token to every write, resign on shutdown, and make the work idempotent anyway. Often a row lock or a single scheduled run is enough and no leader is needed.</p></div>
+
+<p>The database usually has its leader election built in. Application jobs do not: the nightly invoice run, a scheduler, the one consumer that must process a partition alone. Here the team writes the election, and everything in chapter 5 applies.</p>
+<div class="card"><div class="card-head"><span>invoice-leader.ts</span><span>campaign, lead while the lease holds, carry the token</span></div><pre><code><span class="k">const</span> election = <span class="k">new</span> Election(etcd, <span class="s">"/election/billing"</span>, { leaseSeconds: 15 });
+
+<span class="k">for</span> (;;) {
+  <span class="k">const</span> term = <span class="k">await</span> election.campaign(instanceId);     <span class="c">// blocks until we win</span>
+  <span class="k">const</span> token = term.revision;                          <span class="c">// only grows: our fencing token</span>
+  <span class="k">try</span> {
+    <span class="k">for</span> (<span class="k">const</span> batch <span class="k">of</span> <span class="k">await</span> pendingCustomers(<span class="s">"2026-11"</span>)) {
+      <span class="k">if</span> (!term.isValid()) <span class="k">break</span>;                       <span class="c">// lost the lease: stop now</span>
+      <span class="k">await</span> writeInvoices(batch, token);                <span class="c">// storage checks the token</span>
+    }
+  } <span class="k">finally</span> {
+    <span class="k">await</span> term.resign();                                <span class="c">// hand over cleanly</span>
+  }
+}</code></pre></div><div class="tbl"><table><thead><tr><th scope="col">Habit</th><th scope="col">Why</th></tr></thead><tbody><tr><td>campaign with a lease, never “whoever starts first”</td><td>a crashed leader must be replaced without a person</td></tr><tr><td>check the lease between batches</td><td>a leader that lost the lease stops within one batch</td></tr><tr><td>pass the token to every write</td><td>a paused leader cannot finish its batch (drill 3)</td></tr><tr><td>resign on shutdown</td><td>a deploy hands over in milliseconds instead of waiting 15 s</td></tr><tr><td>make the work idempotent</td><td>one invoice per customer per month, as a unique key, so a mistake costs nothing</td></tr></tbody></table></div><aside class="mn">Leader election makes duplicates rare. Idempotency makes them harmless. You want both.</aside><div class="full">
+<h3>Do you need a leader at all?</h3>
+<p>Often not. Three cheaper designs cover many “only one may do it” jobs.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Instead of a leader</th><th scope="col">How</th><th scope="col">Fits</th></tr></thead><tbody><tr><td>a row lock in the database</td><td>each instance runs <code>SELECT … FOR UPDATE SKIP LOCKED</code> on the next unit of work</td><td>work that splits into many small items</td></tr><tr><td>a scheduler that starts exactly one copy</td><td>a Kubernetes CronJob with <code>concurrencyPolicy: Forbid</code>, or a managed scheduler</td><td>a nightly job with no need for standby instances</td></tr><tr><td>idempotent work run everywhere</td><td>every instance tries; the unique key lets one succeed</td><td>cheap work where duplicates are only wasted effort</td></tr></tbody></table></div><p>Use real leader election when one instance must hold a role continuously, such as a scheduler or a partition owner, and the role must move quickly when that instance dies.</p>
+<h3>Where to keep the lease</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Store</th><th scope="col">Fine for</th></tr></thead><tbody><tr><td>etcd, ZooKeeper, Consul</td><td>anything; this is what they are for</td></tr><tr><td>a Kubernetes Lease object</td><td>workloads already on Kubernetes; it is stored in etcd</td></tr><tr><td>a row in the main database, with a lease time and a fencing column</td><td>small systems; the database is the one place everyone can already reach</td></tr><tr><td>a single Redis</td><td>avoiding wasted effort only. Not for correctness (drill 6)</td></tr></tbody></table></div>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why resign the lease on shutdown instead of letting it expire?</summary><p>A deploy then hands over at once instead of leaving the job without a leader for up to 15 seconds.</p></details><details><summary>When is a single Redis lock acceptable?</summary><p>When a duplicate only wastes effort. Not when it bills a customer twice.</p></details></div>
+<a class="next" href="#testing"><small>next · chapter 9</small>Testing it and running it →</a>
+</section>
+<section id="testing" data-title="Testing">
+<p class="ch">chapter 9 <span>· 3 min</span></p>
+<h2>Testing it and running it</h2>
+<div class="gist"><p><b>Gist</b> Break a production-like environment on purpose: kill, isolate, pause and slow the leader, lag a follower, restart the lock store. Count confirmed writes across each failover to measure the real RPO. Graph lag, leader changes, time without a leader and fencing rejections.</p></div>
+
+<p>Failover code runs on the worst day of the year, so it has to be run on ordinary days too. The useful tests are not unit tests. They are small, deliberate breakages of a test environment that looks like production.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Break</th><th scope="col">How</th><th scope="col">Expect</th></tr></thead><tbody><tr><td>kill the leader</td><td>stop the database process or the machine</td><td>promotion in under 30 s; no confirmed write lost; clients reconnect by themselves</td></tr><tr class=hot><td>cut the leader off</td><td>block its network to the other zones, but not to some app servers</td><td>it stops accepting writes; exactly one new leader (drill 2)</td></tr><tr class=hot><td>pause the leader</td><td>send SIGSTOP for 30 s, then SIGCONT</td><td>the woken process steps down; its writes are refused (drill 3)</td></tr><tr><td>slow the leader</td><td>add 3 s of disk latency for 10 s</td><td>no failover (drill 4)</td></tr><tr><td>lag a follower</td><td>run a large update</td><td>the follower leaves read rotation; reads stay correct</td></tr><tr><td>restart the lock store</td><td>restart one etcd member, then the Redis if you have one</td><td>no second job leader (drill 6)</td></tr></tbody></table></div><aside class="mn">The pause test finds the most bugs. Almost nobody tests it, because nothing crashes.</aside><div class="full">
+<h3>Count the writes</h3>
+<p>“No confirmed write lost” needs a way to check. During the test, a small client writes numbered rows and records each one the database confirmed. After the failover, every confirmed number must be present on the new leader. It is a ten-line script and the only honest measure of your RPO.</p>
+<div class="card"><div class="card-head"><span>count-writes.ts</span><span>the RPO, measured</span></div><pre><code><span class="k">const</span> confirmed: number[] = [];
+<span class="k">for</span> (<span class="k">let</span> i = 1; testRunning(); i++) {
+  <span class="k">try</span> { <span class="k">await</span> db.query(<span class="s">"INSERT INTO rpo_probe (n) VALUES ($1)"</span>, [i]); confirmed.push(i); }
+  <span class="k">catch</span> { /* during the failover, some writes fail: that is fine */ }
+}
+<span class="k">const</span> present = <span class="k">new</span> Set(<span class="k">await</span> db.column(<span class="s">"SELECT n FROM rpo_probe"</span>));
+<span class="k">const</span> lost = confirmed.filter((n) =&gt; !present.has(n));
+console.log(<span class="s">`confirmed ${confirmed.length}, lost ${lost.length}`</span>);   <span class="c">// must be 0</span></code></pre></div>
+</div>
+<h3>What to watch</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Metric</th><th scope="col">Alert when</th></tr></thead><tbody><tr><td>replication lag per follower, in bytes and in seconds</td><td>seconds exceed the read budget; bytes keep growing</td></tr><tr><td>a follower not connected</td><td>at once: you are one failure from no copy</td></tr><tr><td>leader changes, for the database and every job election</td><td>any unplanned change; two in an hour</td></tr><tr><td>time without a leader</td><td>longer than the RTO</td></tr><tr><td>fencing rejections</td><td>any: a stale leader tried to write, and the design worked</td></tr></tbody></table></div><div class="full">
+<h3>Runbook: after an unplanned failover</h3>
+<ol>
+  <li><b>Confirm one leader.</b> Ask every node which role it has. Two answers of “leader” is an emergency: stop writes at the proxy.</li>
+  <li><b>Check that clients moved.</b> Error rates by app server; any still failing are holding old connections (drill 5).</li>
+  <li><b>Find the loss.</b> Compare the old leader's last log position with what the new leader received. Zero with quorum commit; if not zero, list the transactions.</li>
+  <li><b>Rebuild the old leader</b> as a follower, after rolling back what the new leader never had, and keep that list.</li>
+  <li><b>Find why.</b> A failover with no hardware fault is drill 4 until shown otherwise.</li>
+</ol>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Which test is most often skipped, and what does it find?</summary><p>Pausing the leader. It finds code that assumes a leader knows when it has lost its role.</p></details><details><summary>A fencing rejection appears on the dashboard. Good news or bad?</summary><p>Both: a stale leader tried to write, which means something paused or split, and the design stopped it.</p></details></div>
+<a class="next" href="#tools"><small>next · chapter 10</small>Tools, a lab and the checklist →</a>
+</section>
+<section id="tools" data-title="Tools &amp; lab">
+<p class="ch">chapter 10 <span>· 4 min</span></p>
+<h2>Tools, a lab and the checklist</h2>
+<div class="gist"><p><b>Gist</b> Managed databases and tools such as Patroni run the failover; you still own how clients find the new leader, which reads may lag, and the drills. Use a consensus store's election API for your own jobs. The lab adds a second region, and the checklist turns the deep dive into review questions.</p></div>
+
+<h3>Tools</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Need</th><th scope="col">Examples</th><th scope="col">Note</th></tr></thead><tbody><tr><td>Managed database with failover</td><td>Amazon RDS Multi-AZ and Aurora, Google Cloud SQL HA, Azure Database flexible server</td><td>the cloud runs steps 1–5; you still own clients (drill 5), lag-aware reads and the drills</td></tr><tr><td>Self-run PostgreSQL failover</td><td>Patroni (on etcd, Consul or Kubernetes), pg_auto_failover</td><td>Patroni is the common choice; it uses a consensus store for exactly chapter 5</td></tr><tr><td>Self-run MySQL failover</td><td>Orchestrator, MySQL Group Replication / InnoDB Cluster</td><td>group replication uses its own consensus</td></tr><tr><td>Following the leader</td><td>PgBouncer or HAProxy with health checks, ProxySQL, multi-host connection strings</td><td>the piece most often forgotten</td></tr><tr><td>Consensus for your own jobs</td><td>etcd, ZooKeeper, Consul, Kubernetes Lease</td><td>use a client library's election API; do not write the protocol</td></tr></tbody></table></div><aside class="mn">Managed failover is excellent at the database part. The app part is still yours.</aside>
+<h3>Lab</h3>
+<p>The shop opens in a second country. Customers there are 70 ms from the current region. The team adds a follower in a new region near them, and wants the invoice job to keep running if the first region is lost.</p>
+<ol class="keep">
+  <li>Should the new follower be synchronous? What does each choice cost?</li>
+  <li>Which reads may go to the new follower, and what stops a customer there from seeing their own order disappear after paying?</li>
+  <li>The consensus store runs on three nodes in the first region. What happens to failover if that region is lost, and what do you change?</li>
+  <li>The invoice job's instances now run in both regions. What prevents two invoice runs during a network split between the regions?</li>
+  <li>Region one is lost entirely. Is this a failover or a disaster recovery, and what is the RPO?</li>
+</ol>
+<div class="check quiz"><h3>model answer</h3>
+<details><summary>1 · Synchronous?</summary><p>No. Synchronous commit to a follower 70 ms away adds 70 ms to every write, for every customer in both countries. Keep it asynchronous and accept a few hundred milliseconds of possible loss if the first region is lost entirely; inside the first region, quorum commit still protects confirmed writes.</p></details>
+<details><summary>2 · Reads there</summary><p>Product pages, search and older order history. After a customer writes, the next reads wait for the follower to reach their write position, or go to the leader for a few seconds (chapter 3). The payment and stock checks always use the leader, inside the transaction.</p></details>
+<details><summary>3 · The consensus store</summary><p>With all three members in region one, losing that region loses the majority, so nothing can be promoted anywhere. Spread five members: two in each region and one in a third place, so either region plus the tie-breaker forms a majority.</p></details>
+<details><summary>4 · Two invoice runs</summary><p>The lease lives in the consensus store, so during a split only the side with the majority can hold it. The other side's leader fails to renew and stops. Fencing tokens refuse any late write, and the unique key per customer and month makes a duplicate harmless anyway.</p></details>
+<details><summary>5 · Losing region one</summary><p>A disaster recovery: the database, app servers and caches all move. The RPO is the cross-region lag at that moment, typically under a second, so some confirmed orders may be lost and must be reconciled with the payment provider. Practise it once a year, on a quiet day.</p></details>
+</div>
+<h3>The review checklist</h3>
+<div class="checklist"><div class="cl"><h3>Replication</h3><ul><li>The data loss you accept (RPO) is written down and matches the replication mode</li><li>Quorum commit if confirmed writes may never be lost</li><li>Lag is measured in bytes and in seconds, per follower</li><li>Large updates are batched so they do not lag every follower</li></ul></div><div class="cl"><h3>Reads</h3><ul><li>Each kind of read is assigned to the leader or to followers</li><li>Reads after a customer's own write wait for their position, or use the leader</li><li>Decisions read from the leader inside the transaction</li><li>A follower beyond the lag budget leaves read rotation</li><li>The leader can carry the reads if every follower leaves</li></ul></div><div class="cl"><h3>Failover</h3><ul><li>Promotion requires a majority of three or more members, across zones</li><li>A leader that cannot renew its lease stops accepting writes</li><li>Detection is patient; failovers have a cool-down and alert a person</li><li>Clients follow the new leader through a proxy or multi-host connections</li><li>The old leader is rewound or rebuilt, and what it lost is recorded</li></ul></div><div class="cl"><h3>Leaders for jobs</h3><ul><li>Leases come from a consensus store, not a cache</li><li>The leader checks its lease between batches and resigns on shutdown</li><li>Every write carries a fencing token and the storage checks it</li><li>The work is idempotent anyway</li></ul></div><div class="cl"><h3>Tests</h3><ul><li>Kill, isolate, pause and slow the leader, in a production-like environment</li><li>A probe counts confirmed writes across each failover</li><li>Planned switchovers are done regularly</li></ul></div><div class="cl"><h3>Operations</h3><ul><li>Lag, leader changes, time without a leader and fencing rejections are graphed</li><li>There is a runbook for after a failover</li><li>A two-leader situation can be stopped at the proxy in one step</li></ul></div></div>
+
+<a class="next" href="#top"><small>the end</small>Back to the top ↑</a>
+</section>
+<p class="sources"><b>Sources.</b> Martin Kleppmann, <i>Designing Data-Intensive Applications</i> (2017), chapters 5, 8 and 9, and “How to do distributed locking” (2016). Diego Ongaro and John Ousterhout, “In Search of an Understandable Consensus Algorithm (Raft)” (2014). Burrows, “The Chubby lock service” (2006). The PostgreSQL documentation on high availability and replication, and the Patroni documentation. Google, <i>Site Reliability Engineering</i> (2016), chapter 23, “Managing Critical State”.</p>
+</div></article>
+<footer class="foot"><span>Jef’s Notes · deep dive 08 · Replication, Failover &amp; Leader Election</span></footer>
+</main>
+
+<div class="dock" data-dock>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+  <div class="dock-in">
+    <a class="dock-arrow" data-prev href="#top" aria-label="Previous chapter">‹</a>
+    <button class="dock-mid" type="button" data-open aria-haspopup="dialog" aria-expanded="false">
+      <small data-count>1 / 10</small><span data-current>Recap</span><i aria-hidden="true">☰</i>
+    </button>
+    <a class="dock-arrow" data-next href="#lag" aria-label="Next chapter">›</a>
+  </div>
+</div>
+<div class="sheet-back" data-close hidden></div>
+<div class="sheet" data-sheet role="dialog" aria-modal="true" aria-label="Chapters" hidden>
+  <div class="sheet-head"><b>Chapters</b><button type="button" data-close aria-label="Close">×</button></div>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Two notes in sixty seconds</span><span class="m">1 min</span></a></li><li><a href="#lag" data-ch="1"><span class="n">2</span><span class="t">The log, and how far behind it is</span><span class="m">2 min</span></a></li><li><a href="#reading" data-ch="2"><span class="n">3</span><span class="t">Reading from followers</span><span class="m">3 min</span></a></li><li><a href="#drills" data-ch="3"><span class="n">4</span><span class="t">Failure drills</span><span class="m">5 min</span></a></li><li><a href="#dead" data-ch="4"><span class="n">5</span><span class="t">Dead or slow? The hard problem</span><span class="m">3 min</span></a></li><li><a href="#failover" data-ch="5"><span class="n">6</span><span class="t">Failover, step by step</span><span class="m">2 min</span></a></li><li><a href="#numbers" data-ch="6"><span class="n">7</span><span class="t">RPO, RTO and the lease, worked out</span><span class="m">2 min</span></a></li><li><a href="#jobs" data-ch="7"><span class="n">8</span><span class="t">Leaders for your own jobs</span><span class="m">2 min</span></a></li><li><a href="#testing" data-ch="8"><span class="n">9</span><span class="t">Testing it and running it</span><span class="m">3 min</span></a></li><li><a href="#tools" data-ch="9"><span class="n">10</span><span class="t">Tools, a lab and the checklist</span><span class="m">4 min</span></a></li></ol>
+  <div class="sheet-foot">
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+    <a href="#top" data-close>Top of page ↑</a>
+  </div>
+</div>
+</body>
+</html>

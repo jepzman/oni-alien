@@ -252,7 +252,7 @@ ALTER TABLE users DROP COLUMN name;
     skip=["Brand-new tables nobody uses yet.",
           "Apps where a short maintenance window is genuinely fine.",
           "Prototypes and local databases."],
-    related=["<b>Optimistic locking</b>", "<b>Change data capture</b>", "<b>History tables</b>", "<b>Strangler fig</b> (planned, Vol. 1)"],
+    related=["<b>Optimistic locking</b>", "<b>Change data capture</b>", "<b>History tables</b>", "<b>Strangler fig</b> (Vol. 1)"],
     quiz=[("Why is renaming a column in one step dangerous?", "During the deploy old code still uses the old name and crashes, and rolling back the code no longer matches the schema."),
           ("What are the three phases?", "Expand (add new), migrate (dual-write, backfill, switch reads), contract (remove old)."),
           ("Why backfill in batches?", "To avoid long locks, table bloat and replication lag from one giant UPDATE."),

@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Active Record vs Data Mapper · Jef’s Notes</title>
+<meta name="description" content="Objects that save themselves, or a separate mapper that saves them: pick by complexity.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=26ccece878">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-app">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 8 · inside the application</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="active-record-data-mapper">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 02.04.27</span><span class="topic">collection · <b>inside your orm</b></span></div>
+  <p class="kicker">a.k.a. “the letter that files itself, or the records clerk”</p>
+  <h1><span class="hl">Active Record vs Data Mapper</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Two ways to save objects. <b>Active Record</b>: one object per row that holds data and knows how to <code>save()</code> and <code>find()</code> itself (Rails, Laravel, Django). Quick and clear when rules are few. <b>Data Mapper</b>: plain domain objects that know nothing about the database, and a separate mapper or ORM session that loads and saves them (Hibernate, EF Core, Doctrine). More setup, but rules stay testable and the schema can differ from the model. <b>Pick per area</b>, by how complex the rules are.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> data source pattern</li><li><b>From:</b> Fowler, PoEAA (2002)</li><li><b>Active Record in:</b> Rails, Laravel, Django</li><li><b>Data Mapper in:</b> Hibernate, EF Core, Doctrine, MikroORM</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Teams pick a persistence style by habit, then find it <span class="hl-pink">fighting the code</span> in the areas it doesn't suit.</p>
+  <ul>
+    <li>Business rules tangled with <code>save()</code>; every test needs a database.</li>
+    <li>Or four layers of mapping for a four-field admin form.</li>
+    <li>Arguments about which ORM is “right” for the whole company.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of the wrong persistence style for each area. In the pricing engine, an Active Record class mixes forty business rules with save and find methods, and every rule&#x27;s test needs a database. Meanwhile the admin screen for store opening hours has a domain class, a mapper, a repository and a DTO for four fields."><g class="rough"><rect class="d f-pink d-red" x="20" y="40" width="340" height="130" rx="10"/><rect class="d f-pink d-red" x="400" y="40" width="340" height="130" rx="10"/></g><text class="t-head" x="190" y="74" text-anchor="middle">Price (Active Record)</text><text class="t" x="190" y="110" text-anchor="middle">40 rules + save() + find()</text><text class="t" x="190" y="142" text-anchor="middle">tests need a database</text><text class="t-head" x="570" y="74" text-anchor="middle">OpeningHours</text><text class="t" x="570" y="110" text-anchor="middle">entity + mapper + repo + DTO</text><text class="t" x="570" y="142" text-anchor="middle">for four fields</text><text class="t-s t-red" x="380" y="220" text-anchor="middle">the right tool, each in the wrong place</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Rules tangled with save() where logic is rich; four layers of mapping for a four-field admin form.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">filing letters</span></h2>
+  <p>In a <b>small office</b>, each letter carries a note saying which drawer it goes in, and anyone files it. Fast and simple. In a <b>big legal firm</b>, a <b>records clerk</b> does all the filing; letters know nothing about drawers, so the filing system can change without rewriting a single letter.</p>
+  <ul>
+    <li>Self-filing letters are <b>Active Record</b>.</li>
+    <li>The clerk is a <b>Data Mapper</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of two ways to file letters. In a small office, each letter carries a sticky note saying which drawer it goes in, and anyone files it themselves. In a big legal firm, a records clerk files everything, and the letters know nothing about drawers, so the filing system can change without rewriting any letter."><g class="rough"><rect class="d f-y" x="20" y="40" width="340" height="120" rx="10"/><rect class="d f-blue" x="400" y="40" width="340" height="120" rx="10"/></g><text class="t-head" x="190" y="74" text-anchor="middle">letter files itself</text><text class="t" x="190" y="112" text-anchor="middle">quick, fine for a few</text><text class="t-head" x="570" y="74" text-anchor="middle">records clerk files</text><text class="t" x="570" y="112" text-anchor="middle">letters know no drawers</text><text class="t-s t-pen" x="190" y="200" text-anchor="middle">Active Record</text><text class="t-s t-pen" x="570" y="200" text-anchor="middle">Data Mapper</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Small office: each letter files itself. Big firm: a clerk does the filing; letters know nothing about drawers.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>A letter with its drawer note</td><td>An Active Record object with <code>save()</code></td></tr>
+      <tr><td>Anyone can file it</td><td>Any code can load and save rows directly</td></tr>
+      <tr><td>The records clerk</td><td>The ORM session or mapper (<code>DbContext</code>, <code>EntityManager</code>)</td></tr>
+      <tr><td>Letters know no drawers</td><td>Domain objects with no persistence code</td></tr>
+      <tr><td>Changing the filing system</td><td>Changing the schema without changing the model</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">two styles, pick per area</span></h2>
+  <p>Active Record maps <b>one class to one table</b>, so the model follows the schema. Data Mapper lets the model and schema <b>differ</b> (value objects in columns, aggregates over several tables). That freedom is what rich domains need, and what CRUD doesn't.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 320" role="img" aria-label="The two styles side by side. Active Record: one class per table row that holds data, a few rules, and save, find and delete; used by Rails, Laravel Eloquent and Django. Data Mapper: plain domain objects with no persistence code, and a separate mapper or ORM session that loads and saves them; used by Hibernate, EF Core, Doctrine and MikroORM. Choose Active Record for simple CRUD and Data Mapper for rich domains."><g class="rough"><rect class="d f-y" x="20" y="20" width="340" height="150" rx="10"/><rect class="d f-blue" x="400" y="20" width="340" height="150" rx="10"/></g><text class="t-head" x="190" y="52" text-anchor="middle">Active Record</text><text class="t" x="190" y="90" text-anchor="middle">order.total = …</text><text class="t" x="190" y="124" text-anchor="middle">await order.save()</text><text class="t" x="190" y="156" text-anchor="middle">Rails · Eloquent · Django</text><text class="t-head" x="570" y="52" text-anchor="middle">Data Mapper</text><text class="t" x="570" y="90" text-anchor="middle">order.addLine(…)</text><text class="t" x="570" y="124" text-anchor="middle">await em.persist(order)</text><text class="t" x="570" y="156" text-anchor="middle">Hibernate · EF Core · Doctrine</text><text class="t-s t-green" x="190" y="220" text-anchor="middle">simple CRUD, few rules</text><text class="t-s t-green" x="570" y="220" text-anchor="middle">rich domain, many rules</text><text class="t-s t-pen" x="380" y="290" text-anchor="middle">both can live in one app, per area</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Active Record: the object saves itself. Data Mapper: a mapper saves plain objects. Pick per area.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Look at the rules</b><p>Few rules and forms? Active Record. Many rules, invariants, aggregates? Data Mapper.</p></li>
+    <li><b>Use your framework's default where it fits</b><p>Rails and Laravel shine at Active Record; don't fight them for CRUD.</p></li>
+    <li><b>Keep rules out of callbacks</b><p>In Active Record, avoid business logic in before-save hooks.</p></li>
+    <li><b>Keep persistence out of the model</b><p>In Data Mapper, entities don't import the ORM's session.</p></li>
+    <li><b>Mix by area</b><p>Active Record for admin and reporting, Data Mapper for the core.</p></li>
+    <li><b>Revisit when an area grows</b><p>Rules multiplying in an Active Record class? Extract a domain object.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Active Record</dt><dd>An object wrapping a database row, with data, some logic and its own persistence.</dd></div>
+    <div><dt>Data Mapper</dt><dd>A layer that moves data between objects and the database, keeping them independent.</dd></div>
+    <div><dt>Persistence ignorance</dt><dd>Domain objects that don't know how they're stored.</dd></div>
+    <div><dt>Callback / hook</dt><dd>Code run before or after save in Active Record frameworks.</dd></div>
+    <div><dt>Object-relational mismatch</dt><dd>The differences between objects and tables that mappers bridge.</dd></div>
+    <div><dt>ORM</dt><dd>Object-relational mapper: a library implementing one or both styles.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>two-styles.ts</span><span>the same change in each style</span></div>
+<pre><code><span class="c">// Active Record (e.g. TypeORM BaseEntity, Rails, Eloquent): the row saves itself</span>
+<span class="k">const</span> hours = <span class="k">await</span> OpeningHours.findOneByOrFail({ storeId, day: <span class="s">"mon"</span> });
+hours.closes = <span class="s">"21:00"</span>;
+<span class="k">await</span> hours.save();
+
+<span class="c">// Data Mapper (e.g. MikroORM, Hibernate, EF Core): a plain object, a session saves it</span>
+<span class="k">const</span> order = <span class="k">await</span> em.findOneOrFail(Order, orderId);   <span class="c">// Order has no persistence code</span>
+order.addLine(productId, Quantity.<span class="k">of</span>(2), price);        <span class="c">// rules on the object</span>
+<span class="k">await</span> em.flush();                                       <span class="c">// the mapper writes the changes</span></code></pre>
+  </div>
+  <p class="aside">tools: Rails ActiveRecord, Laravel Eloquent, Django ORM and TypeORM's BaseEntity for Active Record; Hibernate/JPA, EF Core, Doctrine, MikroORM and SQLAlchemy's ORM for Data Mapper; query builders (Kysely, jOOQ) when you want neither.</p>
+  <section class="thennow verdict-built-in" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="your framework or language does it for you; know it to use the tool well">built in now</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Fowler, PoEAA 2002</small></h3><p>Fowler described both, plus Table Data Gateway and Row Data Gateway, as patterns you might implement by hand, with advice on when each fits.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>Every major ORM is one or the other: Rails, Laravel and Django are Active Record; Hibernate, EF Core, Doctrine and MikroORM are Data Mappers. You choose a style by choosing a framework, and Fowler's advice on when each fits is still exactly right.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> Built in now: you don't write them, but knowing which one you're using tells you where your rules should live.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Active Record</b>: very little code for CRUD.</li><li><b>Data Mapper</b>: rules testable without a database.</li><li><b>Data Mapper</b>: model and schema can differ.</li><li><b>Choosing per area</b> gives the best of both.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Active Record</b>: rules and persistence tangle as logic grows.</li><li><b>Data Mapper</b>: more mapping and configuration.</li><li><b>Two styles</b> in one codebase to explain.</li><li><b>Switching later</b> takes refactoring.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Code-design ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>one persistence style used everywhere by habit</b> to <b>Active Record for simple areas and Data Mapper for the rich core</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="4"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Each area uses the lighter fitting style.</td></tr>
+      <tr data-before="3" data-after="4"><td>Domain clarity<small>reads like the business?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The core's model isn't bent to the table layout.</td></tr>
+      <tr data-before="3" data-after="4"><td>Correctness<small>rules can't be broken?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Core rules tested without persistence in the way.</td></tr>
+      <tr data-before="3" data-after="4"><td>Changeability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Schema and model change more independently in the core.</td></tr>
+      <tr data-before="2" data-after="4"><td>Testability<small>test without the world?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Core tests run in memory.</td></tr>
+      <tr data-before="3" data-after="4"><td>Low coupling<small>parts change alone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The core doesn't import the ORM.</td></tr>
+      <tr data-before="3" data-after="3"><td>Performance<small>fast enough?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral; both can be fast or slow.</td></tr>
+      <tr data-before="3" data-after="4"><td>Low ceremony<small>little boilerplate?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No mapping ceremony where CRUD will do.</td></tr>
+      <tr data-before="3" data-after="3"><td>Team scalability<small>many teams at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Rules in callbacks</h3><p>Before-save hooks send emails and change other rows. <span class="fix">Fix →</span> explicit service or domain methods; keep hooks for timestamps.</p></li>
+    <li><h3>Active Record in a rich core</h3><p>A 2,000-line model class with rules and queries mixed. <span class="fix">Fix →</span> extract a domain object, or move that area to Data Mapper.</p></li>
+    <li><h3>Data Mapper for forms</h3><p>Entity, mapper, repository and DTO for a settings page. <span class="fix">Fix →</span> plain Active Record or a direct query.</p></li>
+    <li><h3>Leaking the session</h3><p>Entities call the ORM session to load more data. <span class="fix">Fix →</span> load what's needed in the application service.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Choosing an ORM or persistence approach for an area.</li><li>An Active Record class whose rules are growing.</li><li>Tests that need a database only because of persistence style.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Read-only reporting: plain SQL or a query builder is simpler than either.</li><li>Rewriting a working CRUD app just to be “clean”.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/transaction-script.html"><b>Transaction Script vs Domain Model</b></a></li><li><a href="../notes/unit-of-work.html"><b>Unit of Work &amp; Identity Map</b></a></li><li><a href="../../ddd/notes/repository.html"><b>Repository</b></a> (Vol. 7)</li><li><a href="../../ddd/notes/anemic-domain-model.html"><b>Anemic Domain Model</b></a> (Vol. 7)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What is Active Record?</summary><p>An object that wraps a database row and contains both data, some logic and its own save/find methods.</p></details>
+    <details><summary>What is Data Mapper?</summary><p>A separate layer that loads and saves plain domain objects, so they don't know about the database.</p></details>
+    <details><summary>When does Active Record fit best?</summary><p>Simple CRUD areas with few rules, where model and table match closely.</p></details>
+    <details><summary>Can one app use both?</summary><p>Yes: Active Record for simple areas and Data Mapper for the rich core is a common mix.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Your Rails app's <code>Subscription</code> model has 1,800 lines: billing rules, callbacks that call Stripe, and scopes. Every test needs the database and stubs Stripe. What's a first step?</span></summary><p>Extract the billing rules into a plain Ruby domain object (or service) that takes values and returns decisions, move the Stripe calls out of callbacks into an explicit application step, and keep the Active Record model for persistence and simple scopes.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Pick one model class in your app and count its business rules and its persistence methods. If rules dominate, extract the three most important into a plain object with no ORM imports and test it without a database.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Let a few letters <span class="hl">file themselves</span>; give the big firm <span class="hl">a records clerk</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/06-active-record-data-mapper.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Martin Fowler, <i>Patterns of Enterprise Application Architecture</i> (2002), “Active Record”, “Data Mapper”.</li><li>Rails Guides, “Active Record Basics”.</li><li>Microsoft, “EF Core: persistence ignorance” (.NET architecture guides).</li><li>MikroORM documentation, “Unit of Work and Identity Map”.</li></ul>
+  </div>
+  <p class="folio">06</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="dependency-inversion.html"><small>← previous note</small>05 · Dependency Inversion</a>
+  <a href="unit-of-work.html"><small>Next note →</small>07 · Unit of Work &amp; Identity Map</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 8 · a student's bullet journal on inside the application</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

@@ -2,7 +2,8 @@
    1. Rating dots drawn from data-before / data-after.
    2. "Export as PDF" buttons (the print dialog's "Save as PDF").
    3. Quiz answers open while printing.
-   4. all.html pulls every note into one printable notebook. */
+   4. all.html pulls every note into one printable notebook.
+   5. Landing page: book spines that pull a volume out. */
 (function () {
   var NAMES = ['', 'very low', 'low', 'medium', 'high', 'very high'];
 
@@ -75,7 +76,32 @@
     }
   }
 
+  /* 5. Landing page: books stored spine-out. Click or arrow keys pull a volume out. */
+  function wireSpines() {
+    document.querySelectorAll('[data-spines]').forEach(function (shelf) {
+      var tabs = Array.prototype.slice.call(shelf.querySelectorAll('.spine'));
+      function pick(tab, focus) {
+        tabs.forEach(function (t) {
+          var on = t === tab;
+          t.setAttribute('aria-selected', on ? 'true' : 'false');
+          t.tabIndex = on ? 0 : -1;
+          document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+        });
+        if (focus) tab.focus();
+        if (tab.scrollIntoView) tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+      tabs.forEach(function (t, i) {
+        t.addEventListener('click', function () { pick(t, false); });
+        t.addEventListener('keydown', function (e) {
+          if (e.key === 'ArrowRight') { pick(tabs[(i + 1) % tabs.length], true); e.preventDefault(); }
+          if (e.key === 'ArrowLeft') { pick(tabs[(i + tabs.length - 1) % tabs.length], true); e.preventDefault(); }
+        });
+      });
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
+    wireSpines();
     renderRatings(document);
     wirePrint(document);
     var main = document.querySelector('[data-collect]');

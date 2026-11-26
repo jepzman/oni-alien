@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chaos Engineering · Jef’s Notes</title>
+<meta name="description" content="Run planned experiments that break things on purpose, to learn before an incident does.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=26ccece878">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-cloud">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 6 · cloud &amp; devops patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="chaos-engineering">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 01.01.27</span><span class="topic">collection · <b>resilience &amp; cost</b></span></div>
+  <p class="kicker">a.k.a. “break it on purpose, before it breaks on its own”</p>
+  <h1><span class="hl">Chaos Engineering</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Failover, retries, autoscaling and runbooks are claims until something fails. <b>Chaos engineering</b> tests them with planned <b>experiments on a running system</b>: define a <b>steady state</b> (a user-facing metric), write a <b>hypothesis</b> (“if a zone fails, checkout stays above 99%”), inject the fault in a <b>small, abortable</b> way, and observe. Start in staging and with game days; move to production carefully. Every surprise becomes a fix.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> resilience</li><li><b>Started at:</b> Netflix (Chaos Monkey, 2011)</li><li><b>Faults:</b> kill instances · zone loss · latency · dependency outage · clock skew</li><li><b>Vol. 4 cousin:</b> fault injection tests inside the test suite</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">The diagram says the database fails over automatically. In the first real zone outage, the standby is promoted on time, but the application's connection pool never reconnects and its DNS cache holds the old address for an hour. <span class="hl-pink">The failover worked on paper and failed in practice</span>, and its first test was a real outage.</p>
+  <ul>
+    <li>Resilience mechanisms are <b>rarely exercised</b>, so they rot: configs change, assumptions break.</li>
+    <li>Distributed systems fail in <b>combinations</b> no design review imagines.</li>
+    <li>On-call people meet each failure for the first time <b>during</b> the incident.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of an untested failover. The database has a standby in a second zone, and the architecture diagram says failover is automatic. In the first real zone outage, the standby takes over, but the application&#x27;s connection strings still point at the old address and its DNS cache holds it for an hour. The failover that existed on paper fails in practice."><g class="rough"><rect class="d f-pink d-red" x="20" y="60" width="200" height="80" rx="10"/><rect class="d f-green" x="280" y="60" width="200" height="80" rx="10"/><rect class="d f-pink d-red" x="540" y="60" width="200" height="80" rx="10"/><path class="d d-red d-dash" d="M536 100 Q380 -24 224 100"/><path class="d d-red" d="M229.2 89.2 L224 100 L235.7 97.4"/></g><text class="t-head t-red" x="120" y="96" text-anchor="middle" font-size="17">primary DB</text><text class="t" x="120" y="120" text-anchor="middle" font-size="13">zone A: down</text><text class="t-head" x="380" y="96" text-anchor="middle" font-size="17">standby</text><text class="t" x="380" y="120" text-anchor="middle" font-size="13">zone B: promoted ✓</text><text class="t-head t-red" x="640" y="96" text-anchor="middle" font-size="17">app</text><text class="t" x="640" y="120" text-anchor="middle" font-size="13">still calls zone A</text><text class="t-s t-red" x="380" y="186" text-anchor="middle" font-size="16">DNS cached for 1 hour · connection pool never reconnects</text><text class="t-s t-red" x="380" y="216" text-anchor="middle" font-size="16">first test of failover: a real outage</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The diagram said “automatic failover”. Nobody had ever pulled the plug.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">a vaccine</span></h2>
+  <p>A vaccine is a <b>small, measured dose</b> of something harmful, given <b>on purpose</b> while the body is healthy, so it learns to cope before the real thing arrives. The patient is watched, and it's stopped if the reaction is too strong.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a vaccine. A small, controlled dose of something harmful, given on purpose, when the body is healthy, so it learns to cope. The dose is measured, the patient is watched, and it&#x27;s stopped if the reaction is too strong."><g class="rough"><rect class="d f-y" x="40" y="60" width="200" height="100" rx="10"/><path class="d" d="M244 110 L316 110"/><path class="d" d="M305.2 115.2 L316 110 L305.2 104.8"/><rect class="d f-blue" x="320" y="60" width="200" height="100" rx="10"/><path class="d" d="M524 110 L576 110"/><path class="d" d="M565.2 115.2 L576 110 L565.2 104.8"/><rect class="d f-green" x="580" y="60" width="166" height="100" rx="10"/></g><text class="t-head" x="140" y="106" text-anchor="middle" font-size="18">small dose</text><text class="t" x="140" y="130" text-anchor="middle" font-size="13">measured · on purpose</text><text class="t-head" x="420" y="106" text-anchor="middle" font-size="18">watched</text><text class="t" x="420" y="130" text-anchor="middle" font-size="13">stop if too strong</text><text class="t-head" x="663" y="106" text-anchor="middle" font-size="18">immune</text><text class="t" x="663" y="130" text-anchor="middle" font-size="13">before the real one</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A small, measured dose on purpose, so the body learns before the real thing arrives.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The small, measured dose</td><td>A limited fault: one instance, one zone, 1% of traffic</td></tr>
+      <tr><td>Given while healthy</td><td>Run when the system is in steady state, with people ready</td></tr>
+      <tr><td>Watching the patient</td><td>Observing the steady-state metric during the experiment</td></tr>
+      <tr><td>Stopping if the reaction is strong</td><td>Abort conditions that end the experiment automatically</td></tr>
+      <tr><td>Immunity</td><td>Fixes made before a real failure tests them</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">the experiment loop</span></h2>
+  <p>Each experiment is a small scientific test. The <b>steady state</b> is a metric users feel; the <b>hypothesis</b> says it stays within limits during a specific fault; the <b>blast radius</b> is kept small; an <b>abort condition</b> stops the fault automatically if the metric drops too far. A disproved hypothesis is the point: it's a weakness found on your schedule, not the incident's.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="The chaos experiment loop. Define steady state with a user-facing metric, for example checkout success above 99.5 percent. Form a hypothesis: if one database zone fails, checkout success stays above 99 percent and recovers in under two minutes. Inject the fault in a limited blast radius with an abort condition. Observe, then fix what you learned and run it again, eventually automatically."><g class="rough"><rect class="d f-green" x="20" y="40" width="150" height="84" rx="10"/><rect class="d f-y" x="210" y="40" width="150" height="84" rx="10"/><path class="d" d="M174 82 L206 82"/><path class="d" d="M195.2 87.2 L206 82 L195.2 76.8"/><rect class="d f-pink" x="400" y="40" width="150" height="84" rx="10"/><path class="d" d="M364 82 L396 82"/><path class="d" d="M385.2 87.2 L396 82 L385.2 76.8"/><rect class="d f-blue" x="590" y="40" width="150" height="84" rx="10"/><path class="d" d="M554 82 L586 82"/><path class="d" d="M575.2 87.2 L586 82 L575.2 76.8"/><path class="d d-dash" d="M650 128 Q380 230 110 128"/><path class="d" d="M122.0 126.9 L110 128 L118.3 136.7"/></g><text class="t-head" x="95" y="78" text-anchor="middle" font-size="17">steady state</text><text class="t" x="95" y="102" text-anchor="middle" font-size="13">checkout ≥ 99.5%</text><text class="t-head" x="285" y="78" text-anchor="middle" font-size="17">hypothesis</text><text class="t" x="285" y="102" text-anchor="middle" font-size="13">zone fails → ≥ 99%</text><text class="t-head" x="475" y="78" text-anchor="middle" font-size="17">inject</text><text class="t" x="475" y="102" text-anchor="middle" font-size="13">small · abortable</text><text class="t-head" x="665" y="78" text-anchor="middle" font-size="17">observe</text><text class="t" x="665" y="102" text-anchor="middle" font-size="13">vs. hypothesis</text><text class="t-s t-pen" x="380" y="206" text-anchor="middle" font-size="16">fix what you learned · run again · then automate it</text><text class="t-s t-red" x="380" y="266" text-anchor="middle" font-size="15">abort if the steady-state metric drops below the limit</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Steady state → hypothesis → small, abortable fault → observe → fix → repeat.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Pick a weakness you suspect</b><p>Failover, a slow dependency, losing a zone, a full disk, an expired certificate.</p></li>
+    <li><b>Define steady state</b><p>A user-facing metric with a normal range: checkout success, search latency.</p></li>
+    <li><b>Write the hypothesis and limits</b><p>What should happen, how much traffic is in scope, and when to abort.</p></li>
+    <li><b>Run it, small and watched</b><p>Staging first, then production in a small slice, during working hours, with the owners present (a game day).</p></li>
+    <li><b>Fix and repeat</b><p>Turn findings into fixes, re-run to confirm, then schedule it to run automatically.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Chaos engineering</dt><dd>Experimenting on a system to build confidence it can withstand turbulent conditions.</dd></div>
+    <div><dt>Steady state</dt><dd>The normal range of a metric users care about.</dd></div>
+    <div><dt>Hypothesis</dt><dd>What you expect to stay true during the fault.</dd></div>
+    <div><dt>Blast radius</dt><dd>How much of the system and its users the experiment can affect.</dd></div>
+    <div><dt>Abort condition</dt><dd>The rule that stops the experiment automatically.</dd></div>
+    <div><dt>Game day</dt><dd>A planned session where a team runs failure experiments together.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>zone-failure.yaml</span><span>Chaos Mesh (Kubernetes)</span></div>
+<pre><code><span class="c"># hypothesis: if orders loses its pods in zone b, checkout success stays &gt;= 99% and recovers within 2 min</span>
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata: { name: orders-zone-b-loss, namespace: chaos }
+spec:
+  action: pod-kill
+  mode: all
+  selector:
+    namespaces: [shop]
+    labelSelectors: { app: orders }
+    nodeSelectors: { topology.kubernetes.io/zone: eu-west-1b }
+  duration: <span class="s">"10m"</span>
+---
+<span class="c"># abort: stop the experiment if checkout success drops below 98.5% (alert wired to delete the PodChaos)</span>
+<span class="c"># run in staging first; in production, during a game day, with the orders team watching</span></code></pre>
+  </div>
+  <p class="aside">tools: Chaos Mesh and LitmusChaos (Kubernetes), AWS Fault Injection Service, Azure Chaos Studio, Gremlin, Chaos Toolkit, Toxiproxy for network faults, Steadybit.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Failover and recovery are proven</b>, not assumed.</li><li><b>Weaknesses found on your schedule</b>, during working hours.</li><li><b>Practised on-call</b>: the team has seen the failure before.</li><li><b>Better runbooks and alerts</b> from every experiment.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Real risk</b> if the blast radius or abort is wrong.</li><li><b>Needs good observability</b> first, or you can't see the result.</li><li><b>Time</b>: planning, game days, follow-up work.</li><li><b>Trust to earn</b> with the business before production experiments.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Operations ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>resilience that exists only on diagrams</b> to <b>regular, controlled experiments against it</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to run &amp; explain?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral: experiments are planned, small and documented.</td></tr>
+      <tr data-before="3" data-after="3"><td>Delivery speed<small>fast from commit to prod?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Release safety<small>low risk per deploy?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Rollback and recovery paths are known to work.</td></tr>
+      <tr data-before="2" data-after="4"><td>Reliability<small>stays up?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Weaknesses are fixed before real failures find them.</td></tr>
+      <tr data-before="3" data-after="3"><td>Scalability<small>handles 10× load?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="5"><td>Recoverability<small>fast to restore?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Failover and restore are practised.</td></tr>
+      <tr data-before="2" data-after="4"><td>Observability<small>can we see inside?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Experiments expose missing alerts and dashboards.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tool and people time, fewer long outages.</td></tr>
+      <tr data-before="3" data-after="3"><td>Developer experience<small>pleasant to ship with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Chaos without a hypothesis</h3><p>Killing random things and watching what happens teaches little and scares everyone. <span class="fix">Fix →</span> one suspected weakness, a written hypothesis and a steady-state metric per experiment.</p></li>
+    <li><h3>No abort condition</h3><p>An experiment keeps running while customers suffer. <span class="fix">Fix →</span> an automatic stop tied to the steady-state metric, and a person ready to stop it.</p></li>
+    <li><h3>Starting in production</h3><p>The first experiment ever takes down checkout. <span class="fix">Fix →</span> staging and game days first; production with a tiny blast radius once trust is earned.</p></li>
+    <li><h3>Findings without fixes</h3><p>The same weakness shows up in every game day. <span class="fix">Fix →</span> track findings as tickets with owners, and re-run the experiment to confirm the fix.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Systems with failover, redundancy or autoscaling you rely on.</li><li>Before peak events (sales, launches) to test the plan.</li><li>Teams with good monitoring and an on-call rotation.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>No observability yet: you won't be able to tell what happened.</li><li>Known weaknesses already waiting to be fixed: fix them first.</li><li>A system that can't take any risk and has no staging copy (build one first).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../../testing/notes/fault-injection.html"><b>Fault injection tests</b></a> (Vol. 4)</li><li><a href="../notes/disaster-recovery.html"><b>Backups &amp; disaster recovery</b></a></li><li><a href="../notes/postmortems.html"><b>Incident response &amp; postmortems</b></a></li><li><a href="../../distributed/notes/circuit-breaker.html"><b>Circuit breaker</b></a> (Vol. 1)</li></ul>
+  <p class="aside seen">seen at Larder → <a href="../../ops-5/notes/game-days.html">Breaking Things on Purpose</a> <small>(Eli, vol. 5)</small></p>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What are the parts of a chaos experiment?</summary><p>A steady-state metric, a hypothesis, a fault with a limited blast radius, an abort condition, and observation of the result.</p></details>
+    <details><summary>Why define steady state with a user-facing metric?</summary><p>It measures what matters (users succeeding), not whether a single server is up.</p></details>
+    <details><summary>Why start in staging and with game days?</summary><p>To learn safely and build trust before running small, controlled experiments in production.</p></details>
+    <details><summary>How is chaos engineering different from fault injection tests?</summary><p>Chaos experiments run against a whole running system and its operations; fault injection tests run inside the test suite against code.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Leadership wants to “turn on Chaos Monkey in production” next week. There's no steady-state metric for checkout, and alerts are mostly on CPU. What do you propose instead?</span></summary><p>First define steady-state SLIs (checkout success, latency) with alerts on them. Then run a game day in staging with one hypothesis (an instance or zone loss), fix what it finds, and only then run small, abortable experiments in production during working hours.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Pick one resilience claim in your system (“if one instance dies, users don't notice”). Write it as a hypothesis with a steady-state metric, then test it in staging: delete one pod or stop one instance while a load generator runs, and watch the metric. Write down what happened, what surprised you, and one fix.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>A <span class="hl">small dose, on purpose</span>, with a <span class="hl">hand on the stop button</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/18-chaos-engineering.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Principles of Chaos Engineering (principlesofchaos.org).</li><li>Casey Rosenthal and Nora Jones, <i>Chaos Engineering</i> (O'Reilly, 2020).</li><li>Ali Basiri et al., “Chaos Engineering”, <i>IEEE Software</i> (2016).</li><li>AWS Well-Architected Reliability Pillar, “Test reliability using fault injection”.</li></ul>
+  </div>
+  <p class="folio">18</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="service-catalogue.html"><small>← previous note</small>17 · Service Catalogue</a>
+  <a href="../index.html"><small>back to →</small>Index</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 6 · a student's bullet journal on cloud &amp; devops patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

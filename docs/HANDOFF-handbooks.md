@@ -2,7 +2,8 @@
 
 Status as of 2026-11-26: **approved and in progress.** Owner decisions: title OK, AWS as the main provider, Larder as
 the running example, 25 chapters, labs may cost up to about $1 (with clean-up steps). Written: Parts I and II
-(chapters 1–10). The book is on the landing page (Series 3 shelf) and in `journals.json` (chapter PDFs + whole-book PDF).
+(chapters 1–10). The book is on the landing page (a **Handbooks** section after Deep dives, added when main's
+format-based landing page was merged in) and in `journals.json` (chapter PDFs + whole-book PDF).
 
 - Contents page: `public/handbooks/cloud-networking/index.html`
 - Sample chapter: `public/handbooks/cloud-networking/08-inside-a-vpc.html`
@@ -107,7 +108,7 @@ NAT Elastic IP `198.51.100.7` (StockPilot allow-lists it). Chapter 9 should rete
 
 ## 5. Progress and checklist
 
-1. [x] Landing page: Series 3 shelf; `journals.json` entries for chapter and whole-book PDFs.
+1. [x] Landing page: Handbooks section (`handbook_items()` in `build_notes.py`); `journals.json` entries for chapter and whole-book PDFs.
 2. [x] Part I: chapters 1–6. [x] Part II: chapters 7–10.
 3. [ ] Part III (11–15), then Parts IV–VI in order, then the appendices. Forward references already promise:
    ch. 11 transit gateway appliance mode and SG referencing; ch. 12 builds Larder's PrivateLink endpoint service for
@@ -117,3 +118,12 @@ NAT Elastic IP `198.51.100.7` (StockPilot allow-lists it). Chapter 9 should rete
    were not run or validated (Terraform wasn't available in the session); run `terraform validate` and one real apply.
 5. Per chapter: figures checked at desktop and 375 px, light and dark (no horizontal overflow); labs not yet run in a
    real account (owner or a later session should run the AWS labs once); links checked.
+
+## 6. Merge with main (2026-11-26)
+
+- Main had moved on (Books 3 and 5, deep dives, cheat sheets, the Darkside, a spine-shelf landing page, cached PDFs).
+  Merged into this branch; generated pages taken from main and rebuilt.
+- Chapter 9's story now matches the casebook's 29 Oct 2026 incident (PR 233, applied 18:10, Bram reverts 18:35).
+- PDFs: `scripts/build-pdf.mjs` renders never-rendered PDFs automatically, so the handbook's 11 PDFs build on the
+  next deploy without touching `pdf-build.json`. Verified locally with
+  `CHROMIUM_PATH=/opt/pw-browsers/chromium PDF_JOURNALS=handbooks/cloud-networking npm run pdf`.

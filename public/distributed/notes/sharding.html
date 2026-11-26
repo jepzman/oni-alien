@@ -10,9 +10,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
 <link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
-<link rel="stylesheet" href="../../assets/bujo.css?v=5215fdc6b0">
+<link rel="stylesheet" href="../../assets/bujo.css?v=26ccece878">
 <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
-<script src="../../assets/notebook.js?v=b632700836" defer></script>
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
 </head>
 <body class="bujo">
 <a class="skip-link" href="#main">Skip to the notes</a>
@@ -31,6 +31,7 @@
 <article class="sheet" id="sharding">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Fri · 09.10.26</span><span class="topic">collection · <b>scaling data</b></span></div>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “split the data, split the load”</p>
   <h1><span class="hl">Sharding</span></h1>
   <div class="tldr">
@@ -127,6 +128,38 @@
 <span class="k">await</span> dbFor(<span class="s">"c-731"</span>).transaction(<span class="k">async</span> (tx) =&gt; { /* order + payment rows */ });</code></pre>
   </div>
   <p class="aside">sharded databases and helpers: Vitess (MySQL), Citus (Postgres), MongoDB sharding, Cassandra / ScyllaDB, DynamoDB partitions, CockroachDB / Spanner / YugabyteDB (automatic ranges), Kafka partitions for streams.</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">moving shards, hot keys, queries across shards</span></h2>
+  <p class="deep-intro">The note explains how to choose a shard key and why to plan for resharding. This chapter shows what that plan looks like when you carry it out, what to do about a single key that is hotter than a whole shard, and how to deal with the queries and transactions that don't fit inside one shard.</p>
+  <h3 class="deep-h"><span>1</span>Moving shards, not keys</h3>
+  <p>Hash each key into a large, fixed number of <b>logical shards</b> (say 1,024) and keep a small <b>shard map</b> that says which physical database holds which logical shards. The key-to-shard step never changes; only the map does.</p>
+  <p>Adding a machine then means moving some logical shards to it:</p>
+  <ol>
+    <li><b>Copy</b> the rows of the moving shards to the new machine (a snapshot), then <b>stream</b> later changes to it (logical replication or CDC) until it is a few seconds behind.</li>
+    <li><b>Pause writes</b> for those shards for a moment, let the copy catch up completely, and <b>change their lines in the map</b>.</li>
+    <li>Callers pick up the new map (watch it, or check its version on each request) and go to the new machine. <b>Delete</b> the old copies a few days later.</li>
+  </ol>
+  <p>Each move touches a fraction of the data and pauses only those shards. This is what Vitess, Citus and MongoDB's balancer do for you; with your own router you build it once and run it many times.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Logical shards on physical machines. Customers are hashed into 1,024 logical shards. A small map assigns ranges of logical shards to four database machines. To add a fifth machine, some logical shards are copied to it, kept in sync, and then their lines in the map are changed. No customer&#x27;s shard number ever changes."><g class="rough"><rect class="d f-paper" x="20" y="30" width="170" height="70" rx="10"/><path class="d" d="M194 65 L246 65"/><path class="d" d="M235.2 70.2 L246 65 L235.2 59.8"/><rect class="d d-thin f-paper" x="250" y="20" width="210" height="136" rx="4"/><path class="d d-thin f-y" d="M250 24 a4 4 0 0 1 4 -4 h202 a4 4 0 0 1 4 4 v28 h-210 z"/><path class="d d-thin d-soft" d="M256 78 h198"/><path class="d d-thin d-soft" d="M256 104 h198"/><rect class="f-hl" x="253" y="106" width="204" height="22" rx="2" style="stroke:none"/><path class="d d-thin d-soft" d="M256 130 h198"/><path class="d" d="M464 116 L520 150"/><path class="d" d="M508.1 148.9 L520 150 L513.5 139.9"/><path class="d d-thin f-paper" d="M525 30 v40 a35 9 0 0 0 70 0 v-40"/><ellipse class="d d-thin f-paper" cx="560" cy="30" rx="35" ry="9"/><path class="d d-thin f-paper" d="M635 30 v40 a35 9 0 0 0 70 0 v-40"/><ellipse class="d d-thin f-paper" cx="670" cy="30" rx="35" ry="9"/><path class="d d-thin f-green" d="M525 130 v40 a35 9 0 0 0 70 0 v-40"/><ellipse class="d d-thin f-green" cx="560" cy="130" rx="35" ry="9"/><path class="d d-thin f-paper" d="M635 130 v40 a35 9 0 0 0 70 0 v-40"/><ellipse class="d d-thin f-paper" cx="670" cy="130" rx="35" ry="9"/></g><text class="t-head" x="105" y="61" text-anchor="middle" font-size="16">customer 81723</text><text class="t" x="105" y="85" text-anchor="middle" font-size="14">hash % 1024 = 517</text><text class="t-head" x="355" y="43" text-anchor="middle" font-size="17">shard map</text><text class="t" x="260" y="71" font-size="16">0–255 → db-1</text><text class="t" x="260" y="97" font-size="16">256–511 → db-2</text><text class="t" x="260" y="123" font-size="16">512–767 → db-3</text><text class="t" x="260" y="149" font-size="16">768–1023 → db-4</text><text class="t t-soft" x="560" y="100" text-anchor="middle" font-size="16">db-1</text><text class="t t-soft" x="670" y="100" text-anchor="middle" font-size="16">db-2</text><text class="t t-soft" x="560" y="200" text-anchor="middle" font-size="16">db-3</text><text class="t t-soft" x="670" y="200" text-anchor="middle" font-size="16">db-4</text><text class="t-s t-pen" x="380" y="238" text-anchor="middle" font-size="17">adding db-5: copy shards 640–767 · catch up · change one line</text><text class="t-s" x="380" y="270" text-anchor="middle" font-size="16">the customer&#x27;s shard (517) never changes</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Hash into many logical shards once; move whole shards between machines later.</figcaption></figure>
+  <h3 class="deep-h"><span>2</span>When one key is hotter than a shard</h3>
+  <p>A good key spreads load evenly on average, but averages hide single keys. One celebrity account with 50 million followers, one product in a flash sale, one tenant who imports a year of data on a Monday: all of that lands on one shard, and moving shards doesn't help, because a key can't be split across them.</p>
+  <ul>
+    <li><b>Reads:</b> cache the hot item in front of the database; a hot key is usually a few rows read many times.</li>
+    <li><b>Writes:</b> split the key. Store counters as <code>post:42#0</code> to <code>post:42#7</code> on different shards, add to a random one, and sum the eight on read.</li>
+    <li><b>Known giants:</b> give a very large tenant its own shard or its own database, and route to it from the map.</li>
+  </ul>
+  <p>Measure per key, not just per shard: the top 20 keys by requests and by writes, every day. Hot keys show up there weeks before they cause an incident.</p>
+
+  <h3 class="deep-h"><span>3</span>Queries and transactions across shards</h3>
+  <p>A query without the shard key has to ask every shard and merge the answers (scatter-gather). Two problems grow with the number of shards. Load: every such query costs every shard something. And latency: the query waits for the slowest shard, so its p99 is roughly the worst of eight (or sixty-four) p99s.</p>
+  <ul>
+    <li><b>Keep a second copy shaped for the question.</b> Search, reports and “all orders for this product” go to a store built for them (a search index, a warehouse) fed by CDC, not to the shards.</li>
+    <li><b>Global lookups</b> (email to customer id) get their own small table, itself sharded by email, or a cache.</li>
+    <li><b>Small reference tables</b> (countries, currencies) are copied to every shard so joins stay local.</li>
+  </ul>
+  <p>Avoid transactions across shards. Choose the key so a business operation stays on one shard (a customer and their orders together). When an operation really spans shards, such as moving money between two customers on different shards, use a saga or the outbox, not a distributed transaction.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Scatter-gather across eight shards. A query that needs all shards waits for the slowest. Seven shards answer in 20 milliseconds and one in 400, so the whole query takes 400 milliseconds. The more shards a query touches, the more likely one of them is slow."><g class="rough"><rect class="d f-paper" x="20" y="90" width="130" height="70" rx="10"/><rect class="d f-green" x="210" y="70" width="56" height="110" rx="10"/><rect class="d f-green" x="276" y="70" width="56" height="110" rx="10"/><rect class="d f-green" x="342" y="70" width="56" height="110" rx="10"/><rect class="d f-green" x="408" y="70" width="56" height="110" rx="10"/><rect class="d f-green" x="474" y="70" width="56" height="110" rx="10"/><rect class="d f-pink d-red" x="540" y="70" width="56" height="110" rx="10"/><rect class="d f-green" x="606" y="70" width="56" height="110" rx="10"/><rect class="d f-green" x="672" y="70" width="56" height="110" rx="10"/><path class="d" d="M154 125 L204 125"/><path class="d" d="M193.2 130.2 L204 125 L193.2 119.8"/></g><text class="t-head" x="85" y="121" text-anchor="middle" font-size="18">query</text><text class="t" x="85" y="145" text-anchor="middle" font-size="14">needs all 8</text><text class="t-head" x="238" y="118" text-anchor="middle" font-size="16">s1</text><text class="t" x="238" y="148" text-anchor="middle" font-size="14">20</text><text class="t-head" x="304" y="118" text-anchor="middle" font-size="16">s2</text><text class="t" x="304" y="148" text-anchor="middle" font-size="14">20</text><text class="t-head" x="370" y="118" text-anchor="middle" font-size="16">s3</text><text class="t" x="370" y="148" text-anchor="middle" font-size="14">20</text><text class="t-head" x="436" y="118" text-anchor="middle" font-size="16">s4</text><text class="t" x="436" y="148" text-anchor="middle" font-size="14">20</text><text class="t-head" x="502" y="118" text-anchor="middle" font-size="16">s5</text><text class="t" x="502" y="148" text-anchor="middle" font-size="14">20</text><text class="t-head" x="568" y="118" text-anchor="middle" font-size="16">s6</text><text class="t" x="568" y="148" text-anchor="middle" font-size="14">400</text><text class="t-head" x="634" y="118" text-anchor="middle" font-size="16">s7</text><text class="t" x="634" y="148" text-anchor="middle" font-size="14">20</text><text class="t-head" x="700" y="118" text-anchor="middle" font-size="16">s8</text><text class="t" x="700" y="148" text-anchor="middle" font-size="14">20</text><text class="t-s t-red" x="480" y="216" text-anchor="middle" font-size="17">result in 400 ms, not 20: the slowest one decides</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A query to every shard is as slow as the slowest shard.</figcaption></figure>
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">
@@ -177,13 +210,19 @@
     </div>
   </div>
   <h3>Related patterns</h3>
-  <ul class="related"><li><b>Leader–follower replication</b> · each shard is replicated</li><li><b>Cache-aside</b></li><li><b>CQRS</b> · global read models</li><li><b>Saga</b> · cross-shard work</li><li><b>Consistent hashing</b></li></ul>
+  <ul class="related"><li><a href="../notes/replication.html"><b>Leader–follower replication</b></a> · each shard is replicated</li><li><a href="../notes/cache-aside.html"><b>Cache-aside</b></a></li><li><a href="../notes/cqrs.html"><b>CQRS</b></a> · global read models</li><li><a href="../notes/saga.html"><b>Saga</b></a> · cross-shard work</li><li><a href="../notes/consistent-hashing.html"><b>Consistent hashing</b></a></li></ul>
+  <p class="aside deeper">go deeper → <a href="../../deep-dives/sharding-partitioning/index.html">Sharding &amp; Partitioning: the deep dive</a></p>
   <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
   <div class="quiz">
     <details><summary>Why is hash(key) % N a problem when N changes?</summary><p>Most keys map to a different shard when N changes, so nearly all data has to move at once.</p></details>
     <details><summary>What makes a good shard key?</summary><p>High cardinality, an even spread of data and load, and present in most queries so they hit one shard.</p></details>
     <details><summary>How do you run a report across all customers in a sharded system?</summary><p>Scatter-gather across shards for occasional use, or better, feed all shards into a separate analytics/read store.</p></details>
     <details><summary>Replication vs sharding?</summary><p>Replication copies the same data to several machines (availability, read scale); sharding splits different data across machines (write and storage scale). Real systems do both.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>You shard an online shop by country. One country is 60% of all orders, and its shard is at 95% CPU while the rest are idle. What went wrong, and what is a better key?</span></summary><p>The key has low cardinality and an uneven spread, so one shard got most of the load. Use a key with many values that spreads evenly and matches the main queries, such as customer id, hashed into many logical shards that you can move between machines.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Take 100,000 fake customer ids and assign them to 4 shards with hash % 4. Count rows per shard. Change to 5 shards and count how many ids moved. Then do the same with 64 logical shards mapped onto 4 machines and compare how much data a fifth machine would move.</p>
   </div>
   <div class="remember">
     <span class="tag">remember!!</span>

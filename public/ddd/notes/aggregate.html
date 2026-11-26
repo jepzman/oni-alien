@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aggregate · Jef’s Notes</title>
+<meta name="description" content="A cluster of objects changed together through one root, which guards their rules.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=26ccece878">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-ddd">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 7 · domain-driven design</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="aggregate">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 18.02.27</span><span class="topic">collection · <b>building blocks</b></span></div>
+  <p class="kicker">a.k.a. “ask the waiter, don't walk into the kitchen”</p>
+  <h1><span class="hl">Aggregate</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Group objects that must stay consistent together (an order and its lines) into an <b>aggregate</b> with one <b>root</b>. Outside code can only talk to the <b>root</b>, which checks every rule before changing anything inside. One aggregate is loaded and saved in <b>one transaction</b>; other aggregates are referenced <b>by ID</b> and updated <b>separately</b>, often by events. Keep aggregates <b>small</b>.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> tactical building block</li><li><b>From:</b> Evans (2003), ch. 6; Vernon (2011)</li><li><b>Rule of thumb:</b> one aggregate per transaction</li><li><b>Pairs with:</b> repository, domain events, optimistic locking</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">When any code can change any object, business rules that span several objects (<span class="hl-pink">invariants</span>) get broken, especially under concurrency.</p>
+  <ul>
+    <li>Lines are added straight to the line table, bypassing the order's limits.</li>
+    <li>Two requests change the same order at once and both “pass” the check.</li>
+    <li>One transaction locks orders, customers and stock at the same time.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="Doodle of an invariant being broken. The rule is: an order may have at most ten lines and its total must not exceed the customer&#x27;s credit limit. Two pieces of code add lines to the same order directly through the line repository, at the same time. Neither sees the other&#x27;s line. The order ends up with twelve lines and over the limit. The rule was checked, but in the wrong place."><g class="rough"><rect class="d f-paper" x="250" y="30" width="260" height="90" rx="10"/><rect class="d f-blue" x="20" y="170" width="220" height="60" rx="10"/><rect class="d f-blue" x="520" y="170" width="220" height="60" rx="10"/><path class="d d-red" d="M130 166 L300 124"/><path class="d d-red" d="M290.8 131.7 L300 124 L288.3 121.5"/><path class="d d-red" d="M630 166 L460 124"/><path class="d d-red" d="M471.7 121.5 L460 124 L469.2 131.7"/></g><text class="t-head" x="380" y="71" text-anchor="middle">Order</text><text class="t" x="380" y="95" text-anchor="middle" font-size="17">max 10 lines · ≤ limit</text><text class="t-head" x="130" y="207" text-anchor="middle" font-size="16">code A: add line</text><text class="t-head" x="630" y="207" text-anchor="middle" font-size="16">code B: add line</text><text class="t-s t-red" x="380" y="160" text-anchor="middle">both go straight to the lines</text><text class="t-s t-red" x="380" y="258" text-anchor="middle">result: 12 lines, €200 over the limit</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Lines are added directly by two pieces of code at once; the order ends up with 12 lines and over its limit.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the table's waiter</span></h2>
+  <p>In a restaurant you don't walk into the kitchen and add dishes to your own ticket. You ask <b>your table's waiter</b>, who checks the rules (kitchen closing, set menu, sold out) and updates the ticket. One waiter per table means two guests can't put conflicting orders on it at the same time.</p>
+  <ul>
+    <li>The ticket and its items are the <b>aggregate</b>.</li>
+    <li>The waiter is the <b>aggregate root</b>.</li>
+    <li>Other tables are <b>other aggregates</b>, served separately.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a restaurant table and its waiter. Customers don&#x27;t walk into the kitchen and add dishes to their own ticket. They ask the table&#x27;s waiter, who checks the rules: the kitchen is closing, the table has a set menu, the dish is sold out. The ticket and its items change only through the waiter, one request at a time."><g class="rough"><rect class="d f-paper" x="30" y="60" width="200" height="90" rx="10"/><path class="d" d="M234 105 L296 105"/><path class="d" d="M285.2 110.2 L296 105 L285.2 99.8"/><rect class="d f-y" x="300" y="50" width="160" height="110" rx="10"/><path class="d" d="M464 105 L526 105"/><path class="d" d="M515.2 110.2 L526 105 L515.2 99.8"/><rect class="d f-green" x="530" y="60" width="200" height="90" rx="10"/></g><text class="t-head" x="130" y="101" text-anchor="middle">guests</text><text class="t" x="130" y="125" text-anchor="middle" font-size="17">“add a dessert”</text><text class="t-head" x="380" y="101" text-anchor="middle">waiter</text><text class="t" x="380" y="125" text-anchor="middle" font-size="17">checks rules</text><text class="t-head" x="630" y="101" text-anchor="middle">ticket</text><text class="t" x="630" y="125" text-anchor="middle" font-size="17">items, total</text><text class="t-s t-pen" x="380" y="220" text-anchor="middle">the ticket only changes through the waiter</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>You don't add dishes to your own ticket in the kitchen: you ask the table's waiter, who checks the rules.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The table's ticket and items</td><td>The Order aggregate with its lines</td></tr>
+      <tr><td>The waiter</td><td>The aggregate root: <code>Order</code></td></tr>
+      <tr><td>“Add a dessert”</td><td><code>order.addLine(productId, qty)</code></td></tr>
+      <tr><td>Kitchen's closing, no more</td><td>Invariants checked inside the root</td></tr>
+      <tr><td>Other tables</td><td>Other aggregates (Customer, Product) referenced by ID</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">a consistency boundary with one door</span></h2>
+  <p>Vaughn Vernon's four rules (2011): <b>protect true invariants</b> inside the border; <b>design small</b> aggregates; <b>reference others by ID</b>; and use <b>eventual consistency</b> between aggregates. Ask “does this rule really have to be true at every instant, or within a few seconds?”</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 330" role="img" aria-label="An Order aggregate. The Order is the aggregate root; it contains order lines and a shipping address. Outside code can only hold a reference to the Order, by ID, and must call its methods, like addLine, which check the rules: at most ten lines and total within the credit limit. The whole aggregate is loaded and saved in one transaction with a version number for optimistic locking. Other aggregates, like Customer and Product, are referenced by ID only."><g class="rough"><rect class="d f-y d-dash" x="200" y="30" width="360" height="230" rx="10"/><rect class="d f-green" x="260" y="50" width="240" height="70" rx="10"/><rect class="d f-paper" x="230" y="150" width="140" height="50" rx="10"/><rect class="d f-paper" x="390" y="150" width="140" height="50" rx="10"/><rect class="d f-paper" x="310" y="210" width="140" height="40" rx="10"/><rect class="d f-blue" x="20" y="60" width="150" height="50" rx="10"/><rect class="d f-blue" x="590" y="60" width="150" height="50" rx="10"/><path class="d d-dash" d="M256 85 L174 85"/><path class="d" d="M184.8 79.8 L174 85 L184.8 90.2"/><path class="d d-dash" d="M504 85 L586 85"/><path class="d" d="M575.2 90.2 L586 85 L575.2 79.8"/></g><text class="t-head" x="380" y="81" text-anchor="middle">Order (root)</text><text class="t" x="380" y="105" text-anchor="middle" font-size="17">addLine() · version 7</text><text class="t-head" x="300" y="182" text-anchor="middle" font-size="15">OrderLine</text><text class="t-head" x="460" y="182" text-anchor="middle" font-size="15">OrderLine</text><text class="t-head" x="380" y="237" text-anchor="middle" font-size="15">Address</text><text class="t-head" x="95" y="92" text-anchor="middle" font-size="15">customerId</text><text class="t-head" x="665" y="92" text-anchor="middle" font-size="15">productId</text><text class="t-s t-pen" x="380" y="296" text-anchor="middle">outside code calls the root · one transaction per aggregate</text><text class="t-s t-pen" x="380" y="322" text-anchor="middle">other aggregates by ID only</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One root guards the rules; the whole cluster is saved in one transaction; others are referenced by ID.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Find the invariants</b><p>Rules that must be true at every moment: “at most ten lines”, “total within credit limit”.</p></li>
+    <li><b>Draw the smallest border around them</b><p>Only objects that take part in such a rule go inside.</p></li>
+    <li><b>Pick the root</b><p>The one entity outside code may hold and call. Everything else is reached through it.</p></li>
+    <li><b>Refer to others by ID</b><p>Order stores <code>customerId</code>, not a Customer object.</p></li>
+    <li><b>One aggregate per transaction</b><p>Load, call a method, save, with a version number for optimistic locking.</p></li>
+    <li><b>Between aggregates, use events</b><p>“Order placed” → reserve stock in another transaction, eventually consistent.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Aggregate</dt><dd>A cluster of objects treated as one unit for changes.</dd></div>
+    <div><dt>Aggregate root</dt><dd>The single entry point that enforces the aggregate's rules.</dd></div>
+    <div><dt>Invariant</dt><dd>A rule that must always hold within the aggregate.</dd></div>
+    <div><dt>Consistency boundary</dt><dd>The border inside which changes are immediately consistent.</dd></div>
+    <div><dt>Optimistic concurrency</dt><dd>Save only if the version hasn't changed since loading.</dd></div>
+    <div><dt>Eventual consistency</dt><dd>Other aggregates catch up shortly after, through events.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>order.ts</span><span>the root guards the rules</span></div>
+<pre><code><span class="k">export</span> <span class="k">class</span> Order {
+  <span class="k">private</span> lines: OrderLine[] = [];
+  <span class="k">private</span> status: <span class="s">"draft"</span> | <span class="s">"placed"</span> = <span class="s">"draft"</span>;
+  <span class="k">private</span> constructor(readonly id: OrderId, readonly customerId: CustomerId,  <span class="c">// by ID</span>
+                      <span class="k">private</span> creditLimit: Money, public version = 0) {}
+
+  addLine(productId: ProductId, qty: Quantity, unitPrice: Money) {
+    <span class="k">if</span> (this.status !== <span class="s">"draft"</span>) <span class="k">throw</span> <span class="k">new</span> Error(<span class="s">"Order is already placed"</span>);
+    <span class="k">if</span> (this.lines.length &gt;= 10) <span class="k">throw</span> <span class="k">new</span> Error(<span class="s">"At most 10 lines"</span>);
+    <span class="k">const</span> next = this.total().add(unitPrice.times(qty));
+    <span class="k">if</span> (next.cents &gt; this.creditLimit.cents) <span class="k">throw</span> <span class="k">new</span> Error(<span class="s">"Over credit limit"</span>);
+    this.lines.push(<span class="k">new</span> OrderLine(productId, qty, unitPrice));
+  }
+  total(): Money { <span class="k">return</span> this.lines.reduce((t, l) =&gt; t.add(l.subtotal()), Money.zero(<span class="s">"EUR"</span>)); }
+}
+
+<span class="c">// application code: one aggregate, one transaction, optimistic lock</span>
+<span class="k">const</span> order = <span class="k">await</span> orders.get(id);
+order.addLine(productId, qty, price);
+<span class="k">await</span> orders.save(order);   <span class="c">// UPDATE ... WHERE id = ? AND version = ?   -&gt; retry on conflict</span></code></pre>
+  </div>
+  <p class="aside">tools: ORMs with optimistic locking (<code>@Version</code> in JPA, concurrency tokens in EF Core), document databases that store one aggregate per document, and event stores (EventStoreDB, Marten) for event-sourced aggregates.</p>
+  <section class="thennow verdict-grown" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="more relevant today than when it was written">matters more now</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Evans, 2003; Vernon, 2011</small></h3><p>Evans described aggregates as clusters with a root and a boundary, but gave little guidance on size, and early implementations were often large object graphs loaded through ORM lazy loading.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>Vernon's “Effective Aggregate Design” (2011) rethought the sizing: small aggregates, references by ID, eventual consistency between them. Aggregates then became the unit of event sourcing, of documents in NoSQL stores, and of consistency in microservices.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> More important today than in 2003: it's the tactical pattern that matters most, as long as you keep it small.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Invariants always hold</b>, even under concurrency.</li><li><b>One door</b>: easy to see how state can change.</li><li><b>Small transactions</b>, fewer lock conflicts.</li><li><b>Natural unit</b> for storage, caching and events.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Hard to size right</b>: too big locks too much, too small can't protect rules.</li><li><b>Eventual consistency</b> between aggregates must be designed.</li><li><b>Loading the whole aggregate</b> for a small change.</li><li><b>Queries across aggregates</b> need separate read models.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Code-design ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>objects any code can change, with rules checked here and there</b> to <b>small aggregates whose roots enforce the rules</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="2" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One door per cluster, but sizing takes skill.</td></tr>
+      <tr data-before="3" data-after="4"><td>Domain clarity<small>reads like the business?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Rules live in methods on the root.</td></tr>
+      <tr data-before="2" data-after="5"><td>Correctness<small>rules can't be broken?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The main gain: invariants are enforced in one place, safely.</td></tr>
+      <tr data-before="2" data-after="4"><td>Changeability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A rule change happens inside one aggregate.</td></tr>
+      <tr data-before="3" data-after="5"><td>Testability<small>test without the world?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Pure in-memory objects; test rules without a database.</td></tr>
+      <tr data-before="2" data-after="4"><td>Low coupling<small>parts change alone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Aggregates point at each other only by ID.</td></tr>
+      <tr data-before="3" data-after="3"><td>Performance<small>fast enough?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Small transactions vs loading whole clusters: depends on size.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low ceremony<small>little boilerplate?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Roots, versioning and events between aggregates.</td></tr>
+      <tr data-before="2" data-after="4"><td>Team scalability<small>many teams at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Small aggregates rarely collide between teams or requests.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Giant aggregates</h3><p>Customer contains all orders, all addresses and all payments; every change locks it. <span class="fix">Fix →</span> small aggregates around true invariants; reference by ID.</p></li>
+    <li><h3>Changing two aggregates in one transaction</h3><p>Placing an order also updates stock and loyalty points atomically. <span class="fix">Fix →</span> one aggregate per transaction; the rest via events.</p></li>
+    <li><h3>Bypassing the root</h3><p>A repository for OrderLine lets code add lines directly. <span class="fix">Fix →</span> repositories only for roots; children reached through the root.</p></li>
+    <li><h3>No concurrency control</h3><p>Two requests load version 7 and both save. <span class="fix">Fix →</span> optimistic locking with a version column; retry on conflict.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Rules that span several objects and must always hold.</li><li>Concurrent changes to the same business object.</li><li>A rich core domain with real behaviour.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>CRUD screens with no rules across objects.</li><li>Reporting and queries (use read models).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/entity.html"><b>Entity</b></a></li><li><a href="../notes/repository.html"><b>Repository</b></a></li><li><a href="../notes/domain-events.html"><b>Domain Events</b></a></li><li><a href="../../data/notes/optimistic-locking.html"><b>Optimistic Locking</b></a> (Vol. 3)</li><li><a href="../../distributed/notes/event-sourcing.html"><b>Event Sourcing</b></a> (Vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What is an aggregate root?</summary><p>The one entity outside code may reference and call; it enforces the aggregate's rules.</p></details>
+    <details><summary>Why reference other aggregates by ID?</summary><p>So each aggregate stays small, is loaded and saved alone, and isn't accidentally changed through another.</p></details>
+    <details><summary>How many aggregates should one transaction change?</summary><p>One, as a rule. Others are updated afterwards, usually through domain events.</p></details>
+    <details><summary>How do you stop two concurrent changes from breaking an invariant?</summary><p>Optimistic locking: save only if the version is unchanged, otherwise retry.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Your <code>Customer</code> aggregate holds every order, address and payment method. Saving it takes 800 ms and checkout fails with lock timeouts during sales. What do you change?</span></summary><p>Split it: make Order its own aggregate referencing the customer by ID, keep in Customer only what its own invariants need, and update anything else (loyalty, stats) through events after the order is placed. Add optimistic locking per aggregate.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Pick one business rule that involves several objects (an order's maximum, a booking's capacity). Write the root class with one method that enforces it and a test that fails when the rule is broken. Then decide which other objects it should reference only by ID.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Ask <span class="hl">the waiter</span>; never add to the ticket <span class="hl">in the kitchen</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/12-aggregate.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Eric Evans, <i>Domain-Driven Design</i> (2003), ch. 6 “Aggregates”.</li><li>Vaughn Vernon, “Effective Aggregate Design”, parts I–III (2011).</li><li>Vaughn Vernon, <i>Implementing Domain-Driven Design</i> (2013), ch. 10.</li><li>Martin Fowler, “DDD_Aggregate” (bliki, 2013).</li></ul>
+  </div>
+  <p class="folio">12</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="entity.html"><small>← previous note</small>11 · Entity</a>
+  <a href="domain-events.html"><small>Next note →</small>13 · Domain Events</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 7 · a student's bullet journal on domain-driven design</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

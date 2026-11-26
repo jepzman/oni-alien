@@ -12,8 +12,10 @@ def esc(s):
 class Doodle:
     """Tiny helper for hand-drawn SVG: shapes go in a wobbly group, text stays crisp."""
 
-    def __init__(self, w, h, label, caption="", small=False):
-        self.w, self.h, self.label, self.caption, self.small = w, h, label, caption, small
+    def __init__(self, w, h, label, caption="", small=False, exact=False):
+        """exact=True: font sizes passed to box(), text(), note() etc. are applied as inline styles, so they win over
+        the stylesheet's fixed sizes (.t 19px, .t-head 21px). Off by default, so existing figures render unchanged."""
+        self.w, self.h, self.label, self.caption, self.small, self.exact = w, h, label, caption, small, exact
         self.shapes, self.texts, self.defs = [], [], []
 
     # shapes ------------------------------------------------------
@@ -141,9 +143,23 @@ class Doodle:
                 self.shapes.append(f'<path class="d d-red" d="M{x + 6} {ry + row / 2:g} h{w - 12}"/>')
         return self
 
+    def row(self, items, x=14, y=30, h=84, gap=14, w=None, size=17, subsize=13, arrows=False):
+        """A row of equal boxes across the drawing. items: (label, sub, fill). With arrows=True (use gap ≥ 34) an arrow
+        joins each box to the next."""
+        n = len(items)
+        w = w or (self.w - 2 * x - gap * (n - 1)) / n
+        for i, (label, sub, fill) in enumerate(items):
+            bx = x + i * (w + gap)
+            self.box(round(bx), y, round(w), h, label, fill, sub=sub, size=size, subsize=subsize)
+            if arrows and i:
+                self.arrow(round(bx - gap + 4), y + h // 2, round(bx - 4), y + h // 2)
+        return self
+
     def html(self):
         shapes = "".join(self.shapes)
         texts = "".join(self.texts)
+        if self.exact:
+            texts = re.sub(r' font-size="([\d.]+)"', r' style="font-size:\1px"', texts)
         swipe = "" if self.small else '<p class="swipe">← swipe to see the whole drawing →</p>'
         cap = f"<figcaption>{self.caption}</figcaption>" if self.caption else ""
         cls = "fig fig--small" if self.small else "fig"
@@ -289,4 +305,11 @@ ICONS.update({
     "switch": '<rect class="F" x="2" y="16" width="56" height="28" rx="14"/><circle class="F" cx="44" cy="30" r="10"/>',
     "container": '<rect class="F" x="2" y="10" width="66" height="40" rx="2"/><path d="M12 10 v40 M22 10 v40 M32 10 v40 M42 10 v40 M52 10 v40 M62 10 v40"/>',
     "coins": '<ellipse class="F" cx="24" cy="46" rx="20" ry="8"/><ellipse class="F" cx="24" cy="36" rx="20" ry="8"/><ellipse class="F" cx="36" cy="22" rx="20" ry="8"/>',
+})
+
+# Icons added for the code-design volumes (same ~60×60 convention).
+ICONS.update({
+    "hexagon": '<path class="F" d="M30 2 L56 17 V45 L30 60 L4 45 V17 Z"/><circle class="F" cx="30" cy="31" r="10"/><path d="M30 2 V21 M56 45 L39 36 M4 45 L21 36"/>',
+    "wrench": '<path class="F" d="M44 4 a14 14 0 0 0 -12 20 L6 50 a5 5 0 0 0 8 8 L40 32 a14 14 0 0 0 18 -16 l-8 8 l-8 -2 l-2 -8 z"/>',
+    "plug2": '<rect class="F" x="14" y="20" width="32" height="26" rx="4"/><path d="M22 20 v-14 M38 20 v-14 M30 46 v14"/>',
 })

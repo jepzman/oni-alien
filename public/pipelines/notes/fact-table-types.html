@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fact Table Types · Jef’s Notes</title>
+<meta name="description" content="Transactions, periodic snapshots, accumulating snapshots and factless facts: pick by question.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=26ccece878">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-pipelines">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 9 · data pipelines &amp; analytics</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="fact-table-types">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 24.05.27</span><span class="topic">collection · <b>modelling the warehouse</b></span></div>
+  <p class="kicker">a.k.a. “transaction, snapshot, accumulating, factless”</p>
+  <h1><span class="hl">Fact Table Types</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Not every question is a sum of events. <b>Transaction</b> facts store one row per event (sales lines). <b>Periodic snapshots</b> store the state of something each period (stock at month end). <b>Accumulating snapshots</b> store one row per process instance, updated at each milestone (order placed → delivered). <b>Factless</b> facts record that something happened or applied, with no number (products on promotion). Start every fact table by writing down its <b>grain</b>.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> modelling</li><li><b>Origin:</b> Kimball dimensional modelling</li><li><b>Key word:</b> grain</li><li><b>Pairs with:</b> star schema, aggregates</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">The shop has one fact table: order lines. Then three questions arrive. <b>Stock on hand at each month end</b> means summing five years of stock movements in every query. <b>Days from order to delivery</b> means joining four status tables to themselves. <b>Promotions that sold nothing</b> has <span class="hl-pink">no rows to count</span>, because nothing was sold.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of three questions asked of one sales fact table. Stock on hand at the end of each month needs summing every movement for five years in every query. Days from order to delivery needs joining four status tables to themselves. Which promotions sold nothing has no rows at all to count. All three are slow or impossible."><g class="rough"><rect class="d d-thin f-paper" x="280" y="90" width="220" height="58" rx="4"/><path class="d d-thin f-y" d="M280 94 a4 4 0 0 1 4 -4 h212 a4 4 0 0 1 4 4 v28 h-220 z"/><rect class="d f-pink d-red" x="10" y="20" width="240" height="60" rx="10"/><rect class="d f-pink d-red" x="520" y="20" width="230" height="60" rx="10"/><rect class="d f-pink d-red" x="260" y="190" width="260" height="60" rx="10"/><path class="d d-red" d="M250 60 L300 100"/><path class="d d-red" d="M288.3 97.3 L300 100 L294.8 89.2"/><path class="d d-red" d="M520 60 L480 100"/><path class="d d-red" d="M483.9 88.7 L480 100 L491.3 96.1"/><path class="d d-red" d="M390 186 L390 152"/><path class="d d-red" d="M395.2 162.8 L390 152 L384.8 162.8"/></g><text class="t-head" x="390" y="113" text-anchor="middle" font-size="17">fact_sales</text><text class="t" x="290" y="141" font-size="16">one row per order line</text><text class="t-head t-red" x="130" y="57" text-anchor="middle" font-size="17">stock at month end?</text><text class="t-head t-red" x="635" y="57" text-anchor="middle" font-size="16">order → delivery days?</text><text class="t-head t-red" x="390" y="227" text-anchor="middle" font-size="16">promos that sold nothing?</text><text class="t-s t-red" x="130" y="120" text-anchor="middle" font-size="15">sum 5 years of moves</text><text class="t-s t-red" x="640" y="120" text-anchor="middle" font-size="15">4 self-joins</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Three questions, one transaction table: slow, painful, or impossible.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">four bank documents</span></h2>
+  <p>Your bank gives you four kinds of document. A <b>transaction list</b> (every payment), a <b>monthly statement</b> (the balance on the last day), an <b>application tracker</b> for your mortgage (one line, with the date of each step), and, at school, a <b>class register</b> (who was there, no amounts). Each answers different questions, and you wouldn't compute your balance from twenty years of payments every time.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of four bank documents. A transaction list shows each payment. A monthly statement shows the balance at month end. A mortgage application tracker shows one line per application with the dates of each milestone. A class register shows who attended, with no amounts at all."><g class="rough"><rect class="d f-y" x="14" y="50" width="171" height="100" rx="10"/><rect class="d f-blue" x="201" y="50" width="171" height="100" rx="10"/><rect class="d f-green" x="388" y="50" width="171" height="100" rx="10"/><rect class="d f-paper" x="575" y="50" width="171" height="100" rx="10"/></g><text class="t-head" x="99.5" y="96" text-anchor="middle" font-size="18">transactions</text><text class="t" x="99.5" y="120" text-anchor="middle" font-size="14">each payment</text><text class="t-head" x="286.5" y="96" text-anchor="middle" font-size="18">statement</text><text class="t" x="286.5" y="120" text-anchor="middle" font-size="14">balance each month</text><text class="t-head" x="473.5" y="96" text-anchor="middle" font-size="18">tracker</text><text class="t" x="473.5" y="120" text-anchor="middle" font-size="14">one line, milestones</text><text class="t-head" x="660.5" y="96" text-anchor="middle" font-size="18">register</text><text class="t" x="660.5" y="120" text-anchor="middle" font-size="14">who was there</text><text class="t-s t-pen" x="380" y="200" text-anchor="middle">four documents, four kinds of question</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Payments, the monthly balance, the application tracker, the class register.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Transaction list</td><td>Transaction fact: one row per order line</td></tr>
+      <tr><td>Monthly statement</td><td>Periodic snapshot: stock per product per shop per month</td></tr>
+      <tr><td>Application tracker</td><td>Accumulating snapshot: one row per order, milestone dates</td></tr>
+      <tr><td>Class register</td><td>Factless fact: product on promotion per day</td></tr>
+      <tr><td>“Balance” can't be added across months</td><td>Semi-additive measure</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">choose by the question, state the grain</span></h2>
+  <p>The <b>grain</b> says what one row is. Write it down before choosing columns: “one row per order line”, “one row per product per shop per month”, “one row per order”. Measures must fit the grain, and the type follows from the question. Transaction measures add up across everything. Snapshot balances add across shops but not across time (average or take the last). Accumulating rows are <b>updated</b> as milestones happen, so they need idempotent merges.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Four fact table types. Transaction: one row per order line, amounts add up across everything. Periodic snapshot: one row per product per shop per month, stock on hand, which adds across shops but not across months. Accumulating snapshot: one row per order, updated as it is paid, picked, shipped and delivered, with a date per milestone and lags. Factless: one row per product on promotion per day, with no measure."><g class="rough"><rect class="d d-thin f-paper" x="20" y="20" width="340" height="84" rx="4"/><path class="d d-thin f-y" d="M20 24 a4 4 0 0 1 4 -4 h332 a4 4 0 0 1 4 4 v28 h-340 z"/><path class="d d-thin d-soft" d="M26 78 h328"/><rect class="d d-thin f-paper" x="400" y="20" width="340" height="84" rx="4"/><path class="d d-thin f-blue" d="M400 24 a4 4 0 0 1 4 -4 h332 a4 4 0 0 1 4 4 v28 h-340 z"/><path class="d d-thin d-soft" d="M406 78 h328"/><rect class="d d-thin f-paper" x="20" y="160" width="340" height="84" rx="4"/><path class="d d-thin f-green" d="M20 164 a4 4 0 0 1 4 -4 h332 a4 4 0 0 1 4 4 v28 h-340 z"/><path class="d d-thin d-soft" d="M26 218 h328"/><rect class="d d-thin f-paper" x="400" y="160" width="340" height="84" rx="4"/><path class="d d-thin f-paper" d="M400 164 a4 4 0 0 1 4 -4 h332 a4 4 0 0 1 4 4 v28 h-340 z"/><path class="d d-thin d-soft" d="M406 218 h328"/></g><text class="t-head" x="190" y="43" text-anchor="middle" font-size="17">fct_sales</text><text class="t" x="30" y="71" font-size="16">grain: order line</text><text class="t" x="30" y="97" font-size="16">qty · amount (add)</text><text class="t-head" x="570" y="43" text-anchor="middle" font-size="17">fct_stock_monthly</text><text class="t" x="410" y="71" font-size="16">grain: product · shop · month</text><text class="t" x="410" y="97" font-size="16">on_hand (not across months)</text><text class="t-head" x="190" y="183" text-anchor="middle" font-size="17">fct_order_lifecycle</text><text class="t" x="30" y="211" font-size="16">grain: order (updated)</text><text class="t" x="30" y="237" font-size="16">paid · shipped · delivered dates</text><text class="t-head" x="570" y="183" text-anchor="middle" font-size="17">fct_promo_coverage</text><text class="t" x="410" y="211" font-size="16">grain: product · promo · day</text><text class="t" x="410" y="237" font-size="16">no measure</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Pick the type by the question. Grain first, then measures.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Write the grain</b><p>One sentence: “one row per …”. If you can't, the table isn't designed yet.</p></li>
+    <li><b>Pick the type from the question</b><p>Events → transaction; state over time → periodic snapshot; a process with steps → accumulating; coverage or attendance → factless.</p></li>
+    <li><b>Add dimensions at that grain</b><p>Date, product, shop, customer, promotion.</p></li>
+    <li><b>Mark measure additivity</b><p>Additive, semi-additive (balances), non-additive (ratios: store the parts).</p></li>
+    <li><b>Load accordingly</b><p>Append or merge; snapshot each period; update milestones; insert coverage rows.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Grain</dt><dd>What one fact row represents.</dd></div>
+    <div><dt>Additive</dt><dd>Can be summed across every dimension (amount).</dd></div>
+    <div><dt>Semi-additive</dt><dd>Sums across some dimensions, not time (stock on hand).</dd></div>
+    <div><dt>Non-additive</dt><dd>Can't be summed (a ratio); store numerator and denominator.</dd></div>
+    <div><dt>Lag</dt><dd>Days between two milestones in an accumulating row.</dd></div>
+    <div><dt>Coverage table</dt><dd>A factless fact recording what applied, e.g. promotions.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>fact_tables.sql</span><span>generic warehouse DDL</span></div>
+<pre><code><span class="c">-- periodic snapshot: state at the end of each month</span>
+<span class="k">CREATE</span> <span class="k">TABLE</span> fct_stock_monthly (
+  month_key int, product_key int, shop_key int,
+  on_hand int,               <span class="c">-- semi-additive: sum across shops, not months</span>
+  on_order int
+);
+
+<span class="c">-- accumulating snapshot: one row per order, updated at each milestone</span>
+<span class="k">CREATE</span> <span class="k">TABLE</span> fct_order_lifecycle (
+  order_id bigint <span class="k">PRIMARY</span> <span class="k">KEY</span>,
+  placed_date_key int, paid_date_key int, shipped_date_key int, delivered_date_key int,
+  days_to_ship int, days_to_deliver int,
+  order_amount numeric
+);
+
+<span class="c">-- factless: which products were on which promotion, each day</span>
+<span class="k">CREATE</span> <span class="k">TABLE</span> fct_promo_coverage (date_key int, product_key int, promo_key int, shop_key int);
+
+<span class="c">-- “promoted but sold nothing” = coverage EXCEPT sales</span>
+<span class="k">SELECT</span> date_key, product_key, promo_key <span class="k">FROM</span> fct_promo_coverage
+EXCEPT
+<span class="k">SELECT</span> date_key, product_key, promo_key <span class="k">FROM</span> fct_sales;</code></pre>
+  </div>
+  <p class="aside">tools: any warehouse; dbt incremental models for snapshots (one partition per period) and merges for accumulating rows; BI tools need semi-additive measures declared (LookML, Power BI, Cube).</p>
+  <section class="thennow verdict-core" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="as useful as when it was written">still core</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Kimball &amp; Ross, 2002</small></h3><p>The second edition of <i>The Data Warehouse Toolkit</i> set out the three fact table types plus factless facts as the core of dimensional design, built because summing raw transactions was too slow on row stores.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>Columnar engines can sum billions of transactions quickly, so some snapshots are now views over transactions. But the questions haven't changed: balances still can't be summed over time, and processes still have milestones. Metrics layers now ask you to declare the same additivity rules.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> Still the vocabulary every analytics engineer needs. Write the grain first, every time.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Each question gets a fast, natural shape</b>.</li><li><b>Clear grain</b> stops double counting.</li><li><b>Process metrics</b> (lags) become one column.</li><li><b>“What didn't happen”</b> becomes answerable.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More tables</b> to build and explain.</li><li><b>Snapshots duplicate</b> state every period.</li><li><b>Accumulating rows are updated</b>, so loads must merge.</li><li><b>Semi-additive traps</b> for unaware users.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Pipeline ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>answering every question from one transaction fact</b> to <b>a fact table of the right type per question</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">More tables, but each one is obvious.</td></tr>
+      <tr data-before="3" data-after="3"><td>Freshness<small>how recent?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="2" data-after="4"><td>Correctness<small>is the number right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Grain and additivity are explicit.</td></tr>
+      <tr data-before="3" data-after="4"><td>Replayability<small>safe to rerun?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Snapshots per period rebuild independently.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>10× the data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No five-year scans for a month-end number.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Snapshots cost storage, save compute.</td></tr>
+      <tr data-before="2" data-after="5"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Balances, lags and gaps are all askable.</td></tr>
+      <tr data-before="3" data-after="3"><td>Observability<small>know when it's wrong?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New processes get their own table.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Mixed grain</h3><p>Order-level shipping cost stored on every order line, then summed. <span class="fix">Fix →</span> store measures only at their own grain, or allocate them explicitly.</p></li>
+    <li><h3>Summing balances over time</h3><p>“Total stock in Q1” adds three month-ends together. <span class="fix">Fix →</span> declare on_hand semi-additive; use last or average over time.</p></li>
+    <li><h3>Ratios stored as facts</h3><p>Average margin per line is averaged again in the report. <span class="fix">Fix →</span> store the parts (revenue, cost) and divide at query time.</p></li>
+    <li><h3>Accumulating rows appended</h3><p>Each milestone adds a new row, and orders are counted four times. <span class="fix">Fix →</span> merge on the order id; one row per order.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Any new fact table: start with the grain.</li><li>Balances and levels: stock, account balances, headcount.</li><li>Processes with steps: orders, claims, tickets, onboarding.</li><li>Coverage or eligibility: promotions, rosters, enrolments.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>When one transaction fact and a fast engine already answer the question well.</li><li>Processes with many loops and unknown steps: an event table fits better.</li><li>Snapshots nobody reads; generate them on demand from transactions.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../../data/notes/star-schema.html"><b>Star schema</b></a> (Vol. 3)</li><li><a href="../notes/aggregates-rollups.html"><b>Aggregates and rollups</b></a></li><li><a href="../notes/idempotent-loads.html"><b>Idempotent loads</b></a></li><li><a href="../notes/metrics-layer.html"><b>Metrics layer</b></a></li></ul>
+  <p class="aside deeper">on a card → <a href="../../cheatsheets/warehouse/index.html">Data Warehouse: the cheat sheet</a></p>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What is the grain of a fact table?</summary><p>A precise statement of what one row represents, e.g. one row per order line.</p></details>
+    <details><summary>Why can't you sum stock on hand across months?</summary><p>It is a balance (semi-additive): each month-end repeats the stock; take the last or the average over time.</p></details>
+    <details><summary>How does an accumulating snapshot change over time?</summary><p>Its row for each order is updated as milestones happen, filling in dates and lags.</p></details>
+    <details><summary>How do you find promotions that sold nothing?</summary><p>Compare a factless coverage table with the sales fact: coverage rows with no matching sales.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Customer service wants “average days from order to delivery, by carrier, by week”. Today they join orders to four status tables and it takes minutes. What do you build?</span></summary><p>An accumulating snapshot, fct_order_lifecycle: one row per order with a date key per milestone and days_to_deliver, merged on order_id as statuses arrive. The question becomes an average of one column grouped by carrier and week.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Take your sales table and write its grain in one sentence. Then write the grain for “stock at month end” and for “order to delivery”. If either needs a new table, sketch its columns and mark each measure additive, semi-additive or non-additive.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p><span class="hl">Grain first</span>. Payments, balances, trackers and registers are different documents.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/07-fact-table-types.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Ralph Kimball and Margy Ross, <i>The Data Warehouse Toolkit</i>, 3rd ed. (2013), chapters 2–4.</li><li>Kimball Group, “Fact Tables” and “Factless Fact Tables” design tips.</li><li>Cube and LookML documentation on non-additive and semi-additive measures.</li><li>Christopher Adamson, <i>Star Schema: The Complete Reference</i> (2010).</li></ul>
+  </div>
+  <p class="folio">07</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="slowly-changing-dimensions.html"><small>← previous note</small>06 · Slowly Changing Dimensions</a>
+  <a href="conformed-dimensions.html"><small>Next note →</small>08 · Conformed Dimensions &amp; the Bus Matrix</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 9 · a student's bullet journal on data pipelines &amp; analytics</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

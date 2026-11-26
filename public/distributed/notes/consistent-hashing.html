@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Consistent Hashing · Jef’s Notes</title>
+<meta name="description" content="Spread keys across nodes so adding or removing a node moves only a small share of them.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=26ccece878">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 1 · distributed design patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="consistent-hashing">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Fri · 23.10.26</span><span class="topic">collection · <b>scaling data</b></span></div>
+  <p class="kicker">a.k.a. “add a node, move only a few keys”</p>
+  <h1><span class="hl">Consistent Hashing</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Spreading keys with <code>hash(key) % N</code> works until N changes: then almost every key moves. <b>Consistent hashing</b> places nodes and keys on the same <b>ring</b>; each key belongs to the next node clockwise. Adding or removing a node moves only the keys next to it, about <b>1/N</b> of them. <b>Virtual nodes</b> (many points per server) keep the load even. Used by caches, sharded databases and load balancers that need stickiness.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> scaling data</li><li><b>Introduced:</b> Karger et al. (1997), for web caches</li><li><b>Variants:</b> virtual nodes · jump hash · rendezvous (HRW) hashing</li><li><b>Used by:</b> Cassandra, DynamoDB, Memcached clients, Envoy ring-hash</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">A cache cluster spreads keys with <code>hash(key) % 4</code>. Traffic grows and a fifth node is added: now it's <code>% 5</code>, and <span class="hl-pink">about 80% of keys map to a different node</span>. Almost every lookup misses at once, and the database behind the cache takes the full load.</p>
+  <ul>
+    <li>Adding capacity <b>causes</b> an incident instead of preventing one.</li>
+    <li>Losing a node is just as bad: every key's home shifts.</li>
+    <li>For sharded data, “moving” means copying most of the data between machines.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of hash modulo N when a cache node is added. With four nodes, each key goes to hash modulo 4. Adding a fifth node changes the rule to hash modulo 5, and about 80 percent of keys now map to a different node. Almost every lookup misses at once, and the database behind the cache is flooded."><g class="rough"><rect class="d f-blue" x="20" y="30" width="131" height="60" rx="10"/><rect class="d f-blue" x="167" y="30" width="131" height="60" rx="10"/><rect class="d f-blue" x="314" y="30" width="131" height="60" rx="10"/><rect class="d f-blue" x="462" y="30" width="131" height="60" rx="10"/><rect class="d f-green" x="609" y="30" width="131" height="60" rx="10"/></g><text class="t-head" x="85.5" y="67" text-anchor="middle" font-size="16">node 1</text><text class="t-head" x="232.5" y="67" text-anchor="middle" font-size="16">node 2</text><text class="t-head" x="379.5" y="67" text-anchor="middle" font-size="16">node 3</text><text class="t-head" x="527.5" y="67" text-anchor="middle" font-size="16">node 4</text><text class="t-head" x="674.5" y="56" text-anchor="middle" font-size="16">node 5</text><text class="t" x="674.5" y="80" text-anchor="middle" font-size="13">new</text><text class="t-s" x="380" y="130" text-anchor="middle" font-size="17">hash % 4 → hash % 5</text><text class="t-s t-red" x="380" y="162" text-anchor="middle" font-size="17">≈ 80% of keys now live on a different node</text><text class="t-s t-red" x="380" y="200" text-anchor="middle" font-size="16">cache misses everywhere → the database takes it all</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>hash % 4 → hash % 5: four keys in five move, and the cache is suddenly empty.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">a round table</span></h2>
+  <p>Guests have name cards placed around a <b>round table</b>, and each is served by the first host clockwise from their card. When a <b>new host sits down</b>, only the guests between the new chair and the previous host move to the new host. Everyone else keeps their host.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of seats around a round table. Each guest sits at the first free host chair clockwise from their name card&#x27;s spot. When a new host sits down, only the guests between the new host and the previous host move to the new host; everyone else stays put."><g class="rough"><circle class="d f-paper" cx="220" cy="130" r="95"/><circle class="d f-blue" cx="220" cy="35" r="16"/><circle class="d f-blue" cx="302" cy="178" r="16"/><circle class="d f-blue" cx="138" cy="178" r="16"/><circle class="d f-green" cx="302" cy="82" r="16"/></g><text class="t-head" x="220" y="42" text-anchor="middle">A</text><text class="t-head" x="302" y="185" text-anchor="middle">B</text><text class="t-head" x="138" y="185" text-anchor="middle">C</text><text class="t-head" x="302" y="89" text-anchor="middle">D</text><text class="t-s t-green" x="500" y="90" text-anchor="start" font-size="16">D sits down between A and B</text><text class="t-s t-green" x="500" y="120" text-anchor="start" font-size="16">only guests from A to D move</text><text class="t-s" x="500" y="150" text-anchor="start" font-size="16">everyone else stays put</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Around a round table, a new host only takes the guests just before their chair.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The round table</td><td>The hash ring (0 to 2³² − 1, wrapping around)</td></tr>
+      <tr><td>A guest's card position</td><td>hash(key)</td></tr>
+      <tr><td>A host's chair</td><td>hash(node), placed on the same ring</td></tr>
+      <tr><td>Served by the next host clockwise</td><td>Key → first node at or after its position</td></tr>
+      <tr><td>One host in several chairs</td><td>Virtual nodes, for an even spread</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">a ring, virtual nodes, the next node clockwise</span></h2>
+  <p>Hash every node many times (say 100–200 <b>virtual nodes</b> each) onto a ring, and keep the points sorted. For a key, hash it and find the first point at or after it (a binary search). To store copies, walk on to the next distinct nodes. A new node's points land all around the ring, so it takes a small slice from every other node.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="A hash ring with virtual nodes. Keys and nodes are hashed onto the same circle. Each key belongs to the first node clockwise. Each physical node appears at many points on the ring (virtual nodes), so the load is even and a new node takes small slices from every other node, about one fifth of the keys when going from four nodes to five."><g class="rough"><circle class="d f-paper" cx="190" cy="140" r="105"/><circle class="d f-blue" cx="190" cy="35" r="9"/><circle class="d f-green" cx="242" cy="49" r="9"/><circle class="d f-y" cx="281" cy="88" r="9"/><circle class="d f-pink" cx="295" cy="140" r="9"/><circle class="d f-blue" cx="281" cy="192" r="9"/><circle class="d f-green" cx="242" cy="231" r="9"/><circle class="d f-y" cx="190" cy="245" r="9"/><circle class="d f-pink" cx="138" cy="231" r="9"/><circle class="d f-blue" cx="99" cy="192" r="9"/><circle class="d f-green" cx="85" cy="140" r="9"/><circle class="d f-y" cx="99" cy="87" r="9"/><circle class="d f-pink" cx="137" cy="49" r="9"/><path class="d d-pen" d="M250 110 Q285 90 232 55"/><path class="d d-pen" d="M243.9 56.6 L232 55 L238.1 65.3"/></g><text class="t-s" x="242" y="118" text-anchor="middle" font-size="14">key</text><text class="t-s" x="370" y="70" text-anchor="start" font-size="15">4 nodes × 3 virtual points each (colours)</text><text class="t-s" x="370" y="104" text-anchor="start" font-size="15">a key → the next point clockwise</text><text class="t-s t-green" x="370" y="150" text-anchor="start" font-size="15">add a 5th node: ≈ 1/5 of keys move,</text><text class="t-s t-green" x="370" y="174" text-anchor="start" font-size="15">a little from every other node</text><text class="t-s t-pen" x="370" y="220" text-anchor="start" font-size="15">replicas: the next 2 distinct nodes clockwise</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Keys and nodes share one ring; each key goes to the next node clockwise.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Hash nodes onto a ring</b><p>Each node at many points: hash("node-3#0") … hash("node-3#149"). Keep the points sorted.</p></li>
+    <li><b>Look up by the next point</b><p>Hash the key, binary-search for the first point ≥ it, wrap to the start if needed.</p></li>
+    <li><b>Use virtual nodes</b><p>100–200 points per node keep the spread within a few percent; give bigger machines more points.</p></li>
+    <li><b>Replicate along the ring</b><p>Store copies on the next 2 distinct physical nodes clockwise.</p></li>
+    <li><b>Move only what changed</b><p>When a node joins or leaves, only the keys between it and its neighbour points move; copy those, nothing else.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Hash ring</dt><dd>The hash space treated as a circle.</dd></div>
+    <div><dt>Virtual node</dt><dd>One of many ring positions belonging to the same physical node.</dd></div>
+    <div><dt>Key movement</dt><dd>The share of keys that change node when membership changes.</dd></div>
+    <div><dt>Jump hash</dt><dd>A fast, memory-free variant for numbered buckets (Lamping & Veach).</dd></div>
+    <div><dt>Rendezvous hashing</dt><dd>Each key picks the node with the highest hash(key, node).</dd></div>
+    <div><dt>Hot spot</dt><dd>A node that gets more than its share of keys or traffic.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>ring.ts</span><span>TypeScript, no library</span></div>
+<pre><code><span class="k">import</span> { createHash } <span class="k">from</span> <span class="s">"node:crypto"</span>;
+<span class="k">const</span> h = (s: string) =&gt; createHash(<span class="s">"md5"</span>).update(s).digest().readUInt32BE(0);
+
+<span class="k">export</span> <span class="k">class</span> Ring {
+  <span class="k">private</span> points: { at: number; node: string }[] = [];
+
+  constructor(nodes: string[], <span class="k">private</span> vnodes = 150) { nodes.forEach((n) =&gt; this.add(n)); }
+
+  add(node: string) {                       <span class="c">// many points per node keep the spread even</span>
+    <span class="k">for</span> (<span class="k">let</span> i = 0; i &lt; this.vnodes; i++) this.points.push({ at: h(<span class="s">`${node}#${i}`</span>), node });
+    this.points.sort((a, b) =&gt; a.at - b.at);
+  }
+
+  remove(node: string) { this.points = this.points.filter((p) =&gt; p.node !== node); }
+
+  nodeFor(key: string): string {            <span class="c">// first point at or after hash(key), wrapping around</span>
+    <span class="k">const</span> k = h(key);
+    <span class="k">let</span> lo = 0, hi = this.points.length;
+    <span class="k">while</span> (lo &lt; hi) { <span class="k">const</span> mid = (lo + hi) &gt;&gt; 1; <span class="k">if</span> (this.points[mid].at &lt; k) lo = mid + 1; <span class="k">else</span> hi = mid; }
+    <span class="k">return</span> this.points[lo % this.points.length].node;
+  }
+}
+<span class="c">// 4 → 5 nodes: about 20% of keys move. With hash % N it would be about 80%.</span></code></pre>
+  </div>
+  <p class="aside">tools: Envoy and NGINX ring-hash / Maglev load balancing, Memcached clients (ketama), Cassandra and ScyllaDB token rings, DynamoDB partitioning, Redis Cluster (16,384 fixed slots: the same goal by another route), Go <code>hashring</code> and Java Guava <code>Hashing.consistentHash</code>.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Adding or removing a node moves ~1/N of keys</b>, not almost all.</li><li><b>Smooth scaling</b> of caches and shards.</li><li><b>Even load</b> with virtual nodes, weighted by machine size.</li><li><b>Natural replica placement</b>: the next nodes on the ring.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More complex</b> than a modulo.</li><li><b>Uneven without virtual nodes</b>: a few points per node gives lumpy load.</li><li><b>Hot keys</b> still land on one node; the ring doesn't split a key.</li><li><b>Every client must agree</b> on the ring, or keys are looked up in the wrong place.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Architecture ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b><code>hash(key) % N</code></b> to <b>a consistent-hash ring with virtual nodes</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="5" data-after="4"><td>Simplicity<small>easy to understand?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A small, well-known algorithm or a library.</td></tr>
+      <tr data-before="4" data-after="4"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Deployability<small>safe, easy releases?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Nodes can be added during the day without a miss storm.</td></tr>
+      <tr data-before="4" data-after="4"><td>Testability<small>test with confidence?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Deterministic; easy to unit-test the movement share.</td></tr>
+      <tr data-before="2" data-after="5"><td>Scalability<small>more users &amp; data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Grow the cluster a node at a time.</td></tr>
+      <tr data-before="2" data-after="4"><td>Elasticity<small>sudden spikes?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Add and remove nodes for peaks without flushing the cache.</td></tr>
+      <tr data-before="2" data-after="4"><td>Fault tolerance<small>failure stays contained?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A lost node only affects its own keys.</td></tr>
+      <tr data-before="4" data-after="4"><td>Performance<small>fast typical request?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A binary search per lookup: microseconds.</td></tr>
+      <tr data-before="3" data-after="4"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Membership changes become routine.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Too few virtual nodes</h3><p>Each server at one point on the ring: one server owns 40% of the keys. <span class="fix">Fix →</span> use 100–200 virtual nodes per server and check the spread.</p></li>
+    <li><h3>Clients with different rings</h3><p>Two app versions hash with different functions or node lists, and look in different places. <span class="fix">Fix →</span> share one membership source and one hash function; roll changes out everywhere together.</p></li>
+    <li><h3>Expecting it to fix hot keys</h3><p>One popular key still lands on one node. <span class="fix">Fix →</span> cache hot keys locally, or split them (key#0…key#7).</p></li>
+    <li><h3>Forgetting the data move</h3><p>For stored data, the ring says where keys belong now, but the bytes are still on the old node. <span class="fix">Fix →</span> copy the moved ranges before switching, or read from both during the move.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Caches and shards whose node count changes.</li><li>Sticky routing: the same user or session to the same backend.</li><li>Placing replicas in a peer-to-peer or leaderless store.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>The node count never changes; a modulo is simpler.</li><li>A fixed number of logical shards with a map already solves movement (see Sharding).</li><li>One managed service already does the placement for you (DynamoDB, Redis Cluster).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/sharding.html"><b>Sharding</b></a> · logical shards are the other answer</li><li><a href="../notes/cache-aside.html"><b>Cache-aside</b></a></li><li><a href="../notes/replication.html"><b>Leader–follower replication</b></a></li><li><a href="../notes/service-discovery.html"><b>Service discovery</b></a></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why does hash % N move most keys when N changes?</summary><p>The result depends on N, so for most keys the remainder changes: going from 4 to 5 nodes moves about 80% of keys.</p></details>
+    <details><summary>On a ring, which node owns a key?</summary><p>The first node position at or after the key's hash, going clockwise and wrapping around.</p></details>
+    <details><summary>What problem do virtual nodes solve?</summary><p>Uneven load: many points per node spread each node's share evenly around the ring.</p></details>
+    <details><summary>Roughly what share of keys moves when going from 4 to 5 nodes?</summary><p>About one fifth: the new node takes small slices from each of the others.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A Memcached cluster of 6 nodes uses consistent hashing, but one node handles 35% of the traffic. Its key share is normal (about 17%). What's going on, and what do you do?</span></summary><p>The keys are spread evenly, but a few hot keys on that node get far more requests. Consistent hashing can't split a single key: add a small local cache in the app for the hottest keys, or split them into several sub-keys, and track requests per key to find them.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Hash 100,000 random keys onto 4 nodes with <code>hash % 4</code>, then with <code>% 5</code>, and count how many keys changed node. Do the same with the ring above (150 virtual nodes), then with only 1 virtual node per server, and compare both the share of keys that moved and the largest node's share.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Nodes and keys on <span class="hl">one ring</span>. A new node takes <span class="hl">a little from everyone</span>, not everything from everyone.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/21-consistent-hashing.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>David Karger et al., “Consistent Hashing and Random Trees” (STOC 1997).</li><li>Giuseppe DeCandia et al., “Dynamo: Amazon's Highly Available Key-value Store” (SOSP 2007).</li><li>John Lamping and Eric Veach, “A Fast, Minimal Memory, Consistent Hash Algorithm” (2014).</li><li>David Thaler and Chinya Ravishankar, “Using Name-Based Mappings to Increase Hit Rates” (rendezvous hashing, 1998).</li></ul>
+  </div>
+  <p class="folio">21</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="backpressure.html"><small>← previous note</small>20 · Backpressure</a>
+  <a href="../index.html"><small>back to →</small>Index</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 1 · a student's bullet journal on distributed design patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

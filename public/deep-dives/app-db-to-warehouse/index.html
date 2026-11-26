@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>From App Database to Warehouse · Deep dive · Jef’s Notes</title>
+<meta name="description" content="A deep dive on getting data from an app database into a warehouse: raw, staging and marts, six failure drills, idempotent loads and the three clocks, full copy vs timestamp vs CDC, the numbers, testing and reconciliation, running it, tools, a lab and a checklist.">
+<meta name="theme-color" content="#E4E1D9">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,700;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/dive.css?v=2b16c30ec1">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/dive.js?v=03c39c00d2" defer></script>
+</head>
+<body class="dive">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah" d="M0 0 L10 4 L0 8z"/></marker><marker id="ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah-r" d="M0 0 L10 4 L0 8z"/></marker></defs></svg>
+<a class="skip-link" href="#main">Skip to the text</a>
+<header class="site" id="top">
+  <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>deep dive 12</small></a>
+  <a class="site-link" href="../../index.html#deep-dives">Shelf</a>
+</header>
+<div class="strip" data-strip>
+  <div class="strip-in">
+    <nav aria-label="Chapters"><a href="#recap" data-ch="0"><b>1</b> Recap</a><a href="#layers" data-ch="1"><b>2</b> The layers</a><a href="#drills" data-ch="2"><b>3</b> Failure drills</a><a href="#rerun" data-ch="3"><b>4</b> Rerun anything</a><a href="#variants" data-ch="4"><b>5</b> Variants</a><a href="#numbers" data-ch="5"><b>6</b> Numbers</a><a href="#testing" data-ch="6"><b>7</b> Testing</a><a href="#running" data-ch="7"><b>8</b> Running it</a><a href="#tools" data-ch="8"><b>9</b> Tools</a><a href="#lab" data-ch="9"><b>10</b> Lab</a></nav>
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+  </div>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+</div>
+
+<main id="main" class="wrap"><article class="page"><div class="col">
+<p class="eyebrow">Deep dive 12 · builds on Vol. 3, notes 11, 15 and 16</p>
+<h1><span>From App Database to Warehouse</span></h1>
+<p class="sub">One order followed from checkout to the finance report: extract, raw, staging and marts, and why the number is right after a rerun, a late commit, a return and a renamed column.</p>
+<ul class="facts"><li><b>Full read</b> about 30 min</li><li><b>Skim</b> about 14 min: yellow boxes, tables and drill rules</li><li><b>Example</b> order 9001: €55 at 23:58 on 31 March, one mug returned on 3 April</li></ul>
+<nav class="toc" aria-label="Contents">
+  <h2 class="toc-h">In this deep dive</h2>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Three notes in sixty seconds</span><span class="m">2 min</span></a></li><li><a href="#layers" data-ch="1"><span class="n">2</span><span class="t">The real mechanism: raw, staging, marts</span><span class="m">3 min</span></a></li><li><a href="#drills" data-ch="2"><span class="n">3</span><span class="t">Failure drills</span><span class="m">6 min</span></a></li><li><a href="#rerun" data-ch="3"><span class="n">4</span><span class="t">The hard problem: rerun anything</span><span class="m">3 min</span></a></li><li><a href="#variants" data-ch="4"><span class="n">5</span><span class="t">Full copy, timestamp or CDC</span><span class="m">3 min</span></a></li><li><a href="#numbers" data-ch="5"><span class="n">6</span><span class="t">The pipeline in numbers</span><span class="m">3 min</span></a></li><li><a href="#testing" data-ch="6"><span class="n">7</span><span class="t">Testing data, not just code</span><span class="m">2 min</span></a></li><li><a href="#running" data-ch="7"><span class="n">8</span><span class="t">Running it</span><span class="m">2 min</span></a></li><li><a href="#tools" data-ch="8"><span class="n">9</span><span class="t">Tools</span><span class="m">2 min</span></a></li><li><a href="#lab" data-ch="9"><span class="n">10</span><span class="t">A lab and the checklist</span><span class="m">3 min</span></a></li></ol>
+  <p class="toc-src">Read first: <a href="../../data/notes/change-data-capture.html">Change Data Capture</a><a href="../../data/notes/star-schema.html">Star Schema</a><a href="../../data/notes/upserts.html">Upserts</a></p>
+</nav>
+<section id="recap" data-title="Recap">
+<p class="ch">chapter 1 <span>· 2 min</span></p>
+<h2>Three notes in sixty seconds</h2>
+<div class="gist"><p><b>Gist</b> Change data capture copies every committed change out of the app database, upserts make loading safe to repeat, and a star schema shapes the result for reports. This deep dive follows one order through the pipeline that joins them, and through everything that later happens to it.</p></div>
+
+<p>A homeware shop sells on the web and in 30 shops. Finance wants revenue by category by day, without slowing down checkout. Three notes from the data volume, put together, give the answer: copy the changes out of the app database, load them so a rerun never double-counts, and shape them as a star for reporting.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Note</th><th scope="col">In one line</th></tr></thead><tbody><tr><td>Change Data Capture</td><td>read the database's own change log and stream every committed insert, update and delete</td></tr><tr><td>Upserts</td><td>insert the row, or update it if the key already exists, in one atomic statement</td></tr><tr><td>Star Schema</td><td>a fact table of numbers at a stated grain, with flat dimension tables around it</td></tr></tbody></table></div><figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="The pipeline this deep dive follows. The app database is the source. Changes are extracted into a raw layer that keeps every change. Staging deduplicates them into the current rows. Marts model them as facts and dimensions. The finance report queries the marts. Change data capture and upserts cover the first half, the star schema the second. Nothing in the pipeline writes back to the app database.">
+  <rect class="bx" x="10" y="70" width="120" height="64" rx="8"/><text class="lbl" x="70" y="98" text-anchor="middle">app DB</text><text class="soft" x="70" y="120" text-anchor="middle">PostgreSQL</text>
+  <rect class="bx-y" x="170" y="70" width="120" height="64" rx="8"/><text class="lbl" x="230" y="98" text-anchor="middle">raw</text><text class="soft" x="230" y="120" text-anchor="middle">every change</text>
+  <rect class="bx" x="330" y="70" width="120" height="64" rx="8"/><text class="lbl" x="390" y="98" text-anchor="middle">staging</text><text class="soft" x="390" y="120" text-anchor="middle">current rows</text>
+  <rect class="bx-g" x="490" y="70" width="120" height="64" rx="8"/><text class="lbl" x="550" y="98" text-anchor="middle">marts</text><text class="soft" x="550" y="120" text-anchor="middle">facts + dims</text>
+  <rect class="bx" x="650" y="70" width="100" height="64" rx="8"/><text class="lbl" x="700" y="98" text-anchor="middle">report</text><text class="soft" x="700" y="120" text-anchor="middle">finance</text>
+  <path class="ln" d="M130 102 H168" marker-end="url(#a)"/><path class="ln" d="M290 102 H328" marker-end="url(#a)"/><path class="ln" d="M450 102 H488" marker-end="url(#a)"/><path class="ln" d="M610 102 H648" marker-end="url(#a)"/>
+  <text class="soft" x="150" y="58" text-anchor="middle">extract</text><text class="soft" x="310" y="58" text-anchor="middle">dedupe</text><text class="soft" x="470" y="58" text-anchor="middle">model</text><text class="soft" x="630" y="58" text-anchor="middle">query</text>
+  <path class="ln-d" d="M170 170 H450"/><text class="soft" x="310" y="194" text-anchor="middle">CDC + upserts: chapters 2, 4, 5</text>
+  <path class="ln-d" d="M490 170 H750"/><text class="soft" x="620" y="194" text-anchor="middle">star schema: chapters 2, 3</text>
+  <path class="ln-r" d="M230 136 V150 H70 V136" marker-end="url(#ar)"/><text class="bad" x="150" y="226" text-anchor="middle" font-size="16">nothing writes back</text>
+</svg></div><figcaption>Four layers, one direction. The notes cover the boxes; this dive covers the arrows.</figcaption></figure><aside class="mn">The CDC note's going-deeper chapter covers the snapshot, ordering and the slot that fills the disk. This dive starts where it ends: at the warehouse door.</aside>
+<p class="full">The notes describe each piece on a good day. In production the pipeline runs every 15 minutes for years, and it is rerun, backfilled, paused for a weekend and pointed at a source table that someone renamed. The questions this dive answers are the ones finance asks: why did March revenue change after we closed March, why is yesterday’s number missing three orders, and why does the warehouse say €55 when the app says €47?</p>
+<h3>The order we will follow</h3>
+<div class="tbl"><table><thead><tr><th scope="col">When</th><th scope="col">What happens to order 9001</th></tr></thead><tbody><tr><td>31 Mar 23:58</td><td>customer 77 signs up and orders a kettle (€39) and two mugs (€8 each): €55, web store</td></tr><tr><td>1 Apr 00:00</td><td>payment confirms 40 seconds later; the transaction commits after midnight</td></tr><tr><td>3 Apr</td><td>one mug is returned: the line changes from 2 × €8 to 1 × €8, the order is now €47</td></tr><tr><td>12 May</td><td>the kettle moves from category <i>Kitchen</i> to <i>Small appliances</i></td></tr></tbody></table></div>
+<p class="full">Each event on that list breaks a naive pipeline in a different way. By the end of the dive the same order will be counted once, in the right day, with the right amount, under the category it had when it was sold.</p>
+
+
+<a class="next" href="#layers"><small>next · chapter 2</small>The real mechanism: raw, staging, marts →</a>
+</section>
+<section id="layers" data-title="The layers">
+<p class="ch">chapter 2 <span>· 3 min</span></p>
+<h2>The real mechanism: raw, staging, marts</h2>
+<div class="gist"><p><b>Gist</b> Raw keeps every change event, untouched. Staging keeps the latest row per key, ordered by log position. Marts hold facts at a stated grain and versioned dimensions. Because raw is kept, every later layer can be thrown away and rebuilt, which is what makes fixes and backfills safe.</p></div>
+
+<p>The CDC note ends with a stream of change events. The star schema note starts with a clean fact table. Between them sit two layers that the notes skip, and most of the hard work happens there.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 310" role="img" aria-label="Order line 51, the two mugs of order 9001, in each layer. The raw layer holds both change events: created with quantity 2 and 16 euros at log position 1000, updated to quantity 1 and 8 euros at position 5200. Staging holds only the latest version. The fact table holds one row for the line with its date, product, customer and store keys, quantity 1 and 8 euros. The report sums it with the kettle into 47 euros for Kitchen on 31 March.">
+  <rect class="bx-y" x="10" y="20" width="350" height="120" rx="8"/>
+  <text class="lbl" x="24" y="46">raw.order_lines_changes</text>
+  <text class="soft" x="24" y="74">op c · lsn 1000 · id 51 · qty 2 · €16</text>
+  <text class="soft" x="24" y="98">op u · lsn 5200 · id 51 · qty 1 · €8</text>
+  <text class="soft" x="24" y="122">append only, never edited</text>
+  <rect class="bx" x="400" y="20" width="350" height="120" rx="8"/>
+  <text class="lbl" x="414" y="46">stg.order_lines</text>
+  <text class="soft" x="414" y="74">id 51 · qty 1 · €8 · lsn 5200</text>
+  <text class="soft" x="414" y="98">latest version per key,</text>
+  <text class="soft" x="414" y="122">deletes flagged</text>
+  <rect class="bx-g" x="10" y="180" width="350" height="120" rx="8"/>
+  <text class="lbl" x="24" y="206">mart.fact_sales</text>
+  <text class="soft" x="24" y="234">line 51 · date 2026-03-31 · product_key 812</text>
+  <text class="soft" x="24" y="258">customer_key 4410 · store_key 1 (web)</text>
+  <text class="soft" x="24" y="282">qty 1 · amount €8</text>
+  <rect class="bx" x="400" y="180" width="350" height="120" rx="8"/>
+  <text class="lbl" x="414" y="206">report</text>
+  <text class="soft" x="414" y="234">31 Mar · Kitchen · €47</text>
+  <text class="soft" x="414" y="258">sum(amount) group by day, category</text>
+  <text class="soft" x="414" y="282">one join per dimension</text>
+  <path class="ln" d="M360 80 H398" marker-end="url(#a)"/><path class="ln" d="M575 140 V160 H185 V178" marker-end="url(#a)"/><path class="ln" d="M360 240 H398" marker-end="url(#a)"/>
+</svg></div><figcaption>One line of order 9001 in every layer. Raw remembers everything; each layer after it forgets on purpose.</figcaption></figure>
+<h3>What each layer promises</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Layer</th><th scope="col">Holds</th><th scope="col">Promise</th><th scope="col">Rebuilt from</th></tr></thead><tbody><tr><td><b>raw</b></td><td>every change event exactly as received, plus load metadata</td><td>never edited, never deleted (until retention)</td><td>the source, by a new snapshot</td></tr><tr><td><b>staging</b></td><td>one row per source key: the latest version, typed and renamed, deletes flagged</td><td>matches the source as of the last log position read</td><td>raw, at any time</td></tr><tr><td><b>marts</b></td><td>facts at a stated grain, dimensions with surrogate keys</td><td>business meaning: one definition of revenue</td><td>staging, at any time</td></tr><tr><td><b>report</b></td><td>queries, extracts and dashboards</td><td>reads marts only</td><td>nothing to rebuild</td></tr></tbody></table></div><aside class="mn">“Medallion” (bronze, silver, gold) is the same three layers under other names.</aside>
+<p>The key line is the last column. Because raw is kept, every later layer can be thrown away and rebuilt. That is what makes it safe to fix a bug in the revenue definition: change the SQL, rebuild the marts, and last year is corrected too. Without raw, the only copy of last year is the wrong one.</p>
+<div class="full">
+<h3>ETL or ELT</h3>
+<p>In classic <b>ETL</b> a separate tool transformed the data before it reached the warehouse, and only the result was stored. In <b>ELT</b> the raw data is loaded first and transformed inside the warehouse with SQL, usually by dbt. ELT won for one reason: warehouses got cheap and fast enough to keep raw data and rerun the transforms. This pipeline is ELT. The extract step does no business logic at all; it copies.</p>
+<h3>Staging: from events to rows</h3>
+<p>Staging turns a pile of change events into the table as it is now. For each key, keep the event with the highest log position, and flag the key if that event is a delete, so the next layer can remove it too:</p>
+<div class="card"><div class="card-head"><span>stg_order_lines.sql</span><span>latest version per key</span></div><pre><code><span class="k">SELECT</span> *, op = <span class="s">'d'</span> <span class="k">AS</span> is_deleted
+<span class="k">FROM</span> (
+  <span class="k">SELECT</span> coalesce(after, before).*, op, lsn,
+         ROW_NUMBER() OVER (<span class="k">PARTITION</span> <span class="k">BY</span> coalesce(after, before).id <span class="k">ORDER</span> <span class="k">BY</span> lsn <span class="k">DESC</span>) <span class="k">AS</span> rn
+  <span class="k">FROM</span> raw.order_lines_changes
+) latest
+<span class="k">WHERE</span> rn = 1;</code></pre></div><p>Order by log position, never by the time the event arrived. Events can arrive out of order after a connector restart or a retry; the log position is the order the database committed them in.</p>
+<h3>Marts: from rows to facts</h3>
+<p>The fact table’s grain is one order line, as the star schema note recommends. Each fact row looks up its dimension keys: the date from <code>placed_at</code>, the product version, the customer and the store. Two details matter more than they look:</p>
+<ul>
+<li><b>The date is the shop’s local date.</b> Order 9001 was placed at 23:58 in Amsterdam, which is 21:58 UTC. An order at 00:30 on 1 April Amsterdam time is 22:30 UTC on 31 March. Finance closes months in local time, so the date key is computed in local time, once, in the pipeline, not in every report.</li>
+<li><b>Amounts are stored, not recomputed.</b> The line total comes from the source as it was charged. Recomputing <code>qty × current price</code> in the warehouse gives a different answer the day prices change.</li>
+</ul>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why order staging by log position rather than by arrival time?</summary><p>Events can arrive out of order after retries or restarts; the log position is the order the database committed them in.</p></details><details><summary>Why compute the date key in local time in the pipeline?</summary><p>Finance closes days and months in local time. Doing it once in the pipeline means every report agrees.</p></details></div>
+<a class="next" href="#drills"><small>next · chapter 3</small>Failure drills →</a>
+</section>
+<section id="drills" data-title="Failure drills">
+<p class="ch">chapter 3 <span>· 6 min</span></p>
+<h2>Failure drills</h2>
+<div class="gist"><p><b>Gist</b> Six ways to get a wrong number: a late commit hidden behind a timestamp watermark, a rerun that doubles a day, a renamed column that loads NULLs, a hard delete the extract cannot see, a dimension overwrite that changes last year, and a fact dropped because its customer had not arrived yet.</p></div>
+<aside class="mn">Each drill is a real way to get a wrong number. Guess the cause before you read it.</aside>
+<ul class="drill-index" aria-label="The six drills">
+  <li><a href="#drill-1">1 · after midnight</a></li><li><a href="#drill-2">2 · counted twice</a></li><li><a href="#drill-3">3 · renamed column</a></li>
+  <li><a href="#drill-4">4 · deleted, still sold</a></li><li><a href="#drill-5">5 · last year changed</a></li><li><a href="#drill-6">6 · early fact</a></li>
+</ul>
+<div class="drill" id="drill-1"><header><span>Drill 1</span><h3>The order that committed after midnight</h3></header><dl><dt>Timeline</dt><dd>The extract reads <code>WHERE updated_at &gt; :watermark</code> and saves the largest <code>updated_at</code> it saw. Order 9001 is written at 23:58:10 but its payment step keeps the transaction open, and it commits at 00:00:40. The 00:00:30 run could not see it and saved a watermark of 23:59:58. The next run asks for rows after 23:59:58. Order 9001 is never loaded.</dd><dt class="full">Tempting mistake</dt><dd class="full">“Use the database clock at commit time.” There is no column for that, and <code>now()</code> inside a transaction returns its start time, which is exactly the problem.</dd><dt class="full">Why</dt><dd class="full">A timestamp is set when the row is written; the row becomes visible when the transaction commits. Any transaction that is open while the extract runs can commit later with an older timestamp. Long transactions, replicas that lag and clocks on several app servers all widen the gap.</dd><dt>What saves you</dt><dd>Either read the log (CDC), which is ordered by commit, or re-read a safety window: <code>updated_at &gt; :watermark − 10 minutes</code>, and make the load idempotent (drill 2) so the overlap does no harm. Set the window longer than the longest transaction you allow, and enforce that with <code>idle_in_<wbr>transaction_<wbr>session_<wbr>timeout</code>.</dd></dl><p class="rule">Rule: a timestamp watermark misses late commits. Overlap the window and make the load idempotent, or read the log.</p></div><figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 236" role="img" aria-label="Timeline of drill 1. Order 9001 is written with updated_at 23:58:10. The extract runs at 00:00:30 and saves a watermark of 23:59:58. Order 9001 commits at 00:00:40, still with updated_at 23:58:10. The next run asks for rows changed after 23:59:58 and never sees it.">
+  <path class="ln" d="M20 150 H740" marker-end="url(#a)"/><text class="soft" x="740" y="176" text-anchor="end">wall clock →</text>
+  <path class="ln-d" d="M300 40 V200"/><text class="soft" x="300" y="222" text-anchor="middle">00:00:30 extract runs</text>
+  <rect class="bx" x="40" y="70" width="200" height="50" rx="8"/><text class="lbl" x="140" y="92" text-anchor="middle">9001 written</text><text class="soft" x="140" y="112" text-anchor="middle">updated_at 23:58:10</text>
+  <rect class="bx-r" x="420" y="70" width="200" height="50" rx="8"/><text class="lbl" x="520" y="92" text-anchor="middle">9001 commits</text><text class="soft" x="520" y="112" text-anchor="middle">00:00:40, still 23:58:10</text>
+  <text class="soft" x="300" y="30" text-anchor="middle">watermark saved: 23:59:58</text>
+  <path class="ln-r" d="M520 124 V140"/><text class="bad" x="520" y="200" text-anchor="middle" font-size="16">next run asks “after 23:59:58”: never seen</text>
+</svg></div><figcaption>Written before the watermark, visible after it: invisible to a timestamp extract.</figcaption></figure><div class="drill" id="drill-2"><header><span>Drill 2</span><h3>March counted twice</h3></header><dl><dt>Timeline</dt><dd>On 1 April the load for 31 March fails halfway. The on-call engineer reruns it. The load appends rows. Half of 31 March is now in the fact table twice, and the dashboard shows the best day of the year.</dd><dt class="full">Why</dt><dd class="full">Appending is not idempotent: running it twice gives a different result from running it once. Every pipeline is rerun eventually: after a failure, a fix, a backfill or a retry by the scheduler.</dd><dt>What saves you</dt><dd>Make every load safe to repeat. Either replace the whole slice (<code>DELETE</code> the day, then <code>INSERT</code> it, in one transaction, or overwrite the partition), or <code>MERGE</code> on the line’s key so a second run updates the same rows. Add a uniqueness test on the fact key that fails the run (chapter 7).</dd></dl><p class="rule">Rule: every load must give the same result when run twice. Replace a slice or merge on a key; never blindly append.</p></div><div class="drill" id="drill-3"><header><span>Drill 3</span><h3>The column that was renamed on a Tuesday</h3></header><dl><dt>Timeline</dt><dd>The app team renames <code>line_total</code> to <code>amount_gross</code> in a normal release. CDC carries the new field. Staging still selects <code>line_total</code>, which is now always NULL. Revenue is €0 for every new line. Nobody notices until the weekly finance meeting.</dd><dt class="full">Why</dt><dd class="full">The pipeline depends on the app’s table layout, but nobody told the app team it was a contract. The warehouse accepted NULLs without complaint because nothing said they were wrong.</dd><dt>What saves you</dt><dd>Fail loudly: a <code>not_null</code> test on the amount and a volume check (“revenue today is 0 % of the usual”) stop the run before the marts publish. Then fix the cause: a schema check in the app’s CI that knows which columns the warehouse reads, or, better, a published contract or outbox event instead of raw tables (the CDC note’s going-deeper chapter).</dd></dl><p class="rule">Rule: silent NULLs are worse than a failed run. Test what the report depends on, and make the source schema a contract.</p></div><div class="drill" id="drill-4"><header><span>Drill 4</span><h3>The cancelled order still in revenue</h3></header><dl><dt>Timeline</dt><dd>Fraud cancels order 9733, and a clean-up job hard-deletes its lines. The timestamp extract looks for changed rows; a deleted row has no row left to change. The warehouse keeps the €310 sale forever.</dd><dt class="full">Why</dt><dd class="full">Incremental extracts by timestamp only see rows that exist. Deletes leave nothing behind to select.</dd><dt>What saves you</dt><dd>CDC sees deletes as events (<code>op = d</code>), and staging drops the key. Without CDC: ask the app team for soft deletes on tables the warehouse reads, or run a periodic key comparison (all ids in the source against all ids in staging) and delete the missing ones. A nightly reconciliation of order counts and totals per day (chapter 8) catches what both miss.</dd></dl><p class="rule">Rule: an extract that cannot see deletes will slowly overstate. Read deletes from the log, or reconcile keys.</p></div><div class="drill" id="drill-5"><header><span>Drill 5</span><h3>Last year’s revenue changed overnight</h3></header><dl><dt>Timeline</dt><dd>On 12 May the kettle moves from <i>Kitchen</i> to <i>Small appliances</i>. The product dimension is a copy of the current product table, so it overwrites the category. The March report, closed and filed, now shows €39 less for Kitchen and €39 more for Small appliances.</dd><dt class="full">Why</dt><dd class="full">Overwriting a dimension (type 1) rewrites history: every old fact now joins to today’s label. Sometimes that is what you want (a typo fix). For a category used in filed reports it is not.</dd><dt>What saves you</dt><dd>Keep history in the dimension (type 2): close the old row and add a new one with a new surrogate key and valid dates. Facts keep the key they were loaded with, so March still joins to <i>Kitchen</i>. Decide per column: typos are type 1, categories and regions are type 2. If someone wants old sales under the new category, that is a different question with its own join (“current category”), not a silent change.</dd></dl><p class="rule">Rule: a dimension that overwrites changes the past. Version the columns that reports group by.</p></div><figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 230" role="img" aria-label="Drill 5 as a timeline. Product 812, the kettle in Kitchen, is valid from September 2025 until 12 May 2026. A new version, product key 977 in Small appliances, is valid from 12 May. The fact row for order 9001, sold on 31 March, keeps pointing at key 812, so March still reports it under Kitchen.">
+  <path class="ln" d="M20 170 H740" marker-end="url(#a)"/>
+  <text class="soft" x="60" y="196" text-anchor="middle">31 Mar</text><text class="soft" x="400" y="196" text-anchor="middle">12 May</text><text class="soft" x="700" y="196" text-anchor="middle">today</text>
+  <rect class="bx-g" x="40" y="40" width="356" height="56" rx="8"/><text class="lbl" x="218" y="64" text-anchor="middle">product_key 812 · Kitchen</text><text class="soft" x="218" y="86" text-anchor="middle">valid 2025-09-01 → 2026-05-12</text>
+  <rect class="bx-y" x="404" y="40" width="336" height="56" rx="8"/><text class="lbl" x="572" y="64" text-anchor="middle">product_key 977 · Small appliances</text><text class="soft" x="572" y="86" text-anchor="middle">valid 2026-05-12 → (current)</text>
+  <circle cx="60" cy="140" r="7" class="bx-r"/><text class="soft" x="76" y="146">fact for order 9001 points at 812</text>
+  <path class="ln-d" d="M400 30 V170"/>
+</svg></div><figcaption>Two versions of one kettle. The fact keeps the key it was sold under.</figcaption></figure><div class="drill" id="drill-6"><header><span>Drill 6</span><h3>The fact that arrived before its customer</h3></header><dl><dt>Timeline</dt><dd>Customer 77 signed up one minute before ordering. Orders come from the app by CDC every 15 minutes; customers come from the CRM in a nightly batch. The 00:15 fact load joins order 9001 to <code>dim_customer</code>, finds no row for customer 77, and the inner join drops both lines. €55 is missing until someone reloads the day by hand.</dd><dt class="full">Why</dt><dd class="full">Facts and dimensions come from different sources on different schedules. An inner join treats “not loaded yet” as “does not exist”.</dd><dt>What saves you</dt><dd>Never drop a fact for a missing dimension. Either point it at an <b>unknown member</b> (key −1, “not yet known”) and re-key it when the dimension arrives, or insert an <b>inferred member</b>: a placeholder row for customer 77 that the nightly load fills in. Monitor the share of facts pointing at unknown members; above a few percent, a source is late.</dd></dl><p class="rule">Rule: an inner join between sources on different schedules loses data. Facts always load; missing dimensions get a placeholder.</p></div><div class="full">
+<h3>What the six drills add up to</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Habit</th><th scope="col">Drill</th></tr></thead><tbody><tr><td>read the log, or overlap the watermark window</td><td>1</td></tr><tr><td>every load is idempotent: replace a slice or merge on a key</td><td>2</td></tr><tr><td>tests on what reports depend on fail the run; the source schema is a contract</td><td>3</td></tr><tr><td>deletes are read from the log or found by reconciling keys</td><td>4</td></tr><tr><td>dimensions version the columns reports group by</td><td>5</td></tr><tr><td>facts never wait for dimensions; unknown and inferred members</td><td>6</td></tr></tbody></table></div>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>A timestamp extract misses a few orders near midnight. Likely cause and fix?</summary><p>Transactions that commit after the run with an older updated_at. Overlap the window and make the load idempotent, or switch to CDC.</p></details><details><summary>Why point a fact at an unknown member instead of waiting for the dimension?</summary><p>An inner join drops the fact silently. A placeholder keeps the revenue and can be re-keyed when the dimension arrives.</p></details></div>
+<a class="next" href="#rerun"><small>next · chapter 4</small>The hard problem: rerun anything →</a>
+</section>
+<section id="rerun" data-title="Rerun anything">
+<p class="ch">chapter 4 <span>· 3 min</span></p>
+<h2>The hard problem: rerun anything</h2>
+<div class="gist"><p><b>Gist</b> A correct pipeline gives the right answer when any part is run again for any period. Use three clocks for three jobs: event time decides the day, commit order decides the version, load time decides nothing. Load with newer-only merges on the source key, and keep hidden clocks out of the transforms.</p></div>
+
+<p>Five of the six drills come down to one property. A correct pipeline is one where <b>running any part of it again, for any period, gives the right answer</b>. Reruns after failures, backfills after bug fixes, replays after a source outage and duplicate events from a connector restart are then all the same, boring operation. Everything in this chapter serves that one promise.</p>
+<h3>Three clocks</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Clock</th><th scope="col">Order 9001</th><th scope="col">Used for</th></tr></thead><tbody><tr class=hot><td><b>event time</b>: when it happened in the business</td><td>31 Mar 23:58 (placed_at)</td><td>which day the sale belongs to</td></tr><tr><td><b>commit order</b>: when the database made it visible</td><td>log position 1000, then 5200 for the return</td><td>which version of a row is the latest</td></tr><tr><td><b>load time</b>: when the warehouse got it</td><td>1 Apr 00:15, then 3 Apr 10:30</td><td>freshness, debugging, nothing else</td></tr></tbody></table></div><aside class="mn">Mixing up event time and load time is the single most common warehouse bug. It looks fine until the first late event.</aside>
+<p>Every decision uses the right clock. The fact row’s date comes from event time. Which version wins comes from commit order. Load time is recorded but never decides anything. The return on 3 April changes a fact for 31 March: an update to a day that is already loaded. A pipeline that only processes “today’s” rows by load time will put the €8 return on 3 April’s report or not at all.</p>
+<div class="full">
+<h3>Four ways to load, compared</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Load method</th><th scope="col">Idempotent?</th><th scope="col">Handles late updates</th><th scope="col">Cost</th><th scope="col">Use for</th></tr></thead><tbody><tr><td><b>append</b></td><td>no</td><td>no</td><td>cheapest</td><td>raw layer only, where duplicates are expected and deduped later</td></tr><tr><td><b>replace a slice</b> (delete + insert a day, or overwrite a partition)</td><td>yes, per slice</td><td>if you reload the affected slices</td><td>rewrites whole slices</td><td>facts by event date, when you know which days changed</td></tr><tr><td><b>MERGE on key</b>, newer only</td><td>yes</td><td>yes, any day</td><td>reads the target to match keys</td><td>facts and staging fed by CDC</td></tr><tr><td><b>full rebuild</b></td><td>yes</td><td>yes</td><td>rereads everything</td><td>small tables, dimensions, and the fix after a logic change</td></tr></tbody></table></div><p>The pipeline uses three of them: append into raw, MERGE from raw into staging and facts, and full rebuilds for small dimensions and after logic changes.</p>
+<h3>The merge, written properly</h3>
+<div class="card"><div class="card-head"><span>fact_sales_merge.sql</span><span>idempotent and order-safe</span></div><pre><code>MERGE <span class="k">INTO</span> mart.fact_sales <span class="k">AS</span> t
+<span class="k">USING</span> (
+  <span class="k">SELECT</span> * <span class="k">FROM</span> stg.order_lines_enriched
+  <span class="k">WHERE</span> lsn &gt; :last_merged_lsn          <span class="c">-- only what changed since the last run</span>
+) <span class="k">AS</span> s
+<span class="k">ON</span> t.order_line_id = s.order_line_id
+<span class="k">WHEN</span> MATCHED <span class="k">AND</span> s.lsn &gt; t.source_lsn <span class="k">AND</span> s.is_deleted <span class="k">THEN</span> <span class="k">DELETE</span>
+<span class="k">WHEN</span> MATCHED <span class="k">AND</span> s.lsn &gt; t.source_lsn <span class="k">THEN</span>   <span class="c">-- newer only: replays and old events do nothing</span>
+  <span class="k">UPDATE</span> <span class="k">SET</span> qty = s.qty, amount = s.amount, source_lsn = s.lsn,
+             product_key = s.product_key, customer_key = s.customer_key
+<span class="k">WHEN</span> <span class="k">NOT</span> MATCHED <span class="k">AND</span> <span class="k">NOT</span> s.is_deleted <span class="k">THEN</span>
+  <span class="k">INSERT</span> (order_line_id, date_key, product_key, customer_key, store_key, qty, amount, source_lsn)
+  <span class="k">VALUES</span> (s.order_line_id, s.date_key, s.product_key, s.customer_key, s.store_key, s.qty, s.amount, s.lsn);</code></pre></div><p>Three details make it safe. The key is the source’s line id, so a second run matches the same rows. The guard <code>s.lsn &gt; t.source_lsn</code> means an older event arriving late, or the same event twice, changes nothing: it is the upsert note’s “skip if older” clause. And <code>:last_merged_lsn</code> is only advanced after the merge commits, so a crash halfway means the next run repeats the batch, which the first two details make harmless.</p>
+<h3>No hidden clocks in the transforms</h3>
+<p>A transform that calls <code>now()</code> or <code>current_date</code> gives a different answer on every run, so it cannot be rerun for last Tuesday. Pass the period being processed in as a parameter (the scheduler’s logical date) and use only that. Then a backfill is simply the normal job, run for old dates:</p>
+<div class="card"><div class="card-head"><span>backfill.sh</span><span>the same job, for a past range</span></div><pre><code># rebuild March after fixing the revenue definition
+dbt build --select fact_sales+ --vars &#x27;{&quot;from&quot;: &quot;2026-03-01&quot;, &quot;to&quot;: &quot;2026-04-01&quot;}&#x27;</code></pre></div><p>If the backfill needs a different script from the daily run, the daily run is not idempotent yet.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>The same change event is merged twice. What stops it doing harm?</summary><p>The merge matches on the source key and only updates when the event’s log position is newer than the stored one.</p></details><details><summary>Why is now() in a transform a problem?</summary><p>The transform gives a different answer each run, so it cannot be rerun or backfilled for a past period.</p></details></div>
+<a class="next" href="#variants"><small>next · chapter 5</small>Full copy, timestamp or CDC →</a>
+</section>
+<section id="variants" data-title="Variants">
+<p class="ch">chapter 5 <span>· 3 min</span></p>
+<h2>Full copy, timestamp or CDC</h2>
+<div class="gist"><p><b>Gist</b> A nightly full copy is simple and correct but slow and heavy. Incremental by timestamp is light but misses late commits and deletes. CDC into raw with frequent merges is fresh and sees everything, at the cost of a connector and a slot to run. Choose per table; keep the layer contract the same.</p></div>
+
+<p>There are three common ways to get order lines out of the app database. Here is each one, with the drills from chapter 3 run against it.</p>
+<div class="tbl"><table><thead><tr><th scope="col"></th><th scope="col">A · nightly full copy</th><th scope="col">B · incremental by timestamp</th><th scope="col">C · CDC into raw, merge every 15 min</th></tr></thead><tbody><tr><td>how</td><td>dump <code>order_lines</code> and replace the warehouse copy</td><td>select rows with <code>updated_at</code> past a watermark, merge them</td><td>a connector reads the log into raw; a job merges raw into staging and facts</td></tr><tr><td>load on the source</td><td>a full scan every night</td><td>an index range scan on <code>updated_at</code></td><td>reads the log; almost none on tables</td></tr><tr><td>freshness</td><td>up to 24 hours</td><td>the schedule, often hourly</td><td>about 15–20 minutes</td></tr><tr class=hot><td>drill 1, late commits</td><td><b>safe</b>: everything is reread</td><td><b>misses them</b> unless the window overlaps</td><td><b>safe</b>: the log is in commit order</td></tr><tr><td>drill 2, rerun</td><td><b>safe</b>: replace is idempotent</td><td>safe only with MERGE</td><td>safe with the newer-only MERGE</td></tr><tr class=hot><td>drill 4, deletes</td><td><b>safe</b>: gone rows are gone</td><td><b>blind</b> to hard deletes</td><td><b>safe</b>: delete events</td></tr><tr><td>history of changes</td><td>none: only last night’s state</td><td>only the versions it happened to see</td><td>every version, in raw</td></tr><tr><td>needs from the app team</td><td>read access</td><td>an indexed, trusted <code>updated_at</code> on every table</td><td>logical replication, a slot, a schema contract</td></tr><tr><td>breaks when</td><td>the table grows past the night</td><td>someone updates without touching <code>updated_at</code></td><td>the connector stops and the slot fills the disk</td></tr></tbody></table></div><aside class="mn">Variant A is underrated. For tables under a few million rows it is correct by construction, and easy to explain.</aside>
+<p class="full">Variant B is the one most teams start with and the one with the most silent failures: a bulk <code>UPDATE</code> from a script that does not set <code>updated_at</code>, a hard delete, a long transaction. Every one of them produces a number that looks plausible. Variant C costs more to run, but its failures are loud: the connector stops, lag grows, an alert fires.</p>
+<h3>Choosing per table</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Table</th><th scope="col">Rows</th><th scope="col">Changes</th><th scope="col">Pick</th></tr></thead><tbody><tr><td><code>stores</code></td><td>30</td><td>a few a year</td><td>A: full copy, type 2 dimension built in the warehouse</td></tr><tr><td><code>products</code></td><td>40,000</td><td>hundreds a day</td><td>A nightly, or C if prices must be fresh</td></tr><tr><td><code>customers</code> (from the CRM)</td><td>2 million</td><td>thousands a day, no log access</td><td>B with an overlap window, plus a weekly key reconciliation</td></tr><tr><td><code>orders</code>, <code>order_lines</code></td><td>60 million lines</td><td>100,000 a day, updates and deletes</td><td>C</td></tr></tbody></table></div><div class="full">
+<p>Mixing variants is normal and is not a compromise. What must be consistent is the layer contract from chapter 2: whichever way data arrives, staging holds the latest row per key and marts are rebuilt from staging. The facts and dimensions do not care how the rows got there.</p>
+<h3>Where the transform runs</h3>
+<p>All three variants load into raw and transform in the warehouse (ELT). The older alternative, a tool that transforms in flight and loads only the result, still makes sense in one case: data that must be masked or dropped before it may be stored at all, such as card numbers or health data. Then the extract step removes those fields and nothing else, so it stays a copy with redactions, not a second place where business logic lives.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Which variant is blind to hard deletes?</summary><p>Incremental by timestamp: a deleted row leaves nothing to select.</p></details><details><summary>When is a nightly full copy the right answer?</summary><p>For small tables that change rarely, such as stores or products: it is correct by construction.</p></details></div>
+<a class="next" href="#numbers"><small>next · chapter 6</small>The pipeline in numbers →</a>
+</section>
+<section id="numbers" data-title="Numbers">
+<p class="ch">chapter 6 <span>· 3 min</span></p>
+<h2>The pipeline in numbers</h2>
+<div class="gist"><p><b>Gist</b> 100,000 new lines and 8,000 updates a day: 25 GB for a full copy, tens of megabytes incrementally. CDC with a 15-minute merge gives a report about 10 minutes old on average. A merge without a partition filter scans the whole fact table each run. A year’s backfill takes a day serially, three hours in parallel.</p></div>
+
+<p>The shop takes about 40,000 orders a day at 2.5 lines each: 100,000 new lines a day, plus about 8,000 updates from returns and status changes. Five years of history is 60 million lines.</p>
+<h3>How much moves</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Variant</th><th scope="col">Data moved per day</th><th scope="col">Source work</th><th scope="col">Worked out</th></tr></thead><tbody><tr><td>A · full copy of order lines</td><td>about 25 GB</td><td>a 60-million-row scan nightly</td><td>60 M rows × ~400 bytes</td></tr><tr><td>B · incremental</td><td>about 45 MB</td><td>one index range scan per run</td><td>108,000 rows × ~400 bytes</td></tr><tr><td>C · CDC</td><td>about 90 MB</td><td>reading the log, which is written anyway</td><td>108,000 events × ~800 bytes (before and after)</td></tr></tbody></table></div><aside class="mn">CDC moves more bytes than B, because each event carries before and after. It still does far less work on the source.</aside>
+<h3>How fresh</h3>
+<p>With CDC the connector delivers events within seconds. The merge runs every 15 minutes and takes about 3. The worst case for a sale to appear in the report is one full interval plus the run: about 18 minutes, and about 10 on average. Halving the interval halves the average but doubles the number of merges, each of which reads part of the fact table.</p>
+<div class="full">
+<h3>What a merge costs</h3>
+<p>A MERGE has to find the matching target rows. If the fact table is partitioned by event date, and the batch only touches recent days, the warehouse reads only those partitions. Returns make that harder: they update facts weeks old.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Batch touches</th><th scope="col">Partitions read</th><th scope="col">Data scanned per merge</th></tr></thead><tbody><tr><td>only today</td><td>1</td><td>~40 MB</td></tr><tr><td>the last 30 days (returns)</td><td>30</td><td>~1.2 GB</td></tr><tr class=hot><td>no date filter in the merge</td><td>all 1,800</td><td>~70 GB, 96 times a day</td></tr></tbody></table></div><p>The last row is a real bill: a merge without a partition filter can cost more than the rest of the warehouse together. Add the affected dates to the merge condition (<code>AND t.date_key IN (dates in this batch)</code>) so the warehouse can prune.</p>
+<h3>The slot on the source</h3>
+<p>The source writes about 20 GB of write-ahead log a day. If the connector stops, PostgreSQL keeps all of it for the slot: a weekend is 60 GB, the disk from the CDC note’s drill. Cap it with <code>max_slot_wal_keep_size</code> (say 100 GB) and alert when lag passes 30 minutes. If the cap is hit, the slot is lost and the connector needs a new snapshot, which is slow but recoverable, because raw and the merge are idempotent.</p>
+<h3>A backfill, timed</h3>
+<p>After a fix to the revenue definition, a year of facts must be rebuilt. One day of facts rebuilds in about 4 minutes. Serially, 365 days take about 24 hours; eight days in parallel take about 3. Plan backfills against the warehouse’s concurrency limit and run them outside the merge schedule, or the daily merges queue behind them and freshness drops for the day.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why does CDC move more bytes than a timestamp extract?</summary><p>Each change event carries the row before and after the change.</p></details><details><summary>How do you stop a merge from scanning the whole fact table?</summary><p>Add the event dates touched by the batch to the merge condition so the warehouse reads only those partitions.</p></details></div>
+<a class="next" href="#testing"><small>next · chapter 7</small>Testing data, not just code →</a>
+</section>
+<section id="testing" data-title="Testing">
+<p class="ch">chapter 7 <span>· 2 min</span></p>
+<h2>Testing data, not just code</h2>
+<div class="gist"><p><b>Gist</b> Unit test the transforms with the drills as fixtures, test that a rerun changes nothing, check keys, volumes and ranges on every load, and reconcile counts and sums per day against the source every night. Build into a hidden schema and publish only when the tests pass.</p></div>
+
+<p>Pipeline bugs rarely crash. They produce a number that is wrong by a few percent, and the first person to notice is in finance. Tests therefore check data as well as code, and they run on every load, not only in CI.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Test</th><th scope="col">Checks</th><th scope="col">Runs</th><th scope="col">Catches</th></tr></thead><tbody><tr><td><b>unit tests on transforms</b></td><td>fixed input rows give the expected output rows</td><td>CI</td><td>logic bugs: the return, the time zone, the unknown customer</td></tr><tr><td><b>the rerun test</b></td><td>loading a batch twice gives the same table as loading it once</td><td>CI</td><td>drill 2</td></tr><tr><td><b>schema tests</b></td><td>keys are unique and not null, foreign keys resolve</td><td>every load</td><td>duplicates, missing dimensions</td></tr><tr><td><b>volume and range checks</b></td><td>row count and revenue within the usual band for the weekday</td><td>every load</td><td>drill 3, half-loaded days</td></tr><tr class=hot><td><b>reconciliation</b></td><td>counts and sums per day match the source</td><td>nightly</td><td>drills 1 and 4, everything else</td></tr><tr><td><b>source contract check</b></td><td>the columns the warehouse reads still exist with the same types</td><td>the app’s CI</td><td>drill 3, before it ships</td></tr></tbody></table></div><aside class="mn">If you can only afford one test, make it the reconciliation. It checks the outcome, so it catches causes you never thought of.</aside><div class="full">
+<h3>A unit test for order 9001</h3>
+<p>Write the drills as fixtures. The return on 3 April is a perfect case: it must change the fact for 31 March, not add one for 3 April.</p>
+<div class="card"><div class="card-head"><span>test_fact_sales.yml</span><span>dbt unit test</span></div><pre><code>unit_tests:
+  - name: return_updates_the_original_day
+    model: fact_sales
+    given:
+      - input: ref(&#x27;stg_order_lines_enriched&#x27;)
+        rows:
+          - {order_line_id: 51, date_key: 20260331, qty: 2, amount: 16, lsn: 1000}
+          - {order_line_id: 51, date_key: 20260331, qty: 1, amount: 8,  lsn: 5200}
+    expect:
+      rows:
+        - {order_line_id: 51, date_key: 20260331, qty: 1, amount: 8}</code></pre></div><h3>Reconciliation, the test that checks the outcome</h3>
+<p>Every night, compute the same small summary on both sides and compare: per event date, the number of order lines and the sum of their amounts. Run it on the source’s read replica, for the last 60 days, so late returns are included.</p>
+<div class="card"><div class="card-head"><span>reconcile.sql</span><span>same query on both sides, then compare</span></div><pre><code><span class="k">SELECT</span> date(placed_at AT TIME ZONE <span class="s">'Europe/Amsterdam'</span>) <span class="k">AS</span> day,
+       count(*)              <span class="k">AS</span> lines,
+       sum(line_total)       <span class="k">AS</span> revenue
+<span class="k">FROM</span> order_lines <span class="k">JOIN</span> orders <span class="k">USING</span> (order_id)
+<span class="k">WHERE</span> placed_at &gt;= now() - interval <span class="s">'60 days'</span>
+<span class="k">GROUP</span> <span class="k">BY</span> 1;</code></pre></div><p>Expect small, explainable differences for the last hour (in flight) and none for older days. A difference on an old day is a bug every time: a missed late commit, a delete that never arrived, a duplicated reload.</p>
+<h3>Write, audit, publish</h3>
+<p>Data tests are only useful if a failing one stops bad data reaching the report. Build each run’s marts in a hidden schema, run the tests there, and swap them in only when they pass. If they fail, finance sees yesterday’s correct numbers with a “data as of” note, rather than today’s wrong ones.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Which single test catches the most causes, and why?</summary><p>The nightly reconciliation of counts and sums per day: it checks the outcome, whatever the cause.</p></details><details><summary>What does write–audit–publish protect finance from?</summary><p>Seeing a wrong number: a failed test keeps yesterday’s correct marts in place.</p></details></div>
+<a class="next" href="#running"><small>next · chapter 8</small>Running it →</a>
+</section>
+<section id="running" data-title="Running it">
+<p class="ch">chapter 8 <span>· 2 min</span></p>
+<h2>Running it</h2>
+<div class="gist"><p><b>Gist</b> Watch freshness measured on the data, the reconciliation difference per day and the share of facts with unknown members. Keep a runbook for restarting the connector, replaying a day from raw, re-snapshotting and backfilling. Agree with finance how a closed month handles late changes.</p></div>
+
+<p>A pipeline that runs every 15 minutes needs three numbers on a dashboard, each with an alert, and a short runbook for the five things that go wrong.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Metric</th><th scope="col">What it means</th><th scope="col">Alert when</th></tr></thead><tbody><tr><td><b>freshness</b>: now minus the newest event time in the marts</td><td>how old the report is</td><td>over 45 minutes in opening hours</td></tr><tr><td><b>completeness</b>: the reconciliation difference per day</td><td>whether the numbers are right</td><td>any day older than one hour differs</td></tr><tr><td><b>unknown-member share</b>: facts with a −1 key</td><td>whether a source is late</td><td>over 2 % of yesterday’s facts</td></tr></tbody></table></div><aside class="mn">Freshness is measured on the data, not on the job. A job that succeeds while loading nothing is the classic false green.</aside><div class="full">
+<p>Behind those three, the engineering view: connector lag and slot size on the source, run duration and rows per run, and tests failed per run. Show “data as of 10:42” on the finance dashboard itself, from the freshness metric, so users can see when it is stale without asking.</p>
+<h3>The runbook</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Symptom</th><th scope="col">First check</th><th scope="col">Repair</th></tr></thead><tbody><tr><td>freshness alert</td><td>is the connector running? is the merge job failing?</td><td>restart the connector; it resumes from its saved log position. Fix the job and let the next run catch up</td></tr><tr><td>one old day differs in reconciliation</td><td>compare keys for that day: missing in warehouse, or extra?</td><td>missing: replay that day from raw. Extra: check for a delete that was never read</td></tr><tr><td>slot near its size cap</td><td>connector lag and errors</td><td>fix the consumer first; if the slot is dropped, take a new incremental snapshot</td></tr><tr><td>a wrong definition found (e.g. revenue included tax)</td><td>which marts use it, from lineage</td><td>fix the SQL, backfill the affected range (chapter 4), tell finance which reports changed</td></tr><tr><td>the source schema changed</td><td>the failed test’s column</td><td>map the new column in staging, rerun from raw; nothing upstream is lost</td></tr></tbody></table></div><h3>Closing a month</h3>
+<p>Finance closes March on 5 April, and late events keep coming: a return in May still updates a March fact. Agree a rule with finance and write it down. The usual one: the warehouse is always current, and the filed March report is a <b>snapshot</b> taken at close (a copy of the month’s summary, stored with the date it was taken). Later changes appear as adjustments in the month they were made, not as edits to a filed month. That is a finance decision, not a technical one, but the pipeline has to support both views.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why measure freshness on the data rather than the job?</summary><p>A job can succeed while loading nothing; only the newest event time shows how old the report really is.</p></details><details><summary>A return in May changes a March sale. What does the filed March report show?</summary><p>Usually the snapshot taken at close; the change appears as an adjustment in May. Agree the rule with finance.</p></details></div>
+<a class="next" href="#tools"><small>next · chapter 9</small>Tools →</a>
+</section>
+<section id="tools" data-title="Tools">
+<p class="ch">chapter 9 <span>· 2 min</span></p>
+<h2>Tools</h2>
+<div class="gist"><p><b>Gist</b> Debezium or a managed connector reads the log, Kafka or storage lands raw data, dbt builds staging and marts with incremental merges, snapshots and tests, a scheduler handles dependencies and backfills, and a columnar warehouse stores it. The grain, the keys and idempotency stay your job.</p></div>
+
+<p>Every piece of this pipeline exists as a product. Each does one box or arrow well and leaves the same few decisions to you.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Job</th><th scope="col">Common tools</th><th scope="col">Gives you</th><th scope="col">Still yours</th></tr></thead><tbody><tr><td>read changes from the source</td><td>Debezium (with Kafka Connect), AWS DMS, Fivetran, Airbyte</td><td>snapshot plus log streaming, schema changes as events</td><td>slot monitoring, the size cap, the contract with the app team</td></tr><tr><td>land raw data</td><td>Kafka plus a sink connector, cloud storage, the warehouse’s streaming ingest</td><td>append-only storage, retention</td><td>how long raw is kept: it decides how far back you can rebuild</td></tr><tr><td>transform (staging, marts)</td><td>dbt, SQLMesh</td><td>incremental models, MERGE, snapshots (type 2), tests, lineage</td><td>the grain, the keys, the newer-only guard, no hidden clocks</td></tr><tr><td>schedule and retry</td><td>Airflow, Dagster, Prefect, dbt Cloud</td><td>dependencies, retries, backfills by date, logical dates</td><td>making every task idempotent so retries are safe</td></tr><tr><td>check data quality</td><td>dbt tests, Great Expectations, Soda, Elementary</td><td>unique, not null, ranges, anomalies, reports</td><td>the reconciliation, and what blocks publishing</td></tr><tr><td>store and query</td><td>Snowflake, BigQuery, Redshift, ClickHouse, Databricks, DuckDB</td><td>columnar scans, partitions, MERGE</td><td>partition filters in merges, cost per query</td></tr></tbody></table></div><aside class="mn">A managed connector removes the work in the first row, not the decisions in the last column.</aside><div class="full">
+<h3>What the tools map to</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Chapter</th><th scope="col">Tool feature</th></tr></thead><tbody><tr><td>2 · layers</td><td>dbt sources (raw), staging models, marts; Debezium topics per table</td></tr><tr><td>3 · drill 5</td><td>dbt snapshots, which build type 2 dimensions from a source table</td></tr><tr><td>4 · idempotent merge</td><td>dbt incremental models with <code>unique_key</code> and <code>incremental_predicates</code></td></tr><tr><td>4 · no hidden clocks</td><td>Airflow’s data interval, Dagster partitions</td></tr><tr><td>7 · tests</td><td>dbt unit tests and data tests, contracts on models</td></tr><tr><td>8 · freshness</td><td>dbt source freshness, Elementary or the scheduler’s data-age sensors</td></tr></tbody></table></div><p>A small team can run the whole thing on DuckDB or a single PostgreSQL warehouse with dbt and a cron job until volumes justify more. The design (raw kept, idempotent merges, three clocks, reconciliation) is the same at every size; only the boxes get bigger.</p>
+</div>
+
+<a class="next" href="#lab"><small>next · chapter 10</small>A lab and the checklist →</a>
+</section>
+<section id="lab" data-title="Lab">
+<p class="ch">chapter 10 <span>· 3 min</span></p>
+<h2>A lab and the checklist</h2>
+<div class="gist"><p><b>Gist</b> The lab adds gift cards: card sales fit the existing fact table, but outstanding balances need a periodic snapshot fact rebuilt from raw, with late till uploads handled by event time. The checklist turns the deep dive into review questions for any pipeline.</p></div>
+
+<p><b>The lab.</b> The shop starts selling gift cards. A card is bought (an order line, as now), then spent across several later orders, and may expire unspent after two years. Card balances live in a new <code>gift_cards</code> table that the app updates on every purchase and spend. Finance wants two reports: gift card sales by day, and the total outstanding balance at the end of each day. Design the pipeline before you open the answers.</p>
+<ol>
+<li>What is the grain of each report, and is it a new fact table?</li>
+<li>Which extract variant for <code>gift_cards</code>, and why?</li>
+<li>How do you get the balance at the end of 31 March, if you load on 2 April?</li>
+<li>A card is spent in a shop whose till uploads its sales a day late. What breaks, and what saves you?</li>
+<li>How do you prove the balance report is right?</li>
+</ol>
+<div class="check quiz"><h3>model answer</h3>
+<details><summary>1 · The grain</summary><p>Card sales are order lines and already land in <code>fact_sales</code> with a product of type gift card. The balance is different: one row per card per day, a <b>periodic snapshot</b> fact (<code>fact_gift_card_daily</code>). Do not try to read balances out of transaction facts at query time; store the end-of-day state.</p></details>
+<details><summary>2 · Extract</summary><p>CDC (variant C). Balances change on every spend, and you need every version to rebuild a past day’s balance. A nightly copy would only give the balance at copy time.</p></details>
+<details><summary>3 · Balance at the end of 31 March</summary><p>From raw: for each card, the latest change event whose event time is on or before 31 March 23:59:59 local time. Because raw keeps every version, the snapshot for any day can be built, or rebuilt, at any time, which also makes the job idempotent.</p></details>
+<details><summary>4 · The late till</summary><p>The spend has an event time of yesterday but arrives today, so yesterday’s balance snapshot was wrong when built. Rebuild snapshots for the days touched by each batch (the event dates in the batch), not just today. Same rule as chapter 4: event time decides the day.</p></details>
+<details><summary>5 · Proof</summary><p>Reconcile every night: the sum of balances in the app for “now” equals the latest snapshot plus today’s changes, and for each past day, sales minus spends minus expiries equals the change in total balance. A difference names the day to replay.</p></details>
+</div>
+<h3>The review checklist</h3>
+<div class="checklist"><div class="cl"><h3>Layers</h3><ul><li>Raw keeps every change, append only, with a stated retention</li><li>Staging holds the latest row per key, ordered by log position</li><li>Marts rebuild from staging; reports read marts only</li><li>No business logic in the extract</li></ul></div><div class="cl"><h3>Extract</h3><ul><li>Each table has a chosen variant and a reason</li><li>Timestamp extracts overlap their window</li><li>Deletes are read from the log or found by reconciling keys</li><li>The slot has a size cap and a lag alert</li></ul></div><div class="cl"><h3>Loading</h3><ul><li>Every load is idempotent: replace a slice or merge on a key</li><li>Merges are newer-only by log position</li><li>Merges filter on the partitions they touch</li><li>No now() in transforms; the period is a parameter</li></ul></div><div class="cl"><h3>Modelling</h3><ul><li>The grain of each fact is written down</li><li>Date keys use the business’s time zone</li><li>Columns reports group by are type 2</li><li>Missing dimensions get unknown or inferred members</li></ul></div><div class="cl"><h3>Trust</h3><ul><li>Keys tested unique and not null on every load</li><li>Volume checks stop a bad run before publishing</li><li>Nightly reconciliation of counts and sums per day</li><li>The source schema is checked in the app’s CI</li></ul></div><div class="cl"><h3>Operations</h3><ul><li>Freshness measured on data and shown on the dashboard</li><li>Runbook for replay, backfill and re-snapshot</li><li>Month-close rule agreed with finance</li></ul></div></div>
+
+<a class="next" href="#top"><small>the end</small>Back to the top ↑</a>
+</section>
+<p class="sources"><b>Sources.</b> Ralph Kimball and Margy Ross, <i>The Data Warehouse Toolkit</i> (3rd ed.): grain, slowly changing dimensions, late-arriving dimensions and inferred members. Maxime Beauchemin, “Functional Data Engineering” (idempotent, deterministic tasks). Martin Kleppmann, <i>Designing Data-Intensive Applications</i>, chapters 10–11. The Debezium, dbt (incremental models, snapshots, unit tests) and PostgreSQL logical replication documentation. Joe Reis and Matt Housley, <i>Fundamentals of Data Engineering</i>.</p>
+</div></article>
+<footer class="foot"><span>Jef’s Notes · deep dive 12 · From App Database to Warehouse</span></footer>
+</main>
+
+<div class="dock" data-dock>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+  <div class="dock-in">
+    <a class="dock-arrow" data-prev href="#top" aria-label="Previous chapter">‹</a>
+    <button class="dock-mid" type="button" data-open aria-haspopup="dialog" aria-expanded="false">
+      <small data-count>1 / 10</small><span data-current>Recap</span><i aria-hidden="true">☰</i>
+    </button>
+    <a class="dock-arrow" data-next href="#layers" aria-label="Next chapter">›</a>
+  </div>
+</div>
+<div class="sheet-back" data-close hidden></div>
+<div class="sheet" data-sheet role="dialog" aria-modal="true" aria-label="Chapters" hidden>
+  <div class="sheet-head"><b>Chapters</b><button type="button" data-close aria-label="Close">×</button></div>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Three notes in sixty seconds</span><span class="m">2 min</span></a></li><li><a href="#layers" data-ch="1"><span class="n">2</span><span class="t">The real mechanism: raw, staging, marts</span><span class="m">3 min</span></a></li><li><a href="#drills" data-ch="2"><span class="n">3</span><span class="t">Failure drills</span><span class="m">6 min</span></a></li><li><a href="#rerun" data-ch="3"><span class="n">4</span><span class="t">The hard problem: rerun anything</span><span class="m">3 min</span></a></li><li><a href="#variants" data-ch="4"><span class="n">5</span><span class="t">Full copy, timestamp or CDC</span><span class="m">3 min</span></a></li><li><a href="#numbers" data-ch="5"><span class="n">6</span><span class="t">The pipeline in numbers</span><span class="m">3 min</span></a></li><li><a href="#testing" data-ch="6"><span class="n">7</span><span class="t">Testing data, not just code</span><span class="m">2 min</span></a></li><li><a href="#running" data-ch="7"><span class="n">8</span><span class="t">Running it</span><span class="m">2 min</span></a></li><li><a href="#tools" data-ch="8"><span class="n">9</span><span class="t">Tools</span><span class="m">2 min</span></a></li><li><a href="#lab" data-ch="9"><span class="n">10</span><span class="t">A lab and the checklist</span><span class="m">3 min</span></a></li></ol>
+  <div class="sheet-foot">
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+    <a href="#top" data-close>Top of page ↑</a>
+  </div>
+</div>
+</body>
+</html>
