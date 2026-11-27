@@ -1,8 +1,8 @@
 # Handoff: Handbook 2 · Identity and Access in the Cloud
 
-Status as of **2026-11-27**: **in progress, 22 of 25 chapters written: Parts I–V (1–22).** The owner approved
-everything in `docs/HANDOFF-handbooks.md` §6 and picked Chapter 9 as the sample. **Next: Chapter 23** (Part VI),
-then 24, 25 and the appendices (`BOOK["next"]` in `book.py` is 23).
+Status as of **2026-11-27**: **complete: all 25 chapters (Parts I–VI) and appendices A–E written.** The owner
+approved everything in `docs/HANDOFF-handbooks.md` §6 and picked Chapter 9 as the sample. `BOOK["next"]` has been
+removed from `book.py`. What remains is in §5 (running the AWS labs once in a real sandbox account).
 
 Read first: `docs/HANDOFF-handbooks.md` §1–2 (what a handbook is, the voice, the building blocks, the look). This
 book uses exactly the same style, blocks, CSS (`public/assets/book.css`) and build as Handbook 1. The best model to copy
@@ -13,7 +13,8 @@ from is `content/handbooks/cloud-networking/09-firewalls.html` (a chapter about 
 | What | Where |
 | --- | --- |
 | Outline (parts, chapters, summaries, topics, appendices) | `content/handbooks/cloud-identity/book.py` |
-| Chapter bodies | `content/handbooks/cloud-identity/<nn>-<slug>.html`; written: 01–22 |
+| Chapter bodies | `content/handbooks/cloud-identity/<nn>-<slug>.html`; written: 01–25 |
+| Appendices | `content/handbooks/cloud-identity/appendix-<a–e>.html`; D and E are generated (§3f) |
 | Built contents page | `public/handbooks/cloud-identity/index.html` |
 | Build | `python3 scripts/build_notes.py` (builds everything, including both handbooks and the landing shelf) |
 | Preview | `npm run serve`, then http://localhost:8080/handbooks/cloud-identity/ |
@@ -259,6 +260,22 @@ key-policy changes (ch. 18), the S3 data-event trail (exists since Dec 2026, ch.
 unused access (StockPilot finding ch. 21), GuardDuty in the `security` account (ch. 20). Ch. 24: everything as code
 (SCPs, permission sets, perimeter) with review; policy generation (ch. 9 stretch); tests. Ch. 25 capstone.
 
+## 3f. Part VI (chapters 23–25) and appendices: written 2026-11-27
+
+| Ch. | Story (all in the casebook) | Lab | Run here? |
+| --- | --- | --- | --- |
+| 23 | Eli's identity watch list live 30 Nov 2027 (closes the review's federation-alert finding); 2 Dec 2027, 7 alerts, no incidents | `detect.py` over `watch-events.jsonl` + optional Access Analyzer (account zone) | Python **run**; AWS not |
+| 24 | Dec 2027 Lena's ISO question; `larder/larder-identity` from 10 Jan 2028 (clean plan 18 Feb); reporting team's PR | `lint.py` over `policies/` (fails, then passes) + optional `check-access-not-granted` | Python **run**; AWS not |
+| 25 | ADR 0026 (Paris pilot light) → design review 15 Feb 2028 + laptop tabletop 22 Feb; 7 tickets | design exercise (inventory, review, tabletop) | n/a |
+
+All 25 lab scripts printed in chapters 1–24 are byte-identical to the executed files. Terraform snippets in ch. 24 are
+marked as not applied. **Appendices:** the build now supports `appendix-<letter>.html` (pages, contents links,
+`#appX` cross-references, `all.html`, `journals.json` + PDFs). A (cookbook) copies its 13 policies from the chapters'
+own code blocks plus two new ones (ECS task trust, TLS-only bucket statement); all 15 parse as JSON. B (translation)
+and C (lab setup, costs, clean-up) are hand-written. **D (glossary) and E (answers) are generated** from every
+chapter's `dl.terms` and `ol.quiz` by `python3 scripts/handbook_appendices.py cloud-identity D E`: rerun it after
+changing a chapter's key terms or questions. `book.css` gained `.terms dd + dd`, `.gl-ref` and `.answers` rules.
+
 ## 4. Order of work after Chapter 9
 
 1. Chapter 9 (above). Update this file and `docs/HANDOFF-handbooks.md`.
@@ -276,4 +293,4 @@ unused access (StockPilot finding ch. 21), GuardDuty in the `security` account (
 - [x] Part III (12–14) written and checked.
 - [x] Part IV (15–19) written and checked.
 - [x] Part V (20–22) written and checked.
-- [ ] Chapter 23 next.
+- [x] Part VI (23–25) and appendices A–E written and checked (pages, ids, links, figures at 1280/375 light and dark, print clipping).

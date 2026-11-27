@@ -674,6 +674,31 @@ and must not contradict, ADR 0021 (staff tools SSO/SCIM, May 2027) and the 11 Oc
   by `aws:ViaAWSService`; AWS package repositories a named exception. Enforced staging then prod: identity-perimeter
   RCP on the root (only exception: tag `perimeter-exception=vendor-role` on `wmsb-nightly-file`), resource-perimeter
   SCP on Workloads, network rule on the two restricted buckets; `break-glass-admin` excepted.
+- **Watch list (ch. 23):** live 30 Nov 2027 (closes the Oct review's “no alert on new federation trust” finding, Eli):
+  Larder's login service writes `federation.connection.created` events, shipped with CloudTrail to `security`. Pages
+  (on-call phone): root sign-in, break-glass, trust/resource policy opened to `*` or outsiders, high GuardDuty.
+  Tickets (platform queue, read each morning): new SAML/OIDC provider or client federation, Identity Center assignment
+  not made by TEAM's role, KMS key policy change, StopLogging/DeleteTrail attempts, new IAM user or key. Thu 2 Dec
+  2027, 7 alerts, no incidents: Eli fixed a TEAM bug by hand (10:02); Mo connected new office client Brightwater's IdP
+  (11:20); Eli added the backup account to a key policy (13:31); Dee opened staging role `team-tool`'s trust to `*`
+  while debugging, reverted 4 min after the page (14:47); Cho's StopLogging denied by SCP, from an old load-test
+  runbook, deleted (16:05); Marco and Femke used root at 18:12 to update the payment card, unannounced; break-glass-2
+  quarterly test (19:30). TEAM's account in examples: `222233334444`.
+- **Identity as code (ch. 24):** Dec 2027 Lena (ISO 27001 prep) asked for every 2027 change to production access and
+  its approver; took Eli two days. Repository `larder/larder-identity` (Terraform; folders `organization/`,
+  `identity-center/`, `accounts/<name>/`, `modules/`, `policies/`) opened 10 Jan 2028; imports SCPs/RCPs → permission
+  sets → OIDC/CI roles → cross-account roles → workload roles; clean plan 18 Feb 2028. Apply role `identity-apply`
+  (trusts only `main` in GitHub environment `identity`); CODEOWNERS platform, plus Lena for `organization/` and
+  `new-access` PRs; two approvals; nightly drift plan. SCP denies changing permission sets, SCPs and roles except
+  `identity-apply`, TEAM (assignments only) and `break-glass-admin`. Reporting team's first PR (`reporting-sync`:
+  `s3:*`, `iam:Create*`, PassRole `*`) failed the linter; merged version reads `larder-stock-exports/daily/` only.
+  Policy generation trimmed `larder-core` from 11 services to 5.
+- **Capstone (ch. 25):** after ADR 0026 (24 Jan 2028, Paris `eu-west-3` pilot light), design review 15 Feb and
+  tabletop 22 Feb 2028 (Eli, Lena, Dee, Cho, Marco; stolen-cookie laptop scenario). Tickets: device-bound sessions
+  (IdP requires managed devices for AWS and GitHub), new-country sign-in alert, one “contain a person” runbook,
+  GitHub fine-grained tokens only (30-day expiry); Paris added to the Prod OU and backup region SCP, multi-Region
+  replica of the snapshot key, GuardDuty/Access Analyzer/watch-list rules in Paris, recovery VPC endpoints in the
+  perimeter; break-glass test with Frankfurt treated as down: 26 minutes. 31 unused-access findings open in Feb 2028.
 - **Deploy key (ch. 17):** CI deployed with a long-lived access key for IAM user `deploy-bot` with
   `AdministratorAccess`, stored as a repository secret; replaced by GitHub OIDC with one role per environment.
 - **Accounts today (ch. 7):** two standalone accounts in Nov 2026: Jasper's original `111122223333` (production, plus the

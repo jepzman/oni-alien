@@ -1,14 +1,13 @@
 # Handbook 2 · Identity and Access in the Cloud. The outline (parts → chapters) and book metadata.
-# Rendered by scripts/build_handbooks.py into public/handbooks/cloud-identity/. Approved 2026-11-26; no chapters yet.
-# A chapter is written when content/handbooks/cloud-identity/<nn>-<slug>.html exists; the rest show as “coming”.
-# While no chapter is written the book has only its contents page (no all.html, no PDF, not in journals.json).
-# Brief for the first chapter (9, the sample): docs/HANDOFF-handbook-2-identity.md
+# Rendered by scripts/build_handbooks.py into public/handbooks/cloud-identity/. Approved 2026-11-26; complete 2026-11-27
+# (all 25 chapters and appendices A–E). Chapter bodies: <nn>-<slug>.html; appendices: appendix-<letter>.html.
+# Appendices D (glossary) and E (answers) are generated from the chapters: python3 scripts/handbook_appendices.py cloud-identity D E
+# Plan and house style: docs/HANDOFF-handbook-2-identity.md
 
 BOOK = dict(
     key="cloud-identity",
     series="Jef’s Handbooks",
     no=2,
-    next=23,  # Parts I–V (1–22) are written; Part VI next
     title="Identity and Access in the Cloud",
     subtitle="From passwords to permission guardrails",
     shelf_blurb="Authentication, OAuth and SSO, IAM policies, roles, workload identity, secrets and multi-account guardrails, with AWS as the main provider and Azure and Google Cloud compared.",

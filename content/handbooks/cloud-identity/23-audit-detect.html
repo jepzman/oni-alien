@@ -1,0 +1,314 @@
+<!-- Handbook 2 · Identity and Access in the Cloud · Chapter 23. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part VI · Running it</p>
+  <p class="chno">23</p>
+  <h1>Auditing and detecting misuse</h1>
+  <p class="promise">Every control in this book can be misconfigured, bypassed or abused by someone who already has access. So you need two more things: a record that can't be quietly edited of who did what, and alerts on the handful of events that change who can get in. This chapter sets up both on AWS: the organisation trail, IAM Access Analyzer, GuardDuty and a short list of rules, small enough that every alert gets read.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Set up an organisation-wide CloudTrail whose logs workload accounts can't change.</li>
+      <li>Use IAM Access Analyzer to find external and unused access.</li>
+      <li>Explain what GuardDuty adds, and where to run it.</li>
+      <li>Write an identity watch list: which events page someone, which open a ticket.</li>
+      <li>Respond to an identity alert: ask, contain, fix.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>CloudTrail and reading events (<a href="#ch11">Chapter 11</a>); the organisation and its security account (<a href="#ch20">Chapter 20</a>).</li>
+      <li>Break-glass and the elevation tool (<a href="#ch14">Chapter 14</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, Python 3; optional AWS step, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 23.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>One finding from the October 2027 review (<a href="#ch19">Chapter 19</a>) was still open in November: <em>no alert when a new client identity provider is trusted</em>. Federating with Korenwolf (<a href="#ch5">Chapter 5</a>) had been a week of careful work; adding a new client took Mo a few minutes in Larder's admin screens, and nobody else would ever know. Eli owned the finding, due 30 November.</p>
+  <p>He used it to answer a broader question. Larder now had a dozen alarms, set up one chapter at a time: root sign-in, break-glass, budget alerts. Was anyone watching the events that change who can get in? Section 23.9 shows the watch list that went live on 30 November, and its first full day.</p>
+</aside>
+
+<!-- ======================================================== 23.1 -->
+<h2 class="sec" id="s23-1"><span class="n">23.1</span>Evidence and detection</h2>
+
+<p class="lead">Auditing serves two different purposes, and they pull in different directions:</p>
+<ul>
+  <li><strong>Evidence</strong>: a complete, tamper-resistant record of who did what, kept long enough for investigations, audits and the occasional “who changed this in March?”. More is better.</li>
+  <li><strong>Detection</strong>: noticing, within minutes, the few events that matter now. Fewer is better: an alert stream nobody reads detects nothing.</li>
+</ul>
+<p>Get evidence right with a central trail that nobody in a workload account can touch. Get detection right with a short list of rules about identity, each with an owner and a response.</p>
+
+<!-- ======================================================== 23.2 -->
+<h2 class="sec" id="s23-2"><span class="n">23.2</span>The organisation trail</h2>
+
+<p>An <span class="term">organisation trail</span> is a CloudTrail trail created in the management account (or by the delegated administrator) that records every member account's events, existing and future, into one S3 bucket. Put that bucket in the security account (<a href="#ch20">Chapter 20</a>), where:</p>
+<ul>
+  <li>workload accounts can't read, change or delete the logs, and the baseline SCP stops anyone but break-glass from stopping the trail;</li>
+  <li><strong>S3 Object Lock</strong> keeps each log file for its retention period, so even the security account's administrators can't delete history;</li>
+  <li>log file validation lets you prove a file wasn't altered;</li>
+  <li>a customer managed key (<a href="#ch18">Chapter 18</a>) controls who can read the logs, which contain sensitive information about everyone's work.</li>
+</ul>
+<p>Management events are recorded by default. Add <strong>data events</strong> where they matter: object-level access to restricted buckets (<a href="#ch22">Chapter 22</a>) and secrets reads. Data events cost per event, so choose them deliberately. Keep at least a year online and longer in cheap storage, whatever your regulators require.</p>
+
+<!-- ======================================================== 23.3 -->
+<h2 class="sec" id="s23-3"><span class="n">23.3</span>IAM Access Analyzer</h2>
+
+<p>Access Analyzer answers questions you can't easily answer from CloudTrail, because they're about what's <em>possible</em>, not what happened:</p>
+<ul>
+  <li><strong>External access</strong>: which resources (buckets, keys, roles, queues, secrets…) can be reached from outside your organisation, and by whom. Each grant is a finding to approve or remove. StockPilot's bucket access was one, closed when the contract ended (<a href="#ch21">Chapter 21</a>).</li>
+  <li><strong>Unused access</strong> (a paid feature): roles, access keys and permissions that haven't been used for a period you choose. It's the best evidence for access reviews (<a href="#ch13">Chapter 13</a>) and for narrowing policies.</li>
+  <li><strong>Policy checks</strong>: validation and custom checks before deployment (<a href="#ch9">Chapter 9</a>, <a href="#ch24">Chapter 24</a>).</li>
+</ul>
+<p>Create the analyzers with the organisation as their zone of trust, administered from the security account.</p>
+
+<!-- ======================================================== 23.4 -->
+<h2 class="sec" id="s23-4"><span class="n">23.4</span>GuardDuty</h2>
+
+<p><strong>Amazon GuardDuty</strong> analyses CloudTrail, VPC flow logs, DNS logs and more for signs of compromise, using AWS's threat intelligence and behaviour models. For identity, its most valuable findings include: instance credentials used from outside AWS (the SSRF of <a href="#ch15">Chapter 15</a>, after the fact), API calls from known malicious addresses or Tor, unusual root usage, and anomalous behaviour by a principal, such as a role suddenly listing every bucket. Enable it in every account and region you use, with the security account as delegated administrator, and route its high-severity findings into the same alerting as your own rules.</p>
+
+<!-- ======================================================== 23.5 -->
+<h2 class="sec" id="s23-5"><span class="n">23.5</span>The identity watch list</h2>
+
+<p>GuardDuty finds known bad patterns. Your own rules cover what only you know is unusual: the changes to <em>who can get in</em>. A watch list that fits on one screen:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 23.1 · Larder's identity watch list</caption>
+    <thead><tr><th>Event</th><th>Why</th><th>Response</th></tr></thead>
+    <tbody>
+      <tr><td>Root user sign-in, any account</td><td>should almost never happen (<a href="#ch7">Chapter 7</a>)</td><td>page</td></tr>
+      <tr><td>Break-glass sign-in or role assumption</td><td>means an emergency or a test (<a href="#ch14">Chapter 14</a>)</td><td>page</td></tr>
+      <tr><td>A trust or resource policy opened to <code>*</code> or an outside account</td><td>a new way in (<a href="#ch8">Chapter 8</a>)</td><td>page</td></tr>
+      <tr><td>New SAML or OIDC provider, in IAM or in the app's login service</td><td>a new identity provider can vouch for people (<a href="#ch5">Chapter 5</a>)</td><td>ticket</td></tr>
+      <tr><td>Identity Center assignment not made by the elevation tool</td><td>bypasses just-in-time (<a href="#ch14">Chapter 14</a>)</td><td>ticket</td></tr>
+      <tr><td>KMS key policy changed</td><td>may change who can decrypt (<a href="#ch18">Chapter 18</a>)</td><td>ticket</td></tr>
+      <tr><td>Attempt to stop or change the trail (even if denied)</td><td>someone tried to go dark</td><td>ticket</td></tr>
+      <tr><td>New IAM user or access key</td><td>Larder has none, by design (<a href="#ch17">Chapter 17</a>)</td><td>ticket</td></tr>
+      <tr><td>High-severity GuardDuty finding</td><td>known attack patterns</td><td>page</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>On AWS, each CloudTrail-based rule is an EventBridge rule with an event pattern (the break-glass alarm in <a href="#ch14">Chapter 14</a> is one), in the region where the event is recorded; or a query over CloudTrail Lake or your log platform. The lab writes the same rules in a few lines of Python, which is a good way to design and test them before deploying.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Alert on changes to who can get in, not on everything that happens. A short list everyone reads beats a long one nobody does.</p>
+</div>
+
+<!-- ======================================================== 23.6 -->
+<h2 class="sec" id="s23-6"><span class="n">23.6</span>Identity events outside AWS</h2>
+
+<p>CloudTrail only sees AWS. Several of the most important identity changes happen elsewhere: a new federation connection in your customer login service, a new admin in your identity provider, a new OAuth app granted access to company data (<a href="#ch4">Chapter 4</a>), a change to a SaaS tool's SSO settings. Make sure each of those systems writes an audit log, ship the logs to the same place, and put their identity events on the same watch list. The October review's finding was exactly this: a powerful change, made in Larder's own application, that no AWS tool would ever see.</p>
+
+<!-- ======================================================== 23.7 -->
+<h2 class="sec" id="s23-7"><span class="n">23.7</span>Responding to an identity alert</h2>
+
+<ol class="steps">
+  <li><strong>Ask first.</strong> Most identity alerts are someone doing their job without saying so. Message the person named in the event: was this you, and why? Make it normal to be asked, and normal to announce planned changes beforehand.</li>
+  <li><strong>If it wasn't expected, contain</strong>: end the person's sessions (<a href="#ch13">Chapter 13</a>), deny the role's existing sessions (<a href="#ch3">Chapter 3</a>), deactivate keys, revert the policy change.</li>
+  <li><strong>Investigate</strong> with the trail: everything the principal did from its first suspicious action, across accounts (<a href="#ch11">Chapter 11</a>).</li>
+  <li><strong>Fix the cause</strong>, and tune the rule if it fired for something you'll always want to allow, by narrowing it, not deleting it.</li>
+</ol>
+
+<!-- ======================================================== 23.8 -->
+<h2 class="sec" id="s23-8"><span class="n">23.8</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 23.2 · Audit and detection at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Central audit log</td><td>CloudTrail organisation trail</td><td>Activity log and Entra audit and sign-in logs, exported via diagnostic settings</td><td>Cloud Audit Logs with an organisation-level sink</td></tr>
+      <tr><td>Who can reach what</td><td>IAM Access Analyzer</td><td>Defender for Cloud recommendations; Entra access reviews</td><td>Policy Analyzer; IAM recommender</td></tr>
+      <tr><td>Threat detection</td><td>GuardDuty</td><td>Defender for Cloud; Entra ID Protection for risky sign-ins</td><td>Security Command Center, Event Threat Detection</td></tr>
+      <tr><td>Your own rules</td><td>EventBridge, CloudTrail Lake</td><td>Microsoft Sentinel analytics rules; activity log alerts</td><td>log-based alerts; Security Command Center custom modules</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>Identity events live in <strong>Entra ID's</strong> audit and sign-in logs, not just the Azure activity log: role activations in PIM, new app registrations and consents, changes to Conditional Access. <strong>Entra ID Protection</strong> scores sign-ins and users for risk (impossible travel, leaked credentials) and can force MFA or a password reset automatically.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p><strong>Admin Activity</strong> audit logs are always on and free; <strong>Data Access</strong> logs must be enabled per service. An organisation-level <strong>log sink</strong> sends every project's logs to a bucket in a locked-down project, Google's equivalent of the organisation trail.</p>
+</div>
+
+<!-- ======================================================== 23.9 -->
+<h2 class="sec" id="s23-9"><span class="n">23.9</span>At Larder: the first full day</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Eli's watch list (Table 23.1) went live on 30 November 2027, closing the review finding: Larder's login service now writes an audit event for every new federation connection, shipped with CloudTrail's events to the security account. Pages go to the on-call phone; tickets to the platform team's queue, reviewed every morning. Thursday 2 December was the first full day, and it raised seven alerts, the same seven as the lab:</p>
+  <p>Eli's own assignment outside TEAM (he'd fixed a broken TEAM approval by hand; now the fix goes through TEAM like everything else). Mo connecting Brightwater, a new office client, to its identity provider (expected; checked against the contract the same morning). Eli's key policy change (adding the backup account, as planned). Dee opening a staging role's trust policy to <code>*</code> while debugging; she reverted it four minutes after the page, and the identity perimeter (<a href="#ch22">Chapter 22</a>) would have refused outsiders anyway. Cho trying to stop the trail, denied by the SCP: he was following an old runbook that said to “pause logging during the load test”. The runbook was deleted. Marco and Femke signing in as root at 18:12 to update the payment card before an invoice deadline, a root-only task they had forgotten to announce. And break-glass-2, the scheduled quarterly test, announced in advance. Seven alerts, no incidents, three runbooks and habits improved.</p>
+</aside>
+
+<!-- ======================================================== 23.10 -->
+<h2 class="sec" id="s23-10"><span class="n">23.10</span>Lab: write the watch list</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 23 · Detection rules over a day of events</p>
+  <p><strong>You'll</strong> run seven identity rules over Larder's 2 December 2027, decide which alerts were real, and add a rule of your own. Optionally, you'll turn on IAM Access Analyzer's external access findings in a sandbox account. <strong>You need</strong> Python 3; for the optional part, the AWS CLI. <strong>Cost:</strong> free (external access analysis is free; unused access analysis is not).</p>
+</div>
+
+<p class="code-title"><span>detect.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># detect.py · a few identity detection rules over a day of events, and who gets told</span>
+<span class="k">import</span> json, sys
+
+TEAM_ROLE = <span class="s">"assumed-role/team-elevation/"</span>          <span class="c"># the elevation tool (Chapter 14)</span>
+
+<span class="k">def</span> who(e):
+    u = e.get(<span class="s">"userIdentity"</span>, {})
+    <span class="k">if</span> u.get(<span class="s">"type"</span>) == <span class="s">"Root"</span>:
+        <span class="k">return</span> f<span class="s">"root of account {e['recipientAccountId']}"</span>
+    <span class="k">return</span> e.get(<span class="s">"actor"</span>) <span class="k">or</span> u.get(<span class="s">"userName"</span>) <span class="k">or</span> u.get(<span class="s">"arn"</span>, <span class="s">"?"</span>).split(<span class="s">"/"</span>)[-1] <span class="k">or</span> u.get(<span class="s">"type"</span>)
+
+RULES = [   <span class="c"># (severity, name, test)</span>
+    (<span class="s">"page"</span>, <span class="s">"root user signed in"</span>,
+     <span class="k">lambda</span> e: e.get(<span class="s">"eventName"</span>) == <span class="s">"ConsoleLogin"</span> <span class="k">and</span> e[<span class="s">"userIdentity"</span>][<span class="s">"type"</span>] == <span class="s">"Root"</span>),
+    (<span class="s">"page"</span>, <span class="s">"break-glass user signed in"</span>,
+     <span class="k">lambda</span> e: e.get(<span class="s">"eventName"</span>) == <span class="s">"ConsoleLogin"</span> <span class="k">and</span> e[<span class="s">"userIdentity"</span>].get(<span class="s">"userName"</span>, <span class="s">""</span>).startswith(<span class="s">"break-glass"</span>)),
+    (<span class="s">"page"</span>, <span class="s">"trust policy opened to everyone"</span>,
+     <span class="k">lambda</span> e: e.get(<span class="s">"eventName"</span>) == <span class="s">"UpdateAssumeRolePolicy"</span> <span class="k">and</span> <span class="s">'"AWS":"*"'</span> <span class="k">in</span> e[<span class="s">"requestParameters"</span>][<span class="s">"policyDocument"</span>].replace(<span class="s">" "</span>, <span class="s">""</span>)),
+    (<span class="s">"ticket"</span>, <span class="s">"new federation trust (client identity provider)"</span>,
+     <span class="k">lambda</span> e: e.get(<span class="s">"event"</span>) == <span class="s">"federation.connection.created"</span>
+               <span class="k">or</span> e.get(<span class="s">"eventName"</span>) <span class="k">in</span> (<span class="s">"CreateSAMLProvider"</span>, <span class="s">"CreateOpenIDConnectProvider"</span>)),
+    (<span class="s">"ticket"</span>, <span class="s">"account assignment made outside the elevation tool"</span>,
+     <span class="k">lambda</span> e: e.get(<span class="s">"eventName"</span>) == <span class="s">"CreateAccountAssignment"</span> <span class="k">and</span> TEAM_ROLE <span class="k">not in</span> e[<span class="s">"userIdentity"</span>][<span class="s">"arn"</span>]),
+    (<span class="s">"ticket"</span>, <span class="s">"KMS key policy changed"</span>,
+     <span class="k">lambda</span> e: e.get(<span class="s">"eventName"</span>) == <span class="s">"PutKeyPolicy"</span>),
+    (<span class="s">"ticket"</span>, <span class="s">"attempt to stop the audit trail"</span>,
+     <span class="k">lambda</span> e: e.get(<span class="s">"eventName"</span>) <span class="k">in</span> (<span class="s">"StopLogging"</span>, <span class="s">"DeleteTrail"</span>)),
+]
+
+path = sys.argv[1] <span class="k">if</span> len(sys.argv) &gt; 1 <span class="k">else</span> <span class="s">"watch-events.jsonl"</span>
+events = [json.loads(line) <span class="k">for</span> line <span class="k">in</span> open(path) <span class="k">if</span> line.strip()]
+<span class="k">for</span> e <span class="k">in</span> events:
+    <span class="k">for</span> severity, name, test <span class="k">in</span> RULES:
+        <span class="k">if</span> test(e):
+            outcome = f<span class="s">" ({e['errorCode']})"</span> <span class="k">if</span> <span class="s">"errorCode"</span> <span class="k">in</span> e <span class="k">else</span> <span class="s">""</span>
+            print(f<span class="s">"{e['eventTime'][11:16]}  {severity.upper():&lt;6} {name}{outcome}: {who(e)}"</span>)
+print(f<span class="s">"\n{len(events)} events, {sum(any(t(e) for _, _, t in RULES) for e in events)} raised an alert"</span>)</code></pre>
+
+<ol class="steps">
+  <li><strong>Save the day's events</strong> as <code>watch-events.jsonl</code> (trimmed to the fields the rules read; two come from Larder's login service, not CloudTrail):
+<pre><code>{"source": "cloudtrail", "eventTime": "2027-12-02T07:58:11Z", "recipientAccountId": "111122223333", "eventName": "GetObject", "userIdentity": {"type": "AssumedRole", "arn": "arn:aws:sts::111122223333:assumed-role/dispatch-task/7f9c"}}
+{"source": "cloudtrail", "eventTime": "2027-12-02T09:14:03Z", "recipientAccountId": "111122223333", "eventName": "CreateAccountAssignment", "userIdentity": {"type": "AssumedRole", "arn": "arn:aws:sts::222233334444:assumed-role/team-elevation/req-881"}}
+{"source": "cloudtrail", "eventTime": "2027-12-02T10:02:40Z", "recipientAccountId": "777788889999", "eventName": "CreateAccountAssignment", "userIdentity": {"type": "AssumedRole", "arn": "arn:aws:sts::777788889999:assumed-role/AWSReservedSSO_PlatformAdmin_3f9a/eli@larder.example"}}
+{"source": "larder-login", "eventTime": "2027-12-02T11:20:55Z", "event": "federation.connection.created", "actor": "mo@larder.example", "detail": {"customer": "brightwater", "issuer": "https://idp.brightwater.example"}}
+{"source": "cloudtrail", "eventTime": "2027-12-02T13:31:09Z", "recipientAccountId": "111122223333", "eventName": "PutKeyPolicy", "userIdentity": {"type": "AssumedRole", "arn": "arn:aws:sts::111122223333:assumed-role/AWSReservedSSO_PlatformAdmin_3f9a/eli@larder.example"}, "requestParameters": {"keyId": "order-exports"}}
+{"source": "cloudtrail", "eventTime": "2027-12-02T14:47:30Z", "recipientAccountId": "444455556666", "eventName": "UpdateAssumeRolePolicy", "userIdentity": {"type": "AssumedRole", "arn": "arn:aws:sts::444455556666:assumed-role/AWSReservedSSO_Developer_77aa/dee@larder.example"}, "requestParameters": {"roleName": "team-tool", "policyDocument": "{\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"*\"},\"Action\":\"sts:AssumeRole\"}]}"}}
+{"source": "cloudtrail", "eventTime": "2027-12-02T16:05:12Z", "recipientAccountId": "111122223333", "eventName": "StopLogging", "errorCode": "AccessDenied", "userIdentity": {"type": "AssumedRole", "arn": "arn:aws:sts::111122223333:assumed-role/AWSReservedSSO_ProdOperator_51c2/cho@larder.example"}}
+{"source": "cloudtrail", "eventTime": "2027-12-02T18:12:44Z", "recipientAccountId": "777788889999", "eventName": "ConsoleLogin", "userIdentity": {"type": "Root", "arn": "arn:aws:iam::777788889999:root"}}
+{"source": "cloudtrail", "eventTime": "2027-12-02T19:30:00Z", "recipientAccountId": "777788889999", "eventName": "ConsoleLogin", "userIdentity": {"type": "IAMUser", "userName": "break-glass-2", "arn": "arn:aws:iam::777788889999:user/break-glass-2"}}</code></pre></li>
+  <li><strong>Run it</strong> with <code>python3 detect.py</code>:
+<pre><code>10:02  TICKET account assignment made outside the elevation tool: eli@larder.example
+11:20  TICKET new federation trust (client identity provider): mo@larder.example
+13:31  TICKET KMS key policy changed: eli@larder.example
+14:47  PAGE   trust policy opened to everyone: dee@larder.example
+16:05  TICKET attempt to stop the audit trail (AccessDenied): cho@larder.example
+18:12  PAGE   root user signed in: root of account 777788889999
+19:30  PAGE   break-glass user signed in: break-glass-2
+
+9 events, 7 raised an alert</code></pre>
+  For each line, decide what you'd ask and of whom, then compare with 23.9. Note the two events that raised nothing: Dispatch reading its config, and an assignment made <em>by</em> the elevation tool.</li>
+  <li><strong>Add a rule</strong> from Table 23.1 that isn't in the code: a new IAM user or access key (<code>CreateUser</code>, <code>CreateAccessKey</code>). Add a test event for it and run again.</li>
+  <li><strong>Break it on purpose.</strong> Change the trust-policy rule to look for <code>"Principal":"*"</code> instead. Dee's change no longer pages anyone, because the policy wrote <code>{"AWS": "*"}</code>. Rules that match text are brittle: real rules should parse the policy, or use Access Analyzer, which evaluates what a policy actually allows.</li>
+  <li><strong>Optional: external access in your account.</strong>
+<pre><code>aws accessanalyzer create-analyzer --analyzer-name lab --type ACCOUNT
+aws accessanalyzer list-findings-v2 --analyzer-arn $(aws accessanalyzer list-analyzers \
+  --query 'analyzers[?name==`lab`].arn' --output text) \
+  --query 'findings[].[resourceType, resource, status]' --output table
+aws accessanalyzer delete-analyzer --analyzer-name lab</code></pre>
+  Findings appear within minutes for anything shared outside the account, including roles you created in earlier labs if you kept them.</li>
+</ol>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s23-11"><span class="n">23.11</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Logs in the accounts they describe</td><td>An attacker deletes the evidence with the rest.</td><td>Organisation trail into a locked security account, with Object Lock.</td></tr>
+      <tr><td>Alerting on everything</td><td>Nobody reads the alerts; the important one is missed.</td><td>A short identity watch list with owners and responses.</td></tr>
+      <tr><td>Watching only AWS</td><td>Changes in the IdP, login service or SaaS go unseen.</td><td>Ship application identity events to the same place.</td></tr>
+      <tr><td>Treating alerts as accusations</td><td>People stop announcing changes, or start hiding them.</td><td>Ask first; announce planned changes.</td></tr>
+      <tr><td>Rules that match policy text</td><td>Equivalent spellings slip through.</td><td>Parse policies, or use Access Analyzer.</td></tr>
+      <tr><td>Never reviewing external and unused access</td><td>Old grants and idle roles pile up.</td><td>Access Analyzer findings in the regular access review.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum23">
+  <h2 class="sec" id="sum23"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Auditing is <strong>evidence</strong> (complete, tamper-resistant, kept) and <strong>detection</strong> (few, fast, read).</li>
+    <li>An <strong>organisation trail</strong> into the security account, with Object Lock and a managed key, is the evidence.</li>
+    <li><strong>Access Analyzer</strong> shows what's possible: external and unused access. <strong>GuardDuty</strong> finds known bad patterns.</li>
+    <li>Your own <strong>watch list</strong> covers changes to who can get in: root, break-glass, open trust, new federation, assignments outside the tool, key policies, trail tampering.</li>
+    <li>Include identity events from outside AWS. Respond by asking first, then containing, investigating and fixing.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Organisation trail</dt><dd>A CloudTrail trail recording every account in an organisation.</dd>
+    <dt>S3 Object Lock</dt><dd>Write-once storage that prevents deletion before a retention date.</dd>
+    <dt>IAM Access Analyzer</dt><dd>Finds external and unused access, and checks policies.</dd>
+    <dt>GuardDuty</dt><dd>AWS's managed threat detection service.</dd>
+    <dt>Watch list</dt><dd>The short set of events that raise alerts, each with a response.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Why should the organisation trail's bucket live in a separate security account? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>So that someone who compromises a workload account, or its administrators, can't delete or alter the record of what they did. Combined with the SCP protecting the trail and Object Lock, the evidence survives.</p></details>
+    </li>
+    <li>
+      <p>Which tool answers “can anyone outside our organisation read this bucket?”, and why not CloudTrail? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>IAM Access Analyzer, which reasons about what policies allow. CloudTrail records what happened, so it can only show access that has already been used.</p></details>
+    </li>
+    <li>
+      <p>The watch list paged at 03:00 for a root sign-in to the management account. Write the first three steps. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Ask the people who can use root (the vault holders) whether it was them; if not, treat it as an incident: check what the session did in CloudTrail and reset root's password and MFA through the recovery path; then review how the credentials could have been used and by whom.</p></details>
+    </li>
+    <li>
+      <p>Why does a new client federation connection in your own login service belong on the same watch list as AWS events? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>It changes who can sign in to your application as a business customer's staff, as powerful as an IAM trust change, and no AWS tool can see it. Its audit event must be shipped and alerted on like any other identity change.</p></details>
+    </li>
+    <li>
+      <p>Design the routing for Table 23.1: which events page, which create tickets, and who reviews tickets? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Page for events that could mean an active attacker with power now: root, break-glass, open trust, high-severity GuardDuty. Tickets for changes that need checking within a day: new federation, assignments outside the tool, key policy changes, trail tampering attempts, new users or keys. The platform team reviews tickets each morning, with a named owner per rule.</p></details>
+    </li>
+    <li>
+      <p>Compare where you'd look for a suspicious new administrator on Azure and on AWS. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Azure: Entra ID audit logs (role assignments and PIM activations) and the activity log for Azure RBAC. AWS: CloudTrail for Identity Center assignment and permission set changes and IAM policy changes, plus the identity provider's own audit log.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/awscloudtrail/latest/userguide/creating-trail-organization.html">Organisation trails</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/what-is-access-analyzer.html">IAM Access Analyzer</a>, <a href="https://docs.aws.amazon.com/guardduty/latest/ug/what-is-guardduty.html">GuardDuty</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/entra/identity/monitoring-health/concept-audit-logs">Entra audit logs</a>. Google Cloud: <a href="https://cloud.google.com/logging/docs/export/aggregated_sinks">Aggregated sinks</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="#ch22">22 · Data perimeters</a></div>
+  <div><span>Next</span><a href="#ch24">24 · Identity as code and least privilege at scale</a></div>
+</nav>

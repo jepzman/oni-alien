@@ -4,6 +4,8 @@
 Each book lives in content/handbooks/<key>/:
   - book.py defines BOOK (metadata, parts → chapters, appendices, and which chapters are written)
   - <nn>-<slug>.html is a written chapter's body (plain HTML using the classes in public/assets/book.css)
+  - appendix-<letter>.html is a written appendix's body (same rules); it gets a page, a contents link and a place
+    at the end of all.html
 Output: public/handbooks/<key>/index.html (title page + contents), all.html (every written chapter, for the PDF)
 and one page per written chapter.
 
@@ -92,19 +94,48 @@ def written(book):
     return out
 
 
+def written_appendices(book):
+    """Appendix letter → file, for every appendix-<letter>.html in the book's content folder."""
+    letters = [a[0] for a in book["appendices"]]
+    return {a: f"appendix-{a.lower()}.html" for a in letters if (CONTENT / book["key"] / f"appendix-{a.lower()}.html").exists()}
+
+
 def link_chapters(html, book):
-    done = written(book)
+    done, apps = written(book), written_appendices(book)
 
     def repl(m):
         n = int(m.group(1))
         return f'href="{page_name(book, n)}"' if n in done else f'href="index.html#ch{n}"'
-    return re.sub(r'href="#ch(\d+)"', repl, html)
+
+    def repl_app(m):
+        a = m.group(1)
+        return f'href="{apps[a]}"' if a in apps else f'href="index.html#app{a}"'
+    html = re.sub(r'href="#ch(\d+)"', repl, html)
+    return re.sub(r'href="#app([A-Z])"', repl_app, html)
 
 
 def chapter_body(book, num):
     body = (CONTENT / book["key"] / written(book)[num]).read_text(encoding="utf-8")
     body = re.sub(r"^<!--.*?-->\s*", "", body, flags=re.S)
     return link_chapters(body, book)
+
+
+def appendix_body(book, letter):
+    body = (CONTENT / book["key"] / written_appendices(book)[letter]).read_text(encoding="utf-8")
+    body = re.sub(r"^<!--.*?-->\s*", "", body, flags=re.S)
+    return link_chapters(body, book)
+
+
+def render_appendix(book, letter, css_href, home):
+    title, desc = next((t, d) for a, t, d in book["appendices"] if a == letter)
+    return "\n".join([
+        head(f"Appendix {letter}: {title} · {book['title']}", desc, css_href, 2),
+        runhead(book, f"Appendix {letter}", home),
+        '<main class="page">',
+        appendix_body(book, letter),
+        '</main>',
+        colophon(book),
+        '</body>', '</html>', ''])
 
 
 def render_chapter(book, num, css_href, home):
@@ -124,9 +155,14 @@ def render_all(book, css_href, home):
     arts = []
     for num in written(book):
         body = chapter_body(book, num)
-        body = re.sub(r'href="(\d\d-[a-z0-9-]+)\.html"', r'href="#chapter-\1"', body)
         body = re.sub(r'<nav class="next".*?</nav>', "", body, flags=re.S)
         arts.append(f'<article class="sheet chapter" id="chapter-{page_name(book, num)[:-5]}">\n{body}\n</article>')
+    for letter, fname in written_appendices(book).items():
+        body = appendix_body(book, letter)
+        body = re.sub(r'<nav class="next".*?</nav>', "", body, flags=re.S)
+        arts.append(f'<article class="sheet chapter" id="chapter-{fname[:-5]}">\n{body}\n</article>')
+    local = r'href="(\d\d-[a-z0-9-]+|appendix-[a-z])\.html"'
+    arts = [re.sub(local, r'href="#chapter-\1"', a) for a in arts]
     return "\n".join([
         head(f"{book['title']} · the whole book", book["promise"], css_href, 2),
         runhead(book, "the whole book", home),
@@ -163,8 +199,12 @@ def render_index(book, css_href, home):
 {chr(10).join(items)}
     </ol>
   </section>''')
-    apps = "\n".join(f'      <li id="app{a}" class="planned"><span class="cn">{a}</span><div><h3>{esc(t)}<span class="badge badge--soon">coming</span></h3><p>{esc(d)}</p></div></li>'
-                     for a, t, d in book["appendices"])
+    done_apps = written_appendices(book)
+    apps = "\n".join(
+        f'      <li id="app{a}"><span class="cn">{a}</span><div><h3><a href="{done_apps[a]}">{esc(t)}</a></h3><p>{esc(d)}</p></div></li>'
+        if a in done_apps else
+        f'      <li id="app{a}" class="planned"><span class="cn">{a}</span><div><h3>{esc(t)}<span class="badge badge--soon">coming</span></h3><p>{esc(d)}</p></div></li>'
+        for a, t, d in book["appendices"])
     pdf = f'pdf/{book["key"]}-handbook.pdf'
     if done:
         start = (f'<p>Start at <a href="{page_name(book, min(done))}">Chapter {min(done)}</a>, or <a href="all.html">read every '
@@ -216,7 +256,10 @@ def build(out_root=None, css_href=None, home="../../index.html"):
             (out / "all.html").write_text(render_all(book, css, home), encoding="utf-8")
         for num in done:
             (out / page_name(book, num)).write_text(render_chapter(book, num, css, home), encoding="utf-8")
-        print(f"[handbooks/{key}] index + {len(done)} chapter(s)")
+        apps = written_appendices(book)
+        for letter, fname in apps.items():
+            (out / fname).write_text(render_appendix(book, letter, css, home), encoding="utf-8")
+        print(f"[handbooks/{key}] index + {len(done)} chapter(s)" + (f" + {len(apps)} appendix(es)" if apps else ""))
         books.append(dict(book, written=done, n_chapters=sum(1 for _ in chapters(book))))
         if not done:
             continue
@@ -224,7 +267,10 @@ def build(out_root=None, css_href=None, home="../../index.html"):
         listing.append(dict(key=base, title=book["title"], all=f"{base}/all.html", pdf=f"{base}/pdf/{key}-handbook.pdf",
                             notes=[dict(num=n, slug=page_name(book, n)[3:-5], title=next(c[2] for _, c in chapters(book) if c[0] == n),
                                         page=f"{base}/{page_name(book, n)}", pdf=f"{base}/pdf/{page_name(book, n)[:-5]}.pdf")
-                                   for n in done]))
+                                   for n in done]
+                                  + [dict(num=a, slug=f[:-5], title=f"Appendix {a}: " + next(t for x, t, _ in book["appendices"] if x == a),
+                                          page=f"{base}/{f}", pdf=f"{base}/pdf/{f[:-5]}.pdf")
+                                     for a, f in apps.items()]))
     return books, listing
 
 
