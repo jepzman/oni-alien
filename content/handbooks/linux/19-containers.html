@@ -1,0 +1,406 @@
+<!-- Handbook 3 · Linux for Cloud Engineers · Chapter 19. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part V · Automation and security</p>
+  <p class="chno">19</p>
+  <h1>Containers are Linux</h1>
+  <p class="promise">A container isn't a small virtual machine. It's an ordinary Linux process that the kernel shows a different view of the system: its own process numbers, its own network, its own root filesystem, and limits on what it may use. This chapter builds one by hand from the pieces you already know, then shows what that means for the containers you'll run: why PID 1 matters, where image layers come from, and how isolated a container really is.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain a container as namespaces, cgroups and a root filesystem, and build one with <code>unshare</code>.</li>
+      <li>Explain image layers with overlayfs, including how deletions work.</li>
+      <li>Write a container entrypoint that receives signals and doesn't leave zombies.</li>
+      <li>Find a container's process, limits and kernel messages from the host.</li>
+      <li>Compare containers and VMs for isolation, and choose between them.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li><a href="#ch5">Chapter 5</a> (PID 1, signals, zombies), <a href="#ch10">Chapter 10</a> (cgroups, OOM), <a href="#ch13">Chapter 13</a> (network namespaces).</li>
+      <li>A Linux VM with <code>sudo</code> and Docker (<code>sudo apt install docker.io</code>) (<a href="#appC">Appendix C</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>35 minutes, a Linux VM with Docker, free</dd>
+      <dt>Main distribution</dt><dd>any; containers are the kernel's</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>In November 2026, Sasha's team packages the app as a container image, first for developers' laptops and then, eventually, for the cloud (Handbooks 4 and 5). On Thursday 5 November, Tiago runs a load test against his first image and finds two problems. Stopping the container always takes exactly ten seconds and kills the checkouts in progress, although the app handles <code>SIGTERM</code> gracefully (<a href="#ch5">Chapter 5</a>). And after the test, the container holds four thousand zombie processes, left by the helper that renders PDF tickets.</p>
+  <p>The same week Leonor asks a question that sounds simple: if each service runs in its own container, are they as separate as if each had its own server? Could the payment service share a machine with everything else?</p>
+</aside>
+
+<!-- ======================================================== 19.1 -->
+<h2 class="sec" id="s19-1"><span class="n">19.1</span>A container is a process</h2>
+
+<p class="lead">Run <code>ps</code> on a machine with containers and you'll find their programs in the list, next to everything else, because that's what they are: processes, started by the container runtime, running on the host's kernel. What makes them “containers” is three kernel features applied to them:</p>
+
+<figure class="wide" id="fig19-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 270" role="img" aria-labelledby="fig19-1-t fig19-1-d">
+      <title id="fig19-1-t">Containers and virtual machines</title>
+      <desc id="fig19-1-d">Left, containers: one host kernel at the bottom. Above it, two containers, each a group of ordinary processes with three things applied by the kernel: namespaces, which give it its own view of process IDs, mounts, network, hostname and users; cgroups, which limit its CPU, memory and other resources; and its own root filesystem, made of image layers. Both containers share the host kernel. Right, virtual machines: a hypervisor on the hardware runs two VMs, each with its own kernel and its own processes. A container's boundary is the kernel's system-call interface; a VM's boundary is the hardware the hypervisor emulates.</desc>
+      <text class="t-title" x="10" y="22">Containers</text>
+      <rect class="node" x="10" y="34" width="170" height="146" rx="6"/>
+      <text class="t-label" x="22" y="56">container A</text><text class="t-small" x="22" y="78">processes, with:</text><text class="t-small" x="22" y="98">· namespaces (view)</text><text class="t-small" x="22" y="118">· cgroups (limits)</text><text class="t-small" x="22" y="138">· own root filesystem</text><text class="t-small" x="22" y="158">  (image layers)</text>
+      <rect class="node" x="196" y="34" width="170" height="146" rx="6"/>
+      <text class="t-label" x="208" y="56">container B</text><text class="t-small" x="208" y="78">processes, with:</text><text class="t-small" x="208" y="98">· namespaces</text><text class="t-small" x="208" y="118">· cgroups</text><text class="t-small" x="208" y="138">· own root filesystem</text>
+      <rect class="node-accent" x="10" y="190" width="356" height="34" rx="5"/><text class="t-label on-accent" x="188" y="212" text-anchor="middle">one shared host kernel</text>
+      <rect class="ext" x="10" y="230" width="356" height="30" rx="5"/><text class="t-small" x="188" y="250" text-anchor="middle">hardware or a VM</text>
+      <text class="t-title" x="394" y="22">Virtual machines</text>
+      <rect class="node" x="394" y="34" width="170" height="110" rx="6"/><text class="t-label" x="406" y="56">VM 1</text><text class="t-small" x="406" y="78">processes</text>
+      <rect class="node-accent" x="406" y="96" width="146" height="34" rx="4"/><text class="t-small on-accent" x="479" y="118" text-anchor="middle">its own kernel</text>
+      <rect class="node" x="580" y="34" width="170" height="110" rx="6"/><text class="t-label" x="592" y="56">VM 2</text><text class="t-small" x="592" y="78">processes</text>
+      <rect class="node-accent" x="592" y="96" width="146" height="34" rx="4"/><text class="t-small on-accent" x="665" y="118" text-anchor="middle">its own kernel</text>
+      <rect class="priv" x="394" y="154" width="356" height="70" rx="5"/><text class="t-label" x="572" y="182" text-anchor="middle">hypervisor</text><text class="t-small" x="572" y="204" text-anchor="middle">emulates hardware for each VM</text>
+      <rect class="ext" x="394" y="230" width="356" height="30" rx="5"/><text class="t-small" x="572" y="250" text-anchor="middle">hardware</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 19.1</b> Containers share one kernel and are separated by it; VMs each bring their own kernel and are separated by the hypervisor. Everything else about the difference follows from that.</figcaption>
+</figure>
+
+<ul>
+  <li><strong>Namespaces</strong> change what a process can <em>see</em>: its own process IDs, mounts, network stack, hostname and users.</li>
+  <li><strong>cgroups</strong> change what it can <em>use</em>: CPU, memory, number of processes, I/O (<a href="#ch9">Chapters 9</a> and <a href="#ch10">10</a>).</li>
+  <li>A <strong>root filesystem</strong> of its own, usually assembled from image layers by overlayfs, so it sees a whole distribution's files without a disk of its own.</li>
+</ul>
+<p>Add security settings (dropped capabilities, a system-call filter, an AppArmor or SELinux profile: <a href="#ch18">Chapter 18</a>'s list) and that's a container. Docker, Podman, containerd and Kubernetes all assemble the same kernel pieces.</p>
+
+<!-- ======================================================== 19.2 -->
+<h2 class="sec" id="s19-2"><span class="n">19.2</span>Namespaces</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 19.1 · Linux namespaces</caption>
+    <thead><tr><th>Namespace</th><th>Gives the process its own…</th><th><code>unshare</code> option</th></tr></thead>
+    <tbody>
+      <tr><td>PID</td><td>process numbers: the first process inside is PID 1</td><td><code>--pid --fork</code></td></tr>
+      <tr><td>Mount</td><td>list of mounts, and so its own root filesystem</td><td><code>--mount</code>, <code>--root</code></td></tr>
+      <tr><td>Network</td><td>interfaces, addresses, routes, firewall, sockets (<a href="#ch13">Chapter 13</a>)</td><td><code>--net</code></td></tr>
+      <tr><td>UTS</td><td>hostname</td><td><code>--uts</code></td></tr>
+      <tr><td>IPC</td><td>shared-memory segments and message queues</td><td><code>--ipc</code></td></tr>
+      <tr><td>User</td><td>user IDs: root inside can be an ordinary user outside (“rootless”)</td><td><code>--user</code></td></tr>
+      <tr><td>Cgroup, time</td><td>view of the cgroup tree; clock offsets</td><td><code>--cgroup</code>, <code>--time</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Every process has a namespace of each type; <code>ls -l /proc/&lt;pid&gt;/ns/</code> shows which, and two processes in the same container point to the same ones. <code>unshare</code> starts a program in new namespaces; <code>nsenter</code> runs a program inside an existing process's namespaces, which is what <code>docker exec</code> does, and a handy debugging trick: <code>sudo nsenter -t &lt;pid&gt; -n ss -tlnp</code> lists a container's listening sockets with the host's tools.</p>
+
+<!-- ======================================================== 19.3 -->
+<h2 class="sec" id="s19-3"><span class="n">19.3</span>cgroups: the limits</h2>
+
+<p>A container's limits are cgroup files (<a href="#ch10">Chapter 10</a>). <code>docker run --memory 64m</code> writes 64 MB into the memory controller's limit for the container's cgroup; <code>--cpus 0.5</code> sets a CPU quota, <code>--pids-limit</code> caps the number of processes. When a container goes over its memory limit, the kernel's OOM killer acts inside that cgroup only, exactly as in Lab 10, and the container exits with 137. From the host, <code>cat /proc/&lt;pid&gt;/cgroup</code> shows a process's cgroup path, and the files under <code>/sys/fs/cgroup/</code> show its limits and usage.</p>
+
+<p>There are two versions of the cgroup interface. <strong>cgroup v2</strong>, one unified tree with files like <code>memory.max</code>, is the default on Ubuntu 22.04+, Debian 11+, RHEL 9 and Amazon Linux 2023. Older systems (and this book's test machine) use <strong>v1</strong>, with a tree per controller and files like <code>memory.limit_in_bytes</code>. Same idea, different file names.</p>
+
+<!-- ======================================================== 19.4 -->
+<h2 class="sec" id="s19-4"><span class="n">19.4</span>Images and layers</h2>
+
+<p>A container image is a stack of read-only <strong>layers</strong>, each a set of files produced by one step of the build (a <code>COPY</code>, a <code>RUN apt-get install</code>), plus metadata such as the command to run. When a container starts, the runtime stacks the layers with <span class="term">overlayfs</span> and adds one writable layer on top:</p>
+
+<figure class="wide" id="fig19-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 230" role="img" aria-labelledby="fig19-2-t fig19-2-d">
+      <title id="fig19-2-t">overlayfs: read-only layers plus a writable layer</title>
+      <desc id="fig19-2-d">From bottom to top: the image's lower layers, read-only and shared by every container from that image, for example the Ubuntu base and the app's files. Above them the container's upper layer, writable and private to the container. The merged view at the top is what the container sees as its root filesystem. Reading a file finds the topmost copy. Writing a file from a lower layer first copies it up into the upper layer. Deleting a file from a lower layer records a whiteout in the upper layer, a special character device, so the file disappears from the merged view while the lower layer is unchanged. Removing the container discards the upper layer.</desc>
+      <rect class="pub" x="10" y="14" width="440" height="44" rx="5"/><text class="t-label" x="24" y="34">merged: what the container sees as /</text><text class="t-small" x="24" y="50">reads find the topmost copy of each file</text>
+      <rect class="node-accent" x="10" y="70" width="440" height="56" rx="5"/><text class="t-label on-accent" x="24" y="92">upper: writable, this container only</text><text class="t-small on-accent" x="24" y="112">new files · copied-up changes · whiteouts for deletions</text>
+      <rect class="node" x="10" y="138" width="440" height="36" rx="5"/><text class="t-small" x="24" y="161">lower: the app's layer (COPY app.py …), read-only</text>
+      <rect class="node" x="10" y="180" width="440" height="36" rx="5"/><text class="t-small" x="24" y="203">lower: the base image (Ubuntu, Python), read-only, shared</text>
+      <rect class="priv" x="470" y="14" width="280" height="202" rx="6"/>
+      <text class="t-small" x="484" y="38"><tspan font-weight="700">write</tspan> a file from below:</text><text class="t-small" x="484" y="56">copied up first, then changed</text>
+      <text class="t-small" x="484" y="90"><tspan font-weight="700">delete</tspan> a file from below:</text><text class="t-small" x="484" y="108">a whiteout in upper hides it</text>
+      <text class="t-small" x="484" y="142"><tspan font-weight="700">remove</tspan> the container:</text><text class="t-small" x="484" y="160">upper is discarded; the image</text><text class="t-small" x="484" y="178">layers are untouched, and</text><text class="t-small" x="484" y="196">shared by every container</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 19.2</b> Many containers from one image share its layers on disk and in the page cache; each pays only for what it changes. Anything written inside a container is lost with it unless it's on a volume.</figcaption>
+</figure>
+
+<p>Two practical consequences. Deleting a file in a later build step doesn't shrink the image (the earlier layer still contains it, hidden by a whiteout), which is why Dockerfiles install and clean up in one <code>RUN</code>, and why a secret copied into an early layer stays in the image even if a later step deletes it. And data a container must keep (uploads, a database) goes on a <strong>volume</strong>, a directory mounted from outside the overlay.</p>
+
+<!-- ======================================================== 19.5 -->
+<h2 class="sec" id="s19-5"><span class="n">19.5</span>PID 1 in a container</h2>
+
+<p>The first process in a PID namespace is PID 1 there, and the kernel treats PID 1 specially (<a href="#ch5">Chapter 5</a>):</p>
+<ul>
+  <li><strong>No default signal actions.</strong> A signal that PID 1 hasn't installed a handler for is ignored, even <code>SIGTERM</code>. A program that would normally die on <code>SIGTERM</code> does nothing as PID 1; the runtime waits its stop timeout (10 seconds for <code>docker stop</code>, 30 for Kubernetes by default) and sends <code>SIGKILL</code>: exit status 137, requests in flight lost.</li>
+  <li><strong>Orphans are adopted by PID 1</strong>, which must reap them. An application never written to be an init system doesn't, and finished orphans pile up as zombies.</li>
+</ul>
+
+<p>Three habits fix both:</p>
+<ol class="steps">
+  <li><strong>Exec form</strong> in the Dockerfile: <code>CMD ["python3", "/app/checkout.py"]</code>, not <code>CMD python3 /app/checkout.py</code>. The shell form runs <code>/bin/sh -c "…"</code>, so PID 1 is a shell that neither forwards signals nor exits; the exec form makes your program PID 1. In an entrypoint script, end with <code>exec "$@"</code> (<a href="#ch5">Chapter 5</a>).</li>
+  <li><strong>Handle <code>SIGTERM</code></strong> in the program: as PID 1 it's the only way it reacts at all.</li>
+  <li><strong>A tiny init</strong> as PID 1 when the program starts children: <code>docker run --init</code> (or <code>tini</code> in the image) runs a minimal init that forwards signals to your program and reaps orphans.</li>
+</ol>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">In a container, your program is PID 1. Make it the program (exec form), make it handle <code>SIGTERM</code>, and give it an init if it has children.</p>
+</div>
+
+<!-- ======================================================== 19.6 -->
+<h2 class="sec" id="s19-6"><span class="n">19.6</span>How isolated is a container?</h2>
+
+<p>All containers on a host share its kernel, so the kernel's system-call interface, hundreds of calls wide, is the boundary between them. A kernel vulnerability, a container run with <code>--privileged</code>, or a sensitive host path mounted in (the Docker socket, <code>/</code>) can let a process escape to the host. A VM's boundary is narrower: a hypervisor emulating a handful of virtual devices. That difference is the answer to “are containers as separate as servers?”: they're good isolation between cooperating workloads you trust roughly equally, and weaker isolation between strangers.</p>
+
+<p>Between the two sit sandboxed runtimes: <strong>gVisor</strong> answers system calls in a user-space kernel; <strong>Kata Containers</strong> and <strong>Firecracker</strong> run each container or function in a lightweight VM. AWS Lambda and Fargate use Firecracker, and so, as Lab 1 noticed, did the machine this book was tested on. Whatever the runtime, the hardening from <a href="#ch18">Chapter 18</a> applies inside: run as a non-root user, drop capabilities, read-only root filesystem, no <code>--privileged</code>.</p>
+
+<!-- ======================================================== 19.7 -->
+<h2 class="sec" id="s19-7"><span class="n">19.7</span>Across distributions</h2>
+
+<div class="box box-provider">
+  <p class="label">On the RHEL family</p>
+  <p>RHEL ships <strong>Podman</strong> instead of Docker: the same command-line options and image format, no central daemon, and <strong>rootless</strong> containers by default, using user namespaces so that root in the container is your own user on the host. It can also generate systemd units for containers (Quadlet), tying this chapter to <a href="#ch6">Chapter 6</a>. Ubuntu packages both Docker (<code>docker.io</code>) and Podman. Kubernetes uses containerd or CRI-O directly; Handbook 4 picks up from here.</p>
+</div>
+
+<!-- ======================================================== 19.8 -->
+<h2 class="sec" id="s19-8"><span class="n">19.8</span>Lab: a container by hand, then by Docker</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 19 · Namespaces, layers, PID 1</p>
+  <p><strong>You'll</strong> try namespaces one at a time, build a container from an exported image and <code>unshare</code>, see overlayfs and a whiteout, then reproduce Tiago's two problems with Docker and fix them, and find a container's cgroup from the host. <strong>You need</strong> a Linux VM with <code>sudo</code> and Docker, and Lab 5's <code>checkout.py</code>. <strong>Cost:</strong> nothing (the images are about 300 MB). <strong>Clean-up:</strong> the last step. PIDs, IDs and times will differ.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>One namespace at a time.</strong> A PID namespace (the first process is PID 1), a UTS namespace (a hostname of its own), a network namespace (nothing but a loopback, down):
+<pre><code>sudo unshare --pid --fork --mount-proc ps -ef</code></pre>
+<pre><code>UID          PID    PPID  C STIME TTY          TIME CMD
+root           1       0  0 12:25 ?        00:00:00 ps -ef</code></pre>
+<pre><code>hostname; sudo unshare --uts sh -c 'hostname minibox; hostname'; hostname</code></pre>
+<pre><code>vm
+minibox
+vm</code></pre>
+<pre><code>sudo unshare --net ip -br address</code></pre>
+<pre><code>lo               DOWN           </code></pre></li>
+  <li><strong>A root filesystem.</strong> Export Ubuntu's container image into a directory (any other source of a root filesystem works, such as the Ubuntu Base tarball from <code>cdimage.ubuntu.com</code>):
+<pre><code>mkdir -p ~/lab19 &amp;&amp; cd ~/lab19
+sudo docker create --name rootfs-src ubuntu:24.04
+mkdir rootfs &amp;&amp; sudo docker export rootfs-src | sudo tar -x -C rootfs &amp;&amp; sudo docker rm rootfs-src
+ls rootfs</code></pre>
+  An ordinary-looking Linux tree, 84 MB.</li>
+  <li><strong>A container by hand.</strong> Save and run:
+<p class="code-title"><span>minibox.sh</span><span>bash</span></p>
+<pre><code>#!/usr/bin/env bash
+<span class="c"># minibox.sh ROOTFS · a container by hand: new namespaces, another root filesystem, a shell inside</span>
+<span class="k">set</span> -euo pipefail
+rootfs=${1:?usage: sudo ./minibox.sh ROOTFS-DIRECTORY}
+
+<span class="c"># --pid --fork: its own process numbers (the shell inside is PID 1)</span>
+<span class="c"># --mount, --uts, --ipc, --net: its own mounts, hostname, IPC objects and network stack</span>
+<span class="c"># --root: the root directory becomes ROOTFS, so it sees only that filesystem</span>
+<span class="c"># shellcheck disable=SC2016  # the inner script is single-quoted on purpose: it must expand inside the container</span>
+exec unshare --pid --fork --mount --uts --ipc --net --root=<span class="s">"$rootfs"</span> /bin/bash -c '
+  mount -t proc proc /proc
+  hostname minibox
+  echo <span class="s">"hostname:   $(hostname)"</span>
+  echo <span class="s">"os:         $(. /etc/os-release &amp;&amp; echo "</span>$PRETTY_NAME<span class="s">")"</span>
+  echo <span class="s">"kernel:     $(uname -r)"</span>
+  echo <span class="s">"interfaces: $(tail -n +3 /proc/net/dev | cut -d: -f1 | tr -d "</span> <span class="s">" | tr "</span>\n<span class="s">" "</span> <span class="s">")"</span>
+  echo <span class="s">"processes:"</span>
+  <span class="k">for</span> p <span class="k">in</span> /proc/[0-9]*; <span class="k">do</span> echo <span class="s">"  PID $(basename "</span>$p<span class="s">"): $(tr "</span>\0\n<span class="s">" "</span>  <span class="s">" &lt; "</span>$p/cmdline<span class="s">" | cut -c1-30)…"</span>; <span class="k">done</span>
+'</code></pre>
+<pre><code>chmod +x minibox.sh; sudo ./minibox.sh rootfs</code></pre>
+<pre><code>hostname:   minibox
+os:         Ubuntu 24.04.5 LTS
+kernel:     6.18.44-fc-v880
+interfaces: lo 
+processes:
+  PID 1: /bin/bash -c    mount -t proc …</code></pre>
+  Its own hostname, Ubuntu's files, only a loopback interface, and one process: itself, as PID 1. But <code>kernel</code> is the host's kernel (here, Lab 1's microVM kernel): there's only one. (Note the <code>shellcheck disable</code> comment: a justified exception, as <a href="#ch17">Chapter 17</a> asked.)</li>
+  <li><strong>Layers with overlayfs.</strong> Use <code>rootfs</code> as a read-only lower layer, write and delete through the merged view, then look at each layer:
+<pre><code>mkdir -p upper work merged
+sudo mount -t overlay overlay -o lowerdir=rootfs,upperdir=upper,workdir=work merged
+echo "tickets" | sudo tee merged/etc/stagedoor-note &gt; /dev/null
+sudo rm merged/etc/legal
+ls upper/etc; ls -l upper/etc/legal
+ls rootfs/etc/stagedoor-note rootfs/etc/legal
+sudo umount merged</code></pre>
+<pre><code>legal
+stagedoor-note
+c--------- 2 root root 0, 0 Nov 27 12:25 upper/etc/legal
+ls: cannot access 'rootfs/etc/stagedoor-note': No such file or directory
+rootfs/etc/legal</code></pre>
+  The new file is only in <code>upper</code>; the lower layer still has <code>legal</code>; the deletion is a <strong>whiteout</strong>, a character device with numbers 0, 0, that hides it in the merged view. That's every container's writable layer, and every “deleted” file in a later image layer.</li>
+  <li><strong>Tiago's first image</strong>: shell-form <code>CMD</code>. In <code>~/lab19/img</code>, with <code>checkout.py</code> from Lab 5 and <code>orphans.py</code> (step 7), save:
+<p class="code-title"><span>Dockerfile.shell</span><span>Dockerfile</span></p>
+<pre><code>FROM python:3.12-slim
+COPY checkout.py /app/checkout.py
+CMD python3 /app/checkout.py --graceful</code></pre>
+<p class="code-title"><span>Dockerfile.exec</span><span>Dockerfile</span></p>
+<pre><code>FROM python:3.12-slim
+COPY checkout.py orphans.py /app/
+CMD ["python3", "/app/checkout.py", "--graceful"]</code></pre>
+<pre><code>sudo docker build -q -t lab19:shell -f Dockerfile.shell .
+sudo docker build -q -t lab19:exec -f Dockerfile.exec .
+sudo docker run -d --name shellform lab19:shell
+sudo docker exec shellform cat /proc/1/cmdline | tr '\0' ' '; echo
+time -p sudo docker stop shellform; sudo docker inspect -f 'exit code {{.State.ExitCode}}' shellform</code></pre>
+<pre><code>/bin/sh -c python3 /app/checkout.py --graceful 
+shellform
+real 10.14
+exit code 137</code></pre>
+  PID 1 is <code>/bin/sh</code> (dash, in this image), which doesn't pass <code>SIGTERM</code> on and, as PID 1, ignores it: ten seconds, then <code>SIGKILL</code>, 137.</li>
+  <li><strong>Exec form</strong>, with the graceful handler, and then without it:
+<pre><code>sudo docker run -d --name execform lab19:exec
+sudo docker exec execform cat /proc/1/cmdline | tr '\0' ' '; echo
+time -p sudo docker stop execform; sudo docker inspect -f 'exit code {{.State.ExitCode}}' execform; sudo docker logs execform</code></pre>
+<pre><code>python3 /app/checkout.py --graceful 
+execform
+real 0.33
+exit code 0
+pid 1 listening on 127.0.0.1:8080
+got SIGTERM: no new requests, finishing the ones in progress
+all requests finished; exiting</code></pre>
+<pre><code>sudo docker run -d --name nohandler lab19:exec python3 /app/checkout.py
+time -p sudo docker stop nohandler; sudo docker inspect -f 'exit code {{.State.ExitCode}}' nohandler</code></pre>
+<pre><code>nohandler
+real 10.16
+exit code 137</code></pre>
+  With the handler: a third of a second, exit 0, the graceful messages in the log. Without it, Python as PID 1 has no default action for <code>SIGTERM</code> either: ten seconds and 137 again. Both fixes are needed.</li>
+  <li><strong>Orphans and zombies.</strong> Save as <code>orphans.py</code> (rebuild <code>lab19:exec</code> if you hadn't yet):
+<p class="code-title"><span>orphans.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># orphans.py · run a helper that leaves a child behind, then list this container's processes</span>
+<span class="k">import</span> os, subprocess, time
+
+subprocess.run([<span class="s">"sh"</span>, <span class="s">"-c"</span>, <span class="s">"sleep 1 &amp; exit 0"</span>])   <span class="c"># the helper exits at once; its child "sleep" is orphaned</span>
+time.sleep(3)                                       <span class="c"># the orphan finishes meanwhile</span>
+<span class="k">for</span> pid <span class="k">in</span> sorted(int(p) <span class="k">for</span> p <span class="k">in</span> os.listdir(<span class="s">"/proc"</span>) <span class="k">if</span> p.isdigit()):
+    fields = open(f<span class="s">"/proc/{pid}/stat"</span>).read().split()
+    print(f<span class="s">"PID {pid:&gt;3}  parent {fields[3]:&gt;3}  state {fields[2]}  {fields[1]}"</span>)</code></pre>
+<pre><code>sudo docker run --rm lab19:exec python3 /app/orphans.py</code></pre>
+<pre><code>PID   1  parent   0  state R  (python3)
+PID   8  parent   1  state Z  (sleep)</code></pre>
+<pre><code>sudo docker run --rm --init lab19:exec python3 /app/orphans.py</code></pre>
+<pre><code>PID   1  parent   0  state S  (docker-init)
+PID   7  parent   1  state R  (python3)</code></pre>
+  Without an init, the orphaned <code>sleep</code> was adopted by PID 1, our Python program, which never reaps: a zombie (<code>Z</code>). With <code>--init</code>, Docker's tiny init is PID 1, our program is PID 7, and the orphan was reaped as soon as it finished. Tiago's four thousand zombies were PDF helpers, one per ticket.</li>
+  <li><strong>The container from the host.</strong> Its process, cgroup and limit; then a container that goes over its limit:
+<pre><code>sudo docker run -d --name memlab2 --memory 64m lab19:exec sleep 60
+pid=$(sudo docker inspect -f '{{.State.Pid}}' memlab2); echo "host PID of the container's process: $pid"
+grep -E ':memory:|^0::' /proc/$pid/cgroup
+p=$(grep ':memory:' /proc/$pid/cgroup | cut -d: -f3); cat /sys/fs/cgroup/memory$p/memory.limit_in_bytes</code></pre>
+<pre><code>host PID of the container's process: 30223
+4:memory:/docker/9df89bb2c4f68887c3def899fd37a39ab21b8728ee8c500ce1bb254bfc0cfcc1
+0::/docker/9df89bb2c4f68887c3def899fd37a39ab21b8728ee8c500ce1bb254bfc0cfcc1
+67108864</code></pre>
+  A process on the host like any other, in a cgroup named after the container, with a limit of 67,108,864 bytes: 64 MB. (This test machine uses cgroup v1. On cgroup v2 there's only the <code>0::</code> line, and the limit is in <code>/sys/fs/cgroup&lt;path&gt;/memory.max</code>.) Now exceed it:
+<pre><code>sudo docker run --name memlab --memory 64m --memory-swap 64m lab19:exec python3 -c "x = bytearray(200 * 1024 * 1024)"
+sudo docker inspect -f 'exit code {{.State.ExitCode}}, OOMKilled {{.State.OOMKilled}}' memlab
+sudo dmesg | grep -i "killed process" | tail -1</code></pre>
+<pre><code>exit code 137, OOMKilled false
+Memory cgroup out of memory: Killed process 30123 (python3) total-vm:218996kB, anon-rss:64896kB, file-rss:5708kB, shmem-rss:0kB, UID:0 pgtables:184kB oom_score_adj:0</code></pre>
+  Exit 137 and the kernel's own record of the kill, inside the container's cgroup, yet Docker reported <code>OOMKilled false</code> on this test machine (its OOM detection relies on events this cgroup-v1 setup didn't deliver). On most systems it says <code>true</code>; when it doesn't, the kernel log is the authority (<a href="#ch10">Chapter 10</a>).</li>
+  <li><strong>Image layers</strong>, newest first:
+<pre><code>sudo docker history --format '{{.Size}}\t{{.CreatedBy}}' lab19:exec | cut -c1-90 | head -6</code></pre>
+<pre><code>0B	CMD ["python3" "/app/checkout.py" "--gracefu…
+16.4kB	COPY checkout.py orphans.py /app/ # buildkit
+0B	CMD ["python3"]
+16.4kB	RUN /bin/sh -c set -eux;  for src in idle3 p…
+41.4MB	RUN /bin/sh -c set -eux;   savedAptMark="$(a…
+0B	ENV PYTHON_SHA256=b5796915dc45ff745cfb4e990a…</code></pre>
+  Each build step is a layer; our two steps are the top two (16.4 kB of files, and the <code>CMD</code> metadata); the rest is the Python base image, shared with every image built on it.</li>
+  <li><strong>Clean up.</strong>
+<pre><code>sudo docker rm -f shellform execform nohandler memlab memlab2
+sudo docker rmi lab19:shell lab19:exec
+sudo rm -r ~/lab19/rootfs ~/lab19/upper ~/lab19/work ~/lab19/merged</code></pre></li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Give <code>minibox.sh</code> a network: create a veth pair, move one end into the container's namespace (<code>ip link set … netns &lt;pid&gt;</code>), and attach the other to <a href="#ch13">Chapter 13</a>'s bridge. (2) Add a cgroup to <code>minibox.sh</code> with <code>sudo systemd-run --scope -p MemoryMax=100M ./minibox.sh rootfs</code>. (3) Run <code>sudo nsenter -t $pid -n ip -br address</code> against a running Docker container and compare with <code>docker exec</code>.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: an image that stops in a third of a second</p>
+  <p>Tiago's Dockerfile switches to the exec form with <code>--init</code> semantics built in: the image installs <code>tini</code> as its entrypoint, so the app receives <code>SIGTERM</code> directly and the PDF helpers' orphans are reaped. <code>docker stop</code> now takes under a second, the load test ends with no failed checkouts, and the zombie count stays at zero. The image runs as a non-root user, with a read-only root filesystem and uploads on a volume, following <a href="#ch18">Chapter 18</a>.</p>
+  <p>Leonor's question gets a written answer: containers on one host share its kernel, so they're separated well enough for Stagedoor's own services, which trust one another roughly equally, but the payment service, which handles card data, should not share a kernel with anything it doesn't have to. When Stagedoor moves to AWS, it will get its own VMs or Fargate tasks, each in its own Firecracker micro-VM. Handbook 4 tells the Kubernetes side; Handbook 5 the infrastructure.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s19-9"><span class="n">19.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Shell-form <code>CMD</code> or an entrypoint script without <code>exec</code></td><td>Signals go to a shell; every stop is a 10-second <code>SIGKILL</code>.</td><td>Exec form; <code>exec "$@"</code> at the end of scripts.</td></tr>
+      <tr><td>An app as PID 1 that starts children</td><td>Zombies accumulate; eventually no new processes.</td><td><code>--init</code> or <code>tini</code>.</td></tr>
+      <tr><td>Treating containers as VMs for isolation</td><td>A kernel bug or a privileged container exposes the host.</td><td>VMs or sandboxed runtimes between untrusted workloads.</td></tr>
+      <tr><td><code>--privileged</code>, or mounting the Docker socket</td><td>The container can take over the host.</td><td>Grant specific capabilities or devices only.</td></tr>
+      <tr><td>Secrets copied into an image layer</td><td>Still in the image after a later step deletes them.</td><td>Build secrets, or inject at run time.</td></tr>
+      <tr><td>Data written inside the container's own layer</td><td>Lost when the container is removed.</td><td>Volumes for anything that must persist.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum19">
+  <h2 class="sec" id="sum19"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>A container is a group of ordinary processes given their own view (<strong>namespaces</strong>), limits (<strong>cgroups</strong>) and root filesystem, on the host's shared kernel.</li>
+    <li><code>unshare</code> and <code>nsenter</code> create and enter namespaces; containers are built from the same pieces.</li>
+    <li>Images are read-only <strong>layers</strong> stacked by <strong>overlayfs</strong> under a writable layer; deletions are whiteouts; data that matters goes on volumes.</li>
+    <li>Your program is <strong>PID 1</strong>: no default signal actions, and it must reap orphans. Use exec form, handle <code>SIGTERM</code>, add an init.</li>
+    <li>Containers share a kernel: good isolation between trusted services, weaker than VMs between strangers. Harden them like services (<a href="#ch18">Chapter 18</a>).</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Container</dt><dd>A process (or group of processes) isolated with namespaces, limited with cgroups and given its own root filesystem, on a shared kernel.</dd>
+    <dt>Namespace</dt><dd>A kernel feature that gives processes their own view of one kind of system resource, such as process IDs or the network.</dd>
+    <dt>Container image</dt><dd>A stack of read-only filesystem layers plus metadata, from which containers are started.</dd>
+    <dt>overlayfs</dt><dd>A filesystem that stacks read-only lower directories under a writable upper one and presents the merged result.</dd>
+    <dt>Whiteout</dt><dd>A marker in an upper overlay layer that hides a file present in a lower layer.</dd>
+    <dt>Exec form</dt><dd>A Dockerfile <code>CMD</code> or <code>ENTRYPOINT</code> written as a JSON list, run directly rather than through <code>/bin/sh -c</code>.</dd>
+    <dt>Init process</dt><dd>The process running as PID 1, responsible for handling signals and reaping orphaned children.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Which three kernel features make a process a container? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Namespaces (its own view of PIDs, mounts, network, hostname, IPC, users), cgroups (resource limits and accounting) and its own root filesystem (usually overlayfs layers), plus security restrictions such as dropped capabilities and system-call filters.</p></details>
+    </li>
+    <li>
+      <p>Rewrite <code>CMD gunicorn app:app --bind 0.0.0.0:8000</code> so the container stops gracefully. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:8000"]</code>, so gunicorn is PID 1 and receives <code>SIGTERM</code> (gunicorn handles it gracefully). If it starts subprocesses that may be orphaned, add an init: <code>ENTRYPOINT ["tini", "--"]</code> or <code>docker run --init</code>.</p></details>
+    </li>
+    <li>
+      <p>Explain why deleting a 500 MB file in a later Dockerfile step doesn't make the image smaller. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Each step creates a new layer; the file is still in the earlier layer, and the deletion only adds a whiteout in the later one that hides it. The image contains every layer. Remove files in the same <code>RUN</code> step that created them, or use a multi-stage build that copies only what's needed into the final image.</p></details>
+    </li>
+    <li>
+      <p>A container's log shows the app handling <code>SIGTERM</code> when you run it with <code>docker run</code> in the foreground and press <kbd>Ctrl</kbd>+<kbd>C</kbd>, but <code>docker stop</code> always takes 10 seconds. What's different? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p><kbd>Ctrl</kbd>+<kbd>C</kbd> sends <code>SIGINT</code>, which the app (or the shell in front of it) may handle; <code>docker stop</code> sends <code>SIGTERM</code> to PID 1. Most likely PID 1 is a shell (shell-form <code>CMD</code> or a wrapper script without <code>exec</code>) that ignores <code>SIGTERM</code> as PID 1 and doesn't forward it, or the app handles <code>SIGINT</code> but not <code>SIGTERM</code>. Check <code>docker exec … cat /proc/1/cmdline</code>.</p></details>
+    </li>
+    <li>
+      <p>Design how Stagedoor should run the payment service and the public web app when it moves to containers. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Separate kernels for different trust levels: the payment service on its own VMs or in a sandboxed runtime (Fargate's Firecracker micro-VMs, or Kata/gVisor nodes), not on the same container hosts as public-facing services. Every container: non-root user, dropped capabilities, read-only root filesystem, resource limits, exec-form entrypoint with an init, secrets injected at run time, images scanned and pinned. Network policies between services (Handbook 4).</p></details>
+    </li>
+    <li>
+      <p>Compare a container and a VM for running a nightly batch job from a vendor you don't fully trust. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>A container starts in a second and is cheap, but shares the host's kernel, so a kernel exploit or misconfiguration could reach other workloads. A VM costs more and starts more slowly, but its boundary is the hypervisor, much narrower than the system-call interface. For untrusted code, a VM (or a micro-VM sandbox) is the safer choice; a hardened container on a dedicated host is a middle ground.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li><code>man 7 namespaces</code>, <code>man 7 cgroups</code>, <code>man unshare</code>, <code>man nsenter</code>; the kernel's <a href="https://docs.kernel.org/filesystems/overlayfs.html">overlayfs documentation</a>.</li>
+    <li>Docker: <a href="https://docs.docker.com/reference/dockerfile/#shell-and-exec-form">Shell and exec form</a> and the <code>--init</code> option; <a href="https://github.com/krallin/tini">tini</a>.</li>
+    <li>Julia Evans, <a href="https://wizardzines.com/zines/containers/">How Containers Work</a>.</li>
+    <li>Handbook 1, Chapter 19 (container networking) and Handbook 2, Chapter 16 (Kubernetes and workload identity).</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="#ch20">20 · A troubleshooting method</a></div>
+</nav>

@@ -1,0 +1,437 @@
+<!-- Handbook 3 · Linux for Cloud Engineers · Chapter 18. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part V · Automation and security</p>
+  <p class="chno">18</p>
+  <h1>Hardening a server</h1>
+  <p class="promise">Hardening is least privilege applied to a whole machine: fewer things running, fewer ways in, less power for each thing that runs, and a record of what happened. This chapter turns the fixes scattered through the book into a baseline you can apply, check and rebuild from, and shows how far systemd's sandboxing can shrink what a compromised service could do.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Inventory a server's attack surface: listening services, enabled units, privileged programs, accounts.</li>
+      <li>Sandbox a service with systemd and measure the result with <code>systemd-analyze security</code>.</li>
+      <li>Write a hardening baseline as a checklist and as cloud-init, and validate it.</li>
+      <li>Explain what an audit trail and a benchmark (CIS, Lynis) add, and their limits.</li>
+      <li>Say what AppArmor and SELinux do, and how to spot when they're the reason something fails.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Most of the book: <a href="#ch4">4</a> (permissions, sudo), <a href="#ch6">6</a> (units), <a href="#ch8">8</a> (updates), <a href="#ch15">15</a> (firewalls) and <a href="#ch16">16</a> (SSH).</li>
+      <li>A VM with systemd and <code>sudo</code>; <code>sudo apt install cloud-init lynis</code>.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>35 minutes, a VM with systemd, free</dd>
+      <dt>Main distribution</dt><dd>Ubuntu 24.04, with RHEL's SELinux in 18.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>The security assessment from <a href="#ch15">Chapter 15</a> had nine findings. The firewall and SSH fixed the two biggest. On Thursday 29 October 2026 Rafaela sits down with the other seven: the app could write anywhere a root process can (it no longer ran as root, but nothing else restricted it); unneeded packages and services on every server; <code>needrestart</code> listing services still running old libraries; no record of who changed files in <code>/etc</code>; and, the one that worries her most, no written description of what a correctly set-up server <em>is</em>. Each server had been fixed by hand, carefully, and slightly differently.</p>
+  <p>The new server Stagedoor needs next, a replacement for <code>door-2</code> (whose Ubuntu 22.04 support ends in April), is the chance to write that description down and build from it.</p>
+</aside>
+
+<!-- ======================================================== 18.1 -->
+<h2 class="sec" id="s18-1"><span class="n">18.1</span>What hardening is for</h2>
+
+<p class="lead">Hardening assumes something will eventually go wrong (an unpatched bug in the app, a stolen laptop with a key on it, a mistake in a firewall rule) and arranges the server so that one failure doesn't become everything.</p>
+
+<figure class="wide" id="fig18-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 270" role="img" aria-labelledby="fig18-1-t fig18-1-d">
+      <title id="fig18-1-t">Layers of defence on one server</title>
+      <desc id="fig18-1-d">Six nested layers around the data. Outermost, the network: a security group or host firewall allowing only the ports needed, from the sources that need them (Chapter 15). Then the way in: SSH with personal keys or certificates, no root, no passwords (Chapter 16). Then people: personal accounts, sudo with narrow rules, no shared root password (Chapter 4). Then each service: its own user, a sandbox that limits files, devices, system calls and privileges (this chapter). Then the software itself: patched daily and restarted (Chapter 8). Throughout: an audit trail and logs shipped off the server (Chapters 7, 16 and this chapter). The data is at the centre.</desc>
+      <rect class="ext" x="10" y="10" width="740" height="250" rx="10"/>
+      <text class="t-small" x="26" y="32"><tspan font-weight="700">Network</tspan>: only needed ports, from needed sources (Ch. 15)</text>
+      <rect class="node" x="40" y="44" width="680" height="206" rx="9"/>
+      <text class="t-small" x="56" y="66"><tspan font-weight="700">The way in</tspan>: SSH by key or certificate, no root, no passwords (Ch. 16)</text>
+      <rect class="priv" x="70" y="78" width="620" height="162" rx="8"/>
+      <text class="t-small" x="86" y="100"><tspan font-weight="700">People</tspan>: personal accounts, narrow sudo, no shared root (Ch. 4)</text>
+      <rect class="node" x="100" y="112" width="560" height="118" rx="7"/>
+      <text class="t-small" x="116" y="134"><tspan font-weight="700">Each service</tspan>: own user, sandboxed files, devices, calls (this chapter)</text>
+      <rect class="pub" x="130" y="146" width="500" height="74" rx="6"/>
+      <text class="t-small" x="146" y="168"><tspan font-weight="700">The software</tspan>: patched daily, restarted in a window (Ch. 8)</text>
+      <rect class="node-accent" x="300" y="180" width="160" height="32" rx="5"/><text class="t-label on-accent" x="380" y="201" text-anchor="middle">the data</text>
+      <text class="t-small" x="560" y="32">audit trail + logs off the server</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 18.1</b> Each layer assumes the one outside it might fail. Most of them were built in earlier chapters; this chapter adds the service sandbox, the audit trail, and a written baseline that holds them all.</figcaption>
+</figure>
+
+<p>Three principles run through every layer: <strong>least function</strong> (don't run, install or expose what you don't need), <strong>least privilege</strong> (give each thing only the access its job requires, Handbook 2, Chapter 6), and <strong>verify, don't assume</strong> (measure the result, and keep checking it).</p>
+
+<!-- ======================================================== 18.2 -->
+<h2 class="sec" id="s18-2"><span class="n">18.2</span>Attack surface: what's there to attack?</h2>
+
+<p>Start with an inventory, using commands from earlier chapters:</p>
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 18.1 · An attack-surface inventory</caption>
+    <thead><tr><th>Question</th><th>Command</th><th>Reduce it by</th></tr></thead>
+    <tbody>
+      <tr><td>What listens on the network?</td><td><code>sudo ss -tlnp</code>, <code>sudo ss -ulnp</code></td><td>stopping services, binding to <code>127.0.0.1</code>, firewall rules</td></tr>
+      <tr><td>What starts at boot?</td><td><code>systemctl list-unit-files --state=enabled</code></td><td><code>systemctl disable --now</code>, removing packages</td></tr>
+      <tr><td>What runs with root's power?</td><td><code>ps -eo user,comm | awk '$1=="root"' | sort -u</code></td><td>services as their own users</td></tr>
+      <tr><td>Which programs are setuid?</td><td><code>sudo find / -xdev -perm -4000 -type f</code></td><td>removing packages that bring unneeded ones</td></tr>
+      <tr><td>Who can log in, and with what?</td><td><code>getent passwd</code>, <code>authorized_keys</code> audit (<a href="#ch16">Chapter 16</a>)</td><td>removing accounts and keys</td></tr>
+      <tr><td>Who can become root?</td><td><code>getent group sudo</code>, <code>/etc/sudoers.d/</code></td><td>narrow rules (<a href="#ch4">Chapter 4</a>)</td></tr>
+      <tr><td>What's installed?</td><td><code>apt list --installed | wc -l</code></td><td>minimal images; removing what isn't needed</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Every item on the list is something that could have a vulnerability, a misconfiguration or a forgotten credential. The cheapest hardening is removal: a service that doesn't run can't be exploited, and a package that isn't installed doesn't need patching. Cloud images help by starting small; “minimal” images start smaller still.</p>
+
+<!-- ======================================================== 18.3 -->
+<h2 class="sec" id="s18-3"><span class="n">18.3</span>Sandboxing services with systemd</h2>
+
+<p>A service running as its own user (<a href="#ch4">Chapter 4</a>) can't read other users' files, but it can still read most of the system, write wherever that user may, see devices, load code into memory as it likes, and make any system call. If an attacker gets code execution in the app, all of that is theirs. systemd can remove most of it before the process starts (<a href="#ch6">Chapter 6</a> previewed this):</p>
+
+<p class="code-title"><span>hardening.conf</span><span>systemd drop-in</span></p>
+<pre><code># /etc/systemd/system/stagedoor.service.d/hardening.conf · take away what the app doesn't need
+[Service]
+NoNewPrivileges=yes                     # no setuid programs, no gaining privileges
+CapabilityBoundingSet=                  # no root powers at all, even by accident
+ProtectSystem=strict                    # the whole filesystem is read-only…
+ReadWritePaths=/var/lib/stagedoor       # …except its own data
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources</code></pre>
+
+<ul>
+  <li><strong>Filesystem</strong>: <code>ProtectSystem=strict</code> mounts everything read-only for this service, <code>ReadWritePaths=</code> opens exactly the paths it writes, <code>ProtectHome</code> hides home directories, <code>PrivateTmp</code> gives it an empty <code>/tmp</code> of its own.</li>
+  <li><strong>Privileges</strong>: <code>NoNewPrivileges</code> blocks setuid programs (so <code>sudo</code> or <code>su</code> are useless from inside), and an empty <code>CapabilityBoundingSet</code> removes every root capability, even if the process somehow became root.</li>
+  <li><strong>Kernel and devices</strong>: no hardware devices, no changing kernel settings, modules, logs, the clock or the hostname.</li>
+  <li><strong>System calls</strong>: <code>SystemCallFilter=@system-service</code> allows the calls a normal service makes and refuses the rest (mounting, rebooting, loading kernel modules, tracing other processes); <code>RestrictAddressFamilies</code> allows only IP and local sockets.</li>
+</ul>
+
+<p><code>systemd-analyze security</code> scores a unit's exposure from 0 (locked down) to 10 (nothing restricted) and lists each missing setting. In the lab, Stagedoor's app goes from 9.2 to 1.8 with this drop-in, and still works. Add settings in small groups and test the app after each: a service that writes somewhere you forgot fails with “Read-only file system”, and one that needs a refused system call is killed with <code>SIGSYS</code>, both of which the journal records.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Assume the app will one day run an attacker's code. Decide now what that code may touch, and let systemd enforce it.</p>
+</div>
+
+<!-- ======================================================== 18.4 -->
+<h2 class="sec" id="s18-4"><span class="n">18.4</span>An audit trail</h2>
+
+<p>Logs (<a href="#ch7">Chapter 7</a>) record what programs say. An <span class="term">audit trail</span> records what <em>happened</em>, from the kernel's point of view, whether or not any program mentions it: who changed <code>/etc/sudoers</code>, who ran a command as root, which process opened a sensitive file. On Linux this is the kernel's audit system, configured with <code>auditd</code> (<code>sudo apt install auditd</code>):</p>
+<pre><code>-w /etc/sudoers -p wa -k sudoers                 <span class="c"># writes or attribute changes to sudoers, tagged "sudoers"</span>
+-w /etc/sudoers.d/ -p wa -k sudoers
+-w /etc/ssh/sshd_config.d/ -p wa -k sshd
+-a always,exit -F arch=b64 -S execve -F euid=0 -F auid&gt;=1000 -F auid!=-1 -k root-commands   <span class="c"># commands run as root by a real person</span></code></pre>
+<p>Rules like these go in <code>/etc/audit/rules.d/</code>; <code>sudo ausearch -k sudoers -i</code> finds the events, each with the <strong>audit UID</strong>: the person who logged in, which stays the same through <code>sudo</code> and <code>su</code>. That's the accountability question from Handbook 2, Chapter 1, answered at the level of the kernel. The audit trail is only useful if it survives an attacker: ship it off the server with the other logs. (The test system for this book is a container, where the kernel's audit system isn't available, so these rules are shown, not run.)</p>
+
+<!-- ======================================================== 18.5 -->
+<h2 class="sec" id="s18-5"><span class="n">18.5</span>A baseline: written, built and checked</h2>
+
+<p>A <span class="term">baseline</span> is the written description of a correctly set-up server, the thing Stagedoor lacked. It works only if it's written in a form that can be applied and checked, not just read. For Stagedoor's web servers, collected from this book:</p>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 18.2 · Stagedoor's server baseline, and where each item comes from</caption>
+    <thead><tr><th>Area</th><th>Baseline</th><th>Chapter</th></tr></thead>
+    <tbody>
+      <tr><td>Release</td><td>an Ubuntu LTS with at least a year of support left</td><td><a href="#ch1">1</a>, <a href="#ch8">8</a></td></tr>
+      <tr><td>Accounts</td><td>personal accounts in <code>sudo</code> and <code>ssh-users</code>; no shared accounts; root locked</td><td><a href="#ch4">4</a></td></tr>
+      <tr><td>SSH</td><td>keys only, no root, <code>AllowGroups ssh-users</code>, <code>LogLevel VERBOSE</code></td><td><a href="#ch16">16</a></td></tr>
+      <tr><td>Firewall</td><td>nftables default deny, per-role file from Git</td><td><a href="#ch15">15</a></td></tr>
+      <tr><td>Updates</td><td>unattended security updates; weekly restart and reboot window</td><td><a href="#ch8">8</a></td></tr>
+      <tr><td>Services</td><td>own users, <code>UMask=0027</code>, sandbox drop-ins, limits</td><td><a href="#ch6">6</a>, <a href="#ch12">12</a>, 18</td></tr>
+      <tr><td>Logs</td><td>journal capped, logrotate for files, shipped off the server</td><td><a href="#ch7">7</a></td></tr>
+      <tr><td>Disks</td><td>data on its own volume; space and inode alerts</td><td><a href="#ch11">11</a></td></tr>
+      <tr><td>Audit</td><td>auditd rules for privilege and configuration changes</td><td>18</td></tr>
+      <tr><td>Nothing else</td><td>no unneeded packages, services or listening ports</td><td>18</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Then make it executable in two forms. A <strong>first-boot configuration</strong> in cloud-init (<a href="#ch1">Chapter 1</a>) builds the parts that belong to every server; the lab validates one with <code>cloud-init schema</code>, which catches typos and wrong types before a server boots with them. And a <strong>build script</strong> does the rest and can check itself, which is <a href="#ch21">Chapter 21</a>'s capstone. Configuration-management tools (Ansible, Salt, Puppet) are the grown-up version of both: the same idea, with modules that are idempotent by design.</p>
+
+<!-- ======================================================== 18.6 -->
+<h2 class="sec" id="s18-6"><span class="n">18.6</span>Benchmarks and scanners</h2>
+
+<p>You don't have to invent a baseline from nothing. The <strong>CIS Benchmarks</strong> are detailed, versioned hardening guides per distribution, with hundreds of checks in two levels (Level 1: sensible for most servers; Level 2: stricter, may break things). Ubuntu Pro's <strong>Ubuntu Security Guide</strong> (<code>usg</code>) can apply and audit them automatically; OpenSCAP does the same for RHEL. <strong>Lynis</strong>, a free scanner, runs a few hundred checks and prints suggestions and a “hardening index” from 0 to 100.</p>
+
+<p>Use them as a second opinion, not a goal. A score measures how many boxes are ticked, not whether the server is safe for what it does: some suggestions don't apply (a web server needs its web port open), some cost more than they're worth, and the most important controls in this book (no shared accounts, no long-lived keys, patches actually running) are things a scanner can only partly see. Read the suggestions, apply what fits, write down why you skipped the rest, and track the score over time so that it doesn't quietly fall.</p>
+
+<!-- ======================================================== 18.7 -->
+<h2 class="sec" id="s18-7"><span class="n">18.7</span>A few kernel settings</h2>
+
+<p>A handful of <code>sysctl</code> settings (<a href="#ch12">Chapter 12</a>) are worth including in a baseline. Ubuntu already sets several; check each with <code>sysctl</code> before adding it:</p>
+<pre><code>kernel.kptr_restrict = 2               <span class="c"># hide kernel addresses from unprivileged users</span>
+kernel.dmesg_restrict = 1              <span class="c"># only root reads the kernel log</span>
+kernel.unprivileged_bpf_disabled = 1   <span class="c"># no BPF programs for ordinary users</span>
+net.ipv4.conf.all.rp_filter = 1        <span class="c"># drop packets with source addresses that can't be right</span>
+net.ipv4.conf.all.accept_redirects = 0 <span class="c"># ignore ICMP redirects</span>
+fs.protected_symlinks = 1              <span class="c"># the /tmp symlink tricks from Chapter 17's warning</span></code></pre>
+
+<!-- ======================================================== 18.8 -->
+<h2 class="sec" id="s18-8"><span class="n">18.8</span>Across distributions: AppArmor and SELinux</h2>
+
+<p>Both families add a second, <strong>mandatory</strong> access-control layer on top of permissions (<a href="#ch4">Chapter 4</a>): a policy, set by the administrator, that even a process running as root can't override. They do with policy files what this chapter's systemd settings do per service.</p>
+
+<div class="box box-provider">
+  <p class="label">AppArmor (Ubuntu, Debian) and SELinux (RHEL family, Amazon Linux)</p>
+  <p><strong>AppArmor</strong> confines programs by path: a profile lists the files and capabilities a program may use. Ubuntu ships profiles for several services; <code>sudo aa-status</code> lists them, and denials appear in the journal as <code>apparmor="DENIED"</code>. <strong>SELinux</strong> labels every file and process with a context and allows interactions by rules between labels (<a href="#ch3">Chapter 3</a> and <a href="#ch4">Chapter 4</a>'s boxes). It's on in enforcing mode by default on RHEL; <code>getenforce</code> shows the mode, <code>sudo ausearch -m avc -ts recent</code> the denials, and <code>restorecon</code> fixes labels on moved files. The common mistake on both is switching them off at the first denial: read the denial, then fix the label or the profile.</p>
+</div>
+
+<!-- ======================================================== 18.9 -->
+<h2 class="sec" id="s18-9"><span class="n">18.9</span>Lab: measure, sandbox, baseline</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 18 · From 9.2 to 1.8</p>
+  <p><strong>You'll</strong> inventory a server, install <a href="#ch6">Chapter 6</a>'s stand-in app, score its unit, sandbox it and score it again, break the sandbox on purpose, validate a cloud-init baseline, and run Lynis. <strong>You need</strong> an Ubuntu 24.04 VM with systemd and <code>sudo</code>, Lab 6's <code>app.py</code>, <code>stagedoor.service</code> and <code>stagedoor.env</code> in <code>~/lab18</code>, and <code>sudo apt install nginx openssh-server cloud-init lynis</code>. <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> as Lab 6, plus <code>sudo rm -r /etc/systemd/system/stagedoor.service.d /var/lib/stagedoor</code>. Outputs come from the systemd test system (a container, host <code>lab</code>).</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Inventory.</strong> What listens, what's enabled, what's setuid:
+<pre><code>sudo ss -tlnp | awk 'NR &gt; 1 {print $4, $6}'</code></pre>
+<pre><code>127.0.0.53%lo:53 users:(("systemd-resolve",pid=105,fd=15))
+127.0.0.1:8000 users:(("python3",pid=266,fd=3))
+0.0.0.0:22 users:(("sshd",pid=180,fd=3),("systemd",pid=1,fd=62))
+0.0.0.0:80 users:(("nginx",pid=179,fd=5),("nginx",pid=178,fd=5),("nginx",pid=176,fd=5),("nginx",pid=175,fd=5),("nginx",pid=174,fd=5))
+127.0.0.54:53 users:(("systemd-resolve",pid=105,fd=17))</code></pre>
+<pre><code>systemctl list-unit-files --type=service --state=enabled --no-legend | cut -d" " -f1</code></pre>
+<pre><code>cloud-config.service
+cloud-final.service
+cloud-init-local.service
+cloud-init.service
+cron.service
+e2scrub_reap.service
+getty@.service
+networkd-dispatcher.service
+nginx.service
+stagedoor.service
+systemd-pstore.service
+systemd-resolved.service
+systemd-timesyncd.service
+unattended-upgrades.service</code></pre>
+<pre><code>sudo find / -xdev -perm -4000 -type f 2&gt;/dev/null | sort</code></pre>
+<pre><code>/usr/bin/chfn
+/usr/bin/chsh
+/usr/bin/gpasswd
+/usr/bin/mount
+/usr/bin/newgrp
+/usr/bin/passwd
+/usr/bin/su
+/usr/bin/sudo
+/usr/bin/umount
+/usr/lib/dbus-1.0/dbus-daemon-launch-helper
+/usr/lib/openssh/ssh-keysign
+/usr/lib/polkit-1/polkit-agent-helper-1</code></pre>
+  Mark each line: needed, or removable? Here SSH and nginx listen on every address, the app (from the next step) and the local DNS stub only on loopback; cloud-init's four units are enabled but only do work at first boot.</li>
+  <li><strong>Install the app</strong> as in Lab 6, now with a data directory it owns, and <strong>score it</strong>:
+<pre><code>sudo useradd --system --user-group --no-create-home --shell /usr/sbin/nologin stagedoor
+sudo install -d -m 755 /opt/stagedoor/releases/2026.10.2
+sudo install -m 644 app.py /opt/stagedoor/releases/2026.10.2/
+sudo ln -sfn releases/2026.10.2 /opt/stagedoor/current
+sudo install -d -o root -g stagedoor -m 750 /etc/stagedoor
+sudo install -o root -g stagedoor -m 640 stagedoor.env /etc/stagedoor/
+sudo install -d -o stagedoor -g stagedoor -m 750 /var/lib/stagedoor
+sudo install -m 644 stagedoor.service /etc/systemd/system/
+sudo systemctl daemon-reload; sudo systemctl enable --now stagedoor
+systemd-analyze security stagedoor.service --no-pager | grep "✗" | sed "s/   */  /g" | head -8</code></pre>
+<pre><code>✗ RemoveIPC=  Service user may leave SysV IPC objects around  0.1
+✗ RootDirectory=/RootImage=  Service runs within the host's root directory  0.1
+✗ CapabilityBoundingSet=~CAP_SYS_TIME  Service processes may change the system clock  0.2
+✗ NoNewPrivileges=  Service processes may acquire new privileges  0.2
+✗ PrivateDevices=  Service potentially has access to hardware devices  0.2
+✗ ProtectClock=  Service may write to the hardware clock or system clock  0.2
+✗ CapabilityBoundingSet=~CAP_SYS_PACCT  Service may use acct()  0.1
+✗ CapabilityBoundingSet=~CAP_KILL  Service may send UNIX signals to arbitrary processes  0.1</code></pre>
+  The full list has dozens of lines; the last one gives the total:
+<pre><code>systemd-analyze security stagedoor.service --no-pager | tail -1</code></pre>
+<pre><code>→ Overall exposure level for stagedoor.service: 9.2 UNSAFE :-{</code></pre></li>
+  <li><strong>Sandbox it</strong> with the drop-in from 18.3, saved as <code>hardening.conf</code>, then check that it still works and score again:
+<pre><code>sudo install -d /etc/systemd/system/stagedoor.service.d
+sudo install -m 644 hardening.conf /etc/systemd/system/stagedoor.service.d/
+sudo systemctl daemon-reload; sudo systemctl restart stagedoor; sleep 1
+systemctl is-active stagedoor; curl -s http://127.0.0.1:8000/
+systemd-analyze security stagedoor.service --no-pager | tail -1</code></pre>
+<pre><code>active
+stagedoor 2026.03.1 as stagedoor, umask 0027, database 10.40.0.11
+→ Overall exposure level for stagedoor.service: 1.8 OK :-)</code></pre>
+  Same app, same answer, a fraction of the exposure.</li>
+  <li><strong>Break it on purpose: a path you forgot.</strong> Run a one-off command with the same filesystem protection, as the app's user, once without and once with <code>ReadWritePaths=</code>:
+<pre><code>sudo systemd-run --wait --quiet -p User=stagedoor -p ProtectSystem=strict touch /var/lib/stagedoor/report.csv; echo "exit status: $?"
+sudo systemd-run --wait --quiet -p User=stagedoor -p ProtectSystem=strict -p ReadWritePaths=/var/lib/stagedoor touch /var/lib/stagedoor/report.csv; echo "exit status: $?"</code></pre>
+<pre><code>exit status: 1
+exit status: 0</code></pre>
+  The journal (<code>sudo journalctl -n 20 -o cat | grep -i read-only</code>) says why the first failed:
+<pre><code>/usr/bin/touch: cannot touch '/var/lib/stagedoor/report.csv': Read-only file system</code></pre>
+  The file permissions would have allowed it; the sandbox didn't. That's the message to look for when a newly hardened service misbehaves.</li>
+  <li><strong>A baseline for the first boot.</strong> Save this as <code>baseline.yaml</code> (with your real public key):
+<p class="code-title"><span>baseline.yaml</span><span>cloud-config</span></p>
+<pre><code>#cloud-config
+# baseline.yaml · first-boot baseline for a Stagedoor web server (Ubuntu 24.04)
+hostname: door-5
+users:
+  - name: rafaela
+    groups: [sudo, ssh-users]
+    shell: /bin/bash
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAA…your-public-key… rafaela@laptop      # paste a real public key here
+groups: [ssh-users]
+ssh_pwauth: false
+disable_root: true
+package_update: true
+package_upgrade: true
+packages: [nginx, nftables, unattended-upgrades, needrestart]
+write_files:
+  - path: /etc/ssh/sshd_config.d/50-stagedoor.conf
+    permissions: "0644"
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+      AllowGroups ssh-users
+      LogLevel VERBOSE
+  - path: /etc/systemd/journald.conf.d/size.conf
+    content: |
+      [Journal]
+      SystemMaxUse=4G
+      SystemKeepFree=20G
+runcmd:
+  - [systemctl, enable, --now, nftables, unattended-upgrades]
+  - [systemctl, reload, ssh]</code></pre>
+<pre><code>cloud-init schema --config-file baseline.yaml 2&gt;/dev/null</code></pre>
+<pre><code>Valid schema baseline.yaml</code></pre>
+  Break it: a misspelt key and a wrong type.
+<pre><code>sed "s/^ssh_pwauth: false/ssh_pwauth: maybe/; s/^packages:/pakages:/" baseline.yaml &gt; broken.yaml
+cloud-init schema --config-file broken.yaml; echo "exit status: $?"</code></pre>
+<pre><code>Cloud config schema deprecations: ssh_pwauth:  Changed in version 22.3. Use of non-boolean values for this field is deprecated.
+Invalid user-data broken.yaml
+Error: Cloud config schema errors: pakages: Additional properties are not allowed ('pakages' was unexpected)
+
+Error: Invalid schema: user-data
+
+exit status: 1</code></pre>
+  Without the check, the misspelt <code>pakages</code> would simply be ignored at boot, and the server would come up without nginx or the firewall. (Run <code>schema</code> outside a cloud and it also prints two warnings about not finding a data source; <code>2&gt;/dev/null</code> hid them above.) This file was validated, not booted: try it with <code>multipass launch --cloud-init baseline.yaml</code> (<a href="#appC">Appendix C</a>).</li>
+  <li><strong>A second opinion.</strong>
+<pre><code>sudo lynis audit system --quick --no-colors | grep -E "Hardening index|Tests performed"</code></pre>
+<pre><code>  Hardening index : 62 [############        ]
+  Tests performed : 251</code></pre>
+<pre><code>sudo grep -c '^suggestion' /var/log/lynis-report.dat
+sudo grep '^suggestion' /var/log/lynis-report.dat | head -6 | cut -d'|' -f1,2</code></pre>
+<pre><code>48
+suggestion[]=LYNIS|This release is more than 4 months old. Check the website or GitHub to see if there is an update available.
+suggestion[]=DEB-0280|Install libpam-tmpdir to set $TMP and $TMPDIR for PAM sessions
+suggestion[]=DEB-0810|Install apt-listbugs to display a list of critical bugs prior to each APT installation.
+suggestion[]=DEB-0811|Install apt-listchanges to display any significant changes prior to any upgrade via APT.
+suggestion[]=DEB-0880|Install fail2ban to automatically ban hosts that commit multiple authentication errors.
+suggestion[]=BOOT-5264|Consider hardening system services</code></pre>
+  Forty-eight suggestions on a fresh test system. Some apply (harden services: exactly step 3, for the others), some are judgement calls (<code>fail2ban</code>, <a href="#ch16">Chapter 16</a>), and one is about Lynis itself. Go through them and write down a decision for each.</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Add <code>MemoryDenyWriteExecute=yes</code> and <code>IPAddressDeny=any</code> plus <code>IPAddressAllow=localhost 10.40.0.0/24</code> to the drop-in, re-score, and check the app still answers. (2) Score nginx (<code>systemd-analyze security nginx.service</code>) and write a drop-in for it; nginx needs to write to <code>/var/log/nginx</code> and <code>/run</code>. (3) On a VM (not a container), install <code>auditd</code>, add the sudoers rule from 18.4, run <code>sudo visudo -c</code>, edit a sudoers drop-in, and find yourself with <code>ausearch -k sudoers -i</code>.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: a baseline in three forms</p>
+  <p>By the end of the week, Table 18.2 is in the operations repository three times: as a checklist anyone can read, as <code>baseline.yaml</code> for first boots (checked with <code>cloud-init schema</code> in CI, next to ShellCheck), and as the beginning of a build script. <code>stagedoor.service</code> and the payouts timer get sandbox drop-ins; the app's score goes from 9.2 to 1.8, nginx's from 9.6 to 4.1 once its writable paths are listed. auditd records changes to sudoers, the SSH configuration and the firewall, and commands run as root by people, and its log ships with the rest. Unneeded packages go (a leftover FTP server on <code>door-3</code> among them).</p>
+  <p>Lynis on <code>door-2</code> scores 58 before and 81 after; Rafaela writes the score into the wiki with a date, and a reason next to each suggestion left open. The retest on 15 October had already closed the network findings; the assessment firm closes the remaining seven on 12 November. And Tiago starts the script that will build <code>door-5</code>, <code>door-2</code>'s replacement, from the baseline (<a href="#ch21">Chapter 21</a>).</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s18-10"><span class="n">18.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Hardening by hand, server by server</td><td>Each server slightly different; nobody knows the intended state.</td><td>A written baseline, applied by cloud-init and scripts, checked regularly.</td></tr>
+      <tr><td>Chasing a scanner's score</td><td>Boxes ticked, real risks (shared accounts, old keys) untouched.</td><td>Use scores as a second opinion; decide per suggestion.</td></tr>
+      <tr><td>Applying every sandbox setting at once</td><td>The service breaks and the whole drop-in is reverted.</td><td>Small groups, test after each, read the journal.</td></tr>
+      <tr><td>Disabling AppArmor or SELinux at the first denial</td><td>The whole mandatory layer is gone, for one mislabelled file.</td><td>Read the denial; fix the label or profile.</td></tr>
+      <tr><td>Audit logs only on the server</td><td>The intruder deletes them.</td><td>Ship them off immediately.</td></tr>
+      <tr><td>Never validating first-boot configuration</td><td>Typos are ignored silently; servers boot half-configured.</td><td><code>cloud-init schema</code> in CI.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum18">
+  <h2 class="sec" id="sum18"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Hardening limits what one failure can lead to: layers from the network to the data, each assuming the outer one might fail.</li>
+    <li>Start with the <strong>attack surface</strong>: listening services, enabled units, root processes, setuid programs, accounts and keys. Remove what isn't needed.</li>
+    <li>systemd <strong>sandboxing</strong> (<code>ProtectSystem</code>, <code>NoNewPrivileges</code>, capabilities, system-call filters) limits a compromised service; <code>systemd-analyze security</code> measures it.</li>
+    <li>An <strong>audit trail</strong> (auditd) records privileged actions and changes by the person who logged in; ship it off the server.</li>
+    <li>Write a <strong>baseline</strong> and make it executable (cloud-init, scripts) and checkable; use CIS, Lynis and similar as second opinions.</li>
+    <li><strong>AppArmor</strong> (Ubuntu) and <strong>SELinux</strong> (RHEL) add mandatory access control; fix denials, don't disable the layer.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Hardening</dt><dd>Reducing a system's attack surface and the privileges of what runs on it, so a single failure does less damage.</dd>
+    <dt>Attack surface</dt><dd>Everything an attacker could try to use: listening services, accounts, credentials, privileged programs, installed software.</dd>
+    <dt>Sandboxing</dt><dd>Restricting what a process may access (files, devices, system calls, privileges) beyond ordinary permissions.</dd>
+    <dt>Capability</dt><dd>One of the separate privileges into which Linux divides root's power, such as binding low ports or overriding file permissions.</dd>
+    <dt>Audit trail</dt><dd>A record of security-relevant actions from the kernel's point of view, tied to the person who logged in.</dd>
+    <dt>Baseline</dt><dd>The written, checkable description of a correctly configured server.</dd>
+    <dt>Mandatory access control</dt><dd>Access rules set by policy that processes, even root ones, can't override; AppArmor and SELinux on Linux.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Name four things to list when measuring a server's attack surface, and a command for each. <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Listening sockets (<code>sudo ss -tlnp</code>), enabled services (<code>systemctl list-unit-files --state=enabled</code>), setuid programs (<code>sudo find / -xdev -perm -4000 -type f</code>), accounts and keys that can log in (<code>getent passwd</code> plus the <code>authorized_keys</code> audit); also sudo rules and installed packages.</p></details>
+    </li>
+    <li>
+      <p>A payouts timer writes its CSV to <code>/var/lib/stagedoor/payouts/</code> and reads <code>/etc/stagedoor/stagedoor.env</code>. Write the filesystem part of its sandbox. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>ProtectSystem=strict</code>, <code>ReadWritePaths=/var/lib/stagedoor/payouts</code>, <code>ProtectHome=yes</code>, <code>PrivateTmp=yes</code>. Reading <code>/etc/stagedoor</code> needs nothing extra (strict makes it read-only, not invisible); the file permissions still decide whether the service's user may read it.</p></details>
+    </li>
+    <li>
+      <p>Explain why <code>NoNewPrivileges=yes</code> matters even for a service that never runs <code>sudo</code>. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>It's about what an <em>attacker</em> could do with the service's process, not what the service does. Without it, code running in the service could run a setuid program (<code>sudo</code>, <code>su</code>, a vulnerable helper) and gain privileges; with it, setuid bits and file capabilities are ignored for that process and its children.</p></details>
+    </li>
+    <li>
+      <p>After you add a sandbox drop-in, a service starts but its file uploads fail with “Read-only file system”, and another service dies with signal SYS. What happened in each case, and how do you fix them? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p>The first writes to a path not in <code>ReadWritePaths=</code> under <code>ProtectSystem=strict</code>: find the path in the error and add it (or use <code>StateDirectory=</code>/<code>CacheDirectory=</code>). The second made a system call outside <code>SystemCallFilter=</code>: the journal or <code>journalctl -k</code> names it; allow that group (or call), or reconsider whether the service should be making it.</p></details>
+    </li>
+    <li>
+      <p>Design how Stagedoor keeps four servers matching its baseline over a year. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>The baseline lives in Git as a checklist, cloud-init and a build script, all reviewed. New servers are built from it, never by hand. A scheduled check (the build script in verify mode, plus Lynis, <code>systemd-analyze security</code> scores and the SSH and sudo audits) runs weekly and reports differences. Fixes go into the baseline first, then onto servers, ideally by rebuilding. Scores and decisions are dated in the wiki.</p></details>
+    </li>
+    <li>
+      <p>Compare systemd sandboxing with AppArmor for confining the app. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>systemd's settings are per unit, short and readable, apply to everything the service starts, and need no extra framework; they can't express fine-grained per-file rules as easily. An AppArmor profile is per program, can list exactly which files it may read and write, and applies however the program is started, but profiles take more effort to write and maintain. Using both is possible; for your own services, systemd's sandbox is the easier first step.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li><code>man systemd.exec</code> (the sandboxing sections) and <code>systemd-analyze security --help</code>.</li>
+    <li><a href="https://www.cisecurity.org/cis-benchmarks">CIS Benchmarks</a> and Canonical's <a href="https://ubuntu.com/security/certifications/docs/usg">Ubuntu Security Guide</a>.</li>
+    <li><a href="https://cisofy.com/lynis/">Lynis</a> and <code>man auditd</code>, <code>man audit.rules</code>, <code>man ausearch</code>.</li>
+    <li>cloud-init: <a href="https://cloudinit.readthedocs.io/">module reference</a> and the <code>schema</code> command.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="#ch19">19 · Containers are Linux</a></div>
+</nav>
