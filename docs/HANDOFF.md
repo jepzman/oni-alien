@@ -84,6 +84,10 @@ Series 1 is revised: linked related notes, seen-at-Larder and cheat-sheet asides
 all 93 notes, 24 going-deeper chapters (4 per volume, in `content/<key>/deeper.py`), and new covers (sticker + printed
 cloth, `COVER_ART`). 18 extra notes (3 per volume, `content/<key>/05_extra.py`) are on the branch. Next: the freshness pass, then Vol. 7.
 
+## 1c. The landing page is a bookcase (2026-11-27)
+
+Seven series tiles (each with a row of mini spines) and one panel per series; see the README's landing-page paragraph for how to add a series. The old per-series sections and the “What's inside” list were folded into each panel's intro. Anchors still work (`#deep-dives`, `#cheatsheets`, `#handbooks`, `#vendor-side`, `#darkside`, `#series-2`; `#shelf` is now the bookcase itself). Check a new series at 1280 px and 375 px, light and dark, with every tile clicked: nothing may be wider than the viewport.
+
 ## 2. Next steps (owner's decisions)
 
 1. **Open item:** the owner reported Grace's cover and pages looked broken right after PR #7. Locally they render
