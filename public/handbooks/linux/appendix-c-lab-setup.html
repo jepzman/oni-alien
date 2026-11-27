@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Appendix C: Lab setup · Linux for Cloud Engineers</title>
+<meta name="description" content="A terminal on any Linux: a container, WSL or a Multipass VM, and how to clean up.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 3</a> · <a href="index.html">Linux for Cloud Engineers</a></span><span>Appendix C</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Appendix</p>
+  <p class="chno">C</p>
+  <h1>Lab setup</h1>
+  <p class="promise">Every lab in this book runs on your own machine, for free. Most need only a Linux terminal; some need a full virtual machine with systemd and root, which you can create and throw away in a minute. This appendix shows the options, which chapters need which, and exactly how this book's labs were tested.</p>
+</header>
+
+<!-- ======================================================== C.1 -->
+<h2 class="sec" id="sC-1"><span class="n">C.1</span>Which environment for which chapter</h2>
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table C.1 · What each lab needs</caption>
+    <thead><tr><th>Chapters</th><th>Needs</th><th>Works in a container?</th></tr></thead>
+    <tbody>
+      <tr><td><a href="01-what-a-server-is.html">1</a>–<a href="03-files.html">3</a>, <a href="05-processes.html">5</a>, <a href="09-cpu.html">9</a>, <a href="17-scripts.html">17</a></td><td>a Linux terminal, Python 3, <code>curl</code></td><td>yes (and in WSL)</td></tr>
+      <tr><td><a href="04-permissions.html">4</a>, <a href="08-packages.html">8</a>, <a href="12-limits.html">12</a></td><td>root through <code>sudo</code>; creates and removes users</td><td>mostly; a VM is simpler</td></tr>
+      <tr><td><a href="06-systemd.html">6</a>, <a href="07-logs.html">7</a>, <a href="10-memory.html">10</a>, <a href="18-hardening.html">18</a>, <a href="20-troubleshooting.html">20</a>, <a href="21-capstone.html">21</a></td><td><strong>systemd as PID 1</strong>, <code>sudo</code></td><td>no: use a VM</td></tr>
+      <tr><td><a href="11-disks.html">11</a></td><td>loop devices, <code>mount</code>, <code>parted</code>, <code>growpart</code></td><td>no: use a VM</td></tr>
+      <tr><td><a href="13-network-config.html">13</a>–<a href="16-ssh.html">16</a></td><td>network namespaces (<code>netlab.sh</code>), nftables, sshd</td><td>no: use a VM</td></tr>
+      <tr><td><a href="19-containers.html">19</a></td><td>root, Docker, <code>unshare</code>, overlayfs</td><td>no: use a VM</td></tr>
+    </tbody>
+  </table>
+</div>
+<p>Check what you have with the first command of the book: <code>ps -o comm= -p 1</code>. If it says <code>systemd</code>, every lab works; anything else (<code>bash</code>, <code>sh</code>, an agent's name) means a container or similar, fine for the first group of chapters only.</p>
+
+<!-- ======================================================== C.2 -->
+<h2 class="sec" id="sC-2"><span class="n">C.2</span>A disposable VM with Multipass (recommended)</h2>
+<p>Multipass, from Canonical, runs Ubuntu VMs on Linux, macOS and Windows with one command, using the platform's own hypervisor. It's the easiest way to get a real Ubuntu server you can break:</p>
+<pre><code>multipass launch 24.04 --name lab --cpus 2 --memory 4G --disk 20G
+multipass shell lab                         <span class="c"># a shell on the VM, as the user ubuntu (with sudo)</span>
+multipass transfer netlab.sh lab:           <span class="c"># copy files in</span>
+multipass stop lab; multipass delete --purge lab   <span class="c"># throw it away</span></code></pre>
+<p>Add <code>--cloud-init user-data.yaml</code> to <code>launch</code> to try <a href="01-what-a-server-is.html">Chapter 1</a>'s and <a href="18-hardening.html">Chapter 18</a>'s first-boot configuration. Take a snapshot before risky labs (<code>multipass snapshot lab</code>; restore with <code>multipass restore</code>), especially <a href="15-host-firewalls.html">Chapter 15</a>'s firewall and <a href="16-ssh.html">Chapter 16</a>'s SSH changes if you apply them to the VM itself rather than the lab namespaces. Other hypervisors (VirtualBox, UTM on Apple silicon, GNOME Boxes, Hyper-V) work as well with an Ubuntu Server 24.04 image.</p>
+
+<!-- ======================================================== C.3 -->
+<h2 class="sec" id="sC-3"><span class="n">C.3</span>Other options</h2>
+<ul>
+  <li><strong>WSL 2 on Windows</strong>: install Ubuntu from the Microsoft Store. Recent versions can run systemd as PID 1 if <code>/etc/wsl.conf</code> contains <code>[boot]</code> and <code>systemd=true</code> (then <code>wsl --shutdown</code> and start again); networking and loop-device labs may still behave differently, so prefer a VM for Parts III and IV.</li>
+  <li><strong>A container</strong>: <code>docker run --rm -it ubuntu:24.04</code> is fine for the shell, files and processes chapters; install what's missing with <code>apt update &amp;&amp; apt install -y python3 curl procps iproute2</code>.</li>
+  <li><strong>A small cloud VM</strong>: any provider's smallest Ubuntu 24.04 instance works for every lab (and lets you try <code>cloud-init</code> and instance metadata for real). Restrict SSH to your own address, and delete it when you're done; a forgotten instance is the only lab in this book that costs money.</li>
+</ul>
+
+<!-- ======================================================== C.4 -->
+<h2 class="sec" id="sC-4"><span class="n">C.4</span>Packages</h2>
+<p>On Ubuntu 24.04, this installs everything the labs use (server images already have most of it):</p>
+<pre><code>sudo apt update
+sudo apt install -y python3 curl procps psmisc iproute2 iputils-ping netcat-openbsd dnsutils dnsmasq-base \
+  tcpdump nftables ufw openssh-server openssh-client acl strace lsof sysstat shellcheck \
+  parted cloud-guest-utils xfsprogs nginx logrotate cloud-init lynis apache2-utils docker.io</code></pre>
+<p>Two of them change the machine as they install: <code>nginx</code> and <code>openssh-server</code> start services listening on ports 80 and 22, and <code>docker.io</code> changes the firewall's forwarding policy (which is why <code>netlab.sh</code> has two lines for Docker, <a href="13-network-config.html">Chapter 13</a>). That's fine on a lab VM, and a reason not to do these labs on a machine you care about.</p>
+
+<!-- ======================================================== C.5 -->
+<h2 class="sec" id="sC-5"><span class="n">C.5</span>The lab network and lab SSH servers</h2>
+<p>Part IV's labs share two scripts, printed in full where they're introduced: <code>netlab.sh</code> (<a href="13-network-config.html">Chapter 13</a>) builds three pretend servers, <code>door-2</code>, <code>door-3</code> and <code>door-4</code>, as network namespaces on a bridge, with your machine as <code>10.40.0.1</code>; <code>sshlab.sh</code> (<a href="16-ssh.html">Chapter 16</a>) runs an sshd inside two of them. Both have <code>up</code> and <code>down</code>, and <code>down</code> removes everything they created. If a lab is interrupted, run the <code>down</code> commands, then check that nothing is left: <code>ip netns list</code> and <code>ip link show br-lab</code> should print nothing, and <code>pgrep -a dnsmasq</code>, <code>pgrep -af sshd_lab</code> nothing of the lab's.</p>
+
+<!-- ======================================================== C.6 -->
+<h2 class="sec" id="sC-6"><span class="n">C.6</span>How this book's labs were tested</h2>
+<p>Every lab script printed in this book is exactly the file that was run, and every output is copied from a real run, apart from the user and host names and timestamps, which will differ on your machine. The test machine was a small cloud VM running Ubuntu 24.04's userland on a Firecracker micro-VM kernel (Lab 1 shows its odd PID 1), with 4 vCPUs and 16 GB of memory. Three consequences, each mentioned where it matters:</p>
+<ul>
+  <li>Its PID 1 isn't systemd, so the systemd chapters (6, 7, 10, 18, 20, 21) were run in an <strong>Ubuntu 24.04 system container</strong> on it: a privileged Docker container running systemd as its PID 1. A few outputs show container traces, such as a <code>/docker/…</code> prefix in cgroup paths and a host name like <code>lab</code> or <code>door-5</code>.</li>
+  <li>It uses cgroup v1 and has IPv6 disabled; outputs involving cgroups and listening sockets reflect that.</li>
+  <li>Its kernel refused a few operations: online <code>resize2fs</code> (<a href="11-disks.html">Chapter 11</a> shows the offline resize that ran), device-mapper (so LVM has no lab), negative <code>oom_score_adj</code>, and the kernel's audit system (so <a href="18-hardening.html">Chapter 18</a>'s auditd rules are shown, not run).</li>
+</ul>
+<p>Debian 11's cron <code>PATH</code> (<a href="06-systemd.html">Chapter 6</a>) is described from its documentation and reproduced by setting the same <code>PATH</code> explicitly. Netplan, firewalld, Session Manager and host certificates appear in prose or stretch goals only. Testing found real bugs in early drafts of two of the book's own scripts and one configuration file; each chapter says what was found, because that's the habit the book is trying to teach.</p>
+
+<!-- ======================================================== C.7 -->
+<h2 class="sec" id="sC-7"><span class="n">C.7</span>Cleaning up</h2>
+<ol class="steps">
+  <li>Each lab ends with its own clean-up step; run it, especially those that create users (<a href="04-permissions.html">4</a>, <a href="06-systemd.html">6</a>, <a href="16-ssh.html">16</a>), services and timers (<a href="06-systemd.html">6</a>, <a href="18-hardening.html">18</a>), firewall rules (<a href="15-host-firewalls.html">15</a>) and Docker images (<a href="19-containers.html">19</a>).</li>
+  <li>Lab directories live in your home directory (<code>~/lab3</code> … <code>~/lab21</code>, <code>~/build</code>): <code>rm -r ~/lab*</code> when you're finished.</li>
+  <li>The simplest clean-up of all: delete the VM (<code>multipass delete --purge lab</code>), or the cloud instance, and start fresh for the next part.</li>
+</ol>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="appendix-d-glossary.html">Appendix D · Glossary</a></div>
+</nav>
+
+<nav class="next" aria-label="Chapters"><div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div></nav>
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 3 · Linux for Cloud Engineers</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

@@ -1,0 +1,416 @@
+<!-- Handbook 3 · Linux for Cloud Engineers · Chapter 17. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part V · Automation and security</p>
+  <p class="chno">17</p>
+  <h1>Shell scripts that don't bite</h1>
+  <p class="promise">Every server accumulates shell scripts: deploys, backups, clean-ups, checks. Most are written in ten minutes and run for years, unattended, as root. This chapter shows how a short script turns into a disaster, and the handful of habits (strict mode, quoting, validation, traps, dry runs and ShellCheck) that make the same ten minutes produce a script you can trust at 03:00.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain what <code>set -euo pipefail</code> does, and where it doesn't help.</li>
+      <li>Quote variables and use arrays so file names with spaces and empty values can't hurt you.</li>
+      <li>Validate inputs, clean up with <code>trap</code>, and make a script safe to re-run.</li>
+      <li>Read ShellCheck's warnings and fix them.</li>
+      <li>Decide when a task has outgrown the shell and belongs in Python.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li><a href="#ch2">Chapter 2</a> (expansion, quoting, exit codes, <code>pipefail</code>) and <a href="#ch3">Chapter 3</a> (the release layout).</li>
+      <li>A Linux terminal with bash and <code>sudo apt install shellcheck</code>.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, any Linux terminal, free; everything happens in a scratch directory</dd>
+      <dt>Shell</dt><dd>bash 5 (Ubuntu 24.04), with notes on <code>sh</code> and macOS in 17.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>Since March, every deploy leaves a new directory in <code>/opt/stagedoor/releases</code> (<a href="#ch6">Chapter 6</a>), and by October there are ninety. Tiago writes a three-line clean-up script that keeps the five newest, and Rafaela turns it into a nightly timer on <code>door-2</code> and <code>door-3</code>, running as <code>stagedoor</code>. In the unit file, the line meant to set <code>RELEASES_DIR</code> has a typo in the variable's name, so it's never set.</p>
+  <p>Thursday 22 October 2026, 03:15. The script's <code>cd</code> fails. The script carries on, in the service's working directory, <code>/var/lib/stagedoor</code>, lists what's there by age, and deletes everything but the five newest entries: the <code>uploads</code> directory, with every venue's posters and seating plans, and the <code>exports</code> directory. Then it prints <code>cleanup done</code> and exits with status 0.</p>
+</aside>
+
+<!-- ======================================================== 17.1 -->
+<h2 class="sec" id="s17-1"><span class="n">17.1</span>How a three-line script deletes the wrong thing</h2>
+
+<p class="lead">Here is the script, exactly as it ran (the lab reproduces it with the variable set but empty, which has the same effect):</p>
+
+<p class="code-title"><span>cleanup-v1.sh</span><span>bash (don't use this)</span></p>
+<pre><code>#!/bin/bash
+<span class="c"># cleanup-releases.sh (first version) · keep the five newest releases, delete the rest</span>
+cd $RELEASES_DIR
+ls -t | tail -n +6 | xargs rm -rf
+echo <span class="s">"cleanup done"</span></code></pre>
+
+<p>Each line has a small problem, and together they're a disaster:</p>
+
+<figure class="wide" id="fig17-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 240" role="img" aria-labelledby="fig17-1-t fig17-1-d">
+      <title id="fig17-1-t">How the first clean-up script failed, and where strict mode would have stopped it</title>
+      <desc id="fig17-1-d">Four steps. One: RELEASES_DIR is empty because of a typo in the unit file; unquoted, cd $RELEASES_DIR becomes plain cd, which goes to the home directory. Two: the stagedoor user's home doesn't exist, so cd fails with an error on stderr. Three: bash carries on, because nothing tells it to stop, in the working directory /var/lib/stagedoor. Four: ls -t, tail and xargs rm -rf delete everything but the five newest entries, including uploads; the script prints cleanup done and exits 0, so systemd records success. Underneath, the fixes: set -u or ${RELEASES_DIR:?} stops at step one; set -e stops at step two; checking that names look like releases stops step four.</desc>
+      <defs><marker id="c17ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="10" y="16" width="170" height="96" rx="5"/><text class="t-title" x="24" y="40">1 Empty variable</text><text class="t-mono" x="24" y="62">cd $RELEASES_DIR</text><text class="t-small" x="24" y="82">becomes plain cd:</text><text class="t-small" x="24" y="98">go to $HOME</text>
+      <rect class="node" x="200" y="16" width="170" height="96" rx="5"/><text class="t-title" x="214" y="40">2 cd fails</text><text class="t-small" x="214" y="62">no home directory;</text><text class="t-small" x="214" y="80">an error on stderr</text><text class="t-small" x="214" y="98">that nobody reads</text>
+      <rect class="node" x="390" y="16" width="170" height="96" rx="5"/><text class="t-title" x="404" y="40">3 Carries on</text><text class="t-small" x="404" y="62">in the working</text><text class="t-small" x="404" y="80">directory:</text><text class="t-mono" x="404" y="98">/var/lib/stagedoor</text>
+      <rect class="node-accent" x="580" y="16" width="170" height="96" rx="5"/><text class="t-title on-accent" x="594" y="40">4 Deletes</text><text class="t-small on-accent" x="594" y="62">all but the 5 newest:</text><text class="t-small on-accent" x="594" y="80">uploads, exports;</text><text class="t-small on-accent" x="594" y="98">then exit 0</text>
+      <path class="wire" d="M180 64 H196" marker-end="url(#c17ah)"/><path class="wire" d="M370 64 H386" marker-end="url(#c17ah)"/><path class="wire" d="M560 64 H576" marker-end="url(#c17ah)"/>
+      <rect class="pub" x="10" y="134" width="170" height="92" rx="5"/><text class="t-small" x="22" y="156">stopped by</text><text class="t-mono" x="22" y="176">set -u</text><text class="t-small" x="22" y="196">if unset; if empty too:</text><text class="t-mono" x="22" y="214">${RELEASES_DIR:?}</text>
+      <rect class="pub" x="200" y="134" width="170" height="92" rx="5"/><text class="t-small" x="212" y="156">stopped by</text><text class="t-mono" x="212" y="176">set -e</text><text class="t-small" x="212" y="196">(or cd … || exit)</text>
+      <rect class="priv" x="390" y="134" width="360" height="92" rx="5"/><text class="t-small" x="402" y="156">and even in the right directory:</text><text class="t-small" x="402" y="176">delete only names that look like releases,</text><text class="t-small" x="402" y="196">never the one “current” points to,</text><text class="t-small" x="402" y="216">and offer a dry run</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 17.1</b> Three independent safety nets were missing. Any one of them would have turned a deleted uploads directory into an error message.</figcaption>
+</figure>
+
+<p>Shell scripts fail this way because the shell was designed for people typing at a prompt: it reports an error and waits for the next command. In a script, nobody is waiting, so the next command runs, in whatever state the failure left behind. The rest of this chapter is about telling bash to behave like a program instead.</p>
+
+<!-- ======================================================== 17.2 -->
+<h2 class="sec" id="s17-2"><span class="n">17.2</span>Strict mode</h2>
+
+<p>Start every bash script with these two lines:</p>
+<pre><code>#!/usr/bin/env bash
+set -euo pipefail</code></pre>
+
+<ul>
+  <li><strong><code>-e</code></strong> (<code>errexit</code>): exit as soon as a command fails (returns non-zero). The <code>cd</code> in Figure 17.1 would have ended the script.</li>
+  <li><strong><code>-u</code></strong> (<code>nounset</code>): using an unset variable is an error, instead of silently becoming empty. A typo in a variable's name stops the script.</li>
+  <li><strong><code>-o pipefail</code></strong>: a pipeline fails if any command in it fails, not only the last (<a href="#ch2">Chapter 2</a>).</li>
+</ul>
+
+<p>Together they're often called bash's “strict mode”. It isn't perfect, and knowing its gaps keeps you from trusting it too much:</p>
+<ul>
+  <li>Commands tested by <code>if</code>, <code>while</code>, <code>&amp;&amp;</code> or <code>||</code> don't trigger <code>-e</code>, which is how you handle expected failures: <code>if ! grep -q x file; then …</code>. But that also switches <code>-e</code> off <em>inside</em> any function called from such a test.</li>
+  <li><code>local x=$(cmd)</code> hides <code>cmd</code>'s failure, because <code>local</code> itself succeeded. Declare first, assign separately: <code>local x; x=$(cmd)</code>. (ShellCheck catches this: SC2155.)</li>
+  <li>A variable that's set but <em>empty</em> passes <code>-u</code>. For values that must not be empty, use <code>${VAR:?message}</code>, which stops with the message if the variable is unset or empty. Give defaults with <code>${VAR:-default}</code>.</li>
+</ul>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">A script should stop at the first thing it didn't expect. <code>set -euo pipefail</code> plus <code>${VAR:?}</code> for every required input makes that the default.</p>
+</div>
+
+<!-- ======================================================== 17.3 -->
+<h2 class="sec" id="s17-3"><span class="n">17.3</span>Quoting, arrays and options</h2>
+
+<p><a href="#ch2">Chapter 2</a>'s rule applies with full force in scripts: put double quotes around every variable and every <code>$( )</code>. Three more habits finish the job:</p>
+<ul>
+  <li><strong>Arrays for lists.</strong> A list of file names or command arguments belongs in an array, expanded as <code>"${files[@]}"</code>: each element stays one argument, spaces and all. Build commands the same way: <code>args=(--archive --delete); rsync "${args[@]}" "$src/" "$dst/"</code>.</li>
+  <li><strong>Globs, not <code>ls</code>.</strong> <code>for f in /var/log/stagedoor/*.log</code> gives exact names; parsing <code>ls</code> output breaks on spaces and newlines in names (ShellCheck's SC2012). Add <code>shopt -s nullglob</code> so a glob that matches nothing becomes nothing, not the literal pattern.</li>
+  <li><strong><code>--</code> before file names</strong> in commands like <code>rm</code>, <code>cd</code> and <code>cp</code>: it ends the options, so a name starting with <code>-</code> can't be read as one (<code>rm -rf -- "$r"</code>).</li>
+  <li><strong><code>"$@"</code></strong> passes a script's or function's arguments on unchanged; <code>$*</code> and unquoted <code>$@</code> re-split them.</li>
+</ul>
+
+<!-- ======================================================== 17.4 -->
+<h2 class="sec" id="s17-4"><span class="n">17.4</span>Structure: inputs, functions and exit codes</h2>
+
+<p>A script that runs unattended needs to say clearly what it needs and what happened. A skeleton worth copying:</p>
+<pre><code>#!/usr/bin/env bash
+<span class="c"># name.sh · one line saying what it does, and how to run it</span>
+set -euo pipefail
+
+<span class="c"># 1. inputs: required ones stop the script if missing, optional ones get defaults</span>
+target=${TARGET:?TARGET must be set}
+keep=${KEEP:-5}
+
+<span class="c"># 2. helpers: messages to stderr, so stdout stays clean for data</span>
+log() { echo "$(date -Is) $*" &gt;&amp;2; }
+die() { log "error: $*"; exit 1; }
+
+<span class="c"># 3. checks before doing anything</span>
+[[ -d $target ]] || die "$target is not a directory"
+[[ $keep =~ ^[0-9]+$ ]] || die "KEEP must be a number, got '$keep'"
+
+<span class="c"># 4. the work, in functions with names that say what they do</span>
+main() {
+  log "starting in $target"
+  …
+}
+main "$@"</code></pre>
+
+<p>Exit with 0 only when the job is done; with non-zero, and a message on stderr, when it isn't. systemd records the status (<code>systemctl status</code>, <a href="#ch6">Chapter 6</a>), and an alert on failed units turns a failing script into a notification the same morning. A script that prints “done” and exits 0 after failing, like Figure 17.1's, defeats all of that.</p>
+
+<!-- ======================================================== 17.5 -->
+<h2 class="sec" id="s17-5"><span class="n">17.5</span>Safety: clean-up, locks, dry runs, idempotence</h2>
+
+<ul>
+  <li><strong>Temporary files</strong> come from <code>mktemp</code> (<code>mktemp -d</code> for a directory), never from a fixed name in <code>/tmp</code>, which another user could create first. Remove them with a <strong>trap</strong>: <code>trap 'rm -rf -- "$work"' EXIT</code> runs however the script ends, on success, on an error under <code>set -e</code>, or on <kbd>Ctrl</kbd>+<kbd>C</kbd>.</li>
+  <li><strong>One at a time.</strong> A job started by a timer can overlap with a manual run. A lock stops the second: <code>exec 9&gt;/run/lock/cleanup.lock; flock -n 9 || die "already running"</code>. (A systemd service can't overlap with itself anyway, <a href="#ch6">Chapter 6</a>.)</li>
+  <li><strong>A dry run</strong> (<code>DRY_RUN=1</code>) that prints what would be changed, for anything that deletes or moves. Run it first, read it, then run for real.</li>
+  <li><strong>Idempotence</strong>: running the script twice should be as safe as running it once. Check before acting (<code>mkdir -p</code>, <code>id user || useradd …</code>, “skip if already deleted”). It's what lets you re-run a script that failed halfway, and it's the core of <a href="#ch21">Chapter 21</a>'s build script.</li>
+  <li><strong>Narrow targets.</strong> Delete only what matches what you expect (names like <code>2026.10.3</code>), and refuse to touch anything else, however the inputs went wrong.</li>
+</ul>
+
+<!-- ======================================================== 17.6 -->
+<h2 class="sec" id="s17-6"><span class="n">17.6</span>ShellCheck and testing</h2>
+
+<p><span class="term">ShellCheck</span> is a static analyser for shell scripts: it reads a script without running it and points out quoting bugs, unhandled failures, unused variables and dozens of other traps, each with a code (SC2086…) and a wiki page explaining it. It found two of Figure 17.1's three problems in a fraction of a second. Run it on every script, in your editor and in CI, and treat its warnings like compiler errors; for the rare false alarm, disable that one check on that one line with a comment (<code># shellcheck disable=SC2016</code>) and say why.</p>
+
+<p>Beyond that: <code>bash -n script.sh</code> checks syntax without running; <code>bash -x</code> (or <code>set -x</code> in the script) prints every command as it runs, the fastest way to see what a script actually did; and for scripts that matter, a scratch directory with fake data, as in the lab, is a test suite you can build in five minutes. Frameworks such as <code>bats</code> make it repeatable.</p>
+
+<!-- ======================================================== 17.7 -->
+<h2 class="sec" id="s17-7"><span class="n">17.7</span>When to switch to Python</h2>
+
+<p>The shell is excellent at running programs and connecting them. It's poor at data structures, arithmetic, parsing JSON, HTTP, and error handling more subtle than “stop”. Rough signs that a script has outgrown it:</p>
+<ul>
+  <li>it's longer than a screen or two, or has more than a few functions;</li>
+  <li>it parses JSON, YAML or CSV, or calls an HTTP API (use Python's <code>json</code> and <code>urllib</code>, or <code>jq</code> for one-off queries);</li>
+  <li>it needs retries, timeouts, or to carry on past one failure and report all of them;</li>
+  <li>it handles money, dates across time zones, or anything where a silent mistake is expensive.</li>
+</ul>
+<p>Python 3 is on every server in this book, and <code>subprocess.run([...], check=True)</code> calls programs as safely as the shell does, without its quoting traps. Stagedoor's payouts report and the load-test client in <a href="#ch21">Chapter 21</a> are Python for exactly these reasons.</p>
+
+<!-- ======================================================== 17.8 -->
+<h2 class="sec" id="s17-8"><span class="n">17.8</span>Across distributions</h2>
+
+<div class="box box-provider">
+  <p class="label">On Debian, Ubuntu, Alpine and macOS</p>
+  <p>Bash features (<code>[[ ]]</code>, arrays, <code>mapfile</code>, <code>pipefail</code> on older shells) don't exist in <code>sh</code>. On Debian and Ubuntu <code>/bin/sh</code> is dash, on Alpine it's BusyBox <code>ash</code>, so a script must start with <code>#!/usr/bin/env bash</code> if it uses them (<a href="#ch2">Chapter 2</a>); ShellCheck reads the shebang and checks for the right shell. macOS ships bash 3.2 from 2007, without <code>mapfile</code> or associative arrays: test scripts on the system they'll run on. On the RHEL family, <code>/bin/sh</code> is bash, which hides the problem until the script moves to Ubuntu.</p>
+</div>
+
+<!-- ======================================================== 17.9 -->
+<h2 class="sec" id="s17-9"><span class="n">17.9</span>Lab: the clean-up script, twice</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 17 · 03:15 on 22 October, in a scratch directory</p>
+  <p><strong>You'll</strong> reproduce the night's deletion with the first version of the script, read what ShellCheck says about it, then run the safe version against a release directory: refusing to start without its input, a dry run, a real run that spares the live release, and a second run that changes nothing. Finally, a trap that cleans up after a failure. <strong>You need</strong> bash and ShellCheck. <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> <code>rm -r ~/lab17</code>. Everything runs as your normal user in <code>~/lab17</code>: never try the first script anywhere else.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>A pretend <code>/var/lib/stagedoor</code></strong>, seven directories with different ages, <code>uploads</code> the oldest:
+<pre><code>mkdir -p ~/lab17/var-lib-stagedoor &amp;&amp; cd ~/lab17/var-lib-stagedoor
+d=1; for x in uploads exports payouts reports thumbs sessions tmp; do mkdir -p $x; touch -d "2026-0$d-01" $x; d=$((d+1)); done
+ls -t</code></pre>
+<pre><code>tmp
+sessions
+thumbs
+reports
+payouts
+exports
+uploads</code></pre></li>
+  <li><strong>Run the first version</strong> (save it from 17.1 as <code>~/lab17/cleanup-v1.sh</code>, <code>chmod +x</code>) the way the timer ran it: an empty <code>RELEASES_DIR</code>, a home directory that doesn't exist, and this directory as the working directory:
+<pre><code>HOME=/nonexistent RELEASES_DIR= ../cleanup-v1.sh; echo "exit status: $?"; ls -t</code></pre>
+<pre><code>../cleanup-v1.sh: line 3: cd: /nonexistent: No such file or directory
+cleanup done
+exit status: 0
+tmp
+sessions
+thumbs
+reports
+payouts</code></pre>
+  An error, then “cleanup done”, exit status 0, and <code>uploads</code> and <code>exports</code> are gone.</li>
+  <li><strong>Ask ShellCheck.</strong>
+<pre><code>cd ~/lab17; shellcheck cleanup-v1.sh</code></pre>
+<pre><code>
+In cleanup-v1.sh line 3:
+cd $RELEASES_DIR
+^--------------^ SC2164 (warning): Use 'cd ... || exit' or 'cd ... || return' in case cd fails.
+   ^-----------^ SC2086 (info): Double quote to prevent globbing and word splitting.
+
+Did you mean: 
+cd "$RELEASES_DIR" || exit
+
+
+In cleanup-v1.sh line 4:
+ls -t | tail -n +6 | xargs rm -rf
+^---^ SC2012 (info): Use find instead of ls to better handle non-alphanumeric filenames.
+
+For more information:
+  https://www.shellcheck.net/wiki/SC2164 -- Use 'cd ... || exit' or 'cd ... |...
+  https://www.shellcheck.net/wiki/SC2012 -- Use find instead of ls to better ...
+  https://www.shellcheck.net/wiki/SC2086 -- Double quote to prevent globbing ...</code></pre>
+  SC2164 is the missing exit after <code>cd</code>; SC2086 the unquoted variable (which turned an empty value into “no argument”); SC2012 the parsed <code>ls</code>. ShellCheck can't know that the working directory is precious; that's what the next version's name check is for.</li>
+  <li><strong>The safe version.</strong> Save it as <code>cleanup-releases.sh</code>:
+<p class="code-title"><span>cleanup-releases.sh</span><span>bash</span></p>
+<pre><code>#!/usr/bin/env bash
+<span class="c"># cleanup-releases.sh · keep the newest KEEP releases in RELEASES_DIR, delete older ones, never the live one</span>
+<span class="k">set</span> -euo pipefail
+
+releases_dir=${RELEASES_DIR:?RELEASES_DIR must be <span class="k">set</span>, e.g. /opt/stagedoor/releases}
+keep=${KEEP:-5}
+dry_run=${DRY_RUN:-0}
+
+cd -- <span class="s">"$releases_dir"</span>
+live=$(basename -- <span class="s">"$(readlink -f ../current)"</span>)          <span class="c"># the release "current" points to</span>
+
+shopt -s nullglob
+releases=( [0-9][0-9][0-9][0-9].[0-9][0-9].[0-9]* )      <span class="c"># only names like 2026.10.3</span>
+<span class="k">if</span> (( ${#releases[@]} == 0 )); <span class="k">then</span>
+  echo <span class="s">"no releases found in $releases_dir"</span>
+  <span class="k">exit</span> 0
+<span class="k">fi</span>
+mapfile -t sorted &lt; &lt;(printf <span class="s">'%s\n'</span> <span class="s">"${releases[@]}"</span> | sort -V)
+count=${#sorted[@]}
+<span class="k">if</span> (( count &lt;= keep )); <span class="k">then</span>
+  echo <span class="s">"nothing to delete: $count releases, keeping $keep"</span>
+  <span class="k">exit</span> 0
+<span class="k">fi</span>
+
+<span class="k">for</span> r <span class="k">in</span> <span class="s">"${sorted[@]:0:count-keep}"</span>; <span class="k">do</span>                 <span class="c"># all but the newest $keep</span>
+  <span class="k">if</span> [[ $r == <span class="s">"$live"</span> ]]; <span class="k">then</span>
+    echo <span class="s">"skipping $r: it's the live release"</span> &gt;&amp;2
+  <span class="k">elif</span> (( dry_run )); <span class="k">then</span>
+    echo <span class="s">"would delete $r"</span>
+  <span class="k">else</span>
+    rm -rf -- <span class="s">"$r"</span>
+    echo <span class="s">"deleted $r"</span>
+  <span class="k">fi</span>
+<span class="k">done</span></code></pre>
+  <code>sort -V</code> sorts version numbers properly (2026.10.2 after 2026.9.x); <code>"${sorted[@]:0:count-keep}"</code> is the array without its newest <code>keep</code> elements. And ShellCheck has nothing to say (together with step 7's script):
+<pre><code>shellcheck cleanup-releases.sh tmpdemo.sh; echo "exit status: $?"</code></pre>
+<pre><code>exit status: 0</code></pre></li>
+  <li><strong>Releases to clean</strong>: eight of them, with <code>current</code> rolled back to an old one, as after a bad deploy:
+<pre><code>mkdir -p opt/stagedoor/releases; cd opt/stagedoor/releases
+for v in 2026.03.1 2026.04.2 2026.05.1 2026.06.3 2026.08.1 2026.09.2 2026.10.1 2026.10.2; do mkdir -p $v; done
+cd ..; ln -sfn releases/2026.05.1 current; ls releases; readlink current; cd ~/lab17</code></pre>
+<pre><code>2026.03.1
+2026.04.2
+2026.05.1
+2026.06.3
+2026.08.1
+2026.09.2
+2026.10.1
+2026.10.2
+releases/2026.05.1</code></pre></li>
+  <li><strong>Run it: missing input, dry run, real run, re-run.</strong>
+<pre><code>env -u RELEASES_DIR ./cleanup-releases.sh; echo "exit status: $?"</code></pre>
+<pre><code>./cleanup-releases.sh: line 5: RELEASES_DIR: RELEASES_DIR must be set, e.g. /opt/stagedoor/releases
+exit status: 1</code></pre>
+<pre><code>RELEASES_DIR=$HOME/lab17/opt/stagedoor/releases DRY_RUN=1 ./cleanup-releases.sh</code></pre>
+<pre><code>would delete 2026.03.1
+would delete 2026.04.2
+skipping 2026.05.1: it's the live release</code></pre>
+<pre><code>RELEASES_DIR=$HOME/lab17/opt/stagedoor/releases ./cleanup-releases.sh; ls opt/stagedoor/releases
+RELEASES_DIR=$HOME/lab17/opt/stagedoor/releases ./cleanup-releases.sh</code></pre>
+<pre><code>deleted 2026.03.1
+deleted 2026.04.2
+skipping 2026.05.1: it's the live release
+2026.05.1
+2026.06.3
+2026.08.1
+2026.09.2
+2026.10.1
+2026.10.2
+skipping 2026.05.1: it's the live release</code></pre>
+  Without its input it refuses, with a message, and exits 1. The dry run says exactly what it will do. The real run deletes two old releases and spares the live one even though it's old; the second run changes nothing. And pointed at the wrong directory by mistake:
+<pre><code>RELEASES_DIR=$HOME/lab17/var-lib-stagedoor ./cleanup-releases.sh</code></pre>
+<pre><code>no releases found in /home/tiago/lab17/var-lib-stagedoor</code></pre>
+  No names like releases, so nothing is touched. (Testing that case found a bug in this chapter's first draft of the script: with no matches, <code>printf</code> printed one empty line, which was counted as a release. The early exit fixes it, and is the kind of thing only a test with odd inputs finds.)</li>
+  <li><strong>A trap that cleans up.</strong>
+<p class="code-title"><span>tmpdemo.sh</span><span>bash</span></p>
+<pre><code>#!/usr/bin/env bash
+<span class="c"># tmpdemo.sh · a temporary directory that is removed however the script ends</span>
+<span class="k">set</span> -euo pipefail
+
+work=$(mktemp -d)
+<span class="k">trap</span> <span class="s">'rm -rf -- "$work"; echo "cleaned up $work"'</span> EXIT
+
+echo <span class="s">"working in $work"</span>
+cp /etc/os-release <span class="s">"$work/"</span>
+false                                    <span class="c"># a command fails: set -e ends the script here</span>
+echo <span class="s">"never printed"</span></code></pre>
+<pre><code>./tmpdemo.sh; echo "exit status: $?"</code></pre>
+<pre><code>working in /tmp/tmp.Mnf9Guk5gM
+cleaned up /tmp/tmp.Mnf9Guk5gM
+exit status: 1</code></pre>
+  <code>false</code> failed, <code>set -e</code> ended the script, and the <code>EXIT</code> trap still removed the temporary directory (your name will differ).</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Add a lock with <code>flock</code> so two copies can't run at once, and test it by starting one with <code>sleep 30</code> added. (2) Run <code>bash -x cleanup-releases.sh</code> (with the variables) and read every command it ran. (3) Rewrite <code>cleanup-releases.sh</code> in Python with <code>pathlib</code> and compare the length and the error handling.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: 03:15 to 07:40</p>
+  <p>Posters vanish from venue pages overnight, and the first venue's email arrives at 07:10. <code>door-3</code> still has every upload: the five-minute <code>rsync -a</code> from <code>door-2</code> (<a href="#ch4">Chapter 4</a>) doesn't delete on the receiving side, and the clean-up on <code>door-3</code> hadn't run yet because its timer has a random delay. Rafaela copies the uploads back to <code>door-2</code> by 07:40; the exports are regenerated from the database. Nothing is lost, by luck rather than design: Stagedoor's backups covered the database, not the uploads, which is the first thing fixed (a nightly copy to Atlantica's object storage).</p>
+  <p>The clean-up timer runs the new script, and the team adopts four rules for every script on the servers: strict mode and <code>${VAR:?}</code> for inputs; a dry run for anything that deletes; ShellCheck in the operations repository's CI, which blocks a merge on any warning; and a failed-unit alert, so a script that fails gets noticed. Tiago fixes the unit file's typo too, and adds a comment above the line.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s17-10"><span class="n">17.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>No <code>set -e</code></td><td>A failed step is followed by the next one, in the wrong state.</td><td><code>set -euo pipefail</code> at the top.</td></tr>
+      <tr><td>Unquoted variables in <code>cd</code>, <code>rm</code>, <code>cp</code></td><td>Empty values vanish; spaces split names.</td><td><code>"$var"</code>, and <code>--</code> before names.</td></tr>
+      <tr><td>Required inputs without a check</td><td>An empty variable silently changes what the script does.</td><td><code>${VAR:?message}</code>.</td></tr>
+      <tr><td>Parsing <code>ls</code></td><td>Breaks on unusual names; matches more than you meant.</td><td>Globs with <code>nullglob</code>, or <code>find -print0</code>.</td></tr>
+      <tr><td>Fixed temporary file names</td><td>Races and symlink attacks in <code>/tmp</code>; leftovers.</td><td><code>mktemp</code> and a <code>trap … EXIT</code>.</td></tr>
+      <tr><td>“done” and exit 0 regardless</td><td>Failures look like success to systemd and to people.</td><td>Exit non-zero on failure; messages to stderr.</td></tr>
+      <tr><td>Deleting without a dry run or a name check</td><td>One wrong input deletes the wrong things.</td><td><code>DRY_RUN=1</code>, and only delete names you expect.</td></tr>
+      <tr><td>Growing a script to 400 lines</td><td>Unreadable and fragile; JSON and retries in bash.</td><td>Python, with <code>subprocess</code> for the commands.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum17">
+  <h2 class="sec" id="sum17"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Shell scripts carry on after errors by default; that's how a failed <code>cd</code> becomes a deleted directory.</li>
+    <li><code>set -euo pipefail</code> stops at failures, unset variables and failed pipelines; <code>${VAR:?}</code> catches empty required inputs. Know where <code>-e</code> doesn't apply.</li>
+    <li>Quote every variable, use arrays for lists, globs instead of <code>ls</code>, and <code>--</code> before file names.</li>
+    <li>Validate inputs first, log to stderr, exit non-zero on failure. Use <code>mktemp</code> and <code>trap … EXIT</code>, locks for jobs that mustn't overlap, dry runs for anything destructive, and make scripts idempotent.</li>
+    <li>Run <strong>ShellCheck</strong> on every script, in CI too. Move to Python when a script needs data structures, JSON, HTTP or careful error handling.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Strict mode</dt><dd>The bash settings <code>set -euo pipefail</code>: exit on errors, on unset variables and on failures anywhere in a pipeline.</dd>
+    <dt>trap</dt><dd>A bash command that runs given code when the script receives a signal or exits.</dd>
+    <dt>mktemp</dt><dd>A command that safely creates a uniquely named temporary file or directory.</dd>
+    <dt>Idempotent</dt><dd>Safe to run more than once: later runs leave the system in the same state as the first.</dd>
+    <dt>Dry run</dt><dd>A mode in which a script reports what it would change without changing anything.</dd>
+    <dt>ShellCheck</dt><dd>A static analysis tool that finds bugs and risky patterns in shell scripts.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>What does each of <code>-e</code>, <code>-u</code> and <code>-o pipefail</code> do? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p><code>-e</code>: exit when a command fails (outside tests such as <code>if</code>). <code>-u</code>: treat use of an unset variable as an error. <code>-o pipefail</code>: a pipeline's status is that of the last command that failed, not only of the last command.</p></details>
+    </li>
+    <li>
+      <p>Rewrite <code>cp $SRC/*.conf $DEST</code> so it's safe with empty variables, names with spaces, and no matching files. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>src=${SRC:?SRC must be set}; dest=${DEST:?DEST must be set}; shopt -s nullglob; files=( "$src"/*.conf ); (( ${#files[@]} )) || { echo "no .conf files in $src" &gt;&amp;2; exit 1; }; cp -- "${files[@]}" "$dest"/</code>.</p></details>
+    </li>
+    <li>
+      <p>Explain why <code>local result=$(curl -sf "$url")</code> doesn't stop a script under <code>set -e</code> when curl fails. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The exit status of that line is <code>local</code>'s, which succeeded in declaring the variable; curl's failure is lost. Write <code>local result; result=$(curl -sf "$url")</code>, so the assignment's status is curl's and <code>-e</code> sees it.</p></details>
+    </li>
+    <li>
+      <p>A backup script works when you run it, but from its timer it leaves files called <code>/tmp/backup.tmp</code> behind and sometimes produces truncated archives. What would you look for? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p>Overlapping runs (a manual run and the timer, both writing the same fixed temporary file: use <code>mktemp</code> and a <code>flock</code> lock); no <code>trap</code> to remove temporary files on failure; and a failure in the middle of a pipeline that's hidden without <code>pipefail</code> (for example <code>pg_dump | gzip &gt; file</code> where <code>pg_dump</code> fails and <code>gzip</code> happily writes a short file). Also the timer's different environment: <code>PATH</code>, working directory, user (<a href="#ch6">Chapter 6</a>).</p></details>
+    </li>
+    <li>
+      <p>Design the safety features for a script that deletes old database dumps from a backup directory. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Strict mode; the directory as a required input checked with <code>${…:?}</code> and <code>[[ -d ]]</code>; only names matching the dump pattern (<code>stagedoor-YYYY-MM-DD.sql.gz</code>) are candidates; keep at least N newest whatever their age, and never delete if fewer than N exist; a dry-run mode; a lock; output listing what was deleted; exit non-zero on any failure; ShellCheck clean; run by a timer as a user that can only write to that directory.</p></details>
+    </li>
+    <li>
+      <p>Compare writing Stagedoor's payouts report in bash and in Python. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>The report queries the database, totals money per venue, handles dates and writes a CSV for the bank. In bash, that means <code>psql</code> output parsing, arithmetic on currency (bash has only integers) and fragile CSV quoting. Python has proper decimals, the <code>csv</code> module, database drivers, exceptions and tests. Bash is fine for the wrapper that runs it; the report itself belongs in Python.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li><a href="https://www.shellcheck.net/wiki/">The ShellCheck wiki</a>: one page per check, with the reason and the fix.</li>
+    <li><a href="https://mywiki.wooledge.org/BashFAQ/105">BashFAQ 105</a>: why <code>set -e</code> doesn't do what you expect.</li>
+    <li>Google's <a href="https://google.github.io/styleguide/shellguide.html">Shell Style Guide</a>, including when not to use shell.</li>
+    <li><code>man bash</code> (“SHELL BUILTIN COMMANDS”: <code>set</code>, <code>trap</code>), <code>man mktemp</code>, <code>man flock</code>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="#ch18">18 · Hardening a server</a></div>
+</nav>

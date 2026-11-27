@@ -1,0 +1,422 @@
+<!-- Handbook 3 · Linux for Cloud Engineers · Chapter 5. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part II · Processes and services</p>
+  <p class="chno">5</p>
+  <h1>Processes and signals</h1>
+  <p class="promise">Everything that runs on a server is a process: started by another process, identified by a number, and stopped by a signal. This chapter shows how processes are born and how they die, how to read <code>ps</code> and <code>top</code> without guessing, and how to stop a server so that the requests it's handling finish instead of vanishing.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain how <code>fork</code>, <code>exec</code>, <code>exit</code> and <code>wait</code> create and end processes.</li>
+      <li>Read a process tree and the state column of <code>ps</code>, including zombies.</li>
+      <li>Choose the right signal (TERM, KILL, HUP, INT) and predict what it does.</li>
+      <li>Write a server that shuts down gracefully, and prove the difference with a test.</li>
+      <li>Read exit statuses such as 137 and 143.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li><a href="#ch2">Chapter 2</a>: exit codes, background jobs with <code>&amp;</code>.</li>
+      <li>A Linux terminal with Python 3 and <code>curl</code> (<a href="#appC">Appendix C</a>); two terminal windows help.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, any Linux terminal, free</dd>
+      <dt>Main distribution</dt><dd>any; the tools are the same everywhere</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>On Thursday 26 February 2026 at 15:10, Leonor deploys a small fix to <code>door-2</code> and <code>door-3</code>. Stagedoor's deploy script has always ended with the same two lines: <code>pkill -9 -f uvicorn</code>, then start the app again with <code>nohup</code>. It takes a second, and nobody has ever complained.</p>
+  <p>This time, a small venue's tickets are on sale. On Friday, three fans write in: their cards were charged at 15:10, and they have no tickets. The payment provider confirmed each payment, but the app process that was waiting for that confirmation no longer existed when it arrived, so no order was saved. Joana refunds them and apologises. Rafaela wants to know exactly what <code>-9</code> did to those three requests, and Tiago, who has used <code>kill -9</code> for years “because it always works”, is about to find out.</p>
+</aside>
+
+<!-- ======================================================== 5.1 -->
+<h2 class="sec" id="s5-1"><span class="n">5.1</span>What a process is</h2>
+
+<p class="lead">A <span class="term">process</span> is a running program: the program's code plus everything the kernel tracks while it runs. A program is a file on disk; you can run it ten times at once and get ten processes.</p>
+
+<p>For each process, the kernel keeps:</p>
+<ul>
+  <li>a <span class="term">PID</span> (process ID), unique while the process exists, and the <strong>PPID</strong>, its parent's PID;</li>
+  <li>the user and groups it runs as (<a href="#ch4">Chapter 4</a>), its current directory, its environment variables and its umask;</li>
+  <li>its memory (<a href="#ch10">Chapter 10</a>), its open file descriptors (<a href="#ch2">Chapter 2</a>, <a href="#ch12">Chapter 12</a>), and its resource limits;</li>
+  <li>its <strong>state</strong> (running, sleeping, stopped…) and how much CPU time it has used.</li>
+</ul>
+<p>All of it is visible under <code>/proc/&lt;pid&gt;/</code>: <code>status</code> for a readable summary, <code>cmdline</code> for the command, <code>environ</code> for the environment, <code>fd/</code> for open files, <code>limits</code> for limits. <code>/proc/self</code> is always the process reading it.</p>
+
+<!-- ======================================================== 5.2 -->
+<h2 class="sec" id="s5-2"><span class="n">5.2</span>How processes are born, and how they end</h2>
+
+<p>Linux creates processes in two steps, and the split explains a lot of behaviour you'll see:</p>
+
+<figure class="wide" id="fig5-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 260" role="img" aria-labelledby="fig5-1-t fig5-1-d">
+      <title id="fig5-1-t">The life of a process: fork, exec, exit, wait</title>
+      <desc id="fig5-1-d">A timeline. The shell, PID 2140, calls fork. The kernel creates a copy, PID 2187, with the same code, memory, open files, user and environment. The copy calls exec to replace its program with /usr/bin/python3; the PID, open files, user and environment stay. The child runs, then calls exit with a status. Until the parent calls wait, the child remains a zombie: only its exit status is kept. When the parent calls wait, it receives the status, which the shell shows as $?, and the zombie disappears. If the parent dies first, the child is adopted by PID 1, which waits for it.</desc>
+      <defs><marker id="c5ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <text class="t-label" x="10" y="40">parent</text>
+      <text class="t-mono" x="10" y="58">bash 2140</text>
+      <path class="wire" d="M100 46 H740"/>
+      <rect class="node" x="120" y="26" width="90" height="40" rx="4"/><text class="t-title" x="165" y="51" text-anchor="middle">fork()</text>
+      <rect class="node" x="620" y="26" width="110" height="40" rx="4"/><text class="t-title" x="675" y="51" text-anchor="middle">wait() → $?</text>
+      <text class="t-small" x="300" y="40">the shell waits (or carries on, with &amp;)</text>
+      <text class="t-label" x="10" y="132">child</text>
+      <text class="t-mono" x="10" y="150">2187</text>
+      <path class="wire" d="M165 66 V112" marker-end="url(#c5ah)"/>
+      <rect class="priv" x="120" y="116" width="120" height="44" rx="4"/><text class="t-small" x="180" y="134" text-anchor="middle">copy of bash:</text><text class="t-small" x="180" y="150" text-anchor="middle">same files, user, env</text>
+      <path class="wire" d="M240 138 H262" marker-end="url(#c5ah)"/>
+      <rect class="node-accent" x="266" y="116" width="120" height="44" rx="4"/><text class="t-title on-accent" x="326" y="134" text-anchor="middle">exec()</text><text class="t-small on-accent" x="326" y="150" text-anchor="middle">now python3</text>
+      <path class="wire" d="M386 138 H408" marker-end="url(#c5ah)"/>
+      <rect class="node" x="412" y="116" width="90" height="44" rx="4"/><text class="t-title" x="457" y="143" text-anchor="middle">runs</text>
+      <path class="wire" d="M502 138 H524" marker-end="url(#c5ah)"/>
+      <rect class="node" x="528" y="116" width="76" height="44" rx="4"/><text class="t-title" x="566" y="143" text-anchor="middle">exit(n)</text>
+      <path class="wire-dash" d="M604 138 H675 V70" marker-end="url(#c5ah)"/>
+      <text class="t-small t-warn" x="612" y="156">zombie until</text><text class="t-small t-warn" x="612" y="172">the parent waits</text>
+      <rect class="pub" x="10" y="196" width="740" height="52" rx="6"/>
+      <text class="t-small" x="26" y="218">exec keeps the PID, the open files (so redirections and pipes survive), the user and the environment. Only the program changes.</text>
+      <text class="t-small" x="26" y="238">If the parent dies first, the child is re-parented to PID 1 (systemd), which waits for it so no zombie is left behind.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 5.1</b> <code>fork</code> copies, <code>exec</code> replaces, <code>exit</code> ends, <code>wait</code> collects. A shell runs every command this way, which is how redirections set up in the copy carry over into the new program.</figcaption>
+</figure>
+
+<ol class="steps">
+  <li><strong><code>fork()</code></strong> makes an almost exact copy of the calling process, with a new PID. The copy has the same memory (copied lazily, only when either side writes), the same open files, user, environment and current directory.</li>
+  <li><strong><code>exec()</code></strong> replaces the program running in a process with another one. The PID, open files, user and environment stay.</li>
+  <li><strong><code>exit(status)</code></strong> ends a process. Its memory and files are released at once, but the kernel keeps a tiny record, the exit status, for the parent.</li>
+  <li><strong><code>wait()</code></strong> is how the parent collects that status. Until it does, the finished child is a <span class="term">zombie</span>: not running, holding no memory, but still listed, with state <code>Z</code>.</li>
+</ol>
+
+<p>Zombies themselves are harmless; a parent that never waits for its children is a bug, and thousands of zombies can exhaust the PID space. If a parent dies first, its children become <strong>orphans</strong> and are adopted by PID 1, whose job includes waiting for them. That's one reason PID 1 is special, and why what runs as PID 1 inside a container matters (<a href="#ch19">Chapter 19</a>).</p>
+
+<!-- ======================================================== 5.3 -->
+<h2 class="sec" id="s5-3"><span class="n">5.3</span>Seeing processes</h2>
+
+<p>Every process except PID 1 has a parent, so all processes form a tree with PID 1 at the root. <code>ps</code> shows a snapshot; <code>top</code> (or the friendlier <code>htop</code>) a live view:</p>
+
+<pre><code>ps -ef --forest                          <span class="c"># every process, as a tree, with its full command</span>
+ps -o pid,ppid,user,stat,etime,cmd -C nginx   <span class="c"># chosen columns, for one program</span>
+pgrep -a uvicorn                         <span class="c"># PIDs and commands matching a name</span>
+pstree -p                                <span class="c"># the tree, compactly</span>
+top                                      <span class="c"># live; press P (CPU), M (memory), q to quit</span></code></pre>
+
+<p>The <code>STAT</code> column of <code>ps</code> (<code>S</code> in <code>top</code>) is the process's state. The first letter matters most:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 5.1 · Process states</caption>
+    <thead><tr><th>State</th><th>Means</th><th>Typical cause</th></tr></thead>
+    <tbody>
+      <tr><td><code>R</code></td><td>running, or ready to run and waiting for a CPU</td><td>doing work (<a href="#ch9">Chapter 9</a>)</td></tr>
+      <tr><td><code>S</code></td><td>sleeping, interruptibly: waiting for something</td><td>a network request, a timer, input; most processes, most of the time</td></tr>
+      <tr><td><code>D</code></td><td>sleeping, uninterruptibly: waiting for the kernel, usually disk I/O</td><td>a slow or stuck disk or network filesystem; can't be killed until the I/O finishes</td></tr>
+      <tr><td><code>T</code></td><td>stopped</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd>, or a debugger</td></tr>
+      <tr><td><code>Z</code></td><td>zombie: finished, waiting for its parent to collect the status</td><td>a parent that doesn't call <code>wait</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Extra letters follow: <code>s</code> a session leader, <code>l</code> multithreaded, <code>+</code> in the terminal's foreground, <code>&lt;</code> and <code>N</code> high and low priority (<a href="#ch9">Chapter 9</a>).</p>
+
+<!-- ======================================================== 5.4 -->
+<h2 class="sec" id="s5-4"><span class="n">5.4</span>Signals</h2>
+
+<p>A <span class="term">signal</span> is a small numbered message the kernel delivers to a process: “stop”, “hang up”, “your child died”. A process can <strong>catch</strong> most signals and run its own code (a handler), <strong>ignore</strong> them, or leave the <strong>default action</strong>, which for most signals is to terminate. Two signals can't be caught or ignored: <code>SIGKILL</code> and <code>SIGSTOP</code>. The kernel carries them out itself.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 5.2 · The signals you'll send and receive</caption>
+    <thead><tr><th>Signal</th><th>No.</th><th>Default</th><th>Used for</th></tr></thead>
+    <tbody>
+      <tr><td><code>SIGTERM</code></td><td>15</td><td>terminate</td><td>“please shut down”. The default of <code>kill</code>, and what systemd and Docker send first. Well-written servers catch it and shut down gracefully.</td></tr>
+      <tr><td><code>SIGINT</code></td><td>2</td><td>terminate</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd> in a terminal; Python raises <code>KeyboardInterrupt</code>.</td></tr>
+      <tr><td><code>SIGHUP</code></td><td>1</td><td>terminate</td><td>originally “the terminal hung up”; by convention, daemons such as nginx catch it to <strong>reload configuration</strong>.</td></tr>
+      <tr><td><code>SIGKILL</code></td><td>9</td><td>terminate, can't be caught</td><td>the last resort: the process gets no chance to finish anything.</td></tr>
+      <tr><td><code>SIGQUIT</code></td><td>3</td><td>terminate and dump core</td><td><kbd>Ctrl</kbd>+<kbd>\</kbd>; nginx uses it for a graceful stop.</td></tr>
+      <tr><td><code>SIGUSR1</code>, <code>SIGUSR2</code></td><td>10, 12</td><td>terminate</td><td>defined by each program: nginx reopens its log files on <code>USR1</code> (<a href="#ch7">Chapter 7</a>).</td></tr>
+      <tr><td><code>SIGCHLD</code></td><td>17</td><td>ignore</td><td>sent to a parent when a child exits, so it can <code>wait</code>.</td></tr>
+      <tr><td><code>SIGPIPE</code></td><td>13</td><td>terminate</td><td>writing to a pipe nobody reads: why <code>grep | head</code> stops <code>grep</code> (<a href="#ch2">Chapter 2</a>).</td></tr>
+      <tr><td><code>SIGSTOP</code>, <code>SIGCONT</code></td><td>19, 18</td><td>stop, continue</td><td>pause and resume; <kbd>Ctrl</kbd>+<kbd>Z</kbd> sends the catchable <code>SIGTSTP</code>.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Send signals with <code>kill -s TERM 2187</code> (or <code>kill -TERM</code>, or <code>kill -15</code>), to every process with a name with <code>pkill</code>, and list them all with <code>kill -l</code>. Prefer names to numbers: they're the same on every machine and say what you mean. And be careful with <code>pkill -f</code>: it matches the whole command line, so <code>pkill -f uvicorn</code> also matches an editor with a file called <code>uvicorn.conf</code> open.</p>
+
+<p>When a process dies from a signal, the shell reports exit status <strong>128 + the signal number</strong> (<a href="#ch2">Chapter 2</a>): <code>143</code> is <code>SIGTERM</code>, <code>137</code> is <code>SIGKILL</code>, <code>130</code> is <code>SIGINT</code>. When a container or service exits with 137, ask who sent <code>SIGKILL</code>: a person, a stop timeout, or the kernel's out-of-memory killer (<a href="#ch10">Chapter 10</a>).</p>
+
+<aside class="side"><b>nohup and hangups</b>When you log out, your terminal's processes get <code>SIGHUP</code> and, by default, die. <code>nohup cmd &amp;</code> makes <code>cmd</code> ignore it, which is why Stagedoor's app survived logouts. It doesn't make it a service: nothing restarts it, and it doesn't come back after a reboot (<a href="#ch6">Chapter 6</a>).</aside>
+
+<!-- ======================================================== 5.5 -->
+<h2 class="sec" id="s5-5"><span class="n">5.5</span>Graceful shutdown</h2>
+
+<p>A server stopping is a normal event: every deploy, every reboot, every scale-down stops one. What matters is what happens to the work in progress. Compare the two ways Stagedoor's app can stop:</p>
+
+<figure class="wide" id="fig5-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig5-2-t fig5-2-d">
+      <title id="fig5-2-t">Abrupt and graceful shutdown of a server with a checkout in progress</title>
+      <desc id="fig5-2-d">Two timelines. Top, abrupt: a checkout request arrives and the app calls the payment provider; SIGKILL arrives one second later; the process vanishes at once; the open connection is closed by the kernel, the fan sees an error, and the payment confirmation arrives two seconds later with nobody to receive it, so the card is charged with no order. Bottom, graceful: the same request; SIGTERM arrives; the app stops accepting new connections, so the load balancer or nginx sends new requests elsewhere; the checkout finishes when the payment provider answers; the order is saved and the response sent; then the process exits with status 0. A supervisor waits for a deadline, for example 30 seconds, and only then sends SIGKILL.</desc>
+      <defs><marker id="c5ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <text class="t-title" x="10" y="24">Abrupt: SIGKILL</text>
+      <path class="wire" d="M10 60 H740" marker-end="url(#c5ah2)"/>
+      <rect class="node" x="30" y="44" width="150" height="32" rx="4"/><text class="t-small" x="105" y="64" text-anchor="middle">checkout starts</text>
+      <rect class="node" x="200" y="44" width="150" height="32" rx="4"/><text class="t-small t-warn" x="275" y="64" text-anchor="middle">SIGKILL: gone at once</text>
+      <rect class="node" x="370" y="44" width="170" height="32" rx="4"/><text class="t-small" x="455" y="64" text-anchor="middle">fan: connection closed</text>
+      <rect class="node" x="560" y="44" width="170" height="32" rx="4"/><text class="t-small t-warn" x="645" y="64" text-anchor="middle">payment OK, no order</text>
+      <text class="t-title" x="10" y="122">Graceful: SIGTERM, then a deadline</text>
+      <path class="wire" d="M10 158 H740" marker-end="url(#c5ah2)"/>
+      <rect class="node" x="30" y="142" width="130" height="32" rx="4"/><text class="t-small" x="95" y="162" text-anchor="middle">checkout starts</text>
+      <rect class="node-accent" x="176" y="142" width="170" height="32" rx="4"/><text class="t-small on-accent" x="261" y="162" text-anchor="middle">SIGTERM: stop accepting</text>
+      <rect class="node" x="362" y="142" width="170" height="32" rx="4"/><text class="t-small" x="447" y="162" text-anchor="middle">finish in-flight work</text>
+      <rect class="pub" x="548" y="142" width="182" height="32" rx="4"/><text class="t-small" x="639" y="162" text-anchor="middle">order saved; exit 0</text>
+      <path class="wire-dash" d="M261 180 V206 H700 V184" marker-end="url(#c5ah2)"/>
+      <text class="t-small" x="300" y="224">deadline (e.g. 30 s): only if it hasn't exited by then, send SIGKILL</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 5.2</b> <code>SIGKILL</code> ends the process mid-sentence. <code>SIGTERM</code> lets a well-written server finish the sentence, but only if it handles the signal, and only if whoever sends it waits.</figcaption>
+</figure>
+
+<p>A <span class="term">graceful shutdown</span> has four parts, and the lab builds each one:</p>
+<ol class="steps">
+  <li><strong>Catch <code>SIGTERM</code>.</strong> If the program doesn't, the default action kills it as abruptly as <code>SIGKILL</code> would. Many frameworks do this for you (uvicorn, gunicorn, nginx, PostgreSQL); check, don't assume.</li>
+  <li><strong>Stop taking new work</strong>: close the listening socket, or fail the health check, so new requests go to another instance.</li>
+  <li><strong>Finish the work in progress</strong>, within a time limit.</li>
+  <li><strong>Exit with status 0.</strong> Whoever sent <code>SIGTERM</code> waits for that, up to a deadline, and only then sends <code>SIGKILL</code>.</li>
+</ol>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Send <code>SIGTERM</code>, wait, and send <code>SIGKILL</code> only when the deadline passes. <code>kill -9</code> first is not “stopping a server”; it's crashing it on purpose.</p>
+</div>
+
+<p>On a server you'll rarely send these signals by hand. systemd does exactly this sequence on <code>systemctl stop</code> (<code>KillSignal=</code> and <code>TimeoutStopSec=</code>, <a href="#ch6">Chapter 6</a>), Docker on <code>docker stop</code>, and Kubernetes when it removes a pod. Your job is to make sure the program handles <code>SIGTERM</code> well and that the deadline is longer than your slowest legitimate request.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: signals don't pass through shell wrappers</p>
+  <p>If a service is started by a shell script (<code>start.sh</code> that runs <code>python3 app.py</code>), the signal goes to the shell, which by default doesn't forward it, and the app never hears it. End such scripts with <code>exec python3 app.py</code>, so the app replaces the shell (Figure 5.1) and receives signals directly. The same trap catches container entrypoints (<a href="#ch19">Chapter 19</a>).</p>
+</div>
+
+<!-- ======================================================== 5.6 -->
+<h2 class="sec" id="s5-6"><span class="n">5.6</span>Jobs, foreground and background</h2>
+
+<p>In an interactive shell, <code>cmd &amp;</code> starts a command in the <strong>background</strong>: the shell doesn't wait, and <code>$!</code> holds its PID. <code>jobs</code> lists the shell's background jobs; <kbd>Ctrl</kbd>+<kbd>Z</kbd> stops the foreground one; <code>bg</code> resumes it in the background, <code>fg</code> brings it back. These are conveniences for a terminal session, and they die with it (or survive with <code>nohup</code>). For anything that must keep running, use a service; for long interactive work over SSH, use <code>tmux</code> so a dropped connection doesn't take your session with it.</p>
+
+<!-- ======================================================== 5.7 -->
+<h2 class="sec" id="s5-7"><span class="n">5.7</span>Across distributions</h2>
+
+<p>Processes, signals and <code>/proc</code> are the kernel's, so they're identical on every distribution. The tools come from the <code>procps</code> package everywhere (<code>ps</code>, <code>top</code>, <code>pgrep</code>, <code>pkill</code>, <code>free</code>), with <code>pstree</code> from <code>psmisc</code>. Two differences appear on small or unusual systems:</p>
+
+<div class="box box-provider">
+  <p class="label">On minimal images and containers</p>
+  <p>Container base images often leave out <code>ps</code> entirely (<code>apt install procps</code> or <code>dnf install procps-ng</code>), and Alpine-based images use BusyBox versions with fewer options. You can always fall back to <code>/proc</code>: <code>ls /proc | grep -E '^[0-9]+$'</code> lists PIDs, and <code>cat /proc/&lt;pid&gt;/cmdline | tr '\0' ' '</code> shows a command.</p>
+</div>
+
+<!-- ======================================================== 5.8 -->
+<h2 class="sec" id="s5-8"><span class="n">5.8</span>Lab: stop a server without losing a checkout</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 5 · Three fans, three signals</p>
+  <p><strong>You'll</strong> run a tiny checkout server, send it three slow requests, and stop it mid-request with <code>SIGTERM</code> and <code>SIGKILL</code>; then add a graceful handler and repeat. Finally you'll make a zombie and watch who cleans it up. <strong>You need</strong> a Linux terminal (two windows are easiest), Python 3 and <code>curl</code>. <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> delete the lab directory. PIDs in the outputs will differ on your machine.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Save the server</strong> as <code>checkout.py</code> in a new directory <code>~/lab5</code>. Each request sleeps 3 seconds, standing in for a payment provider; <code>--graceful</code> switches on a <code>SIGTERM</code> handler.
+<p class="code-title"><span>checkout.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># checkout.py · a tiny web server whose checkout takes 3 seconds, like a call to a payment provider</span>
+<span class="k">import</span> http.server, os, signal, sys, threading, time
+
+<span class="k">class</span> Checkout(http.server.BaseHTTPRequestHandler):
+    <span class="k">def</span> do_GET(self):
+        time.sleep(3)                                   <span class="c"># waiting for the payment provider</span>
+        body = f<span class="s">"order confirmed by pid {os.getpid()}\n"</span>.encode()
+        self.send_response(200)
+        self.send_header(<span class="s">"Content-Length"</span>, str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    <span class="k">def</span> log_message(self, *args):                       <span class="c"># keep the terminal quiet</span>
+        <span class="k">pass</span>
+
+server = http.server.ThreadingHTTPServer((<span class="s">"127.0.0.1"</span>, 8080), Checkout)
+server.daemon_threads = <span class="k">False</span>                           <span class="c"># at shutdown, wait for requests in progress</span>
+
+<span class="k">def</span> graceful(signum, frame):
+    print(f<span class="s">"got {signal.Signals(signum).name}: no new requests, finishing the ones in progress"</span>, flush=<span class="k">True</span>)
+    threading.Thread(target=server.shutdown).start()    <span class="c"># stop the accept loop</span>
+
+<span class="k">if</span> <span class="s">"--graceful"</span> <span class="k">in</span> sys.argv:
+    signal.signal(signal.SIGTERM, graceful)
+print(f<span class="s">"pid {os.getpid()} listening on 127.0.0.1:8080"</span>, flush=<span class="k">True</span>)
+server.serve_forever()
+server.server_close()                                   <span class="c"># waits for the request threads</span>
+print(<span class="s">"all requests finished; exiting"</span>, flush=<span class="k">True</span>)</code></pre></li>
+  <li><strong>Save the fans</strong> as <code>fans.sh</code> and make it executable (<code>chmod +x fans.sh</code>). It starts three requests in the background, waits a second, and signals the server while they're in progress:
+<p class="code-title"><span>fans.sh</span><span>bash</span></p>
+<pre><code>#!/usr/bin/env bash
+<span class="c"># fans.sh SIGNAL · start three checkouts, then send SIGNAL to the server while they're in progress</span>
+pid=$(pgrep -f <span class="s">'^python3 checkout.py'</span>)
+<span class="k">for</span> fan <span class="k">in</span> 1 2 3; <span class="k">do</span>
+  ( curl -s -m 10 http://127.0.0.1:8080/checkout || echo <span class="s">"fan $fan: failed, curl exit status $?"</span> ) &amp;
+<span class="k">done</span>
+sleep 1
+echo <span class="s">"sending SIG$1 to pid $pid"</span>
+kill -s <span class="s">"$1"</span> <span class="s">"$pid"</span>
+wait</code></pre>
+  <code>pgrep -f '^python3 checkout.py'</code> finds the server by its command line; the <code>^</code> anchors the match at the start, so it can't match some other command that merely mentions the file.</li>
+  <li><strong>Stop it with <code>SIGTERM</code>, no handler.</strong> In window 1: <code>cd ~/lab5 &amp;&amp; python3 checkout.py</code>. In window 2: <code>cd ~/lab5 &amp;&amp; ./fans.sh TERM</code>.
+<pre><code>sending SIGTERM to pid 6658
+fan 2: failed, curl exit status 52
+fan 3: failed, curl exit status 52
+fan 1: failed, curl exit status 52</code></pre>
+  In window 1 the server printed only its first line and stopped. Run <code>echo $?</code> there: <code>143</code>, 128 + 15. The program didn't catch <code>SIGTERM</code>, so the default action terminated it mid-request, and the kernel closed all three connections (curl's status 52 means “empty reply from server”).</li>
+  <li><strong>Stop it with <code>SIGKILL</code>.</strong> Start the server again in window 1, then <code>./fans.sh KILL</code> in window 2:
+<pre><code>sending SIGKILL to pid 6675
+fan 1: failed, curl exit status 52
+fan 3: failed, curl exit status 52
+fan 2: failed, curl exit status 52</code></pre>
+  The same three failures, and <code>echo $?</code> in window 1 says <code>137</code>. For this program <code>TERM</code> and <code>KILL</code> did the same damage, because it had no handler: that's Stagedoor's deploy on 26 February.</li>
+  <li><strong>Now gracefully.</strong> In window 1: <code>python3 checkout.py --graceful</code>. In window 2: <code>./fans.sh TERM</code>. Window 2 shows:
+<pre><code>sending SIGTERM to pid 6692
+order confirmed by pid 6692
+order confirmed by pid 6692
+order confirmed by pid 6692</code></pre>
+  and window 1:
+<pre><code>pid 6692 listening on 127.0.0.1:8080
+got SIGTERM: no new requests, finishing the ones in progress
+all requests finished; exiting</code></pre>
+  All three checkouts completed, about two seconds after the signal, and <code>echo $?</code> says <code>0</code>. While the server was finishing, it had already stopped accepting: a fourth <code>curl http://127.0.0.1:8080/</code> sent a fraction of a second after the signal fails to connect (curl's exit status 7) instead of starting a checkout that might not finish.</li>
+  <li><strong>Break it on purpose: a deadline that's too short.</strong> Start <code>python3 checkout.py --graceful</code> again, and in window 2 send <code>SIGKILL</code> half a second after the <code>SIGTERM</code>:
+<pre><code>./fans.sh TERM &amp; sleep 1.5; pkill -KILL -f '^python3 checkout.py'</code></pre>
+<pre><code>sending SIGTERM to pid 6840
+fan 2: failed, curl exit status 52
+fan 1: failed, curl exit status 52
+fan 3: failed, curl exit status 52</code></pre>
+  Window 1 shows that the handler ran, and then nothing more:
+<pre><code>pid 6840 listening on 127.0.0.1:8080
+got SIGTERM: no new requests, finishing the ones in progress</code></pre>
+  Nobody waited for it. A stop timeout shorter than your slowest request turns a graceful shutdown back into a crash.</li>
+  <li><strong>Make a zombie.</strong> Save this as <code>zombie.py</code>:
+<p class="code-title"><span>zombie.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># zombie.py · a parent that never collects its child's exit status</span>
+<span class="k">import</span> os, time
+
+<span class="k">if</span> os.fork() == 0:      <span class="c"># fork() returns 0 in the child</span>
+    os._exit(0)         <span class="c"># the child exits at once</span>
+time.sleep(60)          <span class="c"># the parent sleeps and never calls os.wait()</span></code></pre>
+  Run it in the background and look at it, then kill the parent and look again:
+<pre><code>python3 zombie.py &amp;
+sleep 1; ps -o pid,ppid,stat,cmd -C python3
+kill $!
+sleep 0.5; ps -o pid,ppid,stat,cmd -C python3</code></pre>
+  On a normal Ubuntu server (PID 1 is systemd), the first <code>ps</code> shows the parent and its zombie child, <code>Z</code> and <code>&lt;defunct&gt;</code>:
+<pre><code>  PID  PPID STAT CMD
+ 6736  6735 S    python3 zombie.py
+ 6738  6736 Z    [python3] &lt;defunct&gt;</code></pre>
+  and the second shows nothing but the header: when the parent died, the zombie was handed to systemd, which collected its status at once.
+<pre><code>    PID    PPID STAT CMD</code></pre>
+  On the small VM where this book's labs were first tested, PID 1 isn't systemd (Lab 1), and the second <code>ps</code> said this instead:
+<pre><code>  PID  PPID STAT CMD
+ 6738     1 Z    [python3] &lt;defunct&gt;</code></pre>
+  The zombie was adopted by PID 1 (its PPID is now 1), and that PID 1 never calls <code>wait</code>, so the zombie stays until the machine restarts. That's exactly the problem a container whose PID 1 is an ordinary app has, and <a href="#ch19">Chapter 19</a> shows the fix.</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Add a <code>SIGHUP</code> handler that prints “reloading” and keeps running; send it with <code>kill -HUP</code>. (2) Read <code>/proc/&lt;pid&gt;/status</code> for the running server and find its state, its threads and its signal masks (<code>SigCgt</code> lists the signals it catches, as a bitmask). (3) Put the server behind a wrapper script <code>start.sh</code> that runs <code>python3 checkout.py --graceful</code> without <code>exec</code>, signal the script's PID, and watch the requests fail; then add <code>exec</code>.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: a deploy that waits</p>
+  <p>Tiago reproduces 26 February in the lab and adds the result to the incident note. uvicorn already handles <code>SIGTERM</code> gracefully; the deploy script never gave it the chance. The new script does three things on each server in turn, <code>door-2</code> first: it fails the app's health check, so Atlantica's load balancer stops sending new fans there; it sends <code>SIGTERM</code> and waits up to 30 seconds (checkout's slowest normal request takes about 8); and only if the app is still running after that does it send <code>SIGKILL</code>, and say so loudly. Then it starts the new version, waits for the health check to pass, and moves on to <code>door-3</code>.</p>
+  <p>Rafaela points out that this is exactly what systemd does on <code>systemctl restart</code>, with less code to get wrong. Turning the app into a service is the next chapter, and the deploy script shrinks accordingly.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s5-9"><span class="n">5.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td><code>kill -9</code> as the first resort</td><td>Requests in progress fail; files and transactions are left half-written.</td><td><code>SIGTERM</code>, wait, then <code>SIGKILL</code> after a deadline.</td></tr>
+      <tr><td>A server that doesn't handle <code>SIGTERM</code></td><td><code>SIGTERM</code> is as abrupt as <code>SIGKILL</code>.</td><td>Handle it, or use a framework that does; test it as in the lab.</td></tr>
+      <tr><td>A shell wrapper without <code>exec</code></td><td>The signal reaches the shell; the app never hears it and is killed at the deadline.</td><td><code>exec</code> the app as the script's last line.</td></tr>
+      <tr><td><code>pkill -f name</code> with a loose pattern</td><td>Kills unrelated processes whose command line contains the word.</td><td>Use the PID, a precise anchored pattern, or the service manager.</td></tr>
+      <tr><td>Stop timeouts shorter than the slowest request</td><td>Graceful shutdown is cut off and becomes a crash.</td><td>Measure; set the deadline above the slowest legitimate request.</td></tr>
+      <tr><td>Running servers in a terminal with <code>nohup</code></td><td>No restart on crash, no start at boot, signals sent by hand.</td><td>A systemd service (<a href="#ch6">Chapter 6</a>).</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum5">
+  <h2 class="sec" id="sum5"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>A <strong>process</strong> is a running program with a PID, a parent, a user, open files and a state; <code>/proc/&lt;pid&gt;/</code> shows all of it.</li>
+    <li><code>fork</code> copies a process, <code>exec</code> replaces its program, <code>exit</code> ends it, and the parent's <code>wait</code> collects the status. Uncollected children are <strong>zombies</strong>; orphans are adopted by PID 1.</li>
+    <li>States: <code>R</code> running, <code>S</code> sleeping, <code>D</code> waiting on I/O and unkillable, <code>T</code> stopped, <code>Z</code> zombie.</li>
+    <li><strong>Signals</strong> are caught, ignored or take their default action. <code>SIGTERM</code> asks; <code>SIGKILL</code> can't be refused. Death by signal <em>n</em> gives exit status 128 + <em>n</em>.</li>
+    <li><strong>Graceful shutdown</strong>: catch <code>SIGTERM</code>, stop accepting, finish in-flight work, exit 0; whoever stops it waits for a deadline before <code>SIGKILL</code>.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Process</dt><dd>A running instance of a program, with its own PID, memory, open files and state.</dd>
+    <dt>PID</dt><dd>The number the kernel uses to identify a process; PID 1 is the first process, the init system.</dd>
+    <dt>fork and exec</dt><dd>The two steps that start a program: copy the current process, then replace the copy's program.</dd>
+    <dt>Zombie</dt><dd>A finished process whose exit status hasn't yet been collected by its parent.</dd>
+    <dt>Orphan</dt><dd>A process whose parent has exited; it is adopted by PID 1.</dd>
+    <dt>Signal</dt><dd>A numbered notification the kernel delivers to a process, such as <code>SIGTERM</code> or <code>SIGKILL</code>.</dd>
+    <dt>Signal handler</dt><dd>Code a program registers to run when it receives a particular signal.</dd>
+    <dt>Graceful shutdown</dt><dd>Stopping a server so it accepts no new work, finishes work in progress, and exits cleanly.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>A process shows state <code>D</code> and doesn't die after <code>kill -9</code>. Why? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p><code>D</code> is uninterruptible sleep: the process is inside the kernel waiting for I/O, usually a disk or a network filesystem. Signals, even <code>SIGKILL</code>, are delivered only when it returns from that wait. Find out what the I/O is stuck on (a failing disk, an unreachable NFS server); the process dies when the I/O completes or fails.</p></details>
+    </li>
+    <li>
+      <p>A container exits with status 137, and nobody ran <code>docker kill</code>. Give two likely explanations. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>137 = 128 + 9, death by <code>SIGKILL</code>. Either the kernel's out-of-memory killer killed it (<code>docker inspect</code> shows <code>OOMKilled: true</code>; <a href="#ch10">Chapter 10</a>), or it was asked to stop and didn't exit within the stop timeout, so the runtime sent <code>SIGKILL</code> (for example because it never handles <code>SIGTERM</code>, or its PID 1 is a shell that doesn't forward it).</p></details>
+    </li>
+    <li>
+      <p>Why does a redirection like <code>python3 app.py &gt; app.log</code> still apply after the shell <code>exec</code>s Python? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The shell forks, and in the child it opens <code>app.log</code> as file descriptor 1 before calling <code>exec</code>. <code>exec</code> replaces the program but keeps the process's open file descriptors, so Python starts with its standard output already pointing at the file.</p></details>
+    </li>
+    <li>
+      <p><code>systemctl stop myapp</code> takes exactly 90 seconds every time, and the logs show no shutdown messages from the app. What's going on, and how do you fix it? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p>The app isn't reacting to <code>SIGTERM</code>, so systemd waits for its default stop timeout (90 s) and then sends <code>SIGKILL</code>. Common causes: the service starts a shell script that doesn't <code>exec</code> the app; the app ignores or blocks <code>SIGTERM</code>; or the main process exits but leaves children behind. Fix the signal handling (or add <code>exec</code>), then set <code>TimeoutStopSec=</code> to a deadline that fits the app.</p></details>
+    </li>
+    <li>
+      <p>Design a deploy for an app on two servers behind a load balancer so that no request in progress is lost. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>One server at a time: take it out of the load balancer (fail its health check or deregister it) and wait for the balancer to notice; send <code>SIGTERM</code> and wait up to a deadline longer than the slowest request; <code>SIGKILL</code> only if it's still running, and alert; start the new version; wait until its health check passes and the balancer sends it traffic; then repeat on the second server.</p></details>
+    </li>
+    <li>
+      <p>Compare <code>SIGHUP</code> and <code>SIGTERM</code> for a daemon such as nginx. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>By convention, <code>SIGHUP</code> asks a daemon to reload its configuration without stopping, and nginx starts new workers with the new configuration while old workers finish their requests. <code>SIGTERM</code> asks it to shut down. For a program that doesn't handle <code>SIGHUP</code>, the default action is to terminate, so check before sending it to an unknown process.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li><code>man 7 signal</code> (every signal and its default action), <code>man 2 fork</code>, <code>man 2 execve</code>, <code>man 2 wait</code>, <code>man 5 proc</code>.</li>
+    <li>nginx: <a href="https://nginx.org/en/docs/control.html">Controlling nginx</a> (which signal does what).</li>
+    <li>uvicorn: <a href="https://www.uvicorn.org/deployment/">Deployment</a>, including graceful shutdown and timeouts.</li>
+    <li>Python: the <a href="https://docs.python.org/3/library/signal.html"><code>signal</code> module</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="#ch6">6 · systemd: services, units and timers</a></div>
+</nav>

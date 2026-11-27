@@ -180,3 +180,12 @@ facts above. 5. Sample chapter: **9** (policies). 6. On the Series 3 shelf now, 
 - PDFs: `scripts/build-pdf.mjs` renders never-rendered PDFs automatically, so the handbook's 11 PDFs build on the
   next deploy without touching `pdf-build.json`. Verified locally with
   `CHROMIUM_PATH=/opt/pw-browsers/chromium PDF_JOURNALS=handbooks/cloud-networking npm run pdf`.
+
+## 8. Next handbooks (proposed 2026-11-27)
+
+Owner, 2026-11-27: Linux first, then Kubernetes, Terraform (main tool) and PostgreSQL; a new fictional story instead
+of Larder (Stagedoor, a Lisbon ticketing platform, proposed); no sample chapters yet. Outlines for Handbooks 3–6,
+sketches for 7–8, and the mechanics of starting a book: **`docs/HANDOFF-handbooks-next.md`**.
+
+Update, 2026-11-27: Stagedoor approved; **Handbook 3 · Linux for Cloud Engineers** started (21 chapters, Ubuntu,
+complete, 21 chapters and appendices A–E): **`docs/HANDOFF-handbook-3-linux.md`**.

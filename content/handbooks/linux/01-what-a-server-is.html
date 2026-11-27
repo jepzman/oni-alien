@@ -1,0 +1,430 @@
+<!-- Handbook 3 · Linux for Cloud Engineers · Chapter 1. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part I · Finding your way</p>
+  <p class="chno">1</p>
+  <h1>What a Linux server is</h1>
+  <p class="promise">A server is just a computer that nobody sits in front of, and most of the ones in the cloud run Linux. This chapter separates the parts that word covers (the kernel, the distribution, the programs around them), follows a machine from power-on to a login prompt, and gives you a calm, read-only way to find out what you've been handed.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain what the kernel does and what the distribution adds around it.</li>
+      <li>Say which distribution and release a server runs, and until when it gets security updates.</li>
+      <li>Describe the boot sequence from firmware to PID 1, and what changes on a cloud VM or in a container.</li>
+      <li>Explain what a cloud image and cloud-init do at first boot.</li>
+      <li>Inventory an unfamiliar server without changing anything on it.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>A terminal on any Linux machine: a container, WSL on Windows, or a small VM. <a href="#appC">Appendix C</a> shows how to get one.</li>
+      <li>You can type a command and press Enter. <a href="#ch2">Chapter 2</a> covers the shell properly.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 35 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, any Linux terminal, free</dd>
+      <dt>Main distribution</dt><dd>Ubuntu, with Debian, the RHEL family and Amazon Linux in 1.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>Stagedoor sells tickets for about six hundred music venues in Portugal. Fans buy on the web and in the app; door staff scan the tickets on their phones. Most weeks the traffic is calm. Then a popular band announces a tour, tickets go on sale at 10:00 on a Friday, and for ten minutes everything is busy at once.</p>
+  <p>On Monday 5 January 2026, Rafaela Costa starts as Stagedoor's first operations engineer. Leonor Ferreira, the CTO, wrote the first version of the platform in 2023 and built its first server herself. She welcomes Rafaela, apologises for the state of things, and gives her three names, <code>door-1</code>, <code>door-2</code> and <code>door-3</code>, and a pinned message in the team chat's <code>#ops</code> channel: the root password, unchanged since 2023. Nobody has written down what runs where. “It works,” Leonor says. “Mostly. Please don't break it during an on-sale.”</p>
+  <p>Rafaela's first rule, which she writes at the top of a new page in the wiki: <em>nothing changes until it's written down</em>. Her first job is to find out what she's been handed, without changing anything. Section 1.8 shows what she found.</p>
+</aside>
+
+<!-- ======================================================== 1.1 -->
+<h2 class="sec" id="s1-1"><span class="n">1.1</span>Kernel, userland, distribution</h2>
+
+<p class="lead">“Linux” means three different things depending on who says it, and it helps to keep them apart from the start.</p>
+
+<p>Strictly, <strong>Linux</strong> is a <span class="term">kernel</span>: the one program on the machine that talks to the hardware directly. It starts first, stays in memory until the machine shuts down, and does five jobs for everything else:</p>
+<ul>
+  <li><strong>Processes:</strong> it starts programs, gives each a share of the CPUs, and stops them (<a href="#ch5">Chapter 5</a>, <a href="#ch9">Chapter 9</a>).</li>
+  <li><strong>Memory:</strong> it hands out memory, keeps each program's memory private from the others, and decides what to do when it runs out (<a href="#ch10">Chapter 10</a>).</li>
+  <li><strong>Files:</strong> it turns blocks on a disk into files and directories (<a href="#ch3">Chapter 3</a>, <a href="#ch11">Chapter 11</a>).</li>
+  <li><strong>Network:</strong> it sends and receives packets and keeps track of connections (<a href="#ch13">Chapter 13</a>).</li>
+  <li><strong>Devices and permissions:</strong> it drives disks, network cards and consoles, and checks who may do what (<a href="#ch4">Chapter 4</a>).</li>
+</ul>
+
+<p>Programs never touch the hardware themselves. When a program wants to open a file, send a packet or start another program, it asks the kernel with a <span class="term">system call</span>: a numbered request such as <code>openat</code>, <code>read</code>, <code>write</code> or <code>execve</code>. The kernel checks the request, does the work and returns a result or an error. Everything outside the kernel, from the shell to your app, is called <span class="term">userland</span> (or user space).</p>
+
+<figure class="wide" id="fig1-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 300" role="img" aria-labelledby="fig1-1-t fig1-1-d">
+      <title id="fig1-1-t">The layers of a Linux server</title>
+      <desc id="fig1-1-d">Four layers from bottom to top. Hardware or a virtual machine: CPUs, memory, disks, network cards. The kernel: processes, memory, files, network, devices and permissions. A dashed line marked system calls separates the kernel from userland. Userland, provided by the distribution: init (systemd), the shell, core utilities, libraries such as glibc and OpenSSL, and the package manager. On top, your applications: nginx, the Stagedoor app, PostgreSQL. A bracket labels the kernel plus userland as the distribution, for example Ubuntu 24.04.</desc>
+      <rect class="priv" x="20" y="16" width="530" height="56" rx="5"/>
+      <text class="t-title" x="40" y="40">Your applications</text>
+      <text class="t-mono" x="40" y="60">nginx · stagedoor app · postgres</text>
+      <rect class="node" x="20" y="86" width="530" height="72" rx="5"/>
+      <text class="t-title" x="40" y="110">Userland</text>
+      <text class="t-small" x="40" y="130">init (systemd) · the shell · core utilities (ls, cp, ps)</text>
+      <text class="t-small" x="40" y="148">libraries (glibc, OpenSSL) · the package manager (apt)</text>
+      <path class="wire-dash" d="M20 172 H550"/>
+      <text class="t-small t-accent" x="558" y="176">system calls</text>
+      <rect class="node-accent" x="20" y="186" width="530" height="50" rx="5"/>
+      <text class="t-title on-accent" x="40" y="208">Kernel (Linux)</text>
+      <text class="t-small on-accent" x="40" y="226">processes · memory · files · network · devices · permissions</text>
+      <rect class="ext" x="20" y="250" width="530" height="40" rx="5"/>
+      <text class="t-label" x="40" y="275">Hardware or a virtual machine: CPUs, memory, disks, network cards</text>
+      <path class="wire" d="M644 86 H656 V236 H644"/>
+      <text class="t-small" x="666" y="150">the</text>
+      <text class="t-small" x="666" y="166">distribution</text>
+      <text class="t-mono" x="666" y="186">Ubuntu 24.04</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 1.1</b> The kernel is the only layer that touches the hardware. Everything above it asks through system calls. A distribution packages a kernel with a userland and keeps both patched.</figcaption>
+</figure>
+
+<p>A kernel on its own can't do anything useful for you: there's no shell to type into and no program to start your web server. A <span class="term">distribution</span> (a “distro”) packages the Linux kernel together with a userland (thousands of programs and libraries, mostly from the GNU project and others), a <strong>package manager</strong> to install and update them (<a href="#ch8">Chapter 8</a>), and a promise to ship security fixes for a stated number of years. Ubuntu, Debian, Red Hat Enterprise Linux and Amazon Linux are distributions. When people say “a Linux server”, they mean a machine running one.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">The kernel does the work; programs only ask. Almost every problem in this book, from “permission denied” to “too many open files”, is the kernel refusing or running out of something a program asked for.</p>
+</div>
+
+<aside class="side"><b>Kernel space, user space</b>The CPU itself enforces the split: kernel code runs in a privileged mode that can touch hardware and any memory; user programs run in a restricted mode and can't. A bug in a program crashes the program. A bug in the kernel can crash the machine.</aside>
+
+<!-- ======================================================== 1.2 -->
+<h2 class="sec" id="s1-2"><span class="n">1.2</span>Distributions and releases</h2>
+
+<p>The distributions you'll meet on cloud servers differ in their package format, their defaults and, most importantly for a server, how long each release is supported. A <span class="term">release</span> is a numbered version of the whole distribution (Ubuntu 24.04, Debian 12) whose packages stay stable: during its support period you get security fixes and bug fixes, not new major versions that might change behaviour under you. When support ends, the fixes stop, and every new vulnerability stays open on that machine for good.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 1.1 · Distributions on cloud servers (support periods at the time of writing; check the vendor's page)</caption>
+    <thead><tr><th>Distribution</th><th>Packages</th><th>Releases</th><th>Support per release</th><th>You'll meet it</th></tr></thead>
+    <tbody>
+      <tr><td>Ubuntu LTS</td><td><code>.deb</code>, <code>apt</code></td><td>every two years, in April (22.04, 24.04, 26.04)</td><td>5 years of standard security updates; more with Ubuntu Pro</td><td>the most common image on AWS, Azure and Google Cloud; this book's main distribution</td></tr>
+      <tr><td>Debian stable</td><td><code>.deb</code>, <code>apt</code></td><td>about every two years (11 “bullseye”, 12 “bookworm”, 13 “trixie”)</td><td>about 3 years, plus about 2 more from the Debian LTS team</td><td>small servers, container base images; Ubuntu is built from it</td></tr>
+      <tr><td>RHEL family (Red Hat Enterprise Linux, Rocky, AlmaLinux)</td><td><code>.rpm</code>, <code>dnf</code></td><td>a major version every three years or so (8, 9, 10)</td><td>10 years</td><td>enterprises, vendor software that “supports RHEL”</td></tr>
+      <tr><td>Amazon Linux 2023</td><td><code>.rpm</code>, <code>dnf</code></td><td>one release, updated in place</td><td>until 2029</td><td>the default image on AWS; tuned for EC2</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p><span class="term">LTS</span> means long-term support: a release meant to be run for years, as servers are. Ubuntu also publishes releases between LTS versions (24.10, 25.04) with nine months of support each; they're fine on a laptop and wrong on a server, because you'd have to upgrade twice a year.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: end of support is a date, not a feeling</p>
+  <p>A server past its release's end of support keeps working, which is exactly why it's dangerous: nothing breaks, so nobody notices that security fixes stopped. Write the end-of-support date on every server's card the day you meet it, and plan the upgrade or rebuild a few months before (<a href="#ch8">Chapter 8</a>).</p>
+</div>
+
+<p>Two files answer “what is this?” on any modern distribution. <code>/etc/os-release</code> names the distribution and release; <code>uname -r</code> prints the running kernel's version. They're different things: Ubuntu 24.04 ships a 6.8 kernel, can be moved to newer ones, and the kernel <em>running</em> can be older than the one installed if nobody has rebooted since the last kernel update.</p>
+
+<!-- ======================================================== 1.3 -->
+<h2 class="sec" id="s1-3"><span class="n">1.3</span>How a machine boots</h2>
+
+<p>Knowing the boot sequence pays off the first time a server doesn't come back after a reboot: each stage hands over to the next, and the question is always which hand-over failed.</p>
+
+<figure class="wide" id="fig1-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig1-2-t fig1-2-d">
+      <title id="fig1-2-t">The boot sequence of a Linux server</title>
+      <desc id="fig1-2-d">Five stages from left to right. Firmware (UEFI or BIOS) checks the hardware and finds a boot disk. The bootloader (GRUB) loads the kernel and the initramfs into memory. The kernel starts, uses the initramfs to find and mount the real root filesystem. The kernel starts PID 1, init, which is systemd on most distributions. systemd starts services in order: network, SSH, nginx, the app. Below, three notes: on a cloud VM, the firmware is the hypervisor's and you see the boot only on the serial console; at first boot, cloud-init runs as a service to configure the machine; in a container, there is no boot at all: the container's first process is PID 1.</desc>
+      <defs><marker id="c1ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="10" y="20" width="132" height="88" rx="5"/>
+      <text class="t-title" x="76" y="46" text-anchor="middle">Firmware</text>
+      <text class="t-small" x="76" y="68" text-anchor="middle">UEFI or BIOS</text>
+      <text class="t-small" x="76" y="86" text-anchor="middle">finds a boot disk</text>
+      <rect class="node" x="162" y="20" width="132" height="88" rx="5"/>
+      <text class="t-title" x="228" y="46" text-anchor="middle">Bootloader</text>
+      <text class="t-small" x="228" y="68" text-anchor="middle">GRUB loads the</text>
+      <text class="t-small" x="228" y="86" text-anchor="middle">kernel + initramfs</text>
+      <rect class="node-accent" x="314" y="20" width="132" height="88" rx="5"/>
+      <text class="t-title on-accent" x="380" y="46" text-anchor="middle">Kernel</text>
+      <text class="t-small on-accent" x="380" y="68" text-anchor="middle">finds and mounts</text>
+      <text class="t-small on-accent" x="380" y="86" text-anchor="middle">the root filesystem</text>
+      <rect class="node" x="466" y="20" width="132" height="88" rx="5"/>
+      <text class="t-title" x="532" y="46" text-anchor="middle">PID 1: init</text>
+      <text class="t-small" x="532" y="68" text-anchor="middle">systemd on most</text>
+      <text class="t-small" x="532" y="86" text-anchor="middle">distributions</text>
+      <rect class="node" x="618" y="20" width="132" height="88" rx="5"/>
+      <text class="t-title" x="684" y="46" text-anchor="middle">Services</text>
+      <text class="t-small" x="684" y="68" text-anchor="middle">network, sshd,</text>
+      <text class="t-small" x="684" y="86" text-anchor="middle">nginx, your app</text>
+      <path class="wire" d="M142 64 H158" marker-end="url(#c1ah)"/>
+      <path class="wire" d="M294 64 H310" marker-end="url(#c1ah)"/>
+      <path class="wire" d="M446 64 H462" marker-end="url(#c1ah)"/>
+      <path class="wire" d="M598 64 H614" marker-end="url(#c1ah)"/>
+      <rect class="priv" x="10" y="132" width="740" height="104" rx="6"/>
+      <text class="t-small" x="26" y="156"><tspan font-weight="700">On a cloud VM:</tspan> the firmware is the hypervisor's; you can't press a key in GRUB, and you see the boot</text>
+      <text class="t-small" x="26" y="174">only through the provider's serial console or screenshot. At first boot, cloud-init runs as a service (1.4).</text>
+      <text class="t-small" x="26" y="204"><tspan font-weight="700">In a container:</tspan> there's no firmware, bootloader or kernel of its own. The host's kernel is shared,</text>
+      <text class="t-small" x="26" y="222">and the container's first process (often your app) is PID 1 (Chapter 19).</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 1.2</b> From power-on to services. When a server doesn't come back, find the last stage that finished.</figcaption>
+</figure>
+
+<ol class="steps">
+  <li><strong>Firmware.</strong> The machine's built-in firmware (<span class="term">UEFI</span> on modern machines, BIOS on old ones) checks the hardware and looks for something bootable on a disk.</li>
+  <li><strong>Bootloader.</strong> <strong>GRUB</strong>, on most distributions, loads two files from <code>/boot</code> into memory: the kernel (<code>vmlinuz-…</code>) and the <span class="term">initramfs</span>, a small temporary filesystem with just enough drivers to find the real disk.</li>
+  <li><strong>Kernel.</strong> The kernel starts, detects hardware, uses the initramfs to find and mount the <strong>root filesystem</strong> (the one mounted at <code>/</code>), and throws the initramfs away.</li>
+  <li><strong>PID 1.</strong> The kernel starts exactly one program itself: <code>/sbin/init</code>, which becomes process number 1. On Ubuntu, Debian, RHEL and Amazon Linux, that's <span class="term">systemd</span>. Every other process on the machine is started by PID 1 or by one of its descendants (<a href="#ch5">Chapter 5</a>).</li>
+  <li><strong>Services.</strong> systemd starts what's configured to run at boot, in dependency order: mounting disks, the network, SSH, then services such as nginx and your app (<a href="#ch6">Chapter 6</a>).</li>
+</ol>
+
+<p>If a program was started by hand (someone logged in and typed a command) rather than as a service, step 5 doesn't know about it, and after a reboot it simply isn't running. That's one of the most common surprises on hand-built servers, and it's waiting for Stagedoor in this chapter's story.</p>
+
+<!-- ======================================================== 1.4 -->
+<h2 class="sec" id="s1-4"><span class="n">1.4</span>Cloud images and cloud-init</h2>
+
+<p>Nobody installs Linux from a USB stick on a cloud server. You pick an <span class="term">image</span>: a ready-made copy of a disk with a distribution already installed (an AMI on AWS, an image on Azure and Google Cloud). Launching a VM copies the image to a new disk and boots it. Ubuntu, Debian, Red Hat and Amazon publish official images for every release and refresh them every few weeks with the latest updates.</p>
+
+<p>An image is the same for everyone, so something must turn it into <em>your</em> server at first boot: set its hostname, create users, install your SSH key, maybe install packages and start your app. On nearly every cloud image, that something is <span class="term">cloud-init</span>. It runs as a set of services early in boot (stage 5 of Figure 1.2), asks the cloud's <strong>instance metadata service</strong> (a web service only the VM can reach, at <code>169.254.169.254</code>) for the <strong>user data</strong> you supplied when you launched the VM, and applies it. User data is usually a shell script or a YAML file that starts with <code>#cloud-config</code>:</p>
+
+<p class="code-title"><span>user-data.yaml</span><span>cloud-config (an illustration; Chapter 18 builds a tested one)</span></p>
+<pre><code><span class="c">#cloud-config</span>
+hostname: door-4
+users:
+  - name: rafaela
+    groups: [sudo]
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3Nza…rafaela-laptop
+package_update: true
+packages: [nginx]
+runcmd:
+  - [systemctl, enable, --now, nginx]</code></pre>
+
+<p>Read it top to bottom: name the machine, create one personal user who can use <code>sudo</code> and log in with one key, update the package lists, install nginx and start it. cloud-init runs most of this only on the <em>first</em> boot of a new instance; rebooting doesn't repeat it. Its log, <code>/var/log/cloud-init-output.log</code>, is the first place to look when a new server didn't come up the way you described.</p>
+
+<aside class="side"><b>Try it locally</b>Multipass, a free tool for Ubuntu VMs on a laptop, accepts the same file: <code>multipass launch --cloud-init user-data.yaml</code> (<a href="#appC">Appendix C</a>).</aside>
+
+<p>This is the first glimpse of an idea the whole book works towards: a server described in a file can be rebuilt in minutes, while a server built by hand over three years can only be repaired, carefully. <a href="#ch18">Chapter 18</a> writes a hardened baseline as cloud-init, and <a href="#ch21">Chapter 21</a> rebuilds one of Stagedoor's servers from a script.</p>
+
+<!-- ======================================================== 1.5 -->
+<h2 class="sec" id="s1-5"><span class="n">1.5</span>Finding out what you've been handed</h2>
+
+<p>The first hour on an unfamiliar server should change nothing. Every question below has a read-only command, and most of the answers come from two places the kernel keeps up to date: <code>/proc</code> and <code>/sys</code>. They look like directories full of files, but nothing in them is stored on a disk; the kernel generates each “file” when you read it (<a href="#ch3">Chapter 3</a>).</p>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 1.2 · An inventory in fourteen questions</caption>
+    <thead><tr><th>Question</th><th>Command</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>What is it called?</td><td><code>hostname</code></td><td>also in the shell prompt, usually</td></tr>
+      <tr><td>Which distribution and release?</td><td><code>cat /etc/os-release</code></td><td>then look up its end of support</td></tr>
+      <tr><td>Which kernel is running?</td><td><code>uname -r</code></td><td>compare with <code>ls /boot</code>: a newer kernel there means it's waiting for a reboot</td></tr>
+      <tr><td>Is a reboot pending?</td><td><code>cat /var/run/reboot-required</code></td><td>Ubuntu and Debian; “No such file” means no</td></tr>
+      <tr><td>How long has it been up?</td><td><code>uptime</code></td><td>also the load average (<a href="#ch9">Chapter 9</a>)</td></tr>
+      <tr><td>What is PID 1?</td><td><code>ps -o comm= -p 1</code></td><td><code>systemd</code> on a normal server</td></tr>
+      <tr><td>How many CPUs?</td><td><code>nproc</code></td><td>details in <code>lscpu</code></td></tr>
+      <tr><td>How much memory?</td><td><code>free -h</code></td><td>read the <code>available</code> column (<a href="#ch10">Chapter 10</a>)</td></tr>
+      <tr><td>Which disks, how full?</td><td><code>lsblk</code>, <code>df -h</code></td><td><a href="#ch11">Chapter 11</a></td></tr>
+      <tr><td>Which addresses?</td><td><code>ip -brief address</code></td><td><a href="#ch13">Chapter 13</a></td></tr>
+      <tr><td>What's listening?</td><td><code>ss -tlnp</code></td><td>with <code>sudo</code>, <code>-p</code> names the program</td></tr>
+      <tr><td>Which services run?</td><td><code>systemctl list-units --type=service --state=running</code></td><td>only on machines where PID 1 is systemd</td></tr>
+      <tr><td>What else runs?</td><td><code>ps -ef --forest</code></td><td>programs started by hand show up here but not above</td></tr>
+      <tr><td>Who logs in?</td><td><code>last -n 20</code>, <code>getent passwd</code></td><td><a href="#ch4">Chapter 4</a>, <a href="#ch16">Chapter 16</a></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>The two rows about running programs are worth comparing on any hand-built server. Something in the <code>ps</code> list that isn't in the <code>systemctl</code> list was started some other way: from a terminal, from <code>cron</code>, from a forgotten script. It won't survive a reboot unless something starts it again.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: “just a quick restart”</p>
+  <p>On a server you don't understand yet, a reboot is a change, not a check. If anything was started by hand, it won't come back. Do the inventory first, find out how each running program was started, and reboot only when you know what to expect.</p>
+</div>
+
+<!-- ======================================================== 1.6 -->
+<h2 class="sec" id="s1-6"><span class="n">1.6</span>Pets and cattle</h2>
+
+<p>Operations people describe two ways of looking after servers. A <span class="term">pet</span> server has a name, was built by hand, and is nursed back to health when it's ill, because nobody knows exactly how to make another one. <strong>Cattle</strong> are numbered, built from a description (an image, cloud-init, a script), and replaced when they misbehave. The terms are blunt, but the difference is real: a pet holds knowledge that exists nowhere else, and losing it loses the knowledge too.</p>
+
+<p>Almost every company starts with pets, and that's fine. The way out isn't to throw them away but to move the knowledge out of the machine and into writing, one piece at a time:</p>
+<ol class="steps">
+  <li><strong>Inventory</strong>: what's on it, what runs, who logs in (this chapter).</li>
+  <li><strong>Understand</strong>: for each running program, how it starts, where its config and data live, where it logs (Chapters 3–8).</li>
+  <li><strong>Fix in place</strong>, writing each fix down as a command you could run again (Chapters 4–16).</li>
+  <li><strong>Script it</strong>: turn the written-down commands into a script or cloud-init (Chapters 17–18).</li>
+  <li><strong>Rebuild</strong> a copy from the script, test it, and replace the pet (<a href="#ch21">Chapter 21</a>).</li>
+</ol>
+
+<!-- ======================================================== 1.7 -->
+<h2 class="sec" id="s1-7"><span class="n">1.7</span>Across distributions</h2>
+
+<p>Everything in this chapter works the same on every mainstream distribution: the kernel, the boot sequence, <code>/proc</code>, systemd and cloud-init. What changes is mostly the package manager and where a few configuration files live, which <a href="#appB">Appendix B</a> lists side by side.</p>
+
+<div class="box box-provider">
+  <p class="label">On the RHEL family</p>
+  <p>Red Hat Enterprise Linux and its rebuilds (Rocky Linux, AlmaLinux) use <code>.rpm</code> packages and <code>dnf</code>, and turn on SELinux by default, an extra permission layer that <a href="#ch18">Chapter 18</a> introduces. The release is in <code>/etc/os-release</code> as on Ubuntu, and also in <code>/etc/redhat-release</code>. Ten years of support per major version is why enterprises like it, and why you'll meet very old ones.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Amazon Linux</p>
+  <p>Amazon Linux 2023 is based on Fedora, uses <code>dnf</code>, and is updated in place: instead of upgrading to a new release every few years, you move the machine to a newer, versioned snapshot of its package repository. Its older sibling, Amazon Linux 2, is at the end of its support period: check the date before building anything new on it. AWS's own tools come preinstalled, which is handy on EC2 and irrelevant elsewhere.</p>
+</div>
+
+<!-- ======================================================== 1.8 -->
+<h2 class="sec" id="s1-8"><span class="n">1.8</span>Lab: a server card</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 1 · Describe a machine without touching it</p>
+  <p><strong>You'll</strong> write a small script that prints a one-page card for any Linux machine, run it, and read what it says, including what it says about the machine not being a normal server. <strong>You need</strong> a terminal on any Linux (<a href="#appC">Appendix C</a>). <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> delete the script; it changes nothing on the machine.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Save the script</strong> as <code>servercard.sh</code> in your home directory. Every line is one command from Table 1.2 wrapped in <code>echo</code>; <code>$( … )</code> means “run this and put its output here”, which <a href="#ch2">Chapter 2</a> explains along with the pipes (<code>|</code>).
+<p class="code-title"><span>servercard.sh</span><span>bash</span></p>
+<pre><code>#!/usr/bin/env bash
+<span class="c"># servercard.sh · a one-page description of this machine. It only reads; it changes nothing.</span>
+
+echo <span class="s">"== $(hostname) =="</span>
+echo <span class="s">"OS:        $(. /etc/os-release &amp;&amp; echo "</span>$PRETTY_NAME<span class="s">")"</span>
+echo <span class="s">"Kernel:    $(uname -r) on $(uname -m)"</span>
+echo <span class="s">"Up since:  $(uptime -s)"</span>
+echo <span class="s">"PID 1:     $(ps -o comm= -p 1)"</span>
+echo <span class="s">"CPUs:      $(nproc)"</span>
+echo <span class="s">"Memory:    $(free -h | awk '/^Mem:/ {print $2 "</span> total, <span class="s">" $7 "</span> available<span class="s">"}')"</span>
+echo <span class="s">"Root disk: $(df -h --output=size,pcent / | tail -1 | awk '{print $1 "</span>, <span class="s">" $2 "</span> used<span class="s">"}')"</span>
+echo <span class="s">"Addresses:"</span>
+ip -brief address | sed <span class="s">'s/^/  /'</span>
+echo <span class="s">"Listening on TCP:"</span>
+ss -tlnH | awk <span class="s">'{print "  " $4}'</span> | sort -u</code></pre></li>
+  <li><strong>Make it executable and run it:</strong>
+<pre><code>chmod +x servercard.sh
+./servercard.sh</code></pre>
+  Here's what it printed on the machine this book's labs were tested on. Yours will differ, and that's the point:
+<pre><code>== vm ==
+OS:        Ubuntu 24.04.5 LTS
+Kernel:    6.18.44-fc-v880 on x86_64
+Up since:  2026-11-27 07:48:25
+PID 1:     process_api
+CPUs:      4
+Memory:    15Gi total, 15Gi available
+Root disk: 252G, 14% used
+Addresses:
+  lo               UNKNOWN        127.0.0.1/8 
+  ifb0             DOWN           
+  ifb1             DOWN           
+  eth0             UP             192.0.2.2/24 
+Listening on TCP:
+  0.0.0.0:2024
+  127.0.0.1:41381
+  127.0.0.1:44513</code></pre></li>
+  <li><strong>Read the card.</strong> This one has some surprises, and spotting them is the skill. The kernel's version string ends in <code>-fc-…</code>, not Ubuntu's usual <code>-generic</code>, and <strong>PID 1 is not systemd</strong>: it's a program called <code>process_api</code>. This machine is a lightweight virtual machine (a Firecracker microVM) whose provider boots its own kernel and its own small init program; Ubuntu supplies only the userland. That's a perfectly good Linux machine for most of this book's labs, but <code>systemctl</code> won't work on it, so the systemd chapters use a full VM instead. On a container you'd see something similar: PID 1 would be <code>bash</code> or your app. On a normal Ubuntu server you'd see <code>systemd</code> and a kernel such as <code>6.8.0-…-generic</code> or <code>…-aws</code>.</li>
+  <li><strong>Compare running and installed kernels.</strong> Run <code>uname -r</code> and <code>ls /boot</code>. On a normal server, if <code>/boot</code> holds a <code>vmlinuz-</code> file with a newer version than <code>uname -r</code>, security fixes for the kernel are installed but not running. On a microVM or container, <code>/boot</code> may be empty or missing: the kernel comes from outside.</li>
+  <li><strong>Break it on purpose.</strong> Remove the execute permission and run the script again:
+<pre><code>chmod -x servercard.sh
+./servercard.sh; echo "exit status: $?"</code></pre>
+<pre><code>bash: ./servercard.sh: Permission denied
+exit status: 126</code></pre>
+  The kernel refused to <em>run</em> the file because its permissions don't allow it (<a href="#ch4">Chapter 4</a>), and the shell reports that with exit status <code>126</code> (<a href="#ch2">Chapter 2</a>). <code>bash servercard.sh</code> still works, because then the kernel runs <code>bash</code>, and <code>bash</code> merely reads the file. Put the permission back with <code>chmod +x servercard.sh</code>.</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Add a line for “reboot pending” that prints <code>yes</code> if <code>/var/run/reboot-required</code> exists and <code>no</code> otherwise (hint: <code>test -e</code>, <a href="#ch2">Chapter 2</a>). (2) Add the number of running processes (<code>ps -e --no-headers | wc -l</code>). (3) Run the card on a second machine, or in a container (<code>docker run --rm -it ubuntu:24.04</code>), and list three differences.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, what Rafaela found">
+  <p class="label">At Stagedoor: three cards</p>
+  <p>By the end of her first week, Rafaela has a card for each server in the wiki, made with a script much like this one, plus a few notes per machine written by hand:</p>
+  <div class="table-wrap">
+    <table>
+      <caption>Table 1.3 · Stagedoor's servers on 9 January 2026</caption>
+      <thead><tr><th>Host</th><th>Release</th><th>Size</th><th>Runs</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>door-1</code></td><td>Debian 11, built March 2023</td><td>8 vCPU, 32 GB</td><td>PostgreSQL 13, the nightly jobs</td><td>up 401 days; two newer kernels installed but not running; Debian 11's security support ends <strong>31 August 2026</strong></td></tr>
+        <tr><td><code>door-2</code></td><td>Ubuntu 22.04, April 2025</td><td>4 vCPU, 8 GB</td><td>nginx, the app</td><td>the app isn't a service: it was started by hand, as root, with <code>nohup</code>, from <code>/root/stagedoor</code></td></tr>
+        <tr><td><code>door-3</code></td><td>Ubuntu 22.04, April 2025</td><td>4 vCPU, 8 GB</td><td>nginx, the app</td><td>same as <code>door-2</code>; standard support for 22.04 ends in April 2027</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>She notices what the cards mean together. If <code>door-2</code> or <code>door-3</code> rebooted (a kernel update, a host failure at Atlantica Hosting), nginx would start and the app wouldn't: fans would see errors until someone logged in and remembered the command. Everyone logs in as root with the same password, so nobody can tell who changed what. And <code>door-1</code>, which holds every ticket ever sold, is the oldest machine, on the release with the least support left. Rafaela doesn't fix anything yet. She writes the three problems at the top of the page, with the chapters of this book that fix them: the app as a service (<a href="#ch6">Chapter 6</a>), personal accounts and no shared root password (<a href="#ch4">Chapter 4</a>), and a plan for <code>door-1</code> (<a href="#ch8">Chapter 8</a>).</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s1-9"><span class="n">1.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Running a release past its end of support</td><td>New vulnerabilities are never fixed on that machine; nothing visibly breaks.</td><td>Record the end-of-support date on day one; plan the move months ahead.</td></tr>
+      <tr><td>Choosing a non-LTS release for a server</td><td>Support ends after nine months; you're forced into upgrades twice a year.</td><td>Use an LTS (or the RHEL family's long releases) for servers.</td></tr>
+      <tr><td>Starting programs by hand on a server</td><td>They don't come back after a reboot, and nobody knows how they were started.</td><td>Run them as services (<a href="#ch6">Chapter 6</a>).</td></tr>
+      <tr><td>Installing kernel updates and never rebooting</td><td>The fixes are on disk but not running; months of exposure.</td><td>Schedule reboots; check <code>/var/run/reboot-required</code> (<a href="#ch8">Chapter 8</a>).</td></tr>
+      <tr><td>Rebooting a server you don't understand to “see if it helps”</td><td>Hand-started programs vanish; an outage becomes a mystery.</td><td>Inventory first; reboot when you know what will start.</td></tr>
+      <tr><td>Changing things during the first look</td><td>You can't tell your changes from what was there before.</td><td>Read-only commands first, and write down what you find.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum1">
+  <h2 class="sec" id="sum1"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>The <strong>kernel</strong> is the only program that touches hardware; everything else asks it through <strong>system calls</strong>.</li>
+    <li>A <strong>distribution</strong> packages the kernel with a userland and a package manager, and supports each <strong>release</strong> for a stated number of years. Know the date for every server.</li>
+    <li>Boot goes firmware → bootloader → kernel → <strong>PID 1</strong> (systemd) → services. Anything not started as a service won't come back after a reboot.</li>
+    <li>Cloud servers start from an <strong>image</strong>, and <strong>cloud-init</strong> turns it into your server at first boot from the user data you supply.</li>
+    <li>Inventory an unfamiliar server with read-only commands first; much of the answer comes from <code>/proc</code> and <code>/sys</code>.</li>
+    <li>Pets hold knowledge nobody wrote down. Move it into writing, then into scripts, then rebuild.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Kernel</dt><dd>The program that runs the hardware and provides processes, memory, files, networking and permissions to everything else.</dd>
+    <dt>System call</dt><dd>A request from a program to the kernel, such as opening a file or starting a program.</dd>
+    <dt>Userland</dt><dd>Everything outside the kernel: init, shells, utilities, libraries and applications.</dd>
+    <dt>Distribution</dt><dd>A kernel, a userland and a package manager released and supported together, such as Ubuntu or Debian.</dd>
+    <dt>Release</dt><dd>A numbered version of a distribution whose packages receive fixes, not major changes, until its end of support.</dd>
+    <dt>LTS</dt><dd>Long-term support: a release meant to be run for years, with security updates for all of that time.</dd>
+    <dt>UEFI</dt><dd>The firmware on modern machines that checks hardware and starts the bootloader.</dd>
+    <dt>initramfs</dt><dd>A small temporary filesystem the kernel uses at boot to find and mount the real root filesystem.</dd>
+    <dt>systemd</dt><dd>The init system (PID 1) on most distributions; it starts and supervises services.</dd>
+    <dt>Image</dt><dd>A ready-made disk with an operating system installed, from which cloud VMs are launched.</dd>
+    <dt>cloud-init</dt><dd>The program on cloud images that configures a new instance at first boot from its user data.</dd>
+    <dt>Pet</dt><dd>A server built and repaired by hand, which can't easily be replaced; the opposite of cattle, built from a description.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Which of these is the kernel's job, and which is the distribution's: scheduling processes on CPUs, shipping a security fix for OpenSSL, deciding whether a program may open a file, providing <code>ls</code>? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Kernel: scheduling processes and checking file permissions. Distribution: shipping the OpenSSL fix (as an updated package) and providing <code>ls</code> (part of the userland, from GNU coreutils). The distribution also ships the kernel itself as a package.</p></details>
+    </li>
+    <li>
+      <p><code>uname -r</code> prints <code>5.15.0-91-generic</code>, and <code>ls /boot</code> shows <code>vmlinuz-5.15.0-91-generic</code> and <code>vmlinuz-5.15.0-131-generic</code>. What does that tell you, and what would you do? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>A newer kernel (131) is installed but the machine is still running the old one (91), so the kernel's security fixes since then aren't active. Plan a reboot, after checking that everything that should run is started as a service and will come back.</p></details>
+    </li>
+    <li>
+      <p>Why does a program started by hand with <code>nohup</code> not come back after a reboot, while nginx does? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>After a reboot, the only programs that start are the ones PID 1 (systemd) is configured to start, plus their descendants. nginx is installed as a systemd service enabled at boot; the hand-started program was started by a person's shell, which no longer exists, and nothing records that it should run.</p></details>
+    </li>
+    <li>
+      <p>A new VM launched from an Ubuntu image with your user data has no user <code>rafaela</code>. Where do you look first, and what might have gone wrong? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p>Look at cloud-init's logs: <code>/var/log/cloud-init-output.log</code> and <code>/var/log/cloud-init.log</code> (and <code>cloud-init status --long</code>). Common causes: the file didn't start with <code>#cloud-config</code>, so it wasn't read as cloud-config; a YAML indentation error; or the user data was added to an instance that had already booted, and cloud-init only applies it at first boot.</p></details>
+    </li>
+    <li>
+      <p>You've inherited a server nobody understands, and you've been asked to “tidy it up”. Write the first five things you'd do, in order. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>One reasonable order: (1) record the release and its end of support, the kernel and uptime; (2) list running services and all running processes and find what was started outside systemd; (3) list listening ports and who logs in; (4) for each running program, find its config, data and logs; (5) write it all down, with the problems found, before changing anything. Only then start fixing, one written-down change at a time.</p></details>
+    </li>
+    <li>
+      <p>Compare an Ubuntu LTS release with a RHEL major version as a choice for a server you expect to run for six years. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Ubuntu LTS gives five years of standard security updates (more with Ubuntu Pro), so a six-year server either needs Pro or an upgrade along the way. A RHEL major version gets ten years, covering the whole period, at the cost of a subscription (or using a rebuild such as Rocky or AlmaLinux) and older package versions near the end. Either works; what matters is knowing the date and planning for it.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>Ubuntu: <a href="https://ubuntu.com/about/release-cycle">The Ubuntu lifecycle and release cadence</a>.</li>
+    <li>Debian: <a href="https://www.debian.org/releases/">Debian releases</a> and <a href="https://wiki.debian.org/LTS">Debian Long Term Support</a>.</li>
+    <li>The Linux kernel documentation: <a href="https://docs.kernel.org/admin-guide/README.html">The Linux kernel user's and administrator's guide</a>.</li>
+    <li>cloud-init: <a href="https://cloudinit.readthedocs.io/">documentation</a>, especially the cloud-config examples.</li>
+    <li><code>man 7 boot</code> and <code>man 2 intro</code> (system calls) on any Linux machine.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="#ch2">2 · The shell, properly</a></div>
+</nav>

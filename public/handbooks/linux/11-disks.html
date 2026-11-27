@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Disks, filesystems and inodes · Linux for Cloud Engineers</title>
+<meta name="description" content="Block devices, partitions, filesystems and mounts, finding what filled a disk, and growing a volume without downtime.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 3</a> · <a href="index.html">Linux for Cloud Engineers</a></span><span>Part III · Chapter 11</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part III · Resources</p>
+  <p class="chno">11</p>
+  <h1>Disks, filesystems and inodes</h1>
+  <p class="promise">Between a cloud volume and a file you can open sit three layers: a partition, a filesystem and a mount. This chapter takes them apart, shows how to find what filled a disk (including the case where the disk isn't full at all), and how to give a server more space without stopping it.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Describe the layers from block device to mounted filesystem, and inspect each one.</li>
+      <li>Find what's using space with <code>df</code> and <code>du</code>, and explain when they disagree.</li>
+      <li>Diagnose and fix inode exhaustion.</li>
+      <li>Write a safe <code>/etc/fstab</code> entry and check it before rebooting.</li>
+      <li>Grow a cloud volume, its partition and its filesystem, and explain what LVM adds.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li><a href="03-files.html">Chapter 3</a>: inodes, mount points. <a href="07-logs.html">Chapter 7</a>: deleted-but-open files.</li>
+      <li>A Linux VM with <code>sudo</code> where you may create loop devices (<a href="appendix-c-lab-setup.html">Appendix C</a>); <code>sudo apt install cloud-guest-utils parted</code>.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, a VM with <code>sudo</code>, free; works on a file, not a real disk</dd>
+      <dt>Main distribution</dt><dd>Ubuntu, with others in 11.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>Thursday 25 June 2026, 14:20. Venues report that uploading a poster fails, and so, on <code>door-2</code>, does the app's attempt to write a ticket PDF: <code>No space left on device</code>. Tiago, remembering March (<a href="07-logs.html">Chapter 7</a>), runs <code>df -h</code>. The root filesystem is 61% full: 62 GB free. He checks for deleted open files: none. He runs <code>df -h</code> again, as if it might change its mind.</p>
+  <p>Rafaela asks him to try one more letter: <code>df -i</code>. The same filesystem is at 100%.</p>
+</aside>
+
+<!-- ======================================================== 11.1 -->
+<h2 class="sec" id="s11-1"><span class="n">11.1</span>From block device to file</h2>
+
+<p class="lead">A <span class="term">block device</span> is storage the kernel reads and writes in fixed-size blocks: a physical disk, a cloud volume, a partition of either, or a file pretending to be a disk. Files only appear once a filesystem is laid over it and mounted into the tree.</p>
+
+<figure class="wide" id="fig11-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 270" role="img" aria-labelledby="fig11-1-t fig11-1-d">
+      <title id="fig11-1-t">The layers between a disk and a file</title>
+      <desc id="fig11-1-d">Five layers from bottom to top. A block device: a cloud volume such as /dev/nvme1n1 or /dev/vdb. A partition table (GPT) divides it into partitions, such as /dev/nvme1n1p1. Optionally, LVM groups physical volumes into a volume group and carves logical volumes from it, such as /dev/vg0/data. A filesystem, ext4 or XFS, is created on a partition or logical volume, with its own inodes and blocks. The filesystem is mounted at a directory, such as /var/lib/postgresql, listed in /etc/fstab so it's mounted at boot. On the right, the command that shows each layer: lsblk, parted or lsblk, pvs vgs lvs, blkid or df -T, findmnt or df.</desc>
+      <rect class="ext" x="10" y="216" width="560" height="42" rx="5"/><text class="t-label" x="24" y="242">block device: a cloud volume, /dev/nvme1n1 or /dev/vdb</text>
+      <rect class="node" x="10" y="164" width="560" height="42" rx="5"/><text class="t-label" x="24" y="190">partition table (GPT) → partitions: /dev/nvme1n1p1</text>
+      <rect class="priv" x="10" y="112" width="560" height="42" rx="5" stroke-dasharray="5 4"/><text class="t-label" x="24" y="138">optional LVM: physical volumes → volume group → logical volumes</text>
+      <rect class="node-accent" x="10" y="60" width="560" height="42" rx="5"/><text class="t-label on-accent" x="24" y="86">filesystem: ext4 or XFS, with its own inodes and blocks</text>
+      <rect class="pub" x="10" y="8" width="560" height="42" rx="5"/><text class="t-label" x="24" y="34">mounted at a directory: /var/lib/postgresql (and in /etc/fstab)</text>
+      <text class="t-mono" x="590" y="34">findmnt, df</text>
+      <text class="t-mono" x="590" y="86">blkid, df -T</text>
+      <text class="t-mono" x="590" y="138">pvs, vgs, lvs</text>
+      <text class="t-mono" x="590" y="190">lsblk, parted</text>
+      <text class="t-mono" x="590" y="242">lsblk</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 11.1</b> Five layers, each with its own size. Growing a disk means growing every layer above the one you changed.</figcaption>
+</figure>
+
+<p><code>lsblk</code> shows the tree of block devices and partitions with their sizes and mount points; it's the first command on any unfamiliar machine. Device names depend on how the disk is attached: <code>/dev/sda</code> (SCSI and SATA), <code>/dev/vda</code> (virtio, common on KVM hosts such as Atlantica's), <code>/dev/nvme0n1</code> (NVMe, how AWS attaches EBS volumes to current instances), with partitions numbered <code>sda1</code>, <code>vda1</code>, <code>nvme0n1p1</code>. Names can change between boots when disks are added, which is why fstab uses UUIDs (11.4).</p>
+
+<!-- ======================================================== 11.2 -->
+<h2 class="sec" id="s11-2"><span class="n">11.2</span>Partitions and filesystems</h2>
+
+<p>A <span class="term">partition table</span> divides a disk into ranges; <strong>GPT</strong> is the modern format (the older MBR is limited to 2 TB). Cloud data volumes are often used whole, with no partition at all; boot disks always have one. <code>parted</code>, <code>fdisk</code> or <code>sfdisk</code> edit them.</p>
+
+<p>A <span class="term">filesystem</span> organises a block device into files and directories, with an inode table (<a href="03-files.html">Chapter 3</a>) and data blocks. Two dominate on servers:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 11.1 · ext4 and XFS</caption>
+    <thead><tr><th></th><th>ext4</th><th>XFS</th></tr></thead>
+    <tbody>
+      <tr><td>Default on</td><td>Ubuntu, Debian</td><td>RHEL family, Amazon Linux</td></tr>
+      <tr><td>Inodes</td><td>fixed when created (one per 16 KB by default); can run out</td><td>allocated as needed; practically never runs out</td></tr>
+      <tr><td>Grow while mounted</td><td>yes, <code>resize2fs</code></td><td>yes, <code>xfs_growfs</code></td></tr>
+      <tr><td>Shrink</td><td>yes, unmounted only</td><td>no</td></tr>
+      <tr><td>Check and repair</td><td><code>e2fsck</code>, unmounted</td><td><code>xfs_repair</code>, unmounted</td></tr>
+      <tr><td>Good at</td><td>general use, small files</td><td>large files, many parallel writers</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p><code>mkfs.ext4 /dev/vdb1</code> or <code>mkfs.xfs /dev/vdb1</code> creates one, erasing whatever was there. A <span class="term">mount</span> attaches it to a directory: <code>sudo mount /dev/vdb1 /var/lib/stagedoor</code>. Whatever was in that directory before is hidden, not deleted, until you unmount, a classic source of “where did my files go?”.</p>
+
+<!-- ======================================================== 11.3 -->
+<h2 class="sec" id="s11-3"><span class="n">11.3</span>What filled the disk?</h2>
+
+<p>Three commands answer it, and they answer different questions:</p>
+<ul>
+  <li><strong><code>df -h</code></strong> asks the filesystem how many blocks are in use. It's the truth about space, including space held by deleted files still open (<a href="07-logs.html">Chapter 7</a>) and blocks reserved for root (ext4 keeps 5% by default so root can still log in and clean up).</li>
+  <li><strong><code>du -xh --max-depth=1 /var | sort -h</code></strong> walks the directory tree and adds up the files it can see. <code>-x</code> stays on one filesystem. Repeat it one level down until you find the culprit; <code>ncdu</code> does the same interactively.</li>
+  <li><strong><code>df -i</code></strong> asks how many <em>inodes</em> are in use. Every file and directory needs one, and on ext4 their number is fixed when the filesystem is created.</li>
+</ul>
+
+<p>When <code>df</code> and <code>du</code> disagree, there are three usual reasons: deleted-but-open files (<code>sudo lsof +L1</code>), files hidden under a mount point, or a different filesystem than you think (<code>du</code> without <code>-x</code> wanders into other mounts). And when writes fail with “No space left on device” while <code>df -h</code> shows space, check <code>df -i</code>: an <span class="term">inode exhaustion</span>. Millions of tiny files (caches, sessions, mail queues, thumbnails) can use every inode while using little space. <code>du --inodes -x /var | sort -n | tail</code> finds where they are.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">A filesystem can run out of two things: blocks and inodes. “No space left” with free space means <code>df -i</code>.</p>
+</div>
+
+<!-- ======================================================== 11.4 -->
+<h2 class="sec" id="s11-4"><span class="n">11.4</span>Mounting at boot: <code>/etc/fstab</code></h2>
+
+<p>Mounts you make by hand disappear at reboot. <code>/etc/fstab</code> lists the filesystems to mount at boot, one per line, six fields:</p>
+<pre><code>UUID=9024b159-9dd4-4d75-8f1e-7a99a652b68a  /var/lib/stagedoor  ext4  defaults,noatime,nofail  0  2
+<span class="c"># what (by UUID)                           where               type  options                  dump  fsck order</span></code></pre>
+
+<ul>
+  <li><strong>Identify by UUID</strong> (from <code>blkid</code> or <code>lsblk -f</code>), never by device name: <code>/dev/vdb</code> today can be <code>/dev/vdc</code> after the next disk is attached.</li>
+  <li><strong><code>nofail</code></strong> for anything that isn't needed to boot: if that volume is missing or broken, the machine still comes up and you can still log in. Without it, a detached data volume can leave a cloud server stuck in emergency mode, reachable only through the provider's serial console.</li>
+  <li><strong><code>noatime</code></strong> stops a write on every read to update access times; a small, free win.</li>
+  <li><strong>The last field</strong> orders boot-time checks: 1 for <code>/</code>, 2 for others, 0 for none (XFS ignores it).</li>
+</ul>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: test fstab before you reboot</p>
+  <p>A typo in <code>/etc/fstab</code> is found at the next boot, when it's hardest to fix. After editing, run <code>sudo findmnt --verify</code> and <code>sudo mount -a</code> (which mounts everything listed that isn't mounted yet) and fix any error while you're still logged in. systemd turns each fstab line into a <code>.mount</code> unit, so also <code>sudo systemctl daemon-reload</code>.</p>
+</div>
+
+<!-- ======================================================== 11.5 -->
+<h2 class="sec" id="s11-5"><span class="n">11.5</span>Growing a volume</h2>
+
+<p>On a cloud provider, making a disk bigger is a console click or an API call, and nowadays the instance doesn't even need to stop. But the click only grows the bottom layer of Figure 11.1. Each layer above needs its own step, all of them possible while the filesystem is mounted and in use:</p>
+
+<figure class="wide" id="fig11-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 196" role="img" aria-labelledby="fig11-2-t fig11-2-d">
+      <title id="fig11-2-t">Growing a cloud volume, layer by layer</title>
+      <desc id="fig11-2-d">Four steps. One: enlarge the volume at the provider, for example from 1 TB to 1.5 TB; lsblk shows the disk larger but the partition and filesystem unchanged. Two: grow the partition with growpart /dev/vdb 1. Three, only if LVM is used: pvresize, then lvextend. Four: grow the filesystem: resize2fs for ext4, xfs_growfs for XFS, given the mount point. df then shows the new size. All steps can be done while mounted. Before step one, take a snapshot.</desc>
+      <defs><marker id="c11ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="ext" x="10" y="20" width="170" height="96" rx="5"/><text class="t-title" x="24" y="44">1 Enlarge</text><text class="t-small" x="24" y="66">at the provider</text><text class="t-small" x="24" y="84">(snapshot first)</text><text class="t-mono" x="24" y="104">lsblk</text>
+      <rect class="node" x="200" y="20" width="170" height="96" rx="5"/><text class="t-title" x="214" y="44">2 Partition</text><text class="t-small" x="214" y="66">if there is one</text><text class="t-mono" x="214" y="104">growpart /dev/vdb 1</text>
+      <rect class="priv" x="390" y="20" width="170" height="96" rx="5" stroke-dasharray="5 4"/><text class="t-title" x="404" y="44">3 LVM</text><text class="t-small" x="404" y="66">only if used</text><text class="t-mono" x="404" y="88">pvresize</text><text class="t-mono" x="404" y="104">lvextend</text>
+      <rect class="node-accent" x="580" y="20" width="170" height="96" rx="5"/><text class="t-title on-accent" x="594" y="44">4 Filesystem</text><text class="t-mono on-accent" x="594" y="80">resize2fs (ext4)</text><text class="t-mono on-accent" x="594" y="100">xfs_growfs (XFS)</text>
+      <path class="wire" d="M180 68 H196" marker-end="url(#c11ah)"/><path class="wire" d="M370 68 H386" marker-end="url(#c11ah)"/><path class="wire" d="M560 68 H576" marker-end="url(#c11ah)"/>
+      <rect class="pub" x="10" y="138" width="740" height="46" rx="6"/>
+      <text class="t-small" x="26" y="166">All four steps work while the filesystem is mounted and in use. Check with <tspan font-family="JetBrains Mono, monospace">lsblk</tspan> after each step and <tspan font-family="JetBrains Mono, monospace">df -h</tspan> at the end.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 11.2</b> The provider grows the disk; you grow everything on it. Forgetting step 2 or 4 is why “I resized the volume and nothing changed” is a common question.</figcaption>
+</figure>
+
+<p>Shrinking is another matter: XFS can't shrink at all, ext4 only unmounted, and cloud volumes generally can't be made smaller. To shrink, create a smaller volume and copy the data. Size data volumes with room to grow, and grow them before they're full rather than during an incident.</p>
+
+<h3>What LVM adds</h3>
+
+<p>The <span class="term">Logical Volume Manager</span> (LVM) puts a flexible layer between partitions and filesystems. Disks or partitions become <strong>physical volumes</strong>; they're pooled into a <strong>volume group</strong>; and <strong>logical volumes</strong>, which you format and mount, are carved out of the pool. A logical volume can span several disks, be grown into free space in the group with <code>lvextend --resizefs</code> in one command, and be snapshotted. On physical servers like Stagedoor's at Atlantica, LVM is very useful: adding a second disk to a full volume group is how you grow without moving data. In the cloud, where volumes can be resized and snapshotted directly, many teams skip it for data volumes and use one filesystem per volume. Ubuntu Server's installer puts the root filesystem on LVM by default (<code>/dev/ubuntu-vg/ubuntu-lv</code>); <code>sudo pvs</code>, <code>vgs</code> and <code>lvs</code> show the layers.</p>
+
+<!-- ======================================================== 11.6 -->
+<h2 class="sec" id="s11-6"><span class="n">11.6</span>Swap files and other small jobs</h2>
+
+<p>Two more tasks you'll meet. A <strong>swap file</strong> (<a href="10-memory.html">Chapter 10</a>): <code>sudo fallocate -l 8G /swapfile</code>, <code>sudo chmod 600 /swapfile</code>, <code>sudo mkswap /swapfile</code>, <code>sudo swapon /swapfile</code>, then a line <code>/swapfile none swap sw 0 0</code> in fstab. And <strong>disk health and speed</strong>: <code>iostat -x 1</code> (from <code>sysstat</code>) shows each device's utilisation, queue and latency (<code>%util</code> near 100 and <code>await</code> in the tens of milliseconds mean the disk is the bottleneck, <a href="09-cpu.html">Chapter 9</a>), and <code>journalctl -k | grep -iE 'I/O error|ext4|xfs'</code> shows errors the kernel saw.</p>
+
+<!-- ======================================================== 11.7 -->
+<h2 class="sec" id="s11-7"><span class="n">11.7</span>Cloud volumes</h2>
+
+<p>Cloud block storage (AWS EBS, Azure Managed Disks, Google Cloud Persistent Disk) is a network service that looks like a local disk. Three properties matter day to day. <strong>Performance is bought, not found</strong>: IOPS and throughput depend on the volume type and size (on AWS gp3, 3,000 IOPS baseline unless you pay for more, at the time of writing), so a slow disk may be a small or cheap one. <strong>Snapshots</strong> are cheap and incremental; take one before any resize or risky change. And <strong>instance-store</strong> or “local SSD” disks are fast but lose their data when the instance stops: use them only for things you can rebuild.</p>
+
+<!-- ======================================================== 11.8 -->
+<h2 class="sec" id="s11-8"><span class="n">11.8</span>Across distributions</h2>
+
+<div class="box box-provider">
+  <p class="label">On the RHEL family and Amazon Linux</p>
+  <p>The default filesystem is XFS, so inode exhaustion is rare and growing uses <code>xfs_growfs /mount/point</code> (it takes the mount point, not the device). RHEL's installer uses LVM for the root filesystem, as Ubuntu's does; Amazon Linux images don't. <code>growpart</code> comes from <code>cloud-utils-growpart</code>. On Ubuntu, <code>growpart</code> is in <code>cloud-guest-utils</code>, and cloud images grow their root partition automatically at first boot (cloud-init, <a href="01-what-a-server-is.html">Chapter 1</a>), but not after later resizes.</p>
+</div>
+
+<!-- ======================================================== 11.9 -->
+<h2 class="sec" id="s11-9"><span class="n">11.9</span>Lab: a disk in a file</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 11 · Partition, fill with inodes, grow</p>
+  <p><strong>You'll</strong> make a disk out of a file (a <strong>loop device</strong>), partition it, create an ext4 filesystem with very few inodes, run out of inodes while most of the space is free, then grow the disk, partition and filesystem as you would a cloud volume, and check an fstab file without touching the real one. <strong>You need</strong> a Linux VM with <code>sudo</code>, <code>parted</code> and <code>growpart</code> (<code>sudo apt install parted cloud-guest-utils</code>); not a container. <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> the last step. The UUIDs and device numbers on your machine will differ.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Make a disk and partition it.</strong> A 200 MB file, attached as a block device (<code>--partscan</code> makes the kernel look for partitions on it), with one 99 MB partition and an ext4 filesystem limited to 2,048 inodes (<code>-N</code>), labelled <code>thumbs</code>:
+<pre><code>mkdir -p ~/lab11 &amp;&amp; cd ~/lab11
+truncate -s 200M disk.img
+dev=$(sudo losetup --find --show --partscan disk.img); echo "attached as $dev"
+sudo parted -s "$dev" mklabel gpt mkpart data ext4 1MiB 100MiB
+sudo mkfs.ext4 -q -N 2048 -L thumbs "${dev}p1"
+sudo mkdir -p /mnt/lab11
+sudo mount "${dev}p1" /mnt/lab11</code></pre>
+<pre><code>attached as /dev/loop0</code></pre>
+  Now look at every layer:
+<pre><code>lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS "$dev"; sudo blkid "${dev}p1"; df -h /mnt/lab11; df -i /mnt/lab11</code></pre>
+<pre><code>NAME       SIZE TYPE MOUNTPOINTS
+loop0      200M loop 
+`-loop0p1   99M part /mnt/lab11
+/dev/loop0p1: LABEL="thumbs" UUID="9024b159-9dd4-4d75-8f1e-7a99a652b68a" BLOCK_SIZE="4096" TYPE="ext4" PARTLABEL="data" PARTUUID="4c4538ad-eafe-43e6-8eb6-562a595dc65e"
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/loop0p1     95M   24K   88M   1% /mnt/lab11
+Filesystem     Inodes IUsed IFree IUse% Mounted on
+/dev/loop0p1     2048    11  2037    1% /mnt/lab11</code></pre>
+  The disk (200M), its partition (99M), the filesystem's type, label and UUID, its usable space (95M after ext4's own structures) and its inodes (2,048, 11 already used by the filesystem itself).</li>
+  <li><strong>Run out of inodes.</strong> Write up to 3,000 tiny “thumbnails”, stopping at the first failure:
+<pre><code>sudo mkdir /mnt/lab11/thumbs; sudo chown "$USER": /mnt/lab11/thumbs
+for i in $(seq 1 3000); do echo "thumbnail $i" &gt; /mnt/lab11/thumbs/t$i.jpg || { echo "stopped at file $i"; break; }; done
+df -h /mnt/lab11; df -i /mnt/lab11</code></pre>
+<pre><code>bash: line 2: /mnt/lab11/thumbs/t2037.jpg: No space left on device
+stopped at file 2037
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/loop0p1     95M  8.1M   80M  10% /mnt/lab11
+Filesystem     Inodes IUsed IFree IUse% Mounted on
+/dev/loop0p1     2048  2048     0  100% /mnt/lab11</code></pre>
+  “No space left on device” with 80 MB available. The inodes are gone. Find where:
+<pre><code>sudo du --inodes -x /mnt/lab11 | sort -n | tail -3; du -sh /mnt/lab11/thumbs</code></pre>
+<pre><code>1	/mnt/lab11/lost+found
+2037	/mnt/lab11/thumbs
+2039	/mnt/lab11
+8.1M	/mnt/lab11/thumbs</code></pre>
+  2,037 files in one directory, using only 8 MB. Clear them: <code>rm -r /mnt/lab11/thumbs</code>.</li>
+  <li><strong>Enlarge the disk</strong>, as a provider would, and tell the kernel:
+<pre><code>truncate -s 400M disk.img
+sudo losetup --set-capacity "$dev"
+lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS "$dev"</code></pre>
+<pre><code>NAME       SIZE TYPE MOUNTPOINTS
+loop0      400M loop 
+`-loop0p1   99M part /mnt/lab11</code></pre>
+  The disk is 400M; the partition is still 99M (Figure 11.2, step 1).</li>
+  <li><strong>Grow the partition</strong> (step 2):
+<pre><code>sudo growpart "$dev" 1</code></pre>
+<pre><code>CHANGED: partition=1 start=2048 old: size=202752 end=204799 new: size=817119 end=819166</code></pre></li>
+  <li><strong>Grow the filesystem</strong> (step 4). On a cloud server you'd do it while mounted, and normally that works:
+<pre><code>sudo resize2fs "${dev}p1"</code></pre>
+  On the test machine for this book, a sandboxed VM, the kernel refused the online resize (<code>resize2fs: Permission denied to resize filesystem</code>), so the filesystem was grown unmounted instead, which works everywhere:
+<pre><code>sudo umount /mnt/lab11
+sudo e2fsck -f -p "${dev}p1"
+sudo resize2fs "${dev}p1"
+sudo mount "${dev}p1" /mnt/lab11
+df -h /mnt/lab11; df -i /mnt/lab11</code></pre>
+<pre><code>thumbs: 11/2048 files (9.1% non-contiguous), 1174/25344 blocks
+resize2fs 1.47.0 (5-Feb-2023)
+Resizing the filesystem on /dev/loop0p1 to 102139 (4k) blocks.
+The filesystem on /dev/loop0p1 is now 102139 (4k) blocks long.
+
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/loop0p1    393M   24K  365M   1% /mnt/lab11
+Filesystem     Inodes IUsed IFree IUse% Mounted on
+/dev/loop0p1     8192    11  8181    1% /mnt/lab11</code></pre>
+  393 MB, and four times the inodes: ext4 keeps its inodes-per-space ratio when it grows.</li>
+  <li><strong>Check an fstab before trusting it.</strong> Write a test file with one good line (this filesystem, by UUID) and one bad one, and verify it with <code>findmnt</code>, which never touches <code>/etc/fstab</code> when given <code>--tab-file</code>:
+<pre><code>uuid=$(sudo blkid -s UUID -o value "${dev}p1")
+printf 'UUID=%s  /mnt/lab11  ext4  defaults,noatime,nofail  0  2\n' "$uuid" &gt; fstab.test
+printf 'UUID=00000000-1111-2222-3333-444444444444  /mnt/other  ext4  defaults  0  2\n' &gt;&gt; fstab.test
+findmnt --verify --tab-file fstab.test; echo "exit status: $?"</code></pre>
+<pre><code>/mnt/other
+   [E] unreachable on boot required target: No such file or directory
+   [E] unreachable on boot required source: UUID=00000000-1111-2222-3333-444444444444
+
+0 parse errors, 2 errors, 0 warnings
+exit status: 1</code></pre>
+  The good line passes. The bad one names a filesystem that doesn't exist and a mount point that doesn't exist, without <code>nofail</code>: in a real fstab, that's a server that doesn't finish booting.</li>
+  <li><strong>Clean up.</strong>
+<pre><code>sudo umount /mnt/lab11
+sudo losetup -d "$dev"
+rm disk.img fstab.test</code></pre></li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Repeat step 1 with <code>mkfs.xfs</code> instead (no <code>-N</code>), and run step 2 with 30,000 files: XFS allocates inodes as it goes. Grow it with <code>sudo xfs_growfs /mnt/lab11</code>. (2) Before step 4, run <code>du -sh</code> and <code>df -h</code> while a process holds a deleted file open on <code>/mnt/lab11</code> (<a href="03-files.html">Chapter 3</a>'s Python one-liner), and see them disagree. (3) Run <code>sudo tune2fs -l "${dev}p1" | grep -iE 'inode count|reserved block'</code> and find ext4's 5% reserve for root.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: 9.8 million thumbnails</p>
+  <p><code>sudo du --inodes -x /var | sort -n | tail</code> points at <code>/var/cache/stagedoor/thumbs</code>: 9.8 million small files. For every poster, the app generates a resized copy for each screen size and device it meets, and has never deleted one; the ext4 root filesystem, made with default settings for a 160 GB disk, has about 10 million inodes in total. Tiago deletes thumbnails older than 30 days with <code>find /var/cache/stagedoor/thumbs -type f -mtime +30 -delete</code>, after running it once without <code>-delete</code> to check, and uploads work again at 15:05.</p>
+  <p>The thumbnails are a cache, so they're allowed to disappear: a nightly timer now deletes any not used for 30 days, and Sasha's team changes the app to generate three standard sizes instead of one per device. An alert on inode usage above 80% joins the disk-space one. And the same week, <code>door-1</code>'s database volume, at 78%, gets room ahead of the autumn: Atlantica enlarges its virtual disk from 1 TB to 1.5 TB on a Tuesday afternoon, and Rafaela grows the partition and the ext4 filesystem with <code>growpart</code> and <code>resize2fs</code> while PostgreSQL keeps running. For the new database server being built for August (<a href="08-packages.html">Chapter 8</a>), the data goes on its own volume, separate from the operating system, so filling one can never stop the other.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s11-10"><span class="n">11.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Checking only <code>df -h</code></td><td>Inode exhaustion looks like a mystery.</td><td><code>df -i</code> too; alert on both.</td></tr>
+      <tr><td>Device names in fstab</td><td>A new disk renames the old ones; the wrong disk is mounted, or none.</td><td>UUIDs or labels.</td></tr>
+      <tr><td>No <code>nofail</code> on data volumes</td><td>A missing volume stops the boot; the server is unreachable.</td><td><code>nofail</code> for anything not needed to boot.</td></tr>
+      <tr><td>Rebooting to test fstab</td><td>Errors appear when you can't fix them.</td><td><code>findmnt --verify</code> and <code>mount -a</code> first.</td></tr>
+      <tr><td>Resizing the volume and stopping there</td><td>The partition and filesystem stay the same size.</td><td><code>growpart</code>, then <code>resize2fs</code> or <code>xfs_growfs</code>.</td></tr>
+      <tr><td>Data and the operating system on one filesystem</td><td>Filling one stops the other; logs fill the database's disk.</td><td>Separate volumes for data that grows.</td></tr>
+      <tr><td>Resizing without a snapshot</td><td>A mistake in the partition step loses the volume.</td><td>Snapshot first; it's cheap.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum11">
+  <h2 class="sec" id="sum11"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>A <strong>block device</strong> is divided by a <strong>partition table</strong>, optionally pooled by <strong>LVM</strong>, formatted with a <strong>filesystem</strong> and <strong>mounted</strong> into the tree. <code>lsblk</code> shows the layers.</li>
+    <li>ext4 is Ubuntu's default with a fixed number of inodes; XFS is RHEL's default and allocates inodes as needed.</li>
+    <li><code>df</code> counts used blocks, <code>du</code> adds up visible files, <code>df -i</code> counts inodes. Each answers a different question.</li>
+    <li><code>/etc/fstab</code> mounts at boot: use UUIDs, <code>nofail</code> for data volumes, and verify before rebooting.</li>
+    <li>Growing a cloud volume is four steps: the provider, the partition (<code>growpart</code>), LVM if used, the filesystem (<code>resize2fs</code>, <code>xfs_growfs</code>). Snapshot first.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Block device</dt><dd>Storage the kernel reads and writes in fixed-size blocks: a disk, a partition, a cloud volume or a loop device.</dd>
+    <dt>Partition table</dt><dd>The structure at the start of a disk that divides it into partitions; GPT is the modern format.</dd>
+    <dt>Filesystem</dt><dd>The on-disk structure of inodes, directories and data blocks that turns a block device into files.</dd>
+    <dt>Mount</dt><dd>Attaching a filesystem to a directory in the tree.</dd>
+    <dt>fstab</dt><dd>The file <code>/etc/fstab</code>, listing filesystems to mount at boot and their options.</dd>
+    <dt>Inode exhaustion</dt><dd>A filesystem running out of inodes, so no new files can be created although space is free.</dd>
+    <dt>LVM</dt><dd>The Logical Volume Manager, which pools disks into volume groups and divides them into resizable logical volumes.</dd>
+    <dt>Loop device</dt><dd>A block device backed by a file, used to treat a file as a disk.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Which command shows, in one view, the disks, their partitions, their sizes and where each is mounted? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p><code>lsblk</code> (add <code>-f</code> for filesystem types, labels and UUIDs).</p></details>
+    </li>
+    <li>
+      <p>You've enlarged an EBS volume from 100 GB to 200 GB. <code>lsblk</code> shows <code>nvme1n1 200G</code> and <code>nvme1n1p1 100G</code> mounted at <code>/data</code>, which is XFS. Write the remaining commands. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>sudo growpart /dev/nvme1n1 1</code>, then <code>sudo xfs_growfs /data</code> (XFS takes the mount point), then <code>df -h /data</code> to confirm. Both work while mounted.</p></details>
+    </li>
+    <li>
+      <p>Explain why <code>du -sh /</code> can report much less than <code>df -h /</code>. Give two causes. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p><code>du</code> only adds up files it can reach by name; <code>df</code> counts every used block. Deleted files still held open by a process use blocks but have no name; files hidden underneath a mount point also can't be reached. (Ext4's reserved blocks and <code>du</code> skipping unreadable directories without <code>sudo</code> also contribute.)</p></details>
+    </li>
+    <li>
+      <p>After adding a second data volume, a cloud server doesn't come back from a reboot, and the serial console shows “You are in emergency mode”. What's the likely cause, and how do you prevent it? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p>An fstab line that can't be satisfied: a device name that changed (the new volume took the old one's name) or a volume that isn't attached, without <code>nofail</code>. Fix from the console (or by attaching the disk to another instance), then use UUIDs, add <code>nofail</code> for non-essential volumes, and verify with <code>findmnt --verify</code> and <code>mount -a</code> before every reboot.</p></details>
+    </li>
+    <li>
+      <p>Design the disk layout for Stagedoor's new database server in the cloud. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>A small root volume for the operating system. A separate data volume for PostgreSQL, mounted at <code>/var/lib/postgresql</code> by UUID with <code>noatime</code>, sized with room to grow and a volume type with enough IOPS; XFS or ext4 with enough inodes. Optionally a separate volume for write-ahead logs. Snapshots scheduled, and alerts on space and inodes for each filesystem.</p></details>
+    </li>
+    <li>
+      <p>Compare using LVM and using whole cloud volumes directly for data. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>LVM can span disks, grow a logical volume and its filesystem in one step, and take LVM snapshots, which is valuable on physical servers where disks can't be resized. In the cloud, volumes can already be resized and snapshotted by the provider, so a filesystem directly on a volume is simpler, with one fewer layer to grow and debug. Use LVM where it solves a problem you have.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li><code>man lsblk</code>, <code>man fstab</code>, <code>man findmnt</code>, <code>man resize2fs</code>, <code>man xfs_growfs</code>, <code>man lvm</code>.</li>
+    <li>AWS: <a href="https://docs.aws.amazon.com/ebs/latest/userguide/recognize-expanded-volume-linux.html">Extend the file system after resizing an EBS volume</a>.</li>
+    <li>Ubuntu Server documentation: <a href="https://documentation.ubuntu.com/server/">storage, including LVM</a>.</li>
+    <li>The kernel documentation on <a href="https://docs.kernel.org/admin-guide/ext4.html">ext4</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="12-limits.html">12 · Limits and kernel settings</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 3 · Linux for Cloud Engineers</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

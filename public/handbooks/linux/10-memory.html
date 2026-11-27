@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Memory, swap and the OOM killer · Linux for Cloud Engineers</title>
+<meta name="description" content="Where memory goes, why “free” looks alarming and isn&#x27;t, and how the kernel picks a process to kill. The report that took Postgres down during a sale.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 3</a> · <a href="index.html">Linux for Cloud Engineers</a></span><span>Part III · Chapter 10</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part III · Resources</p>
+  <p class="chno">10</p>
+  <h1>Memory, swap and the OOM killer</h1>
+  <p class="promise">Linux uses memory differently from how most people expect: it fills “free” memory with cache on purpose, promises programs more than it has, and, when the promises can't all be kept, picks a process and kills it. This chapter explains each of those, how to read memory numbers without alarm, and how to make sure that when something must die, it isn't your database.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Read <code>free</code> correctly, and say why “available” matters more than “free”.</li>
+      <li>Tell virtual size from resident memory, and find the processes really using memory.</li>
+      <li>Explain what swap is for, and when a server should have it.</li>
+      <li>Explain how the OOM killer chooses a victim, find its traces, and protect a process from it.</li>
+      <li>Contain a memory-hungry job with a cgroup limit.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li><a href="05-processes.html">Chapter 5</a>: processes, signals, exit status 137. <a href="06-systemd.html">Chapter 6</a>: units and <code>systemd-run</code>.</li>
+      <li>A Linux VM with systemd, <code>sudo</code>, Python 3 and 3 GB of free disk (<a href="appendix-c-lab-setup.html">Appendix C</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, a VM with systemd, free</dd>
+      <dt>Main distribution</dt><dd>any; memory management is the kernel's</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>Friday 5 June 2026, 10:12, twelve minutes into a summer festival's on-sale: for forty seconds, every request to the database fails, on both web servers at once. Then everything recovers. PostgreSQL's log on <code>door-1</code> tells the story in three lines: one server process “was terminated by signal 9: Killed”; the database then “terminating any other active server processes”; then “database system was not properly shut down; automatic recovery in progress”.</p>
+  <p>Nobody sent signal 9. The kernel did. <code>journalctl -k</code> has the matching line: <em>Out of memory: Killed process 31877 (postgres)</em>, with 19 GB of resident memory. One PostgreSQL process, on a 32 GB machine, had grown to 19 GB. Rafaela and Sasha set out to find out which query it was running, and why the kernel chose it.</p>
+</aside>
+
+<!-- ======================================================== 10.1 -->
+<h2 class="sec" id="s10-1"><span class="n">10.1</span>Virtual memory</h2>
+
+<p class="lead">Every process sees its own private, contiguous range of memory addresses, its <span class="term">virtual address space</span>. The kernel maps pieces of it, in <strong>pages</strong> of 4 KB, onto real memory (RAM) only when the process actually touches them.</p>
+
+<figure class="wide" id="fig10-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 270" role="img" aria-labelledby="fig10-1-t fig10-1-d">
+      <title id="fig10-1-t">Virtual memory, resident memory and the page cache</title>
+      <desc id="fig10-1-d">On the left, one process's virtual address space, 4.3 GB in total: its code and shared libraries; 300 MB of data it has written to; and a 4 GB region it has reserved but never touched. On the right, physical RAM. The code and libraries map to pages shared with other processes using the same libraries. The 300 MB of written data maps to private pages: this is resident memory. The untouched 4 GB maps to nothing yet. The rest of RAM holds the page cache, copies of recently read files, and free pages. VSZ counts the whole virtual space; RSS counts only pages in RAM.</desc>
+      <defs><marker id="c10ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <text class="t-label" x="20" y="22">one process: virtual address space (VSZ 4.3 GB)</text>
+      <rect class="node" x="20" y="34" width="250" height="36" rx="4"/><text class="t-small" x="32" y="57">code and shared libraries</text>
+      <rect class="node-accent" x="20" y="76" width="250" height="36" rx="4"/><text class="t-small on-accent" x="32" y="99">300 MB it has written to</text>
+      <rect class="ext" x="20" y="118" width="250" height="128" rx="4" stroke-dasharray="5 4"/><text class="t-small" x="32" y="142">4 GB reserved, never touched</text><text class="t-small" x="32" y="160">(a mapping, a big buffer)</text><text class="t-small" x="32" y="178">costs no RAM yet</text>
+      <text class="t-label" x="480" y="22">physical RAM</text>
+      <rect class="node" x="480" y="34" width="270" height="36" rx="4"/><text class="t-small" x="492" y="57">shared pages (one copy for all)</text>
+      <rect class="node-accent" x="480" y="76" width="270" height="36" rx="4"/><text class="t-small on-accent" x="492" y="99">private pages: this process's RSS</text>
+      <rect class="pub" x="480" y="118" width="270" height="76" rx="4"/><text class="t-small" x="492" y="142">page cache: copies of files</text><text class="t-small" x="492" y="160">recently read or written;</text><text class="t-small" x="492" y="178">given back when needed</text>
+      <rect class="priv" x="480" y="200" width="270" height="46" rx="4"/><text class="t-small" x="492" y="228">free</text>
+      <path class="wire" d="M270 52 H476" marker-end="url(#c10ah)"/>
+      <path class="wire" d="M270 94 H476" marker-end="url(#c10ah)"/>
+      <path class="wire-dash" d="M270 182 H360"/><text class="t-small" x="366" y="186">no pages yet</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 10.1</b> <code>VSZ</code> is everything a process has mapped; <code>RSS</code> is what's in RAM. The difference can be enormous, and only RSS uses memory.</figcaption>
+</figure>
+
+<p>This explains the two memory columns in <code>ps</code> and <code>top</code>:</p>
+<ul>
+  <li><strong><code>VSZ</code></strong> (virtual size, <code>VIRT</code> in <code>top</code>): everything mapped, used or not. It's often huge and almost meaningless: a Java or Go program can map gigabytes it never touches.</li>
+  <li><strong><code>RSS</code></strong> (resident set size, <code>RES</code>): pages actually in RAM. This is the number to watch, with one caveat: shared pages (libraries, a database's shared buffers) are counted in the RSS of <em>every</em> process that uses them, so adding up RSS over-counts. <code>smem</code> or <code>/proc/&lt;pid&gt;/smaps_rollup</code> gives PSS, which divides shared pages fairly.</li>
+</ul>
+
+<p>Because pages are handed out only when touched, the kernel lets programs reserve more memory in total than the machine has. This is <span class="term">overcommit</span>, and it's usually right: most reservations are never fully used. When they are, the kernel has a problem it can only solve by taking memory back from someone (10.4).</p>
+
+<!-- ======================================================== 10.2 -->
+<h2 class="sec" id="s10-2"><span class="n">10.2</span>Reading <code>free</code></h2>
+
+<pre><code>               total        used        free      shared  buff/cache   available
+Mem:            15Gi       673Mi        14Gi        12Mi       739Mi        15Gi
+Swap:             0B          0B          0B</code></pre>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 10.1 · The columns of <code>free</code></caption>
+    <thead><tr><th>Column</th><th>Means</th></tr></thead>
+    <tbody>
+      <tr><td><code>used</code></td><td>memory programs and the kernel are using, not counting cache</td></tr>
+      <tr><td><code>free</code></td><td>memory nobody is using for anything, not even cache</td></tr>
+      <tr><td><code>buff/cache</code></td><td>the <span class="term">page cache</span> and kernel buffers: copies of files, kept in case they're read again</td></tr>
+      <tr><td><code>available</code></td><td>an estimate of how much could be given to programs right now without swapping: free plus cache that can be dropped</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Linux uses otherwise idle RAM to cache files, because reading from RAM is thousands of times faster than from disk, and gives that memory back the moment a program needs it. On a healthy server that has been up for a while, <code>free</code> is small and <code>buff/cache</code> is large, and that's a good sign, not a warning. The lab reads a 2 GB file and watches <code>buff/cache</code> grow by 2 GB while <code>available</code> doesn't move.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Watch <code>available</code>, not <code>free</code>. Free memory is memory doing nothing; cache is memory doing something useful until it's needed elsewhere.</p>
+</div>
+
+<!-- ======================================================== 10.3 -->
+<h2 class="sec" id="s10-3"><span class="n">10.3</span>Swap</h2>
+
+<p><span class="term">Swap</span> is disk space the kernel can move memory pages to when RAM is short: a swap partition, or a swap file. Pages of program memory that haven't been used for a while are written out (“swapped out”) and read back when touched again. It isn't a substitute for RAM, since disk is far slower, but it does two useful things: it lets the kernel move genuinely idle memory out of the way to make room for cache and active work, and it turns a sudden memory shortage into a gradual slowdown that a person or alert can notice, instead of an instant kill.</p>
+
+<p><code>free</code> shows swap's size and use; <code>vmstat 1</code>'s <code>si</code> and <code>so</code> columns show pages swapped in and out each second. Swap <em>used</em> isn't a problem; <em>continuous</em> swapping in and out (“thrashing”) is, and makes a machine crawl. <code>vm.swappiness</code> (0–200, default 60) tunes how readily the kernel swaps program memory rather than dropping cache.</p>
+
+<aside class="side"><b>Swap on cloud VMs</b>Most cloud images, including Ubuntu's, ship with no swap at all, as did the lab machine. Adding a swap file is a few commands (<a href="11-disks.html">Chapter 11</a>); whether to is a judgement: for a database server, a small amount buys warning time; for a container host, many teams prefer no swap and strict limits.</aside>
+
+<!-- ======================================================== 10.4 -->
+<h2 class="sec" id="s10-4"><span class="n">10.4</span>When memory runs out</h2>
+
+<p>When a program touches a page and the kernel can't find RAM for it, the kernel works down a ladder:</p>
+
+<figure class="wide" id="fig10-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 230" role="img" aria-labelledby="fig10-2-t fig10-2-d">
+      <title id="fig10-2-t">What the kernel does as memory runs out</title>
+      <desc id="fig10-2-d">Four steps, each tried when the one before isn't enough. One: use free pages. Two: reclaim page cache, dropping clean cached file pages and writing dirty ones back; the system slows a little as files are read again. Three: swap out idle program pages, if there is swap; the system slows more, and swapping in and out continuously is thrashing. Four: the OOM killer picks the process with the highest oom_score, usually the one using the most memory, adjusted by oom_score_adj, and sends it SIGKILL; it's logged in the kernel log. Inside a cgroup with a memory limit, the same ladder applies within the limit, and the OOM killer chooses only among the cgroup's processes.</desc>
+      <defs><marker id="c10ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="10" y="16" width="170" height="104" rx="5"/><text class="t-title" x="24" y="40">1 Free pages</text><text class="t-small" x="24" y="62">use what nobody</text><text class="t-small" x="24" y="80">is using</text>
+      <rect class="node" x="200" y="16" width="170" height="104" rx="5"/><text class="t-title" x="214" y="40">2 Reclaim cache</text><text class="t-small" x="214" y="62">drop cached files,</text><text class="t-small" x="214" y="80">write back dirty ones;</text><text class="t-small" x="214" y="98">a little slower</text>
+      <rect class="node" x="390" y="16" width="170" height="104" rx="5"/><text class="t-title" x="404" y="40">3 Swap out</text><text class="t-small" x="404" y="62">move idle program</text><text class="t-small" x="404" y="80">pages to disk, if any;</text><text class="t-small" x="404" y="98">slower, maybe thrashing</text>
+      <rect class="node-accent" x="580" y="16" width="170" height="104" rx="5"/><text class="t-title on-accent" x="594" y="40">4 OOM killer</text><text class="t-small on-accent" x="594" y="62">SIGKILL to the highest</text><text class="t-small on-accent" x="594" y="80">oom_score; logged in</text><text class="t-small on-accent" x="594" y="98">the kernel log</text>
+      <path class="wire" d="M180 68 H196" marker-end="url(#c10ah2)"/><path class="wire" d="M370 68 H386" marker-end="url(#c10ah2)"/><path class="wire" d="M560 68 H576" marker-end="url(#c10ah2)"/>
+      <rect class="priv" x="10" y="140" width="740" height="76" rx="6"/>
+      <text class="t-small" x="26" y="164"><tspan font-weight="700">Score:</tspan> roughly the share of memory a process uses (RSS, swap, page tables), shifted by oom_score_adj</text>
+      <text class="t-small" x="26" y="184">from −1000 (never kill) to +1000 (kill first). <tspan font-weight="700">In a cgroup with a limit</tspan> (MemoryMax=, docker --memory),</text>
+      <text class="t-small" x="26" y="204">the same ladder runs inside the limit, and only the cgroup's own processes can be chosen.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 10.2</b> The OOM killer is the last step, not the first. Without swap, step 3 doesn't exist, and the gap between “a bit slow” and “something was killed” is short.</figcaption>
+</figure>
+
+<p>The <span class="term">OOM killer</span> (out of memory) chooses by a score, <code>/proc/&lt;pid&gt;/oom_score</code>: mostly how much memory the process uses, so the biggest process is usually the victim. Each process also has <code>/proc/&lt;pid&gt;/oom_score_adj</code>, from −1000 to +1000, added to its score; −1000 exempts it entirely. In a unit file it's <code>OOMScoreAdjust=</code>. The victim gets <code>SIGKILL</code> (exit status 137, <a href="05-processes.html">Chapter 5</a>), and the kernel log records it: <code>journalctl -k | grep -i "out of memory"</code> or <code>dmesg</code>, with the process's memory use at the moment of death.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: the biggest process is often the most important one</p>
+  <p>On a database server, the database is the biggest process by far, so it's the OOM killer's favourite target, even when a careless report or a leaky script caused the shortage. For PostgreSQL, killing even one backend with <code>SIGKILL</code> makes the whole server restart all connections and run crash recovery, because shared memory might be corrupt: a few seconds to minutes of outage for everyone. Protect the database's main process, cap what other jobs on the machine may use, and keep memory headroom.</p>
+</div>
+
+<!-- ======================================================== 10.5 -->
+<h2 class="sec" id="s10-5"><span class="n">10.5</span>Limits with cgroups</h2>
+
+<p>A <span class="term">cgroup</span> (control group) is a group of processes that the kernel accounts and limits together. systemd puts every service in its own cgroup (<a href="06-systemd.html">Chapter 6</a>), so memory limits are one line in a unit:</p>
+<ul>
+  <li><code>MemoryMax=2G</code>: a hard limit. If the service's processes need more and nothing can be reclaimed within the cgroup, the OOM killer kills one of <em>them</em>, not something else on the machine.</li>
+  <li><code>MemoryHigh=1.5G</code>: a soft limit. Above it, the kernel reclaims the cgroup's memory aggressively and slows it down, which is often enough to keep it from reaching <code>MemoryMax</code>.</li>
+  <li><code>MemorySwapMax=0</code>: no swap for this service.</li>
+</ul>
+
+<p>For a one-off job, <code>sudo systemd-run --unit=report -p MemoryMax=4G -p User=$USER command</code> runs it in its own limited cgroup, which is what the lab does. Containers use the same mechanism: <code>docker run --memory=2g</code>, and Kubernetes' memory limits (Handbook 4), so a container killed with 137 and <code>OOMKilled: true</code> hit its own limit, not the machine's.</p>
+
+<!-- ======================================================== 10.6 -->
+<h2 class="sec" id="s10-6"><span class="n">10.6</span>Who is using the memory?</h2>
+
+<pre><code>ps -eo pid,rss,vsz,comm --sort=-rss | head        <span class="c"># biggest resident first (KB)</span>
+top                                               <span class="c"># press M to sort by memory</span>
+grep -E 'VmRSS|VmSwap' /proc/2187/status          <span class="c"># one process: resident and swapped</span>
+systemd-cgtop                                     <span class="c"># memory per service (cgroup), live</span>
+grep -E 'MemAvailable|Dirty|Shmem' /proc/meminfo  <span class="c"># the whole machine, in detail</span></code></pre>
+
+<p>Two traps when the numbers don't add up: shared memory is counted in every process that maps it (10.1), and memory used by the kernel itself (slab caches, page tables) appears in no process at all; <code>/proc/meminfo</code> and <code>slabtop</code> show it.</p>
+
+<!-- ======================================================== 10.7 -->
+<h2 class="sec" id="s10-7"><span class="n">10.7</span>Across distributions</h2>
+
+<p>Memory management, the OOM killer and cgroups are the kernel's, so they behave the same everywhere. What differs is the plumbing around them:</p>
+
+<div class="box box-provider">
+  <p class="label">On newer systems: systemd-oomd</p>
+  <p>Ubuntu Desktop (since 22.04) and Fedora run <code>systemd-oomd</code>, a user-space killer that acts <em>earlier</em> than the kernel, when memory pressure (time spent waiting for memory, from <code>/proc/pressure/memory</code>) stays high, and kills a whole cgroup rather than one process. It's configured per slice with <code>ManagedOOMMemoryPressure=</code>; on servers it's often not installed or not active, so check <code>systemctl status systemd-oomd</code>. If something was killed and the kernel log has no OOM line, check <code>journalctl -u systemd-oomd</code>. RHEL and Amazon Linux don't enable it by default.</p>
+</div>
+
+<!-- ======================================================== 10.8 -->
+<h2 class="sec" id="s10-8"><span class="n">10.8</span>Lab: cache, residence and a kill</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 10 · Watch memory being cached, reserved and taken back</p>
+  <p><strong>You'll</strong> see the page cache fill without hurting <code>available</code>, compare a process's virtual and resident size, change its OOM score, then run a memory hog inside a 200 MB limit and find the kernel's record of killing it. <strong>You need</strong> a Linux VM with systemd, <code>sudo</code>, Python 3 and 3 GB of free disk. <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> delete <code>big.bin</code> and <code>hog.py</code>. Steps 1–3 ran on a 16 GB test VM, step 4 on the systemd test system of Lab 6.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>The page cache.</strong> Make a 2 GB file, empty the cache (harmless: the kernel just forgets cached copies), then read the file and compare:
+<pre><code>mkdir -p ~/lab10 &amp;&amp; cd ~/lab10
+head -c 2G /dev/urandom &gt; big.bin
+sync; echo 3 | sudo tee /proc/sys/vm/drop_caches &gt; /dev/null
+free -h | head -2; cat big.bin &gt; /dev/null; free -h | head -2</code></pre>
+<pre><code>               total        used        free      shared  buff/cache   available
+Mem:            15Gi       616Mi        15Gi        12Mi       319Mi        15Gi
+               total        used        free      shared  buff/cache   available
+Mem:            15Gi       618Mi        13Gi        12Mi       2.3Gi        15Gi</code></pre>
+  <code>buff/cache</code> grew by 2 GB and <code>free</code> shrank by 2 GB, but <code>available</code> stayed at 15 GiB: that cache can be given back at any time. Read the file again and time it (<code>time cat big.bin &gt; /dev/null</code>): from cache, it's much faster than the first read. Never use <code>drop_caches</code> on a production server to “free memory”; you'd only make the next reads slow.</li>
+  <li><strong>Virtual and resident.</strong> Start a Python process that maps 4 GB without touching it and fills 300 MB, and look at it:
+<pre><code>python3 -c "import mmap, time; m = mmap.mmap(-1, 4 &lt;&lt; 30); b = bytearray(300 &lt;&lt; 20); time.sleep(20)" &amp;
+sleep 2; ps -o pid,vsz,rss,comm -p $!; grep -E "VmSize|VmRSS" /proc/$!/status</code></pre>
+<pre><code>  PID    VSZ   RSS COMMAND
+12866 4537064 317596 python3
+VmSize:	 4537064 kB
+VmRSS:	  317596 kB</code></pre>
+  4.3 GB virtual, 310 MB resident. The untouched 4 GB costs nothing until it's written.</li>
+  <li><strong>The OOM score</strong> of the same process, before and after making it a preferred victim (no <code>sudo</code> needed to <em>raise</em> your own; lowering it below 0 needs root):
+<pre><code>cat /proc/$!/oom_score; echo 500 &gt; /proc/$!/oom_score_adj; cat /proc/$!/oom_score</code></pre>
+<pre><code>679
+1012</code></pre>
+  The adjustment moved it up the list. A process with <code>oom_score_adj</code> of −1000 is never chosen; setting a negative value needs root (and some sandboxed machines refuse even that). Stop it with <code>kill $!</code>.</li>
+  <li><strong>A kill, contained.</strong> Save this hog as <code>hog.py</code>:
+<p class="code-title"><span>hog.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># hog.py · take memory 10 MB at a time, say so every 50 MB, and never give it back</span>
+<span class="k">import</span> time
+
+held = []
+<span class="k">for</span> n <span class="k">in</span> range(1, 1001):
+    held.append(bytearray(10 * 1024 * 1024))   <span class="c"># bytearray fills its memory with zeros, so it's really used</span>
+    <span class="k">if</span> n % 5 == 0:
+        print(f<span class="s">"holding {n * 10} MB"</span>, flush=<span class="k">True</span>)
+    time.sleep(0.02)
+print(<span class="s">"finished: holding 10 GB"</span>)</code></pre>
+  Run it as a transient service with a 200 MB memory limit and no swap, and wait for it to finish:
+<pre><code>sudo systemd-run --wait --unit=hog -p User=$USER -p MemoryMax=200M -p MemorySwapMax=0 /usr/bin/python3 $HOME/lab10/hog.py</code></pre>
+<pre><code>Running as unit: hog.service; invocation ID: 9d1ab0c9e70e433babfc971be1cfd8e4
+Finished with result: signal
+Main processes terminated with: code=killed/status=KILL
+Service runtime: 524ms</code></pre>
+  Killed by signal 9 after half a second. Its output and what systemd saw:
+<pre><code>sudo journalctl -u hog --no-pager -o cat | tail -6</code></pre>
+<pre><code>Started hog.service - /usr/bin/python3 /home/tiago/hog.py.
+holding 50 MB
+holding 100 MB
+holding 150 MB
+hog.service: Main process exited, code=killed, status=9/KILL
+hog.service: Failed with result 'signal'.</code></pre>
+  It reached 150 MB and died before 200. The kernel's side:
+<pre><code>sudo dmesg | grep -i "killed process" | tail -1</code></pre>
+<pre><code>[ 3881.215523] Memory cgroup out of memory: Killed process 12758 (python3) total-vm:220000kB, anon-rss:204288kB, file-rss:6456kB, shmem-rss:0kB, UID:1001 pgtables:456kB oom_score_adj:0</code></pre>
+  “Memory cgroup out of memory”: the limit was the cgroup's, so the rest of the machine never noticed. <code>anon-rss</code> (about 200 MB) is the memory it had written to; <code>UID:1001</code> is the user it ran as. On a system using cgroup v2 throughout, systemd may also report the result as <code>oom-kill</code> rather than <code>signal</code>.</li>
+  <li><strong>Clean up:</strong> <code>sudo systemctl reset-failed hog; rm ~/lab10/big.bin ~/lab10/hog.py</code>.</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Run the hog again with <code>-p MemoryHigh=150M -p MemoryMax=200M</code> and watch it with <code>systemd-cgtop</code>: does it slow down before it dies? (2) Run it with no limit at all on a small VM (1 GB) and find which process the global OOM killer chose; were you surprised? (3) Read <code>/proc/pressure/memory</code> during step 4 of a run with <code>MemoryHigh=</code>.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: the 19 GB query</p>
+  <p>PostgreSQL's log shows what process 31877 was doing: a settlement report from an analyst's dashboard, grouping three years of ticket rows by venue and seat category. The analyst's session had raised <code>work_mem</code>, the memory each sort or hash step may use, to 4 GB “so the report would finish”. A single query can use <code>work_mem</code> several times over, and this one used it five times. With 8 GB of shared buffers and two hundred checkout connections on top, a 32 GB server with no swap ran out, and the biggest process on it was that one PostgreSQL backend.</p>
+  <p>Sasha and Rafaela change four things. Reports get their own database role with <code>work_mem</code> capped at 64 MB and a statement timeout; they run on a schedule outside on-sales. <code>door-1</code> gets an 8 GB swap file, to turn the next shortage into a slowdown with an alert instead of a restart. PostgreSQL's main process (the postmaster) gets <code>OOMScoreAdjust=-1000</code> in a drop-in, with the environment settings PostgreSQL's documentation describes so that its child processes stay killable, so if anything must be killed, it isn't the process whose death restarts everything. And an alert fires when <code>MemAvailable</code> stays below 10%. The real fix, a read-only replica for reports, belongs to Handbook 6.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s10-9"><span class="n">10.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Alerting on low <code>free</code></td><td>Constant false alarms on every healthy server.</td><td>Alert on <code>MemAvailable</code>, and on swapping in and out.</td></tr>
+      <tr><td>Judging a process by <code>VSZ</code></td><td>Huge numbers that use no memory.</td><td><code>RSS</code> (or PSS for shared memory).</td></tr>
+      <tr><td>Dropping caches to “free memory”</td><td>Every following read goes to disk; nothing is gained.</td><td>Leave the cache alone; it's given back when needed.</td></tr>
+      <tr><td>Running reports and batch jobs uncapped on the database server</td><td>The OOM killer picks the database.</td><td>Limits (<code>MemoryMax=</code>, per-role <code>work_mem</code>), another machine, or a replica.</td></tr>
+      <tr><td><code>oom_score_adj=-1000</code> on everything important</td><td>The killer has nothing left to choose, and the whole machine can hang.</td><td>Protect one or two processes; limit the rest.</td></tr>
+      <tr><td>Missing the kernel's message</td><td>“It just died with 137” stays a mystery.</td><td><code>journalctl -k</code> or <code>dmesg</code> for “Killed process”.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum10">
+  <h2 class="sec" id="sum10"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Each process has a <strong>virtual address space</strong>; pages use RAM only when touched. <code>VSZ</code> is mapped, <code>RSS</code> is resident.</li>
+    <li>The kernel fills idle RAM with the <strong>page cache</strong> and gives it back on demand; <code>available</code> is the number that matters.</li>
+    <li><strong>Swap</strong> moves idle pages to disk, buying time and turning sudden shortages into slowdowns; continuous swapping is thrashing.</li>
+    <li>When memory runs out, the kernel reclaims cache, swaps, then the <strong>OOM killer</strong> sends <code>SIGKILL</code> to the process with the highest <code>oom_score</code>, adjusted by <code>oom_score_adj</code>, and logs it.</li>
+    <li><strong>cgroup</strong> limits (<code>MemoryMax=</code>, <code>MemoryHigh=</code>, container limits) contain a hungry job so the OOM killer chooses only within it.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Virtual address space</dt><dd>The private range of memory addresses a process sees, mapped by the kernel onto RAM page by page.</dd>
+    <dt>Page</dt><dd>The unit of memory the kernel manages, usually 4 KB.</dd>
+    <dt>RSS</dt><dd>Resident set size: the part of a process's memory currently in RAM.</dd>
+    <dt>Page cache</dt><dd>RAM holding copies of file contents, kept for fast re-reading and released when programs need memory.</dd>
+    <dt>Overcommit</dt><dd>The kernel allowing programs to reserve more memory in total than the machine has.</dd>
+    <dt>Swap</dt><dd>Disk space used to hold memory pages moved out of RAM.</dd>
+    <dt>OOM killer</dt><dd>The kernel mechanism that kills a process to free memory when none can otherwise be found.</dd>
+    <dt>oom_score_adj</dt><dd>A per-process value from −1000 to 1000 added to its OOM score; −1000 means never kill.</dd>
+    <dt>cgroup</dt><dd>A control group: a set of processes the kernel accounts for and limits together.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p><code>free -h</code> shows <code>total 32Gi, used 6Gi, free 400Mi, buff/cache 25Gi, available 25Gi</code>. Is the server short of memory? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>No. Programs use about 6 GB; most of the rest is page cache, which the kernel gives back on demand, so about 25 GB is available. Low <code>free</code> on a long-running server is normal.</p></details>
+    </li>
+    <li>
+      <p>A container exits with 137. How do you find out whether it was out of memory, and whose limit it hit? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>docker inspect</code> shows <code>OOMKilled: true</code> if the container hit its own memory limit. The kernel log (<code>dmesg</code> or <code>journalctl -k</code>) has “Memory cgroup out of memory: Killed process …” for a cgroup limit, or “Out of memory: Killed process …” for a machine-wide shortage. If neither appears, something else sent <code>SIGKILL</code>, such as a stop timeout.</p></details>
+    </li>
+    <li>
+      <p>Explain why adding up the RSS of all PostgreSQL processes gives more than the machine's RAM. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>PostgreSQL's shared buffers are shared memory mapped by every backend. Each backend's RSS includes the shared pages it has touched, so the same pages are counted many times. PSS (from <code>smem</code> or <code>smaps_rollup</code>) splits shared pages between the processes using them.</p></details>
+    </li>
+    <li>
+      <p>A server becomes extremely slow for minutes at a time but nothing is killed. <code>vmstat 1</code> shows <code>si</code> and <code>so</code> in the thousands. What's happening, and what would you do? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p>Thrashing: memory demand exceeds RAM, and pages are continuously swapped out and back in. Find the processes with the largest resident and swapped memory (<code>VmSwap</code> in <code>/proc/&lt;pid&gt;/status</code>), reduce or limit them (a cgroup <code>MemoryMax=</code>), or add RAM. Swap bought time; the shortage is real.</p></details>
+    </li>
+    <li>
+      <p>Design memory protection for a server that runs PostgreSQL and, at night, a Python export job that sometimes uses a lot of memory. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Run the export as a systemd service or timer with <code>MemoryHigh=</code> and <code>MemoryMax=</code> well below what PostgreSQL needs, so it's killed first and alone. Give the postmaster <code>OOMScoreAdjust=-1000</code>. Size PostgreSQL's memory settings (shared buffers, <code>work_mem</code> per connection) with headroom. Add a little swap for warning time and alert on <code>MemAvailable</code>. Better still, run the export elsewhere, against a replica.</p></details>
+    </li>
+    <li>
+      <p>Compare <code>MemoryHigh=</code> and <code>MemoryMax=</code>. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p><code>MemoryHigh=</code> is soft: above it, the kernel reclaims the cgroup's memory hard and throttles it, slowing it down, but nothing is killed. <code>MemoryMax=</code> is hard: the cgroup can't exceed it, and if reclaim fails the OOM killer kills one of its processes. Use <code>High</code> as a brake a little below <code>Max</code>.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>The kernel documentation: <a href="https://docs.kernel.org/admin-guide/mm/concepts.html">Concepts overview</a> (memory management) and <a href="https://docs.kernel.org/admin-guide/cgroup-v2.html">Control Group v2</a> (memory controller).</li>
+    <li><code>man 5 proc</code> (<code>meminfo</code>, <code>oom_score_adj</code>), <code>man free</code>, <code>man systemd.resource-control</code>.</li>
+    <li>PostgreSQL: <a href="https://www.postgresql.org/docs/current/kernel-resources.html">Managing kernel resources</a>, section “Linux Memory Overcommit”.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="11-disks.html">11 · Disks, filesystems and inodes</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 3 · Linux for Cloud Engineers</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

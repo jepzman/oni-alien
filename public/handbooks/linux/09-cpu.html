@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>CPU, load and scheduling · Linux for Cloud Engineers</title>
+<meta name="description" content="What load average really measures, how the scheduler shares CPUs, and how to tell busy from blocked.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 3</a> · <a href="index.html">Linux for Cloud Engineers</a></span><span>Part III · Chapter 9</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part III · Resources</p>
+  <p class="chno">9</p>
+  <h1>CPU, load and scheduling</h1>
+  <p class="promise">“The load is 14!” is one of the most common alarms in operations, and one of the most misread. This chapter explains how Linux shares CPUs between processes, what load average actually counts, how to tell a machine that's busy computing from one that's stuck waiting, and how to tell the scheduler what matters more.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain what load average measures on Linux, and judge it against the number of CPUs.</li>
+      <li>Read the CPU breakdown in <code>top</code> and <code>vmstat</code>: user, system, idle, I/O wait, steal.</li>
+      <li>Tell CPU saturation from I/O waiting in two commands.</li>
+      <li>Lower a job's CPU and disk priority with <code>nice</code>, <code>ionice</code> and systemd settings.</li>
+      <li>Recognise cloud-specific CPU effects: vCPUs, steal time, burstable instances.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li><a href="05-processes.html">Chapter 5</a>: process states, especially <code>R</code> and <code>D</code>. <a href="06-systemd.html">Chapter 6</a>: services and timers.</li>
+      <li>A Linux machine with at least 2 CPUs and a few GB of free disk (<a href="appendix-c-lab-setup.html">Appendix C</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, any Linux VM, free</dd>
+      <dt>Main distribution</dt><dd>any; the kernel's scheduler is the same everywhere</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>Friday 8 May 2026, 10:00. Tickets for a sold-out arena show's extra date go on sale, and at 10:02 the new monitoring pages Rafaela: <em>door-1 load average 14.2</em>. <code>door-1</code> has 8 vCPUs. Checkout is slow; seat holds take three seconds instead of a fraction of one. In the team chat, Leonor writes what most people would: “The database server is overloaded. Can Atlantica give us a bigger one today?”</p>
+  <p>Rafaela opens <code>top</code> before answering. The CPUs are 30% busy. Most of the rest of the time, they're waiting.</p>
+</aside>
+
+<!-- ======================================================== 9.1 -->
+<h2 class="sec" id="s9-1"><span class="n">9.1</span>CPUs, cores and vCPUs</h2>
+
+<p class="lead">To Linux, a CPU is anything that can run one thread of instructions at a time. <code>nproc</code> counts them; <code>lscpu</code> describes them.</p>
+
+<p>On physical hardware, a processor has several <strong>cores</strong>, and each core may run two <strong>hardware threads</strong> (Intel calls this Hyper-Threading, AMD SMT). Two threads on one core share its execution units, so they're worth less than two cores: perhaps 1.2 to 1.3 times one core for typical server work. Linux counts each hardware thread as a CPU.</p>
+
+<p>In the cloud, you rent <span class="term">vCPUs</span>. On most instance types one vCPU is one hardware thread of a physical core shared with other customers' VMs; on some, two vCPUs are the two threads of one dedicated core. Either way, <code>nproc</code> on an “8 vCPU” server says 8, and that's the number to compare load against. The lab machine for this chapter:</p>
+<pre><code>CPU(s):                                  4
+Model name:                              Intel(R) Xeon(R) Processor @ 2.10GHz
+Thread(s) per core:                      1
+Core(s) per socket:                      4
+Socket(s):                               1</code></pre>
+
+<!-- ======================================================== 9.2 -->
+<h2 class="sec" id="s9-2"><span class="n">9.2</span>How the scheduler shares CPUs</h2>
+
+<p>At any moment, most processes are <strong>sleeping</strong> (<code>S</code>, <a href="05-processes.html">Chapter 5</a>): waiting for a network packet, a timer, a lock. The ones that could use a CPU right now are <strong>runnable</strong> (<code>R</code>). If there are more runnable threads than CPUs, the extras wait in a <span class="term">run queue</span>, and the kernel's <span class="term">scheduler</span> switches between them every few milliseconds so each gets a fair share. Each switch is a <strong>context switch</strong>; it costs a few microseconds, which is nothing until a machine does hundreds of thousands a second.</p>
+
+<p>A third group neither runs nor waits for a CPU: threads in <strong>uninterruptible sleep</strong> (<code>D</code>), waiting inside the kernel for disk I/O (or a network filesystem) to finish. They can't use a CPU even if one is free; they're waiting for the disk.</p>
+
+<figure class="wide" id="fig9-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 270" role="img" aria-labelledby="fig9-1-t fig9-1-d">
+      <title id="fig9-1-t">What load average counts on Linux</title>
+      <desc id="fig9-1-d">A machine with four CPUs. Four threads are running, one on each CPU. Three more runnable threads wait in the run queue for a CPU. Five threads are in uninterruptible sleep, D state, waiting for the disk. Many other threads are sleeping, waiting for the network or a timer. A bracket labels the running, queued and D-state threads together: 4 plus 3 plus 5 equals 12, the instantaneous load. Load average is an exponentially smoothed average of that number over 1, 5 and 15 minutes. Sleeping threads are not counted.</desc>
+      <rect class="node" x="10" y="14" width="380" height="96" rx="6"/>
+      <text class="t-label" x="24" y="36">4 CPUs: running (R)</text>
+      <rect class="node-accent" x="24" y="48" width="80" height="44" rx="4"/><text class="t-small on-accent" x="64" y="74" text-anchor="middle">CPU 0</text>
+      <rect class="node-accent" x="114" y="48" width="80" height="44" rx="4"/><text class="t-small on-accent" x="154" y="74" text-anchor="middle">CPU 1</text>
+      <rect class="node-accent" x="204" y="48" width="80" height="44" rx="4"/><text class="t-small on-accent" x="244" y="74" text-anchor="middle">CPU 2</text>
+      <rect class="node-accent" x="294" y="48" width="80" height="44" rx="4"/><text class="t-small on-accent" x="334" y="74" text-anchor="middle">CPU 3</text>
+      <rect class="node" x="10" y="122" width="380" height="56" rx="6"/>
+      <text class="t-label" x="24" y="144">run queue: runnable, waiting for a CPU (R)</text>
+      <text class="t-mono" x="24" y="166">■ ■ ■</text>
+      <rect class="node" x="10" y="190" width="380" height="56" rx="6"/>
+      <text class="t-label" x="24" y="212">waiting for the disk (D)</text>
+      <text class="t-mono t-warn" x="24" y="234">■ ■ ■ ■ ■</text>
+      <path class="wire" d="M400 20 H414 V246 H400"/>
+      <text class="t-title" x="426" y="118">load now = 4 + 3 + 5 = 12</text>
+      <text class="t-small" x="426" y="142">load average: this count, smoothed</text>
+      <text class="t-small" x="426" y="160">over 1, 5 and 15 minutes</text>
+      <rect class="priv" x="426" y="190" width="324" height="56" rx="6"/>
+      <text class="t-small" x="440" y="212">not counted: sleeping threads (S),</text>
+      <text class="t-small" x="440" y="232">waiting for the network or a timer</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 9.1</b> Linux's load counts threads that are running, waiting for a CPU, <em>and</em> waiting for the disk. A high load can mean too little CPU or too slow a disk, and the number alone doesn't say which.</figcaption>
+</figure>
+
+<!-- ======================================================== 9.3 -->
+<h2 class="sec" id="s9-3"><span class="n">9.3</span>Load average</h2>
+
+<p>The <span class="term">load average</span> is the three numbers at the start of <code>uptime</code>, <code>top</code> and <code>/proc/loadavg</code>: the average number of threads that were running, runnable or in uninterruptible sleep, over roughly the last 1, 5 and 15 minutes. They're exponentially smoothed, so a sudden change shows up gradually: in the lab, eight busy processes take more than a minute to push the 1-minute figure near 8.</p>
+
+<p>Three rules make the numbers useful:</p>
+<ol class="steps">
+  <li><strong>Divide by the number of CPUs.</strong> A load of 8 is idle-ish on a 64-CPU machine and badly overloaded on a 2-CPU one. Below the CPU count, there's usually spare capacity; persistently above it, something is waiting.</li>
+  <li><strong>Compare the three numbers.</strong> 1-minute higher than 15-minute: getting worse. Lower: recovering. The trend matters more than the value.</li>
+  <li><strong>Find out what kind of waiting.</strong> On Linux (unlike most other Unix systems), load includes <code>D</code>-state threads. Look at the CPU breakdown (9.4) and the <code>r</code> and <code>b</code> columns of <code>vmstat</code> before deciding a machine needs more CPU.</li>
+</ol>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Load average says that things are waiting, not what they're waiting for. Before buying CPUs, check whether the waiting is for CPUs.</p>
+</div>
+
+<!-- ======================================================== 9.4 -->
+<h2 class="sec" id="s9-4"><span class="n">9.4</span>Where the CPU time goes</h2>
+
+<p>The kernel accounts for every tick of every CPU in one of a few categories. <code>top</code> shows them on its <code>%Cpu(s)</code> line, and <code>vmstat</code> in its last columns:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 9.1 · CPU time categories</caption>
+    <thead><tr><th><code>top</code></th><th><code>vmstat</code></th><th>Means</th><th>High usually means</th></tr></thead>
+    <tbody>
+      <tr><td><code>us</code></td><td><code>us</code></td><td>user: running programs' own code</td><td>your app or database is computing</td></tr>
+      <tr><td><code>sy</code></td><td><code>sy</code></td><td>system: running the kernel on programs' behalf</td><td>lots of system calls, network or disk work, context switches</td></tr>
+      <tr><td><code>ni</code></td><td>(in <code>us</code>)</td><td>user time of processes with a positive nice value</td><td>background jobs you deprioritised (9.5)</td></tr>
+      <tr><td><code>id</code></td><td><code>id</code></td><td>idle, nothing to do</td><td>spare capacity</td></tr>
+      <tr><td><code>wa</code></td><td><code>wa</code></td><td>idle, but some thread is waiting for I/O</td><td>the disk is the bottleneck; look at <code>b</code> and <a href="11-disks.html">Chapter 11</a></td></tr>
+      <tr><td><code>hi</code>, <code>si</code></td><td>(in <code>sy</code>)</td><td>handling hardware and software interrupts</td><td>very high packet rates</td></tr>
+      <tr><td><code>st</code></td><td><code>st</code></td><td>steal: the hypervisor ran someone else on your vCPU</td><td>a busy host, or a burstable instance out of credits (9.6)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Two more columns of <code>vmstat 1</code> complete the picture: <code>r</code>, the number of runnable threads (running plus queued), and <code>b</code>, the number blocked in <code>D</code> state. With these, the first question about a loaded machine takes one command:</p>
+<ul>
+  <li><code>r</code> well above the CPU count, <code>us</code> + <code>sy</code> near 100: <strong>CPU saturation</strong>. Something is computing too much, or there's too little CPU.</li>
+  <li><code>b</code> high, <code>wa</code> high, <code>id</code> non-zero: <strong>waiting for I/O</strong>. More CPUs won't help; find what's using the disk.</li>
+</ul>
+
+<p>To find <em>which</em> process: <code>top</code> sorted by CPU (press <kbd>P</kbd>), <code>ps -eo pid,stat,pcpu,comm --sort=-pcpu | head</code>, and for <code>D</code> states <code>ps -eo pid,stat,wchan:20,comm | awk '$2 ~ /D/'</code> (the <code>wchan</code> column names the kernel function it's waiting in). The <code>sysstat</code> package adds <code>mpstat -P ALL 1</code> (per CPU, to spot one CPU at 100% while the rest idle: a single-threaded bottleneck), <code>pidstat 1</code> (per process, over time) and <code>iostat -x 1</code> (per disk).</p>
+
+<!-- ======================================================== 9.5 -->
+<h2 class="sec" id="s9-5"><span class="n">9.5</span>Priorities: nice, ionice and systemd</h2>
+
+<p>The scheduler gives runnable threads CPU time in proportion to a weight, set by the process's <span class="term">nice</span> value, from −20 (most favoured) to 19 (least). The default is 0. Each step changes the weight by about 25%, so the gaps are large: a nice-19 process competing for one CPU with a nice-0 one gets around 1.5% of it, as the lab shows. Nice only matters when CPUs are contended; on an idle machine, a nice-19 job runs at full speed.</p>
+
+<ul>
+  <li><code>nice -n 10 cmd</code> starts a command with a lower priority; <code>renice -n 10 -p 2187</code> changes a running one. Only root may raise priority (negative values).</li>
+  <li><code>ionice -c 3 cmd</code> puts a process in the <strong>idle</strong> I/O class: it gets the disk only when nobody else wants it. <code>-c 2 -n 7</code> is best-effort at the lowest priority. The effect depends on the disk's I/O scheduler, and is strongest on local disks.</li>
+  <li>For services and timers, put it in the unit: <code>Nice=10</code>, <code>IOSchedulingClass=idle</code>, or with cgroups, <code>CPUWeight=20</code> (default 100) and <code>CPUQuota=50%</code> (a hard cap: half of one CPU).</li>
+</ul>
+
+<p>Lowering the priority of what can wait is almost always better than raising the priority of what can't: a database at nice −10 can starve the very processes it depends on, such as its own log writer or <code>sshd</code> when you need to log in and fix it.</p>
+
+<!-- ======================================================== 9.6 -->
+<h2 class="sec" id="s9-6"><span class="n">9.6</span>CPU on a cloud VM</h2>
+
+<p>Three cloud effects appear in the numbers above:</p>
+<ul>
+  <li><strong>Steal time</strong> (<code>st</code>) is time your vCPU was ready to run but the hypervisor ran another VM on that physical CPU. A few percent is normal on shared instances (the lab machine showed 1–3%); sustained double digits means you're not getting what you pay for, and moving to another host (stop and start the instance) or a different instance family helps.</li>
+  <li><strong>Burstable instances</strong> (AWS T family, Azure B series, Google Cloud's shared-core types) give you a baseline, say 20% of a vCPU, plus credits saved while idle. When the credits run out, the vCPU is throttled to the baseline, often visible as high steal. They're good for small, spiky servers and a trap for anything with sustained load, like an on-sale.</li>
+  <li><strong>vCPU counts</strong> are threads, not cores (9.1). A CPU-bound app that scales to 8 cores may not scale to 8 vCPUs on 4 cores.</li>
+</ul>
+
+<!-- ======================================================== 9.7 -->
+<h2 class="sec" id="s9-7"><span class="n">9.7</span>Across distributions</h2>
+
+<p>The scheduler, load average and <code>/proc</code> are the kernel's, identical everywhere. <code>top</code>, <code>vmstat</code>, <code>ps</code> and <code>nice</code> come from procps on every distribution in this book. <code>mpstat</code>, <code>pidstat</code> and <code>iostat</code> come from <code>sysstat</code>, which isn't installed by default on Ubuntu, Debian or Amazon Linux (<code>apt install sysstat</code>, <code>dnf install sysstat</code>); it also records history every ten minutes for <code>sar</code> once enabled, which is very useful for “what happened at 03:00?”.</p>
+
+<div class="box box-provider">
+  <p class="label">On the cloud</p>
+  <p>Cloud consoles graph “CPU utilisation” from outside the VM, as busy time over all vCPUs. It doesn't show I/O wait or load, and it ignores steal from the VM's point of view, so a VM can look 30% busy in the console while its users wait. The provider's agent (CloudWatch agent, Azure Monitor agent, Ops Agent) can send the in-guest numbers too.</p>
+</div>
+
+<!-- ======================================================== 9.8 -->
+<h2 class="sec" id="s9-8"><span class="n">9.8</span>Lab: busy, nice and blocked</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 9 · Three kinds of load</p>
+  <p><strong>You'll</strong> overload the CPUs and watch the load climb, share one CPU between a nice and a not-nice process, then create load with the CPUs nearly idle by making processes wait for the disk. <strong>You need</strong> a Linux VM (not a laptop you're using for other things) with 2 or more CPUs and 2 GB of free disk. <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> every step stops itself with <code>timeout</code>; delete the files at the end. Outputs come from a 4-vCPU test VM.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>A CPU burner.</strong> In <code>~/lab9</code>, save this as <code>burn.sh</code> and <code>chmod +x burn.sh</code>:
+<p class="code-title"><span>burn.sh</span><span>sh</span></p>
+<pre><code>#!/bin/sh
+<span class="c"># burn.sh · keep one CPU busy, doing nothing useful, until stopped</span>
+<span class="k">while</span> :; <span class="k">do</span> :; <span class="k">done</span></code></pre></li>
+  <li><strong>Twice as many burners as CPUs.</strong> Start eight (on a 4-CPU machine; use twice <code>nproc</code>), each stopped after 100 seconds, wait 75 seconds, and look:
+<pre><code>for i in 1 2 3 4 5 6 7 8; do timeout 100 ./burn.sh &amp; done
+sleep 75
+cat /proc/loadavg; vmstat 1 3; ps -o stat=,comm= -u "$USER" | sort | uniq -c</code></pre>
+<pre><code>6.78 3.54 1.47 10/171 12134
+procs -----------memory---------- ---swap-- -----io---- -system-- -------cpu-------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st gu
+ 8  0      0 15356720   5036 705048    0    0   826   460  478    1  6  0 93  0  0  0
+ 8  0      0 15356720   5036 705052    0    0     0     0 1037 1091 99  0  0  0  1  0
+ 8  0      0 15356720   5036 705052    0    0     0     0 1037 1123 99  0  0  0  1  0
+      8 R    burn.sh
+      1 R    ps
+      1 S    bash
+      1 S    sort
+      8 S    timeout
+      1 S    uniq</code></pre>
+  The 1-minute load (6.78) is still climbing towards 8 after 75 seconds: smoothing. <code>r</code> is 8 (four running, four queued), <code>us</code> is 99 and <code>id</code> 0: <strong>CPU saturation</strong>. The first <code>vmstat</code> line is an average since boot; ignore it. And <code>st</code> 1: a little steal from the host.</li>
+  <li><strong>Nice in action.</strong> Pin two burners to the same CPU with <code>taskset</code>, one at the default priority and one at nice 19:
+<pre><code>taskset -c 0 timeout 40 ./burn.sh &amp;
+taskset -c 0 nice -n 19 timeout 40 ./burn.sh &amp;
+sleep 20; ps -o pid,ni,psr,pcpu,comm -C burn.sh</code></pre>
+<pre><code>  PID  NI PSR %CPU COMMAND
+12155   0   0 96.8 burn.sh
+12156  19   0  1.4 burn.sh</code></pre>
+  Both on CPU 0 (<code>PSR</code>); the nice-19 one got about 1.5% of it. Run the nice one alone and it gets 100%: nice only matters under contention.</li>
+  <li><strong>Load without CPU.</strong> Three writers that bypass the page cache (<code>oflag=direct</code>, so every write waits for the disk):
+<pre><code>for i in 1 2 3; do dd if=/dev/zero of=big$i bs=1M count=3000 oflag=direct status=none &amp; done
+sleep 5; vmstat 1 4; ps -o pid,stat,wchan:20,comm -C dd</code></pre>
+<pre><code>procs -----------memory---------- ---swap-- -----io---- -system-- -------cpu-------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st gu
+ 0  3      0 15352800   5192 705672    0    0   809  1676  484    1  7  0 92  0  0  0
+ 1  2      0 15353680   5216 705728    0    0    24 819200 2489 3516  0  5 53 42  1  0
+ 1  2      0 15354896   5248 705824    0    0    32 947200 2844 4044  0  7 47 45  0  0
+ 0  3      0 15355548   5276 705880    0    0    28 1073152 3016 4518  0  7 48 46  0  0
+  PID STAT WCHAN                COMMAND
+12173 D    iomap_dio_rw         dd
+12174 D    iomap_dio_rw         dd
+12175 D    iomap_dio_rw         dd</code></pre>
+  <code>r</code> is 0 or 1, <code>b</code> is 2 or 3, <code>wa</code> about 45 and <code>id</code> about 50: the CPUs are half idle and half “waiting for I/O”. The writers are in <code>D</code>, waiting in the kernel's direct-I/O path (<code>wchan</code>). Keep four writers going for a minute and read the load:
+<pre><code>for i in 1 2 3 4; do timeout 75 sh -c "while :; do dd if=/dev/zero of=big$i bs=1M count=500 oflag=direct status=none; done" &amp; done
+sleep 65; cat /proc/loadavg; vmstat 1 2 | tail -1</code></pre>
+<pre><code>4.05 3.65 1.84 1/167 12303
+ 0  4      0 15358080   5768 707144    0    0     0 643072 2577 3166  0  6 23 71  0  0</code></pre>
+  A load of 4 on a 4-CPU machine whose CPUs are 6% busy: exactly the reading that makes people order bigger servers. Delete the files: <code>rm big1 big2 big3 big4</code>.</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Install <code>sysstat</code> and run step 2 again with <code>mpstat -P ALL 1 3</code>: every CPU at 100%. Then run a single burner: one CPU at 100%, the others idle, a load of 1. (2) Repeat step 4 with <code>ionice -c 3</code> on the writers while a fourth, normal <code>dd</code> runs: does the normal one get more of the disk? (3) Run a burner as a transient service with a cap, <code>sudo systemd-run --unit=capped -p CPUQuota=25% ./burn.sh</code> (from the lab directory, with a full path), and watch it in <code>top</code>: 25%, however idle the machine.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: the backup at the wrong time</p>
+  <p><code>vmstat 1</code> on <code>door-1</code> shows <code>r</code> between 2 and 4, <code>b</code> around 10, and <code>wa</code> above 50. The processes in <code>D</code> are PostgreSQL's, plus <code>pg_dump</code> and <code>gzip</code>: a full backup is running. It's the new weekly full backup, added in April as a timer with <code>OnCalendar=Fri 08:00</code>, meant to finish long before any on-sale. <code>door-1</code>'s clock is UTC; since the clocks changed in March, 08:00 UTC is 09:00 in Lisbon, and on an arena on-sale, with the database busy, the backup takes eighty minutes instead of forty. Exactly <a href="06-systemd.html">Chapter 6</a>'s warning about time zones.</p>
+  <p>Rafaela stops the backup at 10:05 (it will run again that night), and seat holds are fast again within a minute. Nobody buys a bigger server. The timer moves to <code>OnCalendar=Sun 04:00 Europe/Lisbon</code>, with <code>Nice=10</code> and <code>IOSchedulingClass=idle</code>. The alert on load average is replaced by two: CPU busy (<code>us</code> + <code>sy</code>) above 80% for ten minutes, and I/O wait above 30%, each naming the machine and showing the top processes. Handbook 6 returns to this backup: taking it from a replica instead of the busy primary is the real fix.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s9-9"><span class="n">9.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Reading load without the CPU count</td><td>Panic over 8 on a 64-CPU machine; calm over 4 on a single CPU.</td><td>Load ÷ <code>nproc</code>, and the trend of the three numbers.</td></tr>
+      <tr><td>Treating high load as “needs more CPU”</td><td>A bigger server, the same slowness: the disk was the bottleneck.</td><td>Check <code>wa</code> and <code>b</code> in <code>vmstat</code> first.</td></tr>
+      <tr><td>Trusting the first line of <code>vmstat</code></td><td>Averages since boot hide what's happening now.</td><td><code>vmstat 1</code> and read from the second line.</td></tr>
+      <tr><td>Raising the priority of the important service</td><td>It starves helpers it depends on, even <code>sshd</code>.</td><td>Lower the priority of what can wait.</td></tr>
+      <tr><td>Heavy batch jobs at the busiest time</td><td>Users wait while a backup runs.</td><td>Schedule in quiet hours with a time zone; <code>Nice=</code> and <code>IOSchedulingClass=idle</code>.</td></tr>
+      <tr><td>Burstable instances for sustained load</td><td>Throttled to the baseline when credits run out, mid-event.</td><td>Fixed-performance instances for busy servers; watch the credit balance.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum9">
+  <h2 class="sec" id="sum9"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Linux counts every hardware thread, and every cloud vCPU, as a CPU; <code>nproc</code> gives the number to compare against.</li>
+    <li>The <strong>scheduler</strong> shares CPUs between runnable threads; extras wait in the <strong>run queue</strong>.</li>
+    <li><strong>Load average</strong> is the smoothed number of threads running, waiting for a CPU, or in <code>D</code> state waiting for the disk, over 1, 5 and 15 minutes.</li>
+    <li>CPU time splits into user, system, nice, idle, I/O wait, interrupts and steal. <code>r</code> and <code>us</code> high: CPU saturation. <code>b</code> and <code>wa</code> high: waiting for I/O.</li>
+    <li><code>nice</code>, <code>ionice</code> and systemd's <code>Nice=</code>, <code>IOSchedulingClass=</code>, <code>CPUWeight=</code> and <code>CPUQuota=</code> decide who gets contended resources.</li>
+    <li>In the cloud, watch for steal time and burstable instances that run out of credits.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>vCPU</dt><dd>A virtual CPU rented in the cloud, usually one hardware thread of a physical core.</dd>
+    <dt>Scheduler</dt><dd>The part of the kernel that decides which runnable thread runs on which CPU, and for how long.</dd>
+    <dt>Run queue</dt><dd>The runnable threads waiting for a CPU.</dd>
+    <dt>Context switch</dt><dd>The CPU switching from running one thread to running another.</dd>
+    <dt>Load average</dt><dd>The average number of threads running, runnable or in uninterruptible sleep over the last 1, 5 and 15 minutes.</dd>
+    <dt>I/O wait</dt><dd>CPU time that was idle while at least one thread was waiting for I/O to complete.</dd>
+    <dt>Steal time</dt><dd>Time a virtual CPU was ready to run but the hypervisor was running something else.</dd>
+    <dt>Nice value</dt><dd>A process's scheduling priority, from −20 (most favoured) to 19 (least); 0 by default.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>A 4-vCPU server shows a load average of <code>3.1 5.6 7.9</code>. What do the three numbers tell you? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Over the last 15 minutes the load averaged about 7.9, almost twice the CPU count; over the last 5 minutes 5.6, and over the last minute 3.1, now below the CPU count. Something was overloaded and is recovering.</p></details>
+    </li>
+    <li>
+      <p><code>vmstat 1</code> shows <code>r 1 b 9 us 4 sy 3 id 41 wa 52</code> on an 8-vCPU database server. What's the bottleneck, and what would you look at next? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>The disk: nine threads blocked in I/O, half the CPU time spent waiting for I/O, CPUs mostly idle. Next: <code>ps -eo pid,stat,wchan:20,comm | awk '$2 ~ /D/'</code> for which processes, <code>iostat -x 1</code> or <code>pidstat -d 1</code> for which disk and who's using it (<a href="11-disks.html">Chapter 11</a>).</p></details>
+    </li>
+    <li>
+      <p>Explain why a nice-19 backup job still runs at full speed on an idle server, and why that can still hurt the database at night. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Nice only changes the share of CPU when CPUs are contended; with free CPUs, the job gets as much as it wants. And nice affects CPU, not the disk: a backup's I/O can still slow the database. Add <code>ionice -c 3</code> or <code>IOSchedulingClass=idle</code>, and schedule it when the database is quiet.</p></details>
+    </li>
+    <li>
+      <p>A web server's console graph shows 35% CPU, but its users report slowness and <code>top</code> inside the VM shows <code>st</code> at 40%. What's happening? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p>The hypervisor isn't giving the VM the CPU time it wants: either a noisy neighbour on a shared host, or (very often) a burstable instance that has run out of CPU credits and is throttled to its baseline. Check the credit balance; move to a fixed-performance instance type, or stop and start to land on another host.</p></details>
+    </li>
+    <li>
+      <p>Design monitoring alerts for CPU on Stagedoor's servers that would have pointed at the real problem on 8 May. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Alert on CPU busy (user + system) above about 80% for several minutes, per server, and separately on I/O wait above about 30%, each with the top processes by CPU and the processes in <code>D</code> attached. Graph load per CPU for context rather than alerting on it. Add steal time for cloud VMs.</p></details>
+    </li>
+    <li>
+      <p>Compare <code>Nice=10</code> and <code>CPUQuota=50%</code> for a reporting service. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p><code>Nice=10</code> lowers its share only when CPUs are contended; when the machine is idle it can use every CPU. <code>CPUQuota=50%</code> is a hard ceiling of half a CPU, even on an idle machine. Use nice (or <code>CPUWeight=</code>) to be polite; use a quota when the job must never take more than a fixed amount.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>Brendan Gregg, <a href="https://www.brendangregg.com/blog/2017-08-08/linux-load-averages.html">Linux Load Averages: Solving the Mystery</a>.</li>
+    <li><code>man 5 proc</code> (<code>/proc/loadavg</code>, <code>/proc/stat</code>), <code>man vmstat</code>, <code>man 7 sched</code>, <code>man ionice</code>.</li>
+    <li><code>man systemd.resource-control</code> (<code>CPUWeight=</code>, <code>CPUQuota=</code>, <code>IOWeight=</code>).</li>
+    <li>AWS: <a href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/burstable-performance-instances.html">Burstable performance instances</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="10-memory.html">10 · Memory, swap and the OOM killer</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 3 · Linux for Cloud Engineers</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

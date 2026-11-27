@@ -1,0 +1,381 @@
+<!-- Handbook 3 · Linux for Cloud Engineers · Chapter 20. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part VI · Running it</p>
+  <p class="chno">20</p>
+  <h1>A troubleshooting method</h1>
+  <p class="promise">The chapters so far each explained one thing that can go wrong. Real incidents don't arrive labelled: “the site is slow” could be any of them, or none. This chapter turns the book into a method: describe the symptom precisely, ask what changed, sweep every resource for utilisation, saturation and errors, and confirm before you act, with a script that gathers the first five minutes of facts in one go.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Turn a vague report into a precise, testable symptom.</li>
+      <li>Apply the USE method (utilisation, saturation, errors) to CPU, memory, disk, network and limits.</li>
+      <li>Collect the first five minutes of evidence on a Linux server with one script, and read it.</li>
+      <li>Find what changed, act with the smallest safe step, and verify.</li>
+      <li>Write an incident note that helps the next person.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Part III (Chapters 9–12) above all; Chapters 5–7 and 13–14 help.</li>
+      <li>A VM with systemd and <code>sudo</code>; <code>sudo apt install sysstat</code>.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 35 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, a VM with systemd, free</dd>
+      <dt>Main distribution</dt><dd>any</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>Friday 13 November 2026, 19:40. It's Tiago's first week on call alone. A venue messages that its event page takes ten seconds to load; a few minutes later, two more. Nothing has alerted. Tickets for a big show go on sale at 20:00, and fans are already arriving.</p>
+  <p>Tiago has seen Rafaela do this a dozen times, and she has left him something better than memory: a script and a page in the wiki called “The first five minutes”. He logs in to <code>door-2</code> and runs it.</p>
+</aside>
+
+<!-- ======================================================== 20.1 -->
+<h2 class="sec" id="s20-1"><span class="n">20.1</span>From a report to a symptom</h2>
+
+<p class="lead">“It's slow” isn't something you can test. Before touching a server, turn the report into a symptom you could check and later prove fixed.</p>
+<ul>
+  <li><strong>What, exactly?</strong> Which page, API call or job; slow or failing; what error, if any.</li>
+  <li><strong>For whom?</strong> Everyone, one venue, one region, mobile only? A problem for some users points at what those users share.</li>
+  <li><strong>Since when?</strong> The start time is the most valuable fact you can get, because it can be matched against changes.</li>
+  <li><strong>How much?</strong> Ten seconds instead of 300 milliseconds; 5% of requests failing. Measure it yourself (<code>curl -w '%{time_total}'</code>, <a href="#ch14">Chapter 14</a>) so you can tell when it's fixed.</li>
+</ul>
+
+<!-- ======================================================== 20.2 -->
+<h2 class="sec" id="s20-2"><span class="n">20.2</span>The USE method</h2>
+
+<p>Brendan Gregg's <span class="term">USE method</span> gives you a checklist that doesn't depend on guessing: for every resource, check its <strong>utilisation</strong> (how busy it is), <strong>saturation</strong> (how much work is waiting for it) and <strong>errors</strong>. A resource with high saturation or errors is a suspect; one that's idle with nothing waiting can be crossed off. Part III gave you the commands; here they are in one table:</p>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 20.1 · USE on one Linux server</caption>
+    <thead><tr><th>Resource</th><th>Utilisation</th><th>Saturation</th><th>Errors</th></tr></thead>
+    <tbody>
+      <tr><td>CPU (<a href="#ch9">Ch. 9</a>)</td><td><code>vmstat 1</code>: <code>us</code>+<code>sy</code>; <code>mpstat -P ALL</code></td><td><code>r</code> above the CPU count; <code>st</code> on VMs</td><td>rare; throttling in <code>journalctl -k</code></td></tr>
+      <tr><td>Memory (<a href="#ch10">Ch. 10</a>)</td><td><code>free -h</code>: <code>available</code></td><td><code>si</code>/<code>so</code> in <code>vmstat</code>; <code>/proc/pressure/memory</code></td><td>OOM kills in <code>journalctl -k</code></td></tr>
+      <tr><td>Disk (<a href="#ch11">Ch. 11</a>)</td><td><code>iostat -x</code>: <code>%util</code></td><td><code>aqu-sz</code>, <code>await</code>; <code>b</code> and <code>wa</code> in <code>vmstat</code>; <code>D</code> states</td><td>I/O errors in <code>journalctl -k</code></td></tr>
+      <tr><td>Space and inodes (<a href="#ch11">Ch. 11</a>)</td><td><code>df -h</code>, <code>df -i</code></td><td>(full is full)</td><td><code>ENOSPC</code> in app logs</td></tr>
+      <tr><td>Network (<a href="#ch13">Ch. 13</a>, <a href="#ch14">14</a>)</td><td><code>sar -n DEV 1</code>: throughput vs link speed</td><td><code>ss -s</code>; <code>TcpExtListenOverflows</code></td><td><code>ip -s link</code>: errors, drops; retransmits</td></tr>
+      <tr><td>Limits (<a href="#ch12">Ch. 12</a>)</td><td><code>/proc/&lt;pid&gt;/fd</code> vs limit</td><td>accept queue (<code>ss -lnt</code>)</td><td><code>EMFILE</code>, <code>EAGAIN</code> in logs</td></tr>
+      <tr><td>Services (<a href="#ch6">Ch. 6</a>, <a href="#ch7">7</a>)</td><td>restarts, timers running now</td><td>—</td><td><code>systemctl --failed</code>, <code>journalctl -p err</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Check every resource, not the one you suspect. The resource that's saturated is often not the one the symptom points to.</p>
+</div>
+
+<!-- ======================================================== 20.3 -->
+<h2 class="sec" id="s20-3"><span class="n">20.3</span>The first five minutes</h2>
+
+<p>Under pressure, people check what they checked last time. A script doesn't: it runs the whole sweep in the same order every time, changes nothing, and produces one screen you can paste into the incident channel. The lab's <code>first5.sh</code> is one; adapt it to your servers. Then read the output in the order of Figure 20.1:</p>
+
+<figure class="wide" id="fig20-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig20-1-t fig20-1-d">
+      <title id="fig20-1-t">A troubleshooting loop</title>
+      <desc id="fig20-1-d">Seven steps. One, a precise symptom: what, for whom, since when, how much. Two, what changed around that time: deploys, timers, configuration, traffic, dependencies. Three, a USE sweep of every resource, for example with first5.sh. Four, a candidate cause that explains the symptom and its timing. Five, confirm it with a specific check before acting. Six, act with the smallest safe step that stops the harm. Seven, verify the symptom is gone by measuring again, then write it down. If confirmation or verification fails, go back to the sweep.</desc>
+      <defs><marker id="c20ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="10" y="20" width="160" height="70" rx="5"/><text class="t-title" x="22" y="44">1 Symptom</text><text class="t-small" x="22" y="64">what, who, since</text><text class="t-small" x="22" y="80">when, how much</text>
+      <rect class="node" x="200" y="20" width="160" height="70" rx="5"/><text class="t-title" x="212" y="44">2 What changed?</text><text class="t-small" x="212" y="64">deploys, timers,</text><text class="t-small" x="212" y="80">config, traffic</text>
+      <rect class="node-accent" x="390" y="20" width="160" height="70" rx="5"/><text class="t-title on-accent" x="402" y="44">3 USE sweep</text><text class="t-small on-accent" x="402" y="64">every resource:</text><text class="t-small on-accent" x="402" y="80">first5.sh</text>
+      <rect class="node" x="580" y="20" width="170" height="70" rx="5"/><text class="t-title" x="592" y="44">4 Candidate</text><text class="t-small" x="592" y="64">explains the symptom</text><text class="t-small" x="592" y="80">and its timing</text>
+      <rect class="node" x="580" y="150" width="170" height="70" rx="5"/><text class="t-title" x="592" y="174">5 Confirm</text><text class="t-small" x="592" y="194">one specific check</text><text class="t-small" x="592" y="210">before acting</text>
+      <rect class="node" x="390" y="150" width="160" height="70" rx="5"/><text class="t-title" x="402" y="174">6 Act</text><text class="t-small" x="402" y="194">smallest safe step</text><text class="t-small" x="402" y="210">that stops the harm</text>
+      <rect class="pub" x="200" y="150" width="160" height="70" rx="5"/><text class="t-title" x="212" y="174">7 Verify, note</text><text class="t-small" x="212" y="194">measure again;</text><text class="t-small" x="212" y="210">write it down</text>
+      <path class="wire" d="M170 55 H196" marker-end="url(#c20ah)"/><path class="wire" d="M360 55 H386" marker-end="url(#c20ah)"/><path class="wire" d="M550 55 H576" marker-end="url(#c20ah)"/>
+      <path class="wire" d="M665 90 V146" marker-end="url(#c20ah)"/><path class="wire" d="M580 185 H554" marker-end="url(#c20ah)"/><path class="wire" d="M390 185 H364" marker-end="url(#c20ah)"/>
+      <path class="wire-dash" d="M470 150 V94" marker-end="url(#c20ah)"/><text class="t-small" x="478" y="130">not confirmed, or not fixed:</text><text class="t-small" x="478" y="144">sweep again</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 20.1</b> The loop is short on purpose. The two steps people skip under pressure, “what changed?” and “confirm before acting”, are the ones that prevent making things worse.</figcaption>
+</figure>
+
+<p>Read <code>first5.sh</code>'s output top to bottom, comparing each number with what you know is normal (which is why it's worth running on a calm day too, as the lab does): the load against the CPU count, <code>vmstat</code>'s <code>r</code>, <code>b</code>, <code>wa</code> and <code>si</code>/<code>so</code>, <code>available</code> memory, space and inodes, busy disks and their queues, the busiest processes by CPU and by I/O, processes stuck in <code>D</code>, listen-queue overflows, failed units, recent errors, and the kernel's own complaints. Usually one or two lines stand out; the rest rule things out, which is just as useful.</p>
+
+<!-- ======================================================== 20.4 -->
+<h2 class="sec" id="s20-4"><span class="n">20.4</span>What changed?</h2>
+
+<p>Most incidents follow a change: a deploy, a configuration edit, a timer that now runs at a different time, more traffic, a dependency that changed under you. Match the symptom's start time against:</p>
+<pre><code>journalctl --since "19:00" --until "19:45" -p notice     <span class="c"># everything notable on this server in the window</span>
+systemctl list-timers --all                             <span class="c"># what runs on a schedule, and when it last ran</span>
+grep -h " install \| upgrade " /var/log/dpkg.log | tail   <span class="c"># package changes</span>
+last -n 10; sudo journalctl -u ssh --since today | grep Accepted   <span class="c"># who logged in</span>
+git -C ~/ops log --since "2 days ago" --oneline        <span class="c"># changes to the operations repository</span></code></pre>
+<p>And outside the server: the deploy history, the provider's status page, the dependencies' dashboards. “Nothing changed” is a hypothesis to check, not a fact.</p>
+
+<!-- ======================================================== 20.5 -->
+<h2 class="sec" id="s20-5"><span class="n">20.5</span>Act small, verify, write it down</h2>
+
+<ul>
+  <li><strong>Mitigate first.</strong> Stop the harm with the smallest, most reversible step: stop a job, roll back a deploy, move traffic to another server. The root cause can wait until users are fine.</li>
+  <li><strong>One change at a time</strong>, each noted with its time, so you know which one worked and can undo the others.</li>
+  <li><strong>Verify with the same measurement</strong> you used for the symptom: the page loads in 300 ms again, not “the load went down”.</li>
+  <li><strong>Write it down</strong> while it's fresh: the timeline, what you saw, what you did, what you're not sure of. A short, blameless incident review afterwards asks how the system let it happen and what would catch it earlier, not who to blame. Every chapter's story in this book ends with exactly that kind of note.</li>
+</ul>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: restarting as diagnosis</p>
+  <p>Restarting a service or rebooting a server often makes a symptom go away, and takes the evidence with it: the stuck process, the full queue, the open file. Collect the first five minutes first (it takes about twenty seconds), then restart if that's the right mitigation. And if a restart “fixed” it, the cause is still there.</p>
+</div>
+
+<!-- ======================================================== 20.6 -->
+<h2 class="sec" id="s20-6"><span class="n">20.6</span>When it isn't this server</h2>
+
+<p>A server that's healthy by every USE check can still be slow for its users, because it's waiting on something else: the database, a payment provider, DNS. Signs: requests take long but the CPUs are idle, <code>wa</code> is low and nothing is in <code>D</code>; many connections sit in <code>ESTABLISHED</code> to one address (<code>ss -tn</code>). Follow the dependency: run the same sweep on the next machine, or the connection method from <a href="#ch14">Chapter 14</a> towards it. Doing this across many services at once is what metrics, traces and dashboards are for; Handbook 7 picks up there.</p>
+
+<!-- ======================================================== 20.7 -->
+<h2 class="sec" id="s20-7"><span class="n">20.7</span>Across distributions</h2>
+
+<div class="box box-provider">
+  <p class="label">History, not just now</p>
+  <p>Every tool in this chapter exists on every distribution; <code>sysstat</code> has to be installed on Ubuntu, Debian and Amazon Linux. Enable its collector (<code>sudo systemctl enable --now sysstat</code>) and it records CPU, memory, disk and network every ten minutes, so <code>sar -d -f /var/log/sysstat/sa13</code> (on RHEL, <code>/var/log/sa/sa13</code>) can answer “what was the disk doing at 19:40 last Friday?” after the fact. On the cloud, the provider's agent sends the same numbers to its monitoring service.</p>
+</div>
+
+<!-- ======================================================== 20.8 -->
+<h2 class="sec" id="s20-8"><span class="n">20.8</span>Lab: the mystery slow box</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 20 · Be the on-call engineer</p>
+  <p><strong>You'll</strong> run the first-five-minutes script on a calm machine, then start a hidden problem without reading how it works, find it with the script and the USE method, confirm it, and stop it. <strong>You need</strong> a VM with systemd, <code>sudo</code> and <code>sudo apt install sysstat</code>; ideally Lab 18's app running, so there's something to look at. <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> <code>sudo ./mystery.sh stop</code>; the problem also stops by itself after ten minutes. Outputs come from a fresh systemd test container named <code>door-2</code>.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>The script.</strong> Save as <code>~/lab20/first5.sh</code> and make it executable:
+<p class="code-title"><span>first5.sh</span><span>bash</span></p>
+<pre><code>#!/usr/bin/env bash
+<span class="c"># first5.sh · the first five minutes on a slow server: one screen of facts, nothing changed</span>
+<span class="k">set</span> -uo pipefail                      <span class="c"># no -e on purpose: one failing check mustn't stop the others</span>
+
+section() { printf <span class="s">'\n== %s\n'</span> <span class="s">"$1"</span>; }
+
+section <span class="s">"load ($(nproc) CPUs)"</span>
+uptime
+section <span class="s">"CPU, run queue, blocked, swap, I/O wait: vmstat 1 5 (skip the first line)"</span>
+vmstat 1 5
+section <span class="s">"memory"</span>
+free -h
+section <span class="s">"space and inodes on /"</span>
+df -h /; df -i /
+section <span class="s">"busy disks: utilisation and latency (iostat, second report)"</span>
+iostat -dx 1 2 | awk '
+  /^Device/ { n++; <span class="k">for</span> (i = 1; i &lt;= NF; i++) col[$i] = i; <span class="k">if</span> (n == 2) print <span class="s">"device  w/s  wkB/s  w_await  aqu-sz  %util"</span>; next }
+  n == 2 &amp;&amp; NF &amp;&amp; $col[<span class="s">"%util"</span>] &gt; 0 { print $1, $col[<span class="s">"w/s"</span>], $col[<span class="s">"wkB/s"</span>], $col[<span class="s">"w_await"</span>], $col[<span class="s">"aqu-sz"</span>], $col[<span class="s">"%util"</span>] }'
+section <span class="s">"top processes by CPU"</span>
+ps -eo pid,user,pcpu,pmem,stat,comm --sort=-pcpu | head -6
+section <span class="s">"processes waiting on the disk (state D)"</span>
+ps -eo pid,user,stat,wchan:22,comm | awk <span class="s">'NR == 1 || $3 ~ /D/'</span>
+section <span class="s">"processes doing disk I/O (pidstat, 3 seconds)"</span>
+pidstat -d 1 3 | awk <span class="s">'/^Average/ &amp;&amp; ($4 + $5 &gt; 0 || $NF == "Command")'</span>
+section <span class="s">"network: sockets and listen-queue overflows"</span>
+ss -s | head -2; nstat -az TcpExtListenOverflows | tail -1
+section <span class="s">"failed units"</span>
+systemctl --failed --no-legend --no-pager
+section <span class="s">"errors in the journal, last 15 minutes"</span>
+journalctl -p err --since -15min --no-pager -q | tail -5
+section <span class="s">"kernel: OOM kills, I/O errors, hung tasks (last hour)"</span>
+journalctl -k --since -1h --no-pager -q | grep -iE <span class="s">'killed process|i/o error|blocked for more'</span> | tail -5</code></pre>
+  No <code>set -e</code>: a check that fails (a tool not installed, say) mustn't hide the others. Only reading commands: it's safe to run on any server, at any time.</li>
+  <li><strong>A calm baseline.</strong> Run it once on a quiet machine and keep the output: <code>sudo ./first5.sh &gt; calm.txt</code>. Two sections from the test machine's calm run:
+<pre><code>== CPU, run queue, blocked, swap, I/O wait: vmstat 1 5 (skip the first line)
+procs -----------memory---------- ---swap-- -----io---- -system-- -------cpu-------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st gu
+ 2  0      0 15056020  19096 936356    0    0  1626 78011 1088    3  2  2 92  3  0  0
+ 0  0      0 15056024  19096 936380    0    0     0     0  191  163  0  0 100  0  0  0
+ 0  0      0 15056024  19096 936380    0    0     0     0  161  168  0  0 100  0  0  0
+ 0  0      0 15056024  19096 936380    0    0     0     0  194  226  0  0 100  0  0  0
+ 0  0      0 15056056  19096 936380    0    0     0   168  137  185  0  0 100  0  0  0
+== busy disks: utilisation and latency (iostat, second report)
+device  w/s  wkB/s  w_await  aqu-sz  %util</code></pre>
+  Idle CPUs, nothing blocked, no busy disk (the header with no rows).</li>
+  <li><strong>The mystery.</strong> Save the next script as <code>mystery.sh</code> without reading it (it's at the end of the lab), and start it:
+<pre><code>sudo ./mystery.sh start</code></pre>
+<pre><code>started: something is now slowing this machine down (it stops by itself after 10 minutes)</code></pre></li>
+  <li><strong>The first five minutes.</strong> Wait half a minute, then:
+<pre><code>sudo ./first5.sh</code></pre>
+<pre><code>
+== load (4 CPUs)
+ 12:33:57 up 19 min,  0 user,  load average: 0.62, 0.46, 0.28
+
+== CPU, run queue, blocked, swap, I/O wait: vmstat 1 5 (skip the first line)
+procs -----------memory---------- ---swap-- -----io---- -system-- -------cpu-------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st gu
+ 0  2      0 15060620  19164 936564    0    0  1574 92353 1115    3  2  2 92  4  0  0
+ 0  1      0 15060320  19164 936572    0    0     0 468992 2117 2333  0  3 67 28  0  0
+ 1  0      0 15058556  19164 936572    0    0     0 603208 2116 2306  0  4 74 22  0  0
+ 0  1      0 15059636  19164 936572    0    0     0 709632 2561 2718  0  5 73 21  0  0
+ 0  1      0 15060424  19164 936572    0    0     0 842944 2467 2636  0  4 74 22  1  0
+
+== memory
+               total        used        free      shared  buff/cache   available
+Mem:            15Gi       720Mi        14Gi        13Mi       933Mi        15Gi
+Swap:             0B          0B          0B
+
+== space and inodes on /
+Filesystem      Size  Used Avail Use% Mounted on
+overlay         252G   11G   58G  16% /
+Filesystem       Inodes  IUsed    IFree IUse% Mounted on
+overlay        16777216 283001 16494215    2% /
+
+== busy disks: utilisation and latency (iostat, second report)
+device  w/s  wkB/s  w_await  aqu-sz  %util
+vda 1117.00 718840.00 0.86 1.25 88.80
+
+== top processes by CPU
+    PID USER     %CPU %MEM STAT COMMAND
+      1 root      0.4  0.0 Ss   systemd
+    252 stagedo+  0.1  0.1 Ss   python3
+    130 root      0.0  0.1 Ssl  unattended-upgr
+     34 root      0.0  0.0 S&lt;s  systemd-journal
+    118 message+  0.0  0.0 Ss   dbus-daemon
+
+== processes waiting on the disk (state D)
+    PID USER     STAT WCHAN                  COMMAND
+    459 root     D    iomap_dio_rw           thumbs-cleanup
+
+== processes doing disk I/O (pidstat, 3 seconds)
+Average:      UID       PID   kB_rd/s   kB_wr/s kB_ccwr/s iodelay  Command
+Average:        0       385      6.67 682697.33      0.00       0  bash
+Average:        0       470      0.00  18432.00      0.00       0  thumbs-cleanup
+
+== network: sockets and listen-queue overflows
+Total: 79
+TCP:   21 (estab 0, closed 16, orphaned 0, timewait 0)
+TcpExtListenOverflows           0                  0.0
+
+== failed units
+
+== errors in the journal, last 15 minutes
+
+== kernel: OOM kills, I/O errors, hung tasks (last hour)</code></pre>
+  Read it as in 20.3. Load is low (the 1-minute average lags, <a href="#ch9">Chapter 9</a>), but <code>vmstat</code> shows a blocked process (<code>b</code> 1) and over 20% I/O wait where the calm run had none; memory, space and inodes are fine; one disk is 89% busy, writing about 700 MB/s; nothing stands out by CPU; one process is in <code>D</code>, waiting on direct I/O; the I/O is attributed to <code>thumbs-cleanup</code> and to a <code>bash</code> process; no overflows, no failed units, no errors. USE says: <strong>disk saturation</strong>, and everything else is crossed off.</li>
+  <li><strong>Confirm.</strong> Who are these processes, and who started them?
+<pre><code>ps -eo pid,ppid,etime,args | grep "[t]humbs-cleanup" | cut -c1-150</code></pre>
+<pre><code>    384       1       00:44 timeout 600 bash -c while :; do /var/tmp/lab20/thumbs-cleanup if=/dev/zero of=/var/tmp/lab20/.cache bs=1M count=400 oflag=
+    385     384       00:44 bash -c while :; do /var/tmp/lab20/thumbs-cleanup if=/dev/zero of=/var/tmp/lab20/.cache bs=1M count=400 oflag=direct statu
+    491     385       00:00 /var/tmp/lab20/thumbs-cleanup if=/dev/zero of=/var/tmp/lab20/.cache bs=1M count=400 oflag=direct status=none</code></pre>
+  A loop (PID 385) started 44 seconds ago, under <code>timeout</code>, that runs <code>thumbs-cleanup</code> again and again, each run writing 400 MB straight to disk. Each run lives only a fraction of a second, so <code>pidstat</code> credits most of the I/O to the parent loop. On a real server, the next questions are “what started the loop?” (<code>ps -o ppid</code> up the tree, <code>systemctl status &lt;pid&gt;</code> names the unit) and “since when?” (<code>etime</code>, the journal).</li>
+  <li><strong>Act and verify.</strong> Stop it, then run <code>first5.sh</code> again and compare with <code>calm.txt</code>:
+<pre><code>sudo ./mystery.sh stop</code></pre>
+<pre><code>stopped</code></pre>
+  Now read the mystery:
+<p class="code-title"><span>mystery.sh</span><span>bash</span></p>
+<pre><code>#!/usr/bin/env bash
+<span class="c"># mystery.sh start|stop · make this machine slow in one particular way. Don't read it before the lab!</span>
+<span class="k">set</span> -euo pipefail
+dir=/var/tmp/lab20
+<span class="k">case</span> <span class="s">"${1:-}"</span> <span class="k">in</span>
+  start)
+    mkdir -p <span class="s">"$dir"</span>
+    cp /usr/bin/dd <span class="s">"$dir/thumbs-cleanup"</span>                    <span class="c"># a familiar-sounding name</span>
+    nohup timeout 600 bash -c <span class="s">"while :; do $dir/thumbs-cleanup if=/dev/zero of=$dir/.cache bs=1M count=400 oflag=direct status=none; done"</span> &gt;/dev/null 2&gt;&amp;1 &amp;
+    echo <span class="s">"started: something is now slowing this machine down (it stops by itself after 10 minutes)"</span> ;;
+  stop)
+    pkill -f <span class="s">"$dir/thumbs-cleanup"</span> || true
+    pkill -f <span class="s">"while :; do $dir/thumbs-cleanup"</span> || true
+    rm -rf <span class="s">"$dir"</span>
+    echo <span class="s">"stopped"</span> ;;
+  *) echo <span class="s">"usage: sudo $0 start|stop"</span> &gt;&amp;2; <span class="k">exit</span> 2 ;;
+<span class="k">esac</span></code></pre>
+  A copy of <code>dd</code> under a reassuring name: a reminder that a process's name tells you what someone called it, not what it does (<code>/proc/&lt;pid&gt;/exe</code> tells you what it is).</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Change <code>mystery.sh</code> to burn CPU instead (<a href="#ch9">Chapter 9</a>'s <code>burn.sh</code>), or eat memory under a limit (<a href="#ch10">Chapter 10</a>'s <code>hog.py</code>), and see which sections of <code>first5.sh</code> change. (2) Add a section for the app's own health: <code>curl -s -o /dev/null -w '%{http_code} %{time_total}s\n' http://127.0.0.1:8000/</code>. (3) Enable sysstat's collector, run the mystery for ten minutes, and find it afterwards with <code>sar -d</code>.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: 19:40 to 19:52</p>
+  <p>Tiago's output looks like the lab's: <code>door-2</code>'s data disk at 94% utilisation, a queue of 30, I/O wait at 40%, and one <code>find</code> process in <code>D</code>, run by <code>thumbs-cleanup.service</code>. <code>systemctl list-timers</code> answers “what changed”: on Thursday, Sasha's team changed the thumbnail clean-up from <a href="#ch11">Chapter 11</a> from nightly to hourly, to keep the cache small. With millions of files, each run's <code>find</code> walks the whole tree for most of the hour; at quiet times nobody noticed, and on a Friday evening, with fans browsing ahead of an on-sale, every page that needed a thumbnail waited behind it.</p>
+  <p>At 19:48 he stops the running clean-up (<code>systemctl stop thumbs-cleanup.service</code>, which, being a service, he can do cleanly) and checks: event pages load in 280 ms again. At 19:52 he posts his notes and the two <code>first5.sh</code> outputs, before and after, in the operations channel. The on-sale at 20:00 is uneventful. On Monday the timer goes back to nightly at 03:30 Lisbon time, with <code>Nice=10</code> and <code>IOSchedulingClass=idle</code> (<a href="#ch9">Chapter 9</a>), and the app learns to delete a poster's thumbnails when the poster changes. Rafaela's only comment on his notes: add the time you started.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s20-9"><span class="n">20.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Starting from a guess</td><td>Hours on the wrong resource.</td><td>A USE sweep of everything, in the same order every time.</td></tr>
+      <tr><td>A vague symptom</td><td>You can't tell when it's fixed.</td><td>What, who, since when, how much; measure it.</td></tr>
+      <tr><td>Skipping “what changed?”</td><td>The cause sits in a deploy log nobody opened.</td><td>Match the start time against changes, every time.</td></tr>
+      <tr><td>Restarting first</td><td>The evidence disappears; the cause stays.</td><td>Collect first (twenty seconds), then mitigate.</td></tr>
+      <tr><td>Several changes at once</td><td>Nobody knows which one helped, or which one hurt.</td><td>One change, noted with its time, then verify.</td></tr>
+      <tr><td>No baseline</td><td>Every number looks suspicious, or none does.</td><td>Run the checks on a calm day; keep history (sysstat).</td></tr>
+      <tr><td>No notes</td><td>The same incident, solved from scratch next time.</td><td>A short, blameless write-up with the timeline.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum20">
+  <h2 class="sec" id="sum20"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Turn reports into a <strong>precise symptom</strong>: what, for whom, since when, how much.</li>
+    <li>The <strong>USE method</strong> checks utilisation, saturation and errors for every resource, so you don't depend on a hunch.</li>
+    <li>A <strong>first-five-minutes</strong> script runs the whole sweep, read-only, the same way every time; compare it with a calm baseline.</li>
+    <li>Ask <strong>what changed</strong>; <strong>confirm</strong> a candidate before acting; <strong>mitigate</strong> with the smallest safe step; <strong>verify</strong> with the original measurement.</li>
+    <li>Write it down, blamelessly. If this server is healthy, follow the dependency.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>USE method</dt><dd>A troubleshooting checklist: for every resource, check utilisation, saturation and errors.</dd>
+    <dt>Utilisation</dt><dd>The proportion of time, or of capacity, a resource is busy.</dd>
+    <dt>Saturation</dt><dd>The amount of work waiting for a resource because it's busy, such as a run queue or a disk queue.</dd>
+    <dt>Mitigation</dt><dd>An action that stops or reduces an incident's harm, separate from fixing its root cause.</dd>
+    <dt>Baseline (performance)</dt><dd>The normal values of a system's measurements, recorded when it's healthy, for comparison during incidents.</dd>
+    <dt>Blameless review</dt><dd>A write-up after an incident that examines how the system allowed it, not who to blame.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Give the utilisation, saturation and errors checks for memory. <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Utilisation: <code>free -h</code>, mainly <code>available</code>. Saturation: swapping (<code>si</code>/<code>so</code> in <code>vmstat 1</code>) and memory pressure (<code>/proc/pressure/memory</code>). Errors: OOM kills in <code>journalctl -k</code> or <code>dmesg</code>.</p></details>
+    </li>
+    <li>
+      <p>A venue says “checkout is broken”. Write four questions that turn this into a symptom you can test. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>What exactly happens: an error message, a spinner, a wrong total? For which events, devices, payment methods? Since when, and is it every time or sometimes? Can you reproduce it, and how long does it take (time a request yourself with curl)? Also: is it only that venue?</p></details>
+    </li>
+    <li>
+      <p>Explain why a script that changes nothing is preferable to a person typing commands during an incident. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Under pressure, people skip steps and check what they suspect. A script checks everything, in the same order, in seconds, produces output that can be compared with a baseline and shared, and can't make things worse because it only reads. It also lets less experienced people do a thorough first look.</p></details>
+    </li>
+    <li>
+      <p><code>first5.sh</code> shows idle CPUs, low I/O wait, nothing in <code>D</code>, free memory and space, but users still wait ten seconds per request. What do you look at next? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p>The server is probably waiting on something else. Look at where its requests go: <code>ss -tnp</code> for many connections to one address (a database, an API), the app's logs for slow downstream calls, then the dependency itself, with the same sweep or the connection method from <a href="#ch14">Chapter 14</a>. Also check limits that don't show as resource use: connection pools, accept queues, worker counts.</p></details>
+    </li>
+    <li>
+      <p>Design the “first five minutes” page for Stagedoor's wiki. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Step 0: write the symptom and its start time in the incident channel. Step 1: run <code>first5.sh</code> on the affected server(s) and paste the output, next to the latest calm baseline. Step 2: check what changed: deploys, timers, config commits, the provider's status. Step 3: USE reading guide (which lines matter and what's normal for each server). Step 4: common mitigations with their commands (stop a job, roll back, take a server out of the load balancer). Step 5: notes template. Plus who to call, and when.</p></details>
+    </li>
+    <li>
+      <p>Compare mitigating by restarting the app with mitigating by stopping the job that's saturating the disk. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Restarting the app might briefly help, interrupts users and in-flight requests, destroys evidence and leaves the cause (the job) running, so the symptom returns. Stopping the job addresses the confirmed cause directly, is reversible (it can run again later) and keeps the app's state. Mitigate at the cause you've confirmed.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>Brendan Gregg, <a href="https://www.brendangregg.com/usemethod.html">The USE Method</a> and the <a href="https://www.brendangregg.com/USEmethod/use-linux.html">Linux checklist</a>.</li>
+    <li>Netflix Technology Blog, <a href="https://netflixtechblog.com/linux-performance-analysis-in-60-000-milliseconds-accc10403c55">Linux Performance Analysis in 60,000 Milliseconds</a>.</li>
+    <li>Google SRE book, chapter <a href="https://sre.google/sre-book/effective-troubleshooting/">Effective Troubleshooting</a> and <a href="https://sre.google/sre-book/postmortem-culture/">Postmortem Culture</a>.</li>
+    <li><code>man sar</code>, <code>man iostat</code>, <code>man pidstat</code>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="#ch21">21 · Capstone: Stagedoor's servers end to end</a></div>
+</nav>

@@ -1,0 +1,405 @@
+<!-- Handbook 3 · Linux for Cloud Engineers · Chapter 12. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part III · Resources</p>
+  <p class="chno">12</p>
+  <h1>Limits and kernel settings</h1>
+  <p class="promise">Some of the resources that run out on a busy server aren't CPU, memory or disk, but numbers: how many files a process may open, how many connections may wait to be accepted, how many ports there are to connect from. This chapter shows where each limit is set, how to see which one you've hit, and how to raise the right one without copying a page of “tuning” from the internet.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain file descriptor limits at the system, process and application level, and read a process's limits.</li>
+      <li>Diagnose “Too many open files” and raise the limit for a systemd service.</li>
+      <li>Explain the listen backlog and spot a full accept queue with <code>ss</code> and <code>nstat</code>.</li>
+      <li>Read and set kernel parameters with <code>sysctl</code>, and make them persistent.</li>
+      <li>Decide which settings are worth changing, and say why.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li><a href="#ch2">Chapter 2</a>: file descriptors. <a href="#ch6">Chapter 6</a>: drop-ins. <a href="#ch5">Chapter 5</a>: <code>/proc/&lt;pid&gt;</code>.</li>
+      <li>A Linux VM with Python 3 and <code>iproute2</code>; for the nginx step, a VM with systemd and nginx (<a href="#appC">Appendix C</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, a Linux VM, free</dd>
+      <dt>Main distribution</dt><dd>Ubuntu, with others in 12.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>Friday 10 July 2026 is the biggest on-sale in Stagedoor's history: a stadium date for a band that last played Portugal ten years ago. At 10:00:38, fans start seeing <code>502 Bad Gateway</code>. On <code>door-2</code>, nginx's error log fills with two kinds of line: <code>accept4() failed (24: Too many open files)</code> and <code>768 worker_connections are not enough</code>.</p>
+  <p>The CPUs are at 40%, memory is fine, the disks are idle. Nothing in the last six chapters has run out. Tiago reads the error number aloud: 24. Rafaela knows it from a hundred incidents at her old job: <code>EMFILE</code>, the process has hit its limit on open files.</p>
+</aside>
+
+<!-- ======================================================== 12.1 -->
+<h2 class="sec" id="s12-1"><span class="n">12.1</span>File descriptors, and why servers need many</h2>
+
+<p class="lead">A <span class="term">file descriptor</span> is the small number a process uses for anything it has open (<a href="#ch2">Chapter 2</a>): a file, a pipe, and, on a server, every network connection. A web proxy like nginx uses <strong>two</strong> per request it forwards: one for the fan's connection and one for its connection to the app.</p>
+
+<p>Each process can have only so many open at once, and the limit is enforced in three layers:</p>
+
+<figure class="wide" id="fig12-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig12-1-t fig12-1-d">
+      <title id="fig12-1-t">Three layers of limits on open files</title>
+      <desc id="fig12-1-d">Three nested boxes. Outermost, the whole system: fs.file-max, the total open files the kernel allows, and fs.nr_open, the highest per-process limit allowed; on modern kernels both are very large. Middle, each process: RLIMIT_NOFILE, with a soft limit, the one enforced, often 1024, and a hard limit, the ceiling the soft limit may be raised to without root. Set by ulimit -n in a shell, LimitNOFILE= in a systemd unit, and limits.conf for login sessions. Innermost, the application's own setting: nginx's worker_connections and worker_rlimit_nofile, a database's max_connections, a connection pool's size. The smallest of these is the one you hit.</desc>
+      <rect class="ext" x="10" y="10" width="740" height="230" rx="8"/>
+      <text class="t-title" x="26" y="36">System</text>
+      <text class="t-mono" x="140" y="36">fs.file-max</text><text class="t-small" x="270" y="36">all open files on the machine (huge by default)</text>
+      <text class="t-mono" x="140" y="56">fs.nr_open</text><text class="t-small" x="270" y="56">the highest per-process limit allowed (about 1 million)</text>
+      <rect class="node" x="30" y="70" width="700" height="158" rx="7"/>
+      <text class="t-title" x="46" y="96">Each process: RLIMIT_NOFILE</text>
+      <text class="t-small" x="46" y="118"><tspan font-weight="700">soft</tspan> limit, the one enforced (often 1024) · <tspan font-weight="700">hard</tspan> limit, the ceiling a non-root process may raise its soft limit to</text>
+      <text class="t-small" x="46" y="138">set by: <tspan font-weight="700">LimitNOFILE=</tspan> (services) · ulimit -n (a shell and its children) · limits.conf (login sessions)</text>
+      <rect class="node-accent" x="50" y="152" width="660" height="62" rx="6"/>
+      <text class="t-title on-accent" x="66" y="176">The application's own setting</text>
+      <text class="t-small on-accent" x="66" y="198">nginx worker_connections, worker_rlimit_nofile · PostgreSQL max_connections · a connection pool's size</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 12.1</b> Three layers, each with its own setting. The smallest one wins, so raising one layer often does nothing until the layer inside it is raised too.</figcaption>
+</figure>
+
+<p>The middle layer is the one most often hit. Its <strong>soft</strong> limit is what's enforced; the <strong>hard</strong> limit is the ceiling a process may raise its own soft limit to. A soft limit of 1024 is a historical default that's still common, and it's far too low for a busy proxy: 1024 file descriptors, minus a few for logs and listening sockets, is about 500 proxied requests per nginx worker.</p>
+
+<p>To see a running process's limits and usage, use <code>/proc</code>, not your own shell's <code>ulimit</code> (which shows only your shell's):</p>
+<pre><code>grep -i "open files" /proc/2187/limits          <span class="c"># soft and hard limit of process 2187</span>
+ls /proc/2187/fd | wc -l                        <span class="c"># how many it has open right now</span>
+sudo ls -l /proc/2187/fd | grep -c socket       <span class="c"># how many of those are sockets</span></code></pre>
+
+<!-- ======================================================== 12.2 -->
+<h2 class="sec" id="s12-2"><span class="n">12.2</span>Raising the limit, in the right place</h2>
+
+<p>Limits are inherited from parent to child (<a href="#ch5">Chapter 5</a>), so where you set one decides who gets it:</p>
+<ul>
+  <li><strong>For a service</strong>, in its unit or a drop-in: <code>LimitNOFILE=65536</code> sets soft and hard; <code>LimitNOFILE=4096:65536</code> sets them separately. This is the one that matters for servers, because services don't start from a login shell.</li>
+  <li><strong>For one shell</strong> and the programs it starts: <code>ulimit -n 4096</code> (up to the hard limit; raising the hard limit needs root).</li>
+  <li><strong>For login sessions</strong>: <code>/etc/security/limits.conf</code> or a file in <code>/etc/security/limits.d/</code>, read by PAM at login. It has <em>no effect on services</em>, which is the most common reason “I raised the limit and nothing changed”.</li>
+</ul>
+
+<p>Then the application's own setting, the innermost layer. nginx has two: <code>worker_connections</code>, the connections each worker may hold, and <code>worker_rlimit_nofile</code>, which raises the worker's own file limit. A useful rule: <code>worker_rlimit_nofile</code> at least twice <code>worker_connections</code>, and <code>LimitNOFILE=</code> at least that.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">After changing a limit, check the running process's <code>/proc/&lt;pid&gt;/limits</code>. Not your shell's, not the config file's: the process's.</p>
+</div>
+
+<!-- ======================================================== 12.3 -->
+<h2 class="sec" id="s12-3"><span class="n">12.3</span>The listen backlog</h2>
+
+<p>Before a server's code sees a connection, the kernel has already done the TCP handshake (Handbook 1, Chapter 3) and put the finished connection in a queue for that listening socket, the <strong>accept queue</strong>. The program takes connections from it with <code>accept()</code>. The queue's length is the <span class="term">listen backlog</span>: the number the program passes to <code>listen()</code>, capped by the kernel setting <code>net.core.somaxconn</code>.</p>
+
+<figure class="wide" id="fig12-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 220" role="img" aria-labelledby="fig12-2-t fig12-2-d">
+      <title id="fig12-2-t">From handshake to accept: the queues a connection passes through</title>
+      <desc id="fig12-2-d">Clients send SYN. Half-open connections wait in the SYN queue, sized by tcp_max_syn_backlog. When the handshake completes, the connection moves to the accept queue, whose length is the listen backlog, the smaller of the program's listen() value and net.core.somaxconn. The program calls accept() to take connections; each one becomes a file descriptor. If the program doesn't accept fast enough, or can't because it has hit its file limit, the accept queue fills; the kernel then drops new handshakes, counted in ListenOverflows, and clients wait and retry. ss -lnt shows the queue: Recv-Q is the number waiting, Send-Q is the backlog.</desc>
+      <defs><marker id="c12ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="ext" x="10" y="30" width="110" height="60" rx="5"/><text class="t-label" x="65" y="56" text-anchor="middle">clients</text><text class="t-small" x="65" y="76" text-anchor="middle">SYN</text>
+      <rect class="node" x="150" y="30" width="160" height="60" rx="5"/><text class="t-label" x="230" y="54" text-anchor="middle">SYN queue</text><text class="t-small" x="230" y="74" text-anchor="middle">half-open</text>
+      <rect class="node-accent" x="340" y="30" width="200" height="60" rx="5"/><text class="t-label on-accent" x="440" y="54" text-anchor="middle">accept queue</text><text class="t-small on-accent" x="440" y="74" text-anchor="middle">length = listen backlog</text>
+      <rect class="node" x="570" y="30" width="180" height="60" rx="5"/><text class="t-label" x="660" y="54" text-anchor="middle">program: accept()</text><text class="t-small" x="660" y="74" text-anchor="middle">→ a file descriptor</text>
+      <path class="wire" d="M120 60 H146" marker-end="url(#c12ah)"/><path class="wire" d="M310 60 H336" marker-end="url(#c12ah)"/><path class="wire" d="M540 60 H566" marker-end="url(#c12ah)"/>
+      <rect class="priv" x="10" y="112" width="740" height="96" rx="6"/>
+      <text class="t-small" x="26" y="136"><tspan font-weight="700">backlog</tspan> = min(the program's listen() value, net.core.somaxconn). nginx asks for 511 by default; set listen … backlog=.</text>
+      <text class="t-small" x="26" y="158"><tspan font-weight="700">If the program can't accept</tspan> (busy, or out of file descriptors), the queue fills; new handshakes are dropped</text>
+      <text class="t-small" x="26" y="178">(nstat: TcpExtListenOverflows) and clients wait and retry, which looks like a slow or hanging site.</text>
+      <text class="t-small" x="26" y="198"><tspan font-weight="700">ss -lnt</tspan> on a listening socket: Recv-Q = connections waiting now, Send-Q = the backlog.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 12.2</b> A connection is “connected” as far as the client knows once it reaches the accept queue, long before the program has seen it. A full queue looks like a slow site, not an error.</figcaption>
+</figure>
+
+<p>Two consequences surprise people. First, clients can connect successfully to a program that will never serve them: the lab's crowd reports every connection as made while the server is stuck. Second, the symptom of a full queue is delay (clients retransmit their handshake after one second, then two, then four), not an error message anywhere. <code>ss -lnt</code> shows the queue for every listening socket, and <code>nstat -az TcpExtListenOverflows</code> counts drops since boot.</p>
+
+<p>Since Linux 5.4, <code>net.core.somaxconn</code> defaults to 4096, which is enough for most servers; older kernels (and old “tuning” guides) used 128. The program's own value is usually the limiting one: nginx asks for 511 unless you write <code>listen 443 ssl backlog=4096;</code>.</p>
+
+<!-- ======================================================== 12.4 -->
+<h2 class="sec" id="s12-4"><span class="n">12.4</span>Kernel parameters with sysctl</h2>
+
+<p>The kernel exposes hundreds of settings as files under <code>/proc/sys/</code>: <code>net.core.somaxconn</code> is <code>/proc/sys/net/core/somaxconn</code>. <span class="term">sysctl</span> reads and writes them:</p>
+<pre><code>sysctl net.core.somaxconn                          <span class="c"># read one</span>
+sudo sysctl -w net.core.somaxconn=8192             <span class="c"># change it now; lost at reboot</span>
+echo "net.core.somaxconn = 8192" | sudo tee /etc/sysctl.d/60-stagedoor.conf   <span class="c"># persist</span>
+sudo sysctl --system                               <span class="c"># reload every file in /etc/sysctl.d/</span></code></pre>
+
+<p>Files in <code>/etc/sysctl.d/</code> are read in name order at boot, later ones winning. Put each setting in a file named for your purpose, with a comment saying why: the next person to see <code>vm.swappiness = 10</code> deserves to know who decided that, and on what evidence.</p>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 12.1 · Kernel settings worth knowing (defaults from Ubuntu 24.04's kernel, at the time of writing)</caption>
+    <thead><tr><th>Setting</th><th>Default</th><th>Controls</th><th>Change it when</th></tr></thead>
+    <tbody>
+      <tr><td><code>net.core.somaxconn</code></td><td>4096</td><td>maximum listen backlog</td><td>a server needs a larger backlog and asks for it</td></tr>
+      <tr><td><code>net.ipv4.tcp_max_syn_backlog</code></td><td>depends on memory</td><td>half-open connections per listener</td><td>under SYN floods (with SYN cookies on)</td></tr>
+      <tr><td><code>net.ipv4.ip_local_port_range</code></td><td><code>32768 60999</code></td><td>source ports for outgoing connections</td><td>a proxy makes tens of thousands of connections to the same backend</td></tr>
+      <tr><td><code>fs.file-max</code></td><td>very large</td><td>open files on the whole system</td><td>almost never on modern kernels</td></tr>
+      <tr><td><code>fs.nr_open</code></td><td>1048576</td><td>highest per-process file limit</td><td>a process needs more than a million</td></tr>
+      <tr><td><code>vm.swappiness</code></td><td>60</td><td>preference for swapping vs dropping cache (<a href="#ch10">Chapter 10</a>)</td><td>with evidence, e.g. a database server</td></tr>
+      <tr><td><code>vm.overcommit_memory</code></td><td>0</td><td>how freely memory is promised (<a href="#ch10">Chapter 10</a>)</td><td>a dedicated database server, per its docs</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: copied tuning</p>
+  <p>The internet is full of “Linux performance tuning” lists with forty sysctl lines. Many were written for kernels from 2010, some are harmful today (<code>net.ipv4.tcp_tw_recycle</code> broke clients behind NAT and was removed from the kernel), and almost none come with a measurement. Change a setting when you can name the limit you hit, show it in a counter or a log, and check afterwards that the counter stopped growing.</p>
+</div>
+
+<!-- ======================================================== 12.5 -->
+<h2 class="sec" id="s12-5"><span class="n">12.5</span>Other limits you'll meet</h2>
+
+<ul>
+  <li><strong>Processes and threads</strong>: <code>LimitNPROC=</code> and <code>TasksMax=</code> per service (systemd's default task limit is a percentage of the system's), <code>kernel.pid_max</code> for the whole system. Hitting them shows as “Resource temporarily unavailable” when starting threads.</li>
+  <li><strong>Ephemeral ports</strong>: every outgoing connection from one address to one destination address and port needs its own source port, and there are about 28,000 in the default range. A proxy that opens a new connection to its backend for every request, and closes it, can run out, helped by the 60 seconds each closed connection spends in <code>TIME_WAIT</code>. Keep-alive connections to the backend (nginx's <code>keepalive</code> in an <code>upstream</code> block) fix it far better than widening the range. <code>ss -s</code> shows the counts.</li>
+  <li><strong>Memory locked, message queues, core file size</strong>: other <code>Limit…=</code> settings in <code>man systemd.exec</code>, needed rarely and by specific software, which documents them.</li>
+</ul>
+
+<!-- ======================================================== 12.6 -->
+<h2 class="sec" id="s12-6"><span class="n">12.6</span>Finding which limit you hit</h2>
+
+<p>Errors name limits by their <code>errno</code> numbers and names, and a few cover almost everything in this chapter:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 12.2 · Error numbers that mean “a limit”</caption>
+    <thead><tr><th>errno</th><th>Name</th><th>Message</th><th>Usually</th></tr></thead>
+    <tbody>
+      <tr><td>24</td><td><code>EMFILE</code></td><td>Too many open files</td><td>this process's <code>RLIMIT_NOFILE</code></td></tr>
+      <tr><td>23</td><td><code>ENFILE</code></td><td>Too many open files in system</td><td><code>fs.file-max</code></td></tr>
+      <tr><td>11</td><td><code>EAGAIN</code></td><td>Resource temporarily unavailable</td><td>process or thread limits; also normal for non-blocking sockets</td></tr>
+      <tr><td>99</td><td><code>EADDRNOTAVAIL</code></td><td>Cannot assign requested address</td><td>out of ephemeral ports</td></tr>
+      <tr><td>28</td><td><code>ENOSPC</code></td><td>No space left on device</td><td>blocks or inodes (<a href="#ch11">Chapter 11</a>)</td></tr>
+      <tr><td>12</td><td><code>ENOMEM</code></td><td>Cannot allocate memory</td><td>memory, or a memory-related limit (<a href="#ch10">Chapter 10</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>With the number in hand: read the process's <code>/proc/&lt;pid&gt;/limits</code>, count what it has open in <code>/proc/&lt;pid&gt;/fd</code>, look at the listening socket with <code>ss -lnt</code>, and check the kernel's counters with <code>nstat</code>.</p>
+
+<!-- ======================================================== 12.7 -->
+<h2 class="sec" id="s12-7"><span class="n">12.7</span>Across distributions</h2>
+
+<p>The limits and sysctl settings are the kernel's and systemd's, so they work the same everywhere; defaults differ a little by kernel version. Two practical differences:</p>
+
+<div class="box box-provider">
+  <p class="label">On older releases and other packages</p>
+  <p>Kernels before 5.4 (Ubuntu 18.04, RHEL 7 and 8, Amazon Linux 2's original kernel) default <code>somaxconn</code> to 128, a real limit for busy servers. Distribution nginx packages differ too: Ubuntu's sets <code>worker_connections 768</code>, nginx.org's packages 1024, and neither raises <code>worker_rlimit_nofile</code>. Whatever the defaults, read them on your server with <code>sysctl</code> and <code>/proc/&lt;pid&gt;/limits</code> rather than trusting a book or a blog, this one included.</p>
+</div>
+
+<!-- ======================================================== 12.8 -->
+<h2 class="sec" id="s12-8"><span class="n">12.8</span>Lab: run out of file descriptors</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 12 · Too many open files, on purpose</p>
+  <p><strong>You'll</strong> run a server that holds every connection open, give it a small file limit, send it a crowd, and watch it fail with errno 24 while the crowd believes it's connected; then fill its accept queue, raise its limit, and finally raise nginx's limits the systemd way. <strong>You need</strong> a Linux VM with Python 3; for the last step, systemd and nginx (<code>sudo apt install nginx</code>). <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> stop the programs, remove the nginx drop-in and config change. Outputs come from the test VM (user <code>tiago</code>) and, for nginx, the systemd test system of Lab 6.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Your own limits, and the kernel's.</strong>
+<pre><code>ulimit -n; ulimit -Hn; grep -i "open files" /proc/self/limits
+sysctl net.core.somaxconn fs.file-max fs.nr_open net.ipv4.ip_local_port_range</code></pre>
+<pre><code>1024
+20000
+Max open files            1024                 20000                files     
+net.core.somaxconn = 4096
+fs.file-max = 9223372036854775807
+fs.nr_open = 1048576
+net.ipv4.ip_local_port_range = 32768	60999</code></pre>
+  Soft 1024; the hard limit here was 20,000 (on a standard Ubuntu VM you'll more often see 1048576).</li>
+  <li><strong>The server and the crowd.</strong> In <code>~/lab12</code>, save:
+<p class="code-title"><span>holdserver.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># holdserver.py · accept connections and keep every one open, like a proxy waiting on slow checkouts</span>
+<span class="k">import</span> os, socket, time
+
+srv = socket.socket()
+srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+srv.bind((<span class="s">"127.0.0.1"</span>, 9000))
+srv.listen(1024)
+print(f<span class="s">"pid {os.getpid()} listening on 127.0.0.1:9000"</span>, flush=<span class="k">True</span>)
+
+held, errors = [], 0
+<span class="k">while</span> <span class="k">True</span>:
+    <span class="k">try</span>:
+        conn, _ = srv.accept()
+        held.append(conn)                       <span class="c"># each open connection is one file descriptor</span>
+        <span class="k">if</span> len(held) % 100 == 0:
+            print(f<span class="s">"holding {len(held)} connections"</span>, flush=<span class="k">True</span>)
+    <span class="k">except</span> OSError <span class="k">as</span> e:
+        errors += 1
+        <span class="k">if</span> errors <span class="k">in</span> (1, 100, 1000):            <span class="c"># don't print the same error thousands of times</span>
+            print(f<span class="s">"accept failed ({errors}x) with {len(held)} held: {e}"</span>, flush=<span class="k">True</span>)
+        time.sleep(0.01)</code></pre>
+<p class="code-title"><span>crowd.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># crowd.py N · open N connections to 127.0.0.1:9000, hold them 10 seconds, report how many got in</span>
+<span class="k">import</span> socket, sys, time
+
+wanted, conns, refused = int(sys.argv[1]), [], 0
+<span class="k">for</span> i <span class="k">in</span> range(wanted):
+    s = socket.socket()
+    s.settimeout(2)
+    <span class="k">try</span>:
+        s.connect((<span class="s">"127.0.0.1"</span>, 9000))
+        conns.append(s)
+    <span class="k">except</span> OSError:
+        refused += 1
+print(f<span class="s">"connected {len(conns)} of {wanted}, failed {refused}"</span>, flush=<span class="k">True</span>)
+time.sleep(10)</code></pre></li>
+  <li><strong>A small limit.</strong> Start the server in a subshell with a limit of 256 (<code>exec</code> so the limit applies to Python itself, <a href="#ch5">Chapter 5</a>), send 400 connections, and look at the server's output and its file descriptors:
+<pre><code>(ulimit -n 256; exec python3 holdserver.py) &gt; server.out 2&gt;&amp;1 &amp; srv=$!
+sleep 0.5; python3 crowd.py 400 &gt; crowd.out &amp; sleep 4
+cat server.out; ls /proc/$srv/fd | wc -l; grep -i "open files" /proc/$srv/limits
+wait %2; cat crowd.out; kill $srv</code></pre>
+<pre><code>pid 13799 listening on 127.0.0.1:9000
+holding 100 connections
+holding 200 connections
+accept failed (1x) with 252 held: [Errno 24] Too many open files
+accept failed (100x) with 252 held: [Errno 24] Too many open files
+256
+Max open files            256                  256                  files     
+connected 400 of 400, failed 0</code></pre>
+  The server stopped accepting at 252 connections: 252 sockets plus standard input, output, error and the listening socket make 256, the limit exactly. Errno 24 is <code>EMFILE</code>. And the crowd reports all 400 as <em>connected</em>: the other 148 completed their handshake into the accept queue and are waiting for a server that can't take them. That's what fans saw on 10 July: not a refusal, a page that never loaded, then a 502 from the load balancer.</li>
+  <li><strong>Fill the accept queue.</strong> Same server, a much bigger crowd (with its own limit raised, so the crowd itself doesn't run out). After a few seconds, look at the listening socket and the kernel's counters:
+<pre><code>nstat -n
+(ulimit -n 256; exec python3 holdserver.py) &gt; server.out 2&gt;&amp;1 &amp; srv=$!
+sleep 0.5; (ulimit -n 4096; exec python3 crowd.py 1500) &gt; crowd.out &amp; sleep 12
+ss -lnt "sport = :9000"; nstat -az TcpExtListenOverflows TcpExtListenDrops</code></pre>
+<pre><code>State  Recv-Q Send-Q Local Address:Port Peer Address:PortProcess
+LISTEN 1025   1024       127.0.0.1:9000      0.0.0.0:*          
+#kernel
+TcpExtListenOverflows           12                 0.0
+TcpExtListenDrops               12                 0.0</code></pre>
+  <code>Send-Q</code> 1024 is the backlog the server asked for (under <code>somaxconn</code> 4096); <code>Recv-Q</code> shows the queue full; every handshake beyond it is dropped and counted as an overflow, and those clients wait and retry. <code>nstat -n</code> at the start reset the counters' baseline. The crowd will now take many minutes to give up on the rest, two seconds per attempt: stop both with <code>kill %1 %2</code>.</li>
+  <li><strong>A big enough limit.</strong> The same 400 connections, with a limit of 4096:
+<pre><code>(ulimit -n 4096; exec python3 holdserver.py) &gt; server.out 2&gt;&amp;1 &amp; srv=$!
+sleep 0.5; python3 crowd.py 400 &gt; crowd.out &amp; sleep 4
+cat server.out; ls /proc/$srv/fd | wc -l
+wait %2; cat crowd.out; kill $srv</code></pre>
+<pre><code>pid 13817 listening on 127.0.0.1:9000
+holding 100 connections
+holding 200 connections
+holding 300 connections
+holding 400 connections
+404
+connected 400 of 400, failed 0</code></pre>
+  All 400 accepted; 404 descriptors open.</li>
+  <li><strong>nginx, the systemd way.</strong> On a VM with systemd and nginx, look at the unit's limit, a worker's real limit, and nginx's own settings:
+<pre><code>systemctl show nginx -p LimitNOFILE -p LimitNOFILESoft
+grep -i "open files" /proc/$(pgrep -n -u www-data nginx)/limits
+grep -E "worker_(processes|connections|rlimit)" /etc/nginx/nginx.conf</code></pre>
+<pre><code>LimitNOFILE=524288
+LimitNOFILESoft=1024
+Max open files            1024                 20000                files     
+worker_processes auto;
+	worker_connections 768;</code></pre>
+  A worker gets soft 1024 (hard 20,000 was the test system's own ceiling; usually it's 524288, as the unit says), and Ubuntu's nginx allows 768 connections per worker: this was <code>door-2</code> on 10 July. Raise all three layers: the unit (a drop-in), nginx's file limit and its connections, then check the worker again:
+<pre><code>sudo mkdir -p /etc/systemd/system/nginx.service.d
+printf "[Service]\nLimitNOFILE=16384\n" | sudo tee /etc/systemd/system/nginx.service.d/limits.conf &gt; /dev/null
+sudo sed -i "s/^worker_processes auto;/worker_processes auto;\nworker_rlimit_nofile 16384;/; s/worker_connections 768;/worker_connections 4096;/" /etc/nginx/nginx.conf
+sudo nginx -t
+sudo systemctl daemon-reload; sudo systemctl restart nginx
+systemctl show nginx -p LimitNOFILE -p LimitNOFILESoft
+grep -i "open files" /proc/$(pgrep -n -u www-data nginx)/limits</code></pre>
+<pre><code>nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+LimitNOFILE=16384
+LimitNOFILESoft=16384
+Max open files            16384                16384                files     </code></pre>
+  16,384 here because the test system couldn't go higher; on a normal VM, 65536 is a common choice. Undo afterwards: delete the drop-in, reverse the two edits, <code>daemon-reload</code> and restart.</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Run <code>holdserver.py</code> as a transient service with <code>sudo systemd-run --unit=hold -p User=$USER -p LimitNOFILE=256 /usr/bin/python3 $HOME/lab12/holdserver.py</code> and confirm the limit with <code>/proc</code>; notice that your shell's <code>ulimit</code> made no difference. (2) Change <code>srv.listen(1024)</code> to <code>srv.listen(16)</code> and repeat step 4: what does <code>Send-Q</code> show? (3) <code>ss -s</code> before and after step 5: count the established connections.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: three layers on both web servers</p>
+  <p>At 10:04, Rafaela raises the limits on <code>door-2</code> and then <code>door-3</code>, in the order of Figure 12.1, and restarts nginx on each in turn: by 10:07 the 502s have stopped. Afterwards she writes the change into both servers' configuration properly. A drop-in sets <code>LimitNOFILE=65536</code> for nginx and for <code>stagedoor.service</code>; nginx gets <code>worker_rlimit_nofile 65536</code>, <code>worker_connections 8192</code>, <code>listen … backlog=4096</code>, and keep-alive connections to the app so each fan no longer costs a new connection and a port. An alert now watches <code>TcpExtListenOverflows</code> and the number of open descriptors per nginx worker.</p>
+  <p>The on-sale sells out at 10:31, despite the seven bad minutes. In the retrospective, Joana asks the question this whole Part has been answering: how would we know <em>before</em> an on-sale? Rafaela's answer is a load test the week before every big one, against a copy of the servers, watching CPU, memory, disk, inodes and the limits in this chapter. Building that copy needs servers that can be rebuilt from a script, which is where Parts IV and V are heading.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s12-9"><span class="n">12.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Raising limits in <code>limits.conf</code> for a service</td><td>Nothing changes: services don't use PAM login sessions.</td><td><code>LimitNOFILE=</code> in a drop-in.</td></tr>
+      <tr><td>Checking <code>ulimit -n</code> in your own shell</td><td>You see your shell's limit, not the service's.</td><td><code>/proc/&lt;pid&gt;/limits</code> of the running process.</td></tr>
+      <tr><td>Raising one layer only</td><td>The next layer in is still the bottleneck.</td><td>System, process and application, in that order (Figure 12.1).</td></tr>
+      <tr><td>Raising <code>somaxconn</code> but not the program's backlog</td><td>The program still asks for 511 or 128.</td><td>Set the program's backlog (nginx <code>listen … backlog=</code>) too.</td></tr>
+      <tr><td>Copying tuning lists</td><td>Obsolete or harmful settings nobody can explain.</td><td>Change what a counter or log proves you hit; comment why.</td></tr>
+      <tr><td>A new backend connection per request</td><td>Ephemeral ports and <code>TIME_WAIT</code> pile up.</td><td>Keep-alive connection pools.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum12">
+  <h2 class="sec" id="sum12"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Every open file and network connection is a <strong>file descriptor</strong>; a proxy uses two per forwarded request.</li>
+    <li>File limits come in three layers: the system (<code>fs.file-max</code>, <code>fs.nr_open</code>), the process (<code>RLIMIT_NOFILE</code>, soft and hard) and the application (<code>worker_connections</code>, pool sizes). The smallest wins.</li>
+    <li>For services, set <code>LimitNOFILE=</code> in the unit; check the running process's <code>/proc/&lt;pid&gt;/limits</code>.</li>
+    <li>Finished handshakes wait in the <strong>accept queue</strong>, sized by the program's backlog capped by <code>somaxconn</code>. A full queue drops handshakes and looks like slowness; <code>ss -lnt</code> and <code>nstat</code> show it.</li>
+    <li><code>sysctl</code> reads and sets kernel parameters; persist them in <code>/etc/sysctl.d/</code>, and change only what a measurement justifies.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>RLIMIT_NOFILE</dt><dd>The per-process limit on open file descriptors, with a soft (enforced) and a hard (ceiling) value.</dd>
+    <dt>Soft and hard limits</dt><dd>The enforced value of a resource limit, and the ceiling to which a non-root process may raise it.</dd>
+    <dt>EMFILE</dt><dd>Error 24, “Too many open files”: a process has reached its file descriptor limit.</dd>
+    <dt>Accept queue</dt><dd>The kernel's queue of fully established connections waiting for a program to call <code>accept()</code>.</dd>
+    <dt>Listen backlog</dt><dd>The length of a listening socket's accept queue: the program's value, capped by <code>net.core.somaxconn</code>.</dd>
+    <dt>sysctl</dt><dd>The interface, and the command, for reading and setting kernel parameters under <code>/proc/sys</code>.</dd>
+    <dt>Ephemeral port</dt><dd>A temporary local port the kernel assigns to an outgoing connection.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Where do you look to find the open-file limit of the running PostgreSQL postmaster, and how many files it has open? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p><code>/proc/&lt;pid&gt;/limits</code> (the “Max open files” line) and <code>ls /proc/&lt;pid&gt;/fd | wc -l</code>, with the PID from <code>systemctl show -p MainPID postgresql@16-main</code> or <code>pgrep</code>. Not <code>ulimit -n</code> in your shell.</p></details>
+    </li>
+    <li>
+      <p>Write a drop-in that gives <code>stagedoor.service</code> a soft limit of 8192 and a hard limit of 65536 open files. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>/etc/systemd/system/stagedoor.service.d/limits.conf</code> with <code>[Service]</code> and <code>LimitNOFILE=8192:65536</code>; then <code>sudo systemctl daemon-reload</code>, <code>sudo systemctl restart stagedoor</code>, and check <code>/proc/&lt;pid&gt;/limits</code>.</p></details>
+    </li>
+    <li>
+      <p>Explain why clients can report a successful connection to a server that's stuck with “Too many open files”. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The kernel completes the TCP handshake and puts the connection in the listening socket's accept queue without involving the program. The client sees an established connection. Only when the program calls <code>accept()</code> does the connection need a file descriptor, and that's the step that fails, so the connection waits in the queue until the client gives up.</p></details>
+    </li>
+    <li>
+      <p>After raising <code>nofile</code> in <code>/etc/security/limits.conf</code> and rebooting, nginx still logs “Too many open files”. Why, and what's the fix? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p><code>limits.conf</code> applies to login sessions through PAM; nginx is started by systemd, which uses the unit's <code>LimitNOFILE=</code>. Add a drop-in with <code>LimitNOFILE=65536</code>, set <code>worker_rlimit_nofile</code> (and enough <code>worker_connections</code>) in nginx's config, restart, and confirm in a worker's <code>/proc/&lt;pid&gt;/limits</code>.</p></details>
+    </li>
+    <li>
+      <p>Design the checks for a load test before a big on-sale, so that limit problems show up a week early. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Generate more than the expected peak against a copy of the servers, and watch: nginx's error log for errno 24 and “worker_connections are not enough”; open descriptors per worker against its limit; <code>TcpExtListenOverflows</code> and <code>ss -lnt</code> queues; <code>ss -s</code> for <code>TIME_WAIT</code> and ephemeral port use; plus CPU, memory, disk and inode usage from Chapters 9–11. Fix each limit reached, then test again.</p></details>
+    </li>
+    <li>
+      <p>Compare raising <code>net.ipv4.ip_local_port_range</code> with using keep-alive connections to the backend, for a proxy running out of ephemeral ports. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Widening the range adds ports (at most about 64,000 per destination) and delays the problem. Keep-alive reuses a small pool of connections for many requests, so ports and <code>TIME_WAIT</code> entries barely grow with traffic, and it also saves handshakes and latency. Keep-alive fixes the cause; widening the range treats the symptom.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li><code>man 2 getrlimit</code>, <code>man 5 proc</code> (<code>/proc/&lt;pid&gt;/limits</code>), <code>man systemd.exec</code> (<code>LimitNOFILE=</code>), <code>man sysctl.d</code>.</li>
+    <li>nginx: <a href="https://nginx.org/en/docs/ngx_core_module.html#worker_rlimit_nofile"><code>worker_rlimit_nofile</code></a>, <a href="https://nginx.org/en/docs/ngx_core_module.html#worker_connections"><code>worker_connections</code></a> and the <code>backlog</code> parameter of <a href="https://nginx.org/en/docs/http/ngx_http_core_module.html#listen"><code>listen</code></a>.</li>
+    <li>The kernel documentation: <a href="https://docs.kernel.org/networking/ip-sysctl.html">IP sysctl</a> (every <code>net.ipv4</code> setting explained).</li>
+    <li>Cloudflare's blog: <a href="https://blog.cloudflare.com/syn-packet-handling-in-the-wild/">SYN packet handling in the wild</a>, on the two queues.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="#ch13">13 · Network configuration and tools</a></div>
+</nav>

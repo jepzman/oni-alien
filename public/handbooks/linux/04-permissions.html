@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Users, groups and permissions · Linux for Cloud Engineers</title>
+<meta name="description" content="Who may read, write and run what: users and groups, permission bits, umask, sudo and ACLs. Stagedoor&#x27;s world-writable uploads directory.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 3</a> · <a href="index.html">Linux for Cloud Engineers</a></span><span>Part I · Chapter 4</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part I · Finding your way</p>
+  <p class="chno">4</p>
+  <h1>Users, groups and permissions</h1>
+  <p class="promise">Every file on a Linux server belongs to someone, and every process runs as someone. This chapter explains the small, strict rules the kernel uses to decide who may read, write and run what, how to grant exactly the access a program needs, and how to replace a shared root password with personal accounts and <code>sudo</code>.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain users, groups and IDs, and where Linux stores them.</li>
+      <li>Read and set permission bits on files and directories, in symbolic and octal form.</li>
+      <li>Predict the kernel's decision for any user, file and action.</li>
+      <li>Set up a shared directory where one program writes and another only reads, with setgid and umask.</li>
+      <li>Give people administrative access through <code>sudo</code>, and narrow it to single commands.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li><a href="03-files.html">Chapter 3</a>: inodes and <code>ls -l</code>.</li>
+      <li>A Linux machine where you can use <code>sudo</code>: a VM or a container (<a href="appendix-c-lab-setup.html">Appendix C</a>). The lab creates two users and removes them at the end.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>35 minutes, a Linux machine with <code>sudo</code>, free</dd>
+      <dt>Main distribution</dt><dd>Ubuntu, with other distributions in 4.9</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>On Tuesday 17 February 2026, Rafaela runs one <code>find</code> command on each server: every directory that anyone on the machine may write to. Apart from <code>/tmp</code>, which is meant to be, one comes back on <code>door-2</code> and <code>door-3</code>: <code>/srv/uploads</code>, where venues' posters and seating plans live. Its permissions are <code>drwxrwxrwx</code>, “777”. Leonor remembers why: in 2024 an upload failed with “Permission denied”, and <code>chmod 777</code> made the error go away.</p>
+  <p>Among the posters, Rafaela finds a dozen files owned by <code>marco</code>. Marco Antunes was a contractor who built the door-scanning API in 2024 and left that November; his account still exists. The files are harmless test images. But nginx serves this directory on Stagedoor's own domain, so anything on the machine, any user or any compromised program, could replace a venue's poster or drop in a web page that fans' browsers would trust. And everyone, Rafaela included, still logs in as root with the password pinned in the chat.</p>
+</aside>
+
+<!-- ======================================================== 4.1 -->
+<h2 class="sec" id="s4-1"><span class="n">4.1</span>Users, groups and IDs</h2>
+
+<p class="lead">To the kernel, a <span class="term">user</span> is a number: the <span class="term">user ID</span> (UID). Names are for people. Every process runs with a UID, every file has an owner UID, and the permission check (4.3) compares the two.</p>
+
+<p>A <span class="term">group</span> is also a number, the GID, with a list of member users. Every user has one <strong>primary group</strong> (new files get it) and can belong to any number of <strong>supplementary groups</strong>. Groups are how you give several users, or several programs, the same access without giving each one separately.</p>
+
+<p>Three kinds of user exist on every server:</p>
+<ul>
+  <li><strong>root</strong>, UID 0. The kernel skips most permission checks for UID 0. It's not a person; it's a level of power.</li>
+  <li><strong>System users</strong> for services: <code>www-data</code> (nginx on Ubuntu), <code>postgres</code>, <code>sshd</code>. They have low UIDs (below 1000 on Ubuntu), no password and usually no login shell (<code>/usr/sbin/nologin</code>). A service running as its own user can only damage what that user owns.</li>
+  <li><strong>People</strong>, with UIDs from 1000 up, a home directory and a shell.</li>
+</ul>
+
+<p>The databases are plain text files in <code>/etc</code>:</p>
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 4.1 · Where users and groups are stored</caption>
+    <thead><tr><th>File</th><th>One line per</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td><code>/etc/passwd</code></td><td>user: name, UID, primary GID, description, home, shell (readable by everyone; despite the name, no passwords)</td><td><code>www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin</code></td></tr>
+      <tr><td><code>/etc/shadow</code></td><td>user's password hash and ageing rules; readable only by root</td><td><code>marco:$y$j9T$…:20057:0:99999:7:::</code></td></tr>
+      <tr><td><code>/etc/group</code></td><td>group: name, GID, members</td><td><code>sudo:x:27:leonor,rafaela</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Read them with <code>getent passwd name</code> and <code>getent group name</code> rather than <code>cat</code>, because <code>getent</code> also asks any directory service the machine is connected to. <code>id</code> shows who you are right now: your UID, primary group and every group you're in.</p>
+
+<aside class="side"><b>Group changes and sessions</b>Groups are read when you log in. After adding yourself to a group, log out and in again (or run <code>newgrp</code>) before the new membership counts. Running services must be restarted for the same reason.</aside>
+
+<!-- ======================================================== 4.2 -->
+<h2 class="sec" id="s4-2"><span class="n">4.2</span>Permission bits</h2>
+
+<p>Every inode carries nine permission bits: read, write and execute, for three classes of user. <code>ls -l</code> shows them after the file type:</p>
+
+<figure class="wide" id="fig4-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 240" role="img" aria-labelledby="fig4-1-t fig4-1-d">
+      <title id="fig4-1-t">Reading the permission string -rw-r----- stagedoor www-data</title>
+      <desc id="fig4-1-d">The string -rw-r----- split into four parts. The first character, a dash, is the file type: a regular file. The next three, rw-, are the owner's permissions: read and write, which is 4 plus 2, 6. The next three, r--, are the group's: read only, 4. The last three, dashes, are for everyone else: nothing, 0. The owner is stagedoor and the group is www-data. Below, the values: read is 4, write is 2, execute is 1, so the mode in octal is 640.</desc>
+      <rect class="priv" x="20" y="20" width="44" height="56" rx="4"/>
+      <text class="t-mono" x="42" y="54" text-anchor="middle" style="font-size:22px">-</text>
+      <rect class="node-accent" x="74" y="20" width="132" height="56" rx="4"/>
+      <text class="t-mono on-accent" x="140" y="54" text-anchor="middle" style="font-size:22px">r w -</text>
+      <rect class="node" x="216" y="20" width="132" height="56" rx="4"/>
+      <text class="t-mono" x="282" y="54" text-anchor="middle" style="font-size:22px">r - -</text>
+      <rect class="node" x="358" y="20" width="132" height="56" rx="4"/>
+      <text class="t-mono" x="424" y="54" text-anchor="middle" style="font-size:22px">- - -</text>
+      <text class="t-mono" x="512" y="54" style="font-size:17px">stagedoor</text><text class="t-mono" x="626" y="54" style="font-size:17px">www-data</text>
+      <text class="t-small" x="42" y="98" text-anchor="middle">type</text>
+      <text class="t-small" x="140" y="98" text-anchor="middle">owner (user)</text>
+      <text class="t-small" x="282" y="98" text-anchor="middle">group</text>
+      <text class="t-small" x="424" y="98" text-anchor="middle">other (everyone else)</text>
+      <text class="t-small" x="512" y="98">owner</text>
+      <text class="t-small" x="626" y="98">group</text>
+      <text class="t-title" x="140" y="132" text-anchor="middle">4+2+0 = 6</text>
+      <text class="t-title" x="282" y="132" text-anchor="middle">4+0+0 = 4</text>
+      <text class="t-title" x="424" y="132" text-anchor="middle">0</text>
+      <text class="t-small" x="42" y="132" text-anchor="middle">regular</text>
+      <rect class="pub" x="20" y="152" width="720" height="74" rx="6"/>
+      <text class="t-small" x="36" y="176"><tspan font-weight="700">r = 4</tspan> read</text><text class="t-small" x="146" y="176"><tspan font-weight="700">w = 2</tspan> write</text><text class="t-small" x="260" y="176"><tspan font-weight="700">x = 1</tspan> execute (files) or enter (directories)</text>
+      <text class="t-small" x="36" y="198">Add the values per class to get one digit each: owner 6, group 4, other 0.</text>
+      <text class="t-mono" x="36" y="218">chmod 640 poster.jpg</text><text class="t-small" x="236" y="218">is the same as</text><text class="t-mono" x="350" y="218">chmod u=rw,g=r,o= poster.jpg</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 4.1</b> One permission string, read left to right: who owns it, what each class may do, and the same thing as three octal digits.</figcaption>
+</figure>
+
+<p>The same three letters mean different things on a file and on a directory, and the directory meanings cause most surprises:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 4.2 · What r, w and x allow</caption>
+    <thead><tr><th>Bit</th><th>On a file</th><th>On a directory</th></tr></thead>
+    <tbody>
+      <tr><td><code>r</code></td><td>read its contents</td><td>list the names in it</td></tr>
+      <tr><td><code>w</code></td><td>change its contents</td><td>create, delete and rename entries in it, <strong>including other people's files</strong></td></tr>
+      <tr><td><code>x</code></td><td>run it as a program</td><td>enter it and reach things inside by name (“traverse”)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Two consequences are worth saying twice. Deleting a file is a change to the <em>directory</em>, not the file: if you can write to a directory, you can delete any file in it, whoever owns the file and whatever its own permissions say. That's what made Stagedoor's 777 directory dangerous. And to reach <code>/var/lib/stagedoor/uploads/poster.jpg</code>, a user needs <code>x</code> on <em>every</em> directory along the path, not only read on the file.</p>
+
+<!-- ======================================================== 4.3 -->
+<h2 class="sec" id="s4-3"><span class="n">4.3</span>How the kernel decides</h2>
+
+<p>When a process opens a file, the kernel compares the process's UID and groups with the file's owner and group, picks <strong>exactly one</strong> class, and checks only that class's bits:</p>
+
+<figure class="wide" id="fig4-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 290" role="img" aria-labelledby="fig4-2-t fig4-2-d">
+      <title id="fig4-2-t">The kernel's permission check</title>
+      <desc id="fig4-2-d">A flowchart. A process with a UID and groups asks to read, write or execute a file. First question: is the UID 0, root? If yes, allow; for execute, at least one x bit must be set. If no: is the process's UID the file's owner? If yes, use the owner bits only. If no: is the file's group the process's primary group or one of its supplementary groups? If yes, use the group bits only. If no, use the other bits. Then: is the requested bit set in that one class? Allow or deny. A note says that the classes don't add up: an owner without w is denied even if other has w. ACLs, covered in section 4.8, add named users and groups between the owner and group steps.</desc>
+      <defs><marker id="c4ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="ext" x="10" y="16" width="170" height="54" rx="5"/>
+      <text class="t-label" x="95" y="38" text-anchor="middle">process (UID, groups)</text>
+      <text class="t-small" x="95" y="58" text-anchor="middle">wants r, w or x</text>
+      <rect class="node" x="210" y="16" width="130" height="54" rx="5"/>
+      <text class="t-label" x="275" y="48" text-anchor="middle">UID 0 (root)?</text>
+      <rect class="node" x="370" y="16" width="160" height="54" rx="5"/>
+      <text class="t-label" x="450" y="48" text-anchor="middle">UID = file's owner?</text>
+      <rect class="node" x="560" y="16" width="190" height="54" rx="5"/>
+      <text class="t-label" x="655" y="40" text-anchor="middle">file's group among the</text>
+      <text class="t-label" x="655" y="58" text-anchor="middle">process's groups?</text>
+      <path class="wire" d="M180 43 H206" marker-end="url(#c4ah)"/>
+      <path class="wire" d="M340 43 H366" marker-end="url(#c4ah)"/>
+      <text class="t-small" x="344" y="36">no</text>
+      <path class="wire" d="M530 43 H556" marker-end="url(#c4ah)"/>
+      <text class="t-small" x="534" y="36">no</text>
+      <rect class="pub" x="210" y="110" width="130" height="50" rx="5"/>
+      <text class="t-small" x="275" y="132" text-anchor="middle">allow (for x: some</text>
+      <text class="t-small" x="275" y="148" text-anchor="middle">x bit must be set)</text>
+      <rect class="node-accent" x="370" y="110" width="160" height="50" rx="5"/>
+      <text class="t-label on-accent" x="450" y="140" text-anchor="middle">use owner bits only</text>
+      <rect class="node-accent" x="560" y="110" width="90" height="50" rx="5"/>
+      <text class="t-label on-accent" x="605" y="132" text-anchor="middle">group</text>
+      <text class="t-label on-accent" x="605" y="148" text-anchor="middle">bits only</text>
+      <rect class="node-accent" x="660" y="110" width="90" height="50" rx="5"/>
+      <text class="t-label on-accent" x="705" y="132" text-anchor="middle">other</text>
+      <text class="t-label on-accent" x="705" y="148" text-anchor="middle">bits only</text>
+      <path class="wire" d="M275 70 V106" marker-end="url(#c4ah)"/><text class="t-small" x="281" y="92">yes</text>
+      <path class="wire" d="M450 70 V106" marker-end="url(#c4ah)"/><text class="t-small" x="456" y="92">yes</text>
+      <path class="wire" d="M605 70 V106" marker-end="url(#c4ah)"/><text class="t-small" x="611" y="92">yes</text>
+      <path class="wire" d="M730 70 V106" marker-end="url(#c4ah)"/><text class="t-small" x="736" y="92">no</text>
+      <rect class="node" x="370" y="190" width="380" height="40" rx="5"/>
+      <text class="t-label" x="560" y="215" text-anchor="middle">is the requested bit set in that one class? → allow / deny</text>
+      <path class="wire" d="M450 160 V186" marker-end="url(#c4ah)"/>
+      <path class="wire" d="M605 160 V186" marker-end="url(#c4ah)"/>
+      <path class="wire" d="M705 160 V186" marker-end="url(#c4ah)"/>
+      <text class="t-small" x="10" y="258">The classes don't add up: an owner without w is denied even if “other” has w.</text>
+      <text class="t-small" x="10" y="276">ACLs (4.8) insert named users and named groups between the owner and group steps.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 4.2</b> One class, chosen by who you are, then one bit. Root skips the check, which is why “it works with sudo” tells you nothing about whether the permissions are right.</figcaption>
+</figure>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">To debug “Permission denied”, ask three questions: which user and groups is the <em>process</em> running as, which class does that put it in for this file, and does every directory on the path allow it in?</p>
+</div>
+
+<p><code>namei -l /var/lib/stagedoor/uploads/poster.jpg</code> answers the third question in one go: it lists the owner and permissions of every directory on the path, so a missing <code>x</code> stands out.</p>
+
+<!-- ======================================================== 4.4 -->
+<h2 class="sec" id="s4-4"><span class="n">4.4</span>Changing owners and permissions</h2>
+
+<p><code>chown user:group file</code> changes the owner and group (only root may give a file away); <code>chgrp group file</code> changes only the group; <code>chmod</code> changes the bits, in either of two notations:</p>
+<ul>
+  <li><strong>Symbolic</strong>: who (<code>u</code>, <code>g</code>, <code>o</code>, <code>a</code>), how (<code>+</code>, <code>-</code>, <code>=</code>), what (<code>r</code>, <code>w</code>, <code>x</code>). <code>chmod g+r file</code>, <code>chmod o= file</code>, <code>chmod u=rwx,g=rx,o= dir</code>. Good for small changes, because it leaves the other bits alone.</li>
+  <li><strong>Octal</strong>: three digits, as in Figure 4.1. <code>chmod 640 file</code>. Good for setting everything at once, as scripts do.</li>
+</ul>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 4.3 · Modes you'll use again and again</caption>
+    <thead><tr><th>Mode</th><th>Symbolic</th><th>For</th></tr></thead>
+    <tbody>
+      <tr><td><code>644</code></td><td><code>rw-r--r--</code></td><td>ordinary files everyone may read: most of <code>/etc</code></td></tr>
+      <tr><td><code>640</code></td><td><code>rw-r-----</code></td><td>files one service writes and one group reads</td></tr>
+      <tr><td><code>600</code></td><td><code>rw-------</code></td><td>secrets: private keys, <code>.env</code> files with passwords</td></tr>
+      <tr><td><code>755</code></td><td><code>rwxr-xr-x</code></td><td>programs and directories everyone may enter</td></tr>
+      <tr><td><code>750</code></td><td><code>rwxr-x---</code></td><td>directories for one service and one group</td></tr>
+      <tr><td><code>2750</code></td><td><code>rwxr-s---</code></td><td>the same, and new files inherit the directory's group (4.5)</td></tr>
+      <tr><td><code>1777</code></td><td><code>rwxrwxrwt</code></td><td><code>/tmp</code>: everyone may create, only owners may delete (4.5)</td></tr>
+      <tr><td><code>777</code></td><td><code>rwxrwxrwx</code></td><td>almost never. If it “fixes” something, the real problem is ownership</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p><code>chmod -R</code> and <code>chown -R</code> change a whole tree. Be careful with <code>chmod -R</code> and octal modes: <code>chmod -R 640 dir</code> removes <code>x</code> from every directory inside, and nobody, not even the owner, can enter them any more. Use symbolic modes with a capital <code>X</code> (“execute only on directories, or where some x is already set”): <code>chmod -R u=rwX,g=rX,o= dir</code>.</p>
+
+<!-- ======================================================== 4.5 -->
+<h2 class="sec" id="s4-5"><span class="n">4.5</span>The special bits: setuid, setgid and sticky</h2>
+
+<p>Three more bits sit in front of the nine, as a fourth octal digit:</p>
+<ul>
+  <li><strong>setuid</strong> (4000, shown as <code>s</code> in the owner's <code>x</code>) on a program makes it run as the file's <em>owner</em>, whoever starts it. <code>/usr/bin/passwd</code> is setuid root, so ordinary users can change their own password in <code>/etc/shadow</code>. Every setuid-root program is a door into root if it has a bug; you'll audit them in <a href="18-hardening.html">Chapter 18</a>. Never set it on your own scripts.</li>
+  <li><strong><span class="term">setgid</span></strong> (2000, <code>s</code> in the group's <code>x</code>) on a <strong>directory</strong> makes new files and subdirectories inside it inherit the directory's group, instead of the creator's primary group. This is the tool for a directory shared between a writer and a reader, as the lab shows.</li>
+  <li><strong><span class="term">sticky bit</span></strong> (1000, <code>t</code> in the other's <code>x</code>) on a directory means that only a file's owner (or root) may delete or rename it, even though others may write to the directory. <code>/tmp</code> is <code>1777</code>: everyone can create files there, nobody can delete anyone else's.</li>
+</ul>
+
+<p>Stagedoor's <code>/srv/uploads</code> was <code>777</code>, without even the sticky bit: any user on the machine could delete or replace any poster.</p>
+
+<!-- ======================================================== 4.6 -->
+<h2 class="sec" id="s4-6"><span class="n">4.6</span>umask: the default for new files</h2>
+
+<p>When a program creates a file, it asks for a mode (usually <code>666</code> for files, <code>777</code> for directories), and the kernel removes the bits set in the process's <span class="term">umask</span>. A umask of <code>022</code> removes write for group and other: new files are <code>644</code>, directories <code>755</code>. A umask of <code>027</code> also removes everything for other: files <code>640</code>, directories <code>750</code>.</p>
+
+<p>The umask belongs to the process and is inherited by its children, so a service's umask decides the permissions of every file it creates. <code>umask</code> with no argument shows your shell's; systemd sets a service's with <code>UMask=</code> (<a href="06-systemd.html">Chapter 6</a>). For an app that writes files other programs shouldn't see, <code>027</code> is a good default.</p>
+
+<!-- ======================================================== 4.7 -->
+<h2 class="sec" id="s4-7"><span class="n">4.7</span>root and sudo</h2>
+
+<p>Logging in as root, especially with a shared password, has every problem a shared account has: nobody knows who did what, a leaver keeps the password, and every typo runs with unlimited power. The standard answer is <span class="term">sudo</span>: people log in with their own accounts, and run individual commands as root when they need to, after proving who they are.</p>
+
+<ul>
+  <li><strong>Who may do what</strong> is in <code>/etc/sudoers</code> and, better, in small files under <code>/etc/sudoers.d/</code>. On Ubuntu, members of the group <code>sudo</code> may run anything: <code>%sudo ALL=(ALL:ALL) ALL</code>.</li>
+  <li><strong>Narrow rules</strong> name the exact command: <code>tiago ALL=(root) /usr/bin/systemctl restart stagedoor</code> lets Tiago restart the app and nothing else. Use full paths: the rule matches the program, not the name you type.</li>
+  <li><strong>Edit with <code>visudo</code></strong> (or check a file with <code>visudo -cf file</code>), never with a plain editor. A syntax error in sudoers can lock everybody out of <code>sudo</code>, and on a cloud VM without a root password that can mean rebuilding the machine.</li>
+  <li><strong>Every use is logged</strong>, with the person's name, to <code>/var/log/auth.log</code> on Ubuntu (and the journal, <a href="07-logs.html">Chapter 7</a>). That's the accountability the shared root password couldn't give.</li>
+  <li><strong><code>sudo -l</code></strong> shows what you may run; <code>sudo -i</code> opens a root shell when you really need several commands (prefer single commands, so each is logged).</li>
+</ul>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: sudo rules that are root in disguise</p>
+  <p>A rule that allows an editor (<code>sudo vim /etc/nginx/nginx.conf</code>), a pager, <code>tar</code>, <code>find</code> or a script the user can modify gives full root, because each of these can start a shell or write any file. Allow specific, non-interactive commands; for editing files as root, use <code>sudoedit</code>, which edits a copy as you and writes it back.</p>
+</div>
+
+<!-- ======================================================== 4.8 -->
+<h2 class="sec" id="s4-8"><span class="n">4.8</span>Access control lists</h2>
+
+<p>Owner, group and other is sometimes too coarse: you want one more user, or a second group, to read a directory without changing its owner or group. <span class="term">ACLs</span> (access control lists) add named entries to an inode: <code>setfacl -m u:tiago:rx dir</code> gives Tiago read and enter on one directory. <code>getfacl dir</code> shows every entry; <code>ls -l</code> marks files that have an ACL with a <code>+</code> after the permission bits.</p>
+
+<p>ACLs have a <strong>mask</strong> entry, which caps what the named entries and the group may have; when an ACL seems not to work, check the mask first. A <strong>default ACL</strong> on a directory (<code>setfacl -d -m …</code>) is copied to new files created in it.</p>
+
+<p>Use ACLs sparingly. They're invisible in a normal <code>ls -l</code> apart from the <code>+</code>, some backup and copy tools drop them, and a server whose access only makes sense with <code>getfacl</code> is hard to review. When a group would do, use a group.</p>
+
+<!-- ======================================================== 4.9 -->
+<h2 class="sec" id="s4-9"><span class="n">4.9</span>Across distributions</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 4.4 · Same ideas, different names</caption>
+    <thead><tr><th></th><th>Ubuntu, Debian</th><th>RHEL family, Amazon Linux</th></tr></thead>
+    <tbody>
+      <tr><td>Administrators' group</td><td><code>sudo</code></td><td><code>wheel</code></td></tr>
+      <tr><td>nginx runs as</td><td><code>www-data</code></td><td><code>nginx</code></td></tr>
+      <tr><td>Authentication log</td><td><code>/var/log/auth.log</code></td><td><code>/var/log/secure</code></td></tr>
+      <tr><td>First UID for people</td><td>1000</td><td>1000</td></tr>
+      <tr><td>Friendly user creation</td><td><code>adduser</code> (asks questions); <code>useradd</code> for scripts</td><td><code>useradd</code></td></tr>
+      <tr><td>Cloud image's default user</td><td><code>ubuntu</code>, <code>admin</code> (Debian)</td><td><code>ec2-user</code> (Amazon Linux, RHEL on AWS)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On the RHEL family</p>
+  <p>SELinux checks every access a second time, after the permission bits, against rules about what each <em>kind</em> of program may touch. nginx may read files labelled as web content and not, say, a user's home directory, even if the bits allow it. A “Permission denied” that survives a correct <code>ls -l</code> on RHEL is usually SELinux; <code>ausearch -m avc -ts recent</code> shows the denial. <a href="18-hardening.html">Chapter 18</a> covers it.</p>
+</div>
+
+<!-- ======================================================== 4.10 -->
+<h2 class="sec" id="s4-10"><span class="n">4.10</span>Lab: fix the uploads directory</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 4 · From 777 to exactly enough</p>
+  <p><strong>You'll</strong> recreate Stagedoor's world-writable uploads directory, abuse it as another user, then fix it so the app writes, nginx reads and nobody else gets in; then grant one extra reader with an ACL and one narrow <code>sudo</code> rule. <strong>You need</strong> a Linux VM or container where you can use <code>sudo</code> (<a href="appendix-c-lab-setup.html">Appendix C</a>); on Ubuntu, the user <code>www-data</code> already exists. For the ACL step: <code>sudo apt install acl</code>. <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> the last step removes everything. Outputs come from a user called <code>tiago</code>; your IDs, names and times will differ.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Who are you?</strong>
+<pre><code>id
+id www-data
+getent group sudo</code></pre>
+<pre><code>uid=30033(tiago) gid=30033(tiago) groups=30033(tiago)
+uid=33(www-data) gid=33(www-data) groups=33(www-data)
+sudo:x:27:ubuntu</code></pre>
+  On this lab machine the first person's UID happened to be 30033 (usually it's 1000 or 1001). <code>www-data</code> is a system user with UID 33. The last line lists who may use <code>sudo</code> through the <code>sudo</code> group.</li>
+  <li><strong>Recreate the problem.</strong> Create a system user for the app, a second person (<code>marco</code>), and a 777 uploads directory; then write one poster as the app and one file as Marco:
+<pre><code>sudo useradd --system --user-group --no-create-home --shell /usr/sbin/nologin stagedoor
+sudo useradd --create-home --shell /bin/bash marco
+sudo mkdir -p /srv/lab4/uploads
+sudo chmod 777 /srv/lab4/uploads
+sudo -u stagedoor sh -c "echo poster &gt; /srv/lab4/uploads/poster-101.jpg"
+sudo -u marco sh -c "echo not-a-poster &gt; /srv/lab4/uploads/poster-102.jpg"
+ls -la /srv/lab4/uploads</code></pre>
+<pre><code>total 16
+drwxrwxrwx 2 root      root      4096 Nov 27 08:05 .
+drwxr-xr-x 3 root      root      4096 Nov 27 08:05 ..
+-rw-rw-r-- 1 stagedoor stagedoor    7 Nov 27 08:05 poster-101.jpg
+-rw-rw-r-- 1 marco     marco       13 Nov 27 08:05 poster-102.jpg</code></pre>
+  <code>sudo -u name</code> runs one command as another user: here it stands in for the app writing a file, and for Marco logging in.</li>
+  <li><strong>Abuse it.</strong> As Marco, delete the app's poster and put your own in its place:
+<pre><code>sudo -u marco rm /srv/lab4/uploads/poster-101.jpg
+sudo -u marco sh -c "echo replaced &gt; /srv/lab4/uploads/poster-101.jpg"
+ls -l /srv/lab4/uploads</code></pre>
+<pre><code>total 8
+-rw-rw-r-- 1 marco marco  9 Nov 27 08:05 poster-101.jpg
+-rw-rw-r-- 1 marco marco 13 Nov 27 08:05 poster-102.jpg</code></pre>
+  No error. Marco can't write to the app's <em>file</em> (it's <code>rw-rw-r--</code>, and he's “other”), but he can write to the <em>directory</em>, so he can delete the file and create a new one with the same name (Table 4.2). nginx would now serve his file as venue 101's poster.</li>
+  <li><strong>Fix it.</strong> Remove both files, then give the directory to the app, with nginx's group, setgid, and nothing for anyone else; write a poster as the app with umask <code>027</code>:
+<pre><code>sudo rm /srv/lab4/uploads/poster-101.jpg /srv/lab4/uploads/poster-102.jpg
+sudo chown stagedoor:www-data /srv/lab4/uploads
+sudo chmod 2750 /srv/lab4/uploads
+sudo -u stagedoor sh -c "umask 027; echo poster &gt; /srv/lab4/uploads/poster-101.jpg"
+ls -ld /srv/lab4/uploads
+sudo ls -l /srv/lab4/uploads</code></pre>
+<pre><code>drwxr-s--- 2 stagedoor www-data 4096 Nov 27 08:05 /srv/lab4/uploads
+total 4
+-rw-r----- 1 stagedoor www-data 7 Nov 27 08:05 poster-101.jpg</code></pre>
+  The directory is <code>rwxr-s---</code>: the app may do anything, the group <code>www-data</code> may list and enter, others nothing; the <code>s</code> is setgid. The new file got the group <code>www-data</code> from the directory, and mode <code>640</code> from the umask. (You needed <code>sudo</code> for the second <code>ls</code>: you're now “other” for this directory, too.)</li>
+  <li><strong>Test every user against Figure 4.2.</strong> nginx reads, nginx can't write, Marco can't even look:
+<pre><code>sudo -u www-data cat /srv/lab4/uploads/poster-101.jpg
+sudo -u www-data touch /srv/lab4/uploads/evil.jpg
+sudo -u marco ls /srv/lab4/uploads
+sudo -u marco cat /srv/lab4/uploads/poster-101.jpg</code></pre>
+<pre><code>poster
+touch: cannot touch '/srv/lab4/uploads/evil.jpg': Permission denied
+ls: cannot open directory '/srv/lab4/uploads': Permission denied
+cat: /srv/lab4/uploads/poster-101.jpg: Permission denied</code></pre>
+  For each line, say which class the user falls into and which bit decided. (Marco's <code>cat</code> fails on the directory's missing <code>x</code> for other, before the file's own bits are even considered.)</li>
+  <li><strong>Break it on purpose: without setgid.</strong> Remove the setgid bit and write another poster:
+<pre><code>sudo chmod g-s /srv/lab4/uploads
+sudo -u stagedoor sh -c "umask 027; echo poster &gt; /srv/lab4/uploads/poster-102.jpg"
+sudo ls -l /srv/lab4/uploads
+sudo -u www-data cat /srv/lab4/uploads/poster-102.jpg</code></pre>
+<pre><code>total 8
+-rw-r----- 1 stagedoor www-data  7 Nov 27 08:05 poster-101.jpg
+-rw-r----- 1 stagedoor stagedoor 7 Nov 27 08:05 poster-102.jpg
+cat: /srv/lab4/uploads/poster-102.jpg: Permission denied</code></pre>
+  The new file took the app's own primary group, <code>stagedoor</code>, so nginx is “other” for it and can't serve it: a broken poster on the website, and the kind of failure that tempts people to type <code>chmod 777</code>. Put it right: <code>sudo chmod g+s /srv/lab4/uploads</code> and <code>sudo chgrp www-data /srv/lab4/uploads/poster-102.jpg</code>.</li>
+  <li><strong>Break it on purpose: the wrong umask.</strong>
+<pre><code>sudo -u stagedoor sh -c "umask 022; echo poster &gt; /srv/lab4/uploads/poster-103.jpg"
+sudo ls -l /srv/lab4/uploads/poster-103.jpg</code></pre>
+<pre><code>-rw-r--r-- 1 stagedoor www-data 7 Nov 27 08:05 /srv/lab4/uploads/poster-103.jpg</code></pre>
+  Readable by everyone. Here the directory still keeps others out, but copy or move that file anywhere else and it's open. The umask is the app's responsibility; set it in the service (<a href="06-systemd.html">Chapter 6</a>).</li>
+  <li><strong>One extra reader with an ACL.</strong> Let <code>tiago</code> (use your own name) list the uploads without joining <code>www-data</code>:
+<pre><code>sudo setfacl -m u:tiago:rx /srv/lab4/uploads
+ls -ld /srv/lab4/uploads
+getfacl -p /srv/lab4/uploads
+ls /srv/lab4/uploads</code></pre>
+<pre><code>drwxr-s---+ 2 stagedoor www-data 4096 Nov 27 08:05 /srv/lab4/uploads
+# file: /srv/lab4/uploads
+# owner: stagedoor
+# group: www-data
+# flags: -s-
+user::rwx
+user:tiago:r-x
+group::r-x
+mask::r-x
+other::---
+
+poster-101.jpg
+poster-102.jpg
+poster-103.jpg</code></pre>
+  The <code>+</code> after the bits says “there's more: run <code>getfacl</code>”.</li>
+  <li><strong>One narrow sudo rule.</strong> Allow <code>tiago</code> to restart the app and nothing else, check the file's syntax, and list what the rule grants:
+<pre><code>echo "tiago ALL=(root) /usr/bin/systemctl restart stagedoor" | sudo tee /etc/sudoers.d/lab4 &gt; /dev/null
+sudo chmod 440 /etc/sudoers.d/lab4
+sudo visudo -cf /etc/sudoers.d/lab4
+sudo -l -U tiago</code></pre>
+<pre><code>/etc/sudoers.d/lab4: parsed OK
+Matching Defaults entries for tiago on vm:
+    env_reset, mail_badpass,
+    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/bin,
+    use_pty
+
+User tiago may run the following commands on vm:
+    (root) /usr/bin/systemctl restart stagedoor</code></pre>
+  (On a machine where you're in the <code>sudo</code> group, the list also shows <code>(ALL : ALL) ALL</code>.) Notice <code>secure_path</code>: <code>sudo</code> replaces your <code>PATH</code> with a fixed, safe one, another reason commands can behave differently under <code>sudo</code>. Now see what <code>visudo</code> catches; check a file with a stray parenthesis, without installing it:
+<pre><code>echo "tiago ALL=(root)) /usr/bin/systemctl" | sudo tee /tmp/bad &gt; /dev/null
+sudo visudo -cf /tmp/bad; echo "exit status: $?"</code></pre>
+<pre><code>/tmp/bad:1:17: syntax error
+tiago ALL=(root)) /usr/bin/systemctl
+                ^
+exit status: 1</code></pre></li>
+  <li><strong>Clean up.</strong>
+<pre><code>sudo rm /etc/sudoers.d/lab4 /tmp/bad
+sudo rm -r /srv/lab4
+sudo userdel -r marco
+sudo userdel stagedoor</code></pre>
+  <code>userdel</code> may warn that Marco's mail spool wasn't found; that's harmless.</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Find every world-writable directory on your machine that lacks the sticky bit: <code>sudo find / -xdev -type d -perm -0002 ! -perm -1000</code>. (2) Find every setuid program: <code>sudo find / -xdev -perm -4000 -type f</code>, and look up why each one needs it. (3) Use <code>namei -l</code> on a file deep in <code>/var/lib</code> and spot the directory that would stop an ordinary user.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: Wednesday 18 February</p>
+  <p>Rafaela and Tiago make the change on both web servers, outside on-sale hours, following the lab almost line for line. The app gets a system user, <code>stagedoor</code>. The uploads move to <code>/var/lib/stagedoor/uploads</code>, the place Chapter 3's layout gave them: owned by <code>stagedoor:www-data</code>, mode <code>2750</code>, every existing file <code>640</code> and in the group <code>www-data</code>. nginx's configuration points there; the five-minute <code>rsync</code> to <code>door-3</code> keeps the same ownership with <code>rsync -a</code>. Marco's test images are archived and removed.</p>
+  <p>The same afternoon, everyone gets a personal account (<code>leonor</code>, <code>rafaela</code>, <code>tiago</code>, <code>sasha</code>) in the <code>sudo</code> group. Rafaela changes the root password, keeps the new one in the company's password manager for emergencies only, and deletes the pinned message from <code>#ops</code>. Marco's account is locked and expired with <code>sudo usermod -L -e 1 marco</code>, and his last login, in November 2024, is noted in the wiki.</p>
+  <p>Two things remain on her list. The app itself still runs as root, from a terminal, so it can still write anywhere: that ends when it becomes a service running as <code>stagedoor</code> with <code>UMask=0027</code> (<a href="06-systemd.html">Chapter 6</a>). And locking an account's password doesn't stop someone who logs in with an SSH key, which is why <a href="16-ssh.html">Chapter 16</a> goes looking for keys.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s4-11"><span class="n">4.11</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td><code>chmod 777</code> to fix “Permission denied”</td><td>The error goes away, and so does all protection: anyone on the machine can replace or delete files.</td><td>Find which user the process runs as (Figure 4.2), and fix ownership or group.</td></tr>
+      <tr><td>Testing access with <code>sudo</code></td><td>Root skips the checks; it “works” and proves nothing.</td><td>Test as the real user: <code>sudo -u www-data cat file</code>.</td></tr>
+      <tr><td>Running services as root</td><td>Any bug in the service is a bug with root's power.</td><td>One system user per service, owning only what it needs.</td></tr>
+      <tr><td>A shared root password</td><td>No accountability; leavers keep access; changing it breaks everyone.</td><td>Personal accounts with <code>sudo</code>; root's password in a vault for emergencies.</td></tr>
+      <tr><td><code>chmod -R 640</code> on a tree</td><td>Directories lose <code>x</code>; nobody can enter them.</td><td><code>chmod -R u=rwX,g=rX,o= dir</code>.</td></tr>
+      <tr><td>Editing sudoers with a plain editor</td><td>One typo and <code>sudo</code> stops working for everyone.</td><td><code>visudo</code>, or <code>visudo -cf</code> on a drop-in file.</td></tr>
+      <tr><td>Locking a leaver's password and calling it done</td><td>SSH keys, cron jobs and running processes still work.</td><td>Lock, expire, then check keys, crontabs and processes (<a href="16-ssh.html">Chapter 16</a>).</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum4">
+  <h2 class="sec" id="sum4"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Users and groups are numbers (UID, GID) with names in <code>/etc/passwd</code> and <code>/etc/group</code>. Services get their own system users.</li>
+    <li>Nine permission bits give read, write and execute to the owner, the group and everyone else. On directories, <code>w</code> means create and delete entries, and <code>x</code> means enter.</li>
+    <li>The kernel picks exactly one class for a process (owner, group or other) and checks only that class. Root skips the check.</li>
+    <li><strong>setgid</strong> on a directory makes new files inherit its group; the <strong>sticky bit</strong> stops people deleting each other's files; the <strong>umask</strong> sets the default mode of new files.</li>
+    <li>A shared directory for a writer and a reader: owner = writer, group = reader, mode <code>2750</code>, writer's umask <code>027</code>.</li>
+    <li>Personal accounts and <strong>sudo</strong> replace a shared root password; narrow rules name exact commands; every use is logged.</li>
+    <li>ACLs add named users or groups when a single group isn't enough; use them sparingly.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>User</dt><dd>An identity the kernel knows by its user ID (UID); processes run as a user and files are owned by one.</dd>
+    <dt>UID</dt><dd>The number that identifies a user to the kernel; 0 is root.</dd>
+    <dt>Group</dt><dd>A numbered set of users that can be given access together.</dd>
+    <dt>Permission bits</dt><dd>Read, write and execute for a file's owner, its group and everyone else.</dd>
+    <dt>setgid (directory)</dt><dd>A directory bit that makes new entries inherit the directory's group.</dd>
+    <dt>Sticky bit</dt><dd>A directory bit that lets only a file's owner (or root) delete or rename it.</dd>
+    <dt>umask</dt><dd>A per-process mask of permission bits removed from every new file and directory.</dd>
+    <dt>sudo</dt><dd>A program that lets permitted users run commands as root (or another user), with logging, according to rules in sudoers.</dd>
+    <dt>ACL</dt><dd>An access control list: extra permission entries for named users and groups on a file or directory.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Write <code>rwxr-x---</code> and <code>rw-------</code> in octal, and say what each is typically used for. <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p><code>750</code>: a directory (or program) for its owner, readable and enterable by one group, closed to everyone else. <code>600</code>: a secret only its owner may read and write, such as a private key or a file with a password.</p></details>
+    </li>
+    <li>
+      <p>A file is <code>-rw----r-- 1 rafaela ops</code>. Rafaela tries to read it. Is she allowed, and why? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Yes: she's the owner, so only the owner bits count, and they include <code>r</code>. (If the owner bits had been <code>---</code>, she would be denied even though “other” has <code>r</code>, because only one class is checked.)</p></details>
+    </li>
+    <li>
+      <p>Why can a user delete a file they don't own and can't write to? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Deleting removes a name from the directory, so it needs write (and execute) permission on the directory, not on the file. Without the sticky bit, anyone who can write to the directory can delete any entry in it.</p></details>
+    </li>
+    <li>
+      <p>nginx returns 403 for <code>/var/lib/stagedoor/uploads/plan-7.pdf</code>, but <code>sudo cat</code> of the file works. List what you'd check, in order. <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p><code>sudo cat</code> proves nothing, because root skips the checks. Check which user nginx's workers run as (<code>ps -o user= -C nginx</code>: the master is <code>root</code>, the workers that open files are <code>www-data</code>); run <code>namei -l</code> on the path to see that <code>www-data</code> can traverse every directory; check the file's group and mode (probably created without the setgid directory, so its group is <code>stagedoor</code>, or with a bad umask); test with <code>sudo -u www-data cat</code>. On RHEL, also check SELinux denials.</p></details>
+    </li>
+    <li>
+      <p>Design permissions for <code>/etc/stagedoor/stagedoor.env</code>, which holds the database password: the app must read it, the deploy process (running as a person with <code>sudo</code>) must update it, nginx must not see it. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Owner <code>root</code>, group <code>stagedoor</code>, mode <code>640</code>; the directory <code>/etc/stagedoor</code> owned <code>root:stagedoor</code>, mode <code>750</code>. The app (user <code>stagedoor</code>) reads through the group but can't change it; deploys update it with <code>sudo</code>; nginx (<code>www-data</code>) is “other” and gets nothing. (<a href="06-systemd.html">Chapter 6</a> loads it with systemd's <code>EnvironmentFile=</code>.)</p></details>
+    </li>
+    <li>
+      <p>Compare giving Tiago read access to the uploads by adding him to <code>www-data</code> with giving it through an ACL. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Joining <code>www-data</code> gives him everything nginx's group can read, everywhere on the machine, which is broader than needed but visible in <code>/etc/group</code>. An ACL gives exactly this directory and nothing else, but it's less visible (only a <code>+</code> in <code>ls -l</code>) and easy to forget. For one person and one directory, the ACL is the narrower choice; for a role several people share, make a dedicated group.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li><code>man 7 credentials</code>, <code>man 7 path_resolution</code> (exactly how the kernel checks a path), <code>man chmod</code>.</li>
+    <li><code>man sudoers</code>, especially the examples, and <a href="https://www.sudo.ws/docs/">sudo's documentation</a>.</li>
+    <li><code>man 5 acl</code> and <code>man setfacl</code>.</li>
+    <li>The <a href="https://documentation.ubuntu.com/server/">Ubuntu Server documentation</a>, section “User management”.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="05-processes.html">5 · Processes and signals</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 3 · Linux for Cloud Engineers</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

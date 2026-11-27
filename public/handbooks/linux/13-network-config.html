@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Network configuration and tools · Linux for Cloud Engineers</title>
+<meta name="description" content="Interfaces, addresses, routes and name resolution on the host, and the tools to see them.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 3</a> · <a href="index.html">Linux for Cloud Engineers</a></span><span>Part IV · Chapter 13</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part IV · Networking from the host</p>
+  <p class="chno">13</p>
+  <h1>Network configuration and tools</h1>
+  <p class="promise">Every network problem eventually lands on one machine, and on that machine four things decide where a packet goes: its addresses, its routes, the sockets that are listening, and how it turns names into addresses. This chapter shows each one with the tool that reads it, and builds a small network of pretend servers on your own machine to practise on.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Read a server's interfaces, addresses and routes with <code>ip</code>, and ask which route a packet would take.</li>
+      <li>List listening sockets with <code>ss</code>, and spot a service listening only on localhost.</li>
+      <li>Explain how a name becomes an address on Linux, and why <code>getent</code> and <code>dig</code> can disagree.</li>
+      <li>Read an Ubuntu netplan file and apply a change safely.</li>
+      <li>Build a test network from network namespaces.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Handbook 1, Chapters 2–5 (addresses and CIDR, TCP and ports, routing, DNS) help a lot; this chapter recaps what it needs.</li>
+      <li>A Linux VM with <code>sudo</code> and these packages: <code>iproute2 iputils-ping netcat-openbsd dnsutils dnsmasq-base</code> (<a href="appendix-c-lab-setup.html">Appendix C</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>35 minutes, a Linux VM with <code>sudo</code>, free; everything stays on your machine</dd>
+      <dt>Main distribution</dt><dd>Ubuntu 24.04, with others in 13.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>The new database server promised in <a href="08-packages.html">Chapter 8</a> is ready on Monday 24 August 2026: <code>door-4</code>, Ubuntu 24.04, address <code>10.40.0.14</code>, built by Rafaela and Tiago from a written checklist. The move from <code>door-1</code> is planned for Thursday night; Monday afternoon is the dry run. The app's settings on both web servers now say <code>db.stagedoor.internal</code>, and the internal DNS record points at <code>10.40.0.14</code>.</p>
+  <p>Two things go wrong in ten minutes. On <code>door-2</code>, the app's test connection fails at once: <code>connection refused</code>. On <code>door-3</code>, it succeeds, which is worse, because its log shows it connected to <code>10.40.0.11</code>: the old server.</p>
+</aside>
+
+<!-- ======================================================== 13.1 -->
+<h2 class="sec" id="s13-1"><span class="n">13.1</span>The network as one host sees it</h2>
+
+<p class="lead">From inside a server, “the network” is four tables the kernel keeps. Nearly every connection problem is one of them being different from what you assumed.</p>
+
+<figure class="wide" id="fig13-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig13-1-t fig13-1-d">
+      <title id="fig13-1-t">What decides where a connection goes, on one host</title>
+      <desc id="fig13-1-d">An app on door-2 wants to connect to db.stagedoor.internal port 5432. Step 1, names: the resolver turns the name into an address, using /etc/hosts and then DNS; tools: getent hosts, dig, resolvectl. Step 2, routes: the routing table picks the interface and next hop for 10.40.0.14, here directly on eth0 because it's in 10.40.0.0/24; tools: ip route, ip route get. Step 3, addresses and links: the interface eth0 with address 10.40.0.12/24, and the neighbour table that maps the next hop's IP to its MAC address; tools: ip addr, ip link, ip neigh. Step 4, on the far end, sockets: something must be listening on 10.40.0.14 port 5432 for the connection to be accepted; tool: ss -tlnp.</desc>
+      <defs><marker id="c13ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="priv" x="10" y="12" width="740" height="34" rx="5"/>
+      <text class="t-small" x="24" y="34">an app on door-2 connects to</text><text class="t-mono" x="230" y="34">db.stagedoor.internal:5432</text>
+      <rect class="node" x="10" y="64" width="170" height="112" rx="5"/><text class="t-title" x="24" y="88">1 Names</text><text class="t-small" x="24" y="110">/etc/hosts, then DNS</text><text class="t-small" x="24" y="128">→ 10.40.0.14</text><text class="t-mono" x="24" y="160">getent hosts, dig</text>
+      <rect class="node" x="200" y="64" width="170" height="112" rx="5"/><text class="t-title" x="214" y="88">2 Routes</text><text class="t-small" x="214" y="110">10.40.0.0/24 is direct</text><text class="t-small" x="214" y="128">on eth0; else via gateway</text><text class="t-mono" x="214" y="160">ip route get</text>
+      <rect class="node" x="390" y="64" width="170" height="112" rx="5"/><text class="t-title" x="404" y="88">3 Interface</text><text class="t-small" x="404" y="110">eth0 10.40.0.12/24;</text><text class="t-small" x="404" y="128">neighbour's MAC (ARP)</text><text class="t-mono" x="404" y="160">ip addr, ip neigh</text>
+      <rect class="node-accent" x="580" y="64" width="170" height="112" rx="5"/><text class="t-title on-accent" x="594" y="88">4 Socket</text><text class="t-small on-accent" x="594" y="110">on door-4: listening</text><text class="t-small on-accent" x="594" y="128">on 10.40.0.14:5432?</text><text class="t-mono on-accent" x="594" y="160">ss -tlnp</text>
+      <path class="wire" d="M180 120 H196" marker-end="url(#c13ah)"/><path class="wire" d="M370 120 H386" marker-end="url(#c13ah)"/><path class="wire" d="M560 120 H576" marker-end="url(#c13ah)"/>
+      <rect class="pub" x="10" y="194" width="740" height="44" rx="5"/>
+      <text class="t-small" x="26" y="221">Stagedoor's dry run failed at step 4 on door-2 (nothing listening on that address) and at step 1 on door-3 (a stale name).</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 13.1</b> Name, route, interface, socket. Check them in order and you'll find most host-side problems in minutes; <a href="14-debugging-connections.html">Chapter 14</a> turns this into a method.</figcaption>
+</figure>
+
+<p>One tool reads most of them. <code>ip</code>, from the <code>iproute2</code> package, replaced the older <code>ifconfig</code>, <code>route</code> and <code>arp</code> (still found in old guides and on old servers, from <code>net-tools</code>): use <code>ip</code>, which shows everything, including what the old tools can't.</p>
+
+<!-- ======================================================== 13.2 -->
+<h2 class="sec" id="s13-2"><span class="n">13.2</span>Interfaces, addresses and routes</h2>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 13.1 · The <code>ip</code> commands you'll use</caption>
+    <thead><tr><th>You want</th><th>Command</th></tr></thead>
+    <tbody>
+      <tr><td>interfaces and addresses, one line each</td><td><code>ip -br address</code> (<code>ip -br a</code>)</td></tr>
+      <tr><td>everything about one interface</td><td><code>ip address show dev eth0</code></td></tr>
+      <tr><td>link state, MTU, MAC</td><td><code>ip -br link</code></td></tr>
+      <tr><td>the routing table</td><td><code>ip route</code></td></tr>
+      <tr><td>which route a packet to X would take</td><td><code>ip route get 10.40.0.14</code></td></tr>
+      <tr><td>the neighbour (ARP) table</td><td><code>ip neigh</code></td></tr>
+      <tr><td>add an address or route now (until reboot)</td><td><code>sudo ip addr add 10.40.0.20/24 dev eth0</code>, <code>sudo ip route add 10.50.0.0/16 via 10.40.0.1</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>A server's <span class="term">routing table</span> is short. Usually there's one route per directly connected network, added automatically from the interface's address (<code>10.40.0.0/24 dev eth0 proto kernel scope link</code>: anything in this range is on the wire, reachable directly), and a <span class="term">default route</span> for everything else (<code>default via 10.40.0.1</code>: send it to this gateway). The kernel picks the most specific matching route, as Handbook 1, Chapter 4 explains. <code>ip route get</code> asks the kernel to make that choice for one address and shows the answer, including the source address it would use: the quickest way to settle “which interface does this go out of?” on a machine with several.</p>
+
+<p>For addresses on the same network, the kernel needs the neighbour's hardware (MAC) address, which it learns with ARP and keeps in the neighbour table (<code>ip neigh</code>). An entry stuck in <code>FAILED</code> or <code>INCOMPLETE</code> means nothing answered: the other machine is down, on another network, or a firewall drops ARP.</p>
+
+<aside class="side"><b>Changes with <code>ip</code> don't last</b>Addresses and routes added with <code>ip</code> vanish at reboot. They're perfect for testing; the permanent configuration lives in netplan on Ubuntu (13.5).</aside>
+
+<!-- ======================================================== 13.3 -->
+<h2 class="sec" id="s13-3"><span class="n">13.3</span>Who is listening?</h2>
+
+<p>A server program accepts connections on a <span class="term">listening socket</span>: an address and a port. <code>ss</code> (which replaced <code>netstat</code>) lists them:</p>
+<pre><code>sudo ss -tlnp      <span class="c"># -t TCP, -l listening, -n numbers not names, -p the process (needs sudo for others' processes)</span>
+sudo ss -ulnp      <span class="c"># the same for UDP</span>
+ss -tn state established '( dport = :5432 )'   <span class="c"># established connections to port 5432</span></code></pre>
+
+<p>The address in <code>Local Address:Port</code> decides who can connect, and it's the cause of a classic failure:</p>
+<ul>
+  <li><code>0.0.0.0:5432</code> (IPv4) or <code>[::]:5432</code> (IPv6, often both): every address on the machine. Reachable from anywhere a route and firewall allow.</li>
+  <li><code>10.40.0.14:5432</code>: only that address.</li>
+  <li><code>127.0.0.1:5432</code>: only <strong>loopback</strong>, the machine talking to itself. Unreachable from any other machine, whatever the firewall says. Many services listen here by default to be safe: PostgreSQL (<code>listen_addresses = 'localhost'</code>), Redis, many admin interfaces.</li>
+</ul>
+
+<p>What a client sees tells you which case you're in. <strong>Connection refused</strong> means the packet reached the machine and nothing was listening on that address and port, so the kernel answered with a reset. A <strong>timeout</strong> means nothing answered at all: wrong address, no route, or a firewall dropping the packet (<a href="15-host-firewalls.html">Chapter 15</a>).</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">“Refused” means you reached the machine and nobody was listening there. “Timed out” means you didn't get an answer at all. They point at different layers.</p>
+</div>
+
+<!-- ======================================================== 13.4 -->
+<h2 class="sec" id="s13-4"><span class="n">13.4</span>From a name to an address</h2>
+
+<p>When a program connects to <code>db.stagedoor.internal</code>, it calls the C library's resolver (<code>getaddrinfo</code>), which follows the <code>hosts:</code> line in <code>/etc/nsswitch.conf</code>. On a server that line is usually <code>files dns</code>: look in <code>/etc/hosts</code> first, and only if the name isn't there, ask DNS.</p>
+
+<figure class="wide" id="fig13-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 230" role="img" aria-labelledby="fig13-2-t fig13-2-d">
+      <title id="fig13-2-t">How a program resolves a name, and what dig skips</title>
+      <desc id="fig13-2-d">A program calls getaddrinfo. The C library reads /etc/nsswitch.conf, whose hosts line says files then dns. Files means /etc/hosts: if the name is there, that answer is used and DNS is never asked. Otherwise the library asks the DNS server listed in /etc/resolv.conf; on Ubuntu that's systemd-resolved's local stub at 127.0.0.53, which forwards to the network's DNS servers and caches answers. getent hosts follows the same path as programs do. dig goes straight to a DNS server and ignores /etc/hosts and nsswitch, so the two can disagree.</desc>
+      <defs><marker id="c13ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="10" y="20" width="150" height="60" rx="5"/><text class="t-label" x="85" y="46" text-anchor="middle">program</text><text class="t-mono" x="85" y="66" text-anchor="middle">getaddrinfo()</text>
+      <rect class="node" x="190" y="20" width="150" height="60" rx="5"/><text class="t-label" x="265" y="46" text-anchor="middle">nsswitch.conf</text><text class="t-mono" x="265" y="66" text-anchor="middle">hosts: files dns</text>
+      <rect class="node-accent" x="370" y="20" width="150" height="60" rx="5"/><text class="t-label on-accent" x="445" y="46" text-anchor="middle">1 files</text><text class="t-mono on-accent" x="445" y="66" text-anchor="middle">/etc/hosts</text>
+      <rect class="node" x="550" y="20" width="200" height="60" rx="5"/><text class="t-label" x="650" y="46" text-anchor="middle">2 dns: resolv.conf</text><text class="t-small" x="650" y="66" text-anchor="middle">127.0.0.53 → DNS servers</text>
+      <path class="wire" d="M160 50 H186" marker-end="url(#c13ah2)"/><path class="wire" d="M340 50 H366" marker-end="url(#c13ah2)"/><path class="wire" d="M520 50 H546" marker-end="url(#c13ah2)"/>
+      <text class="t-small" x="445" y="98" text-anchor="middle">not listed? then DNS →</text>
+      <rect class="pub" x="10" y="104" width="510" height="44" rx="5"/><text class="t-mono" x="26" y="131">getent hosts NAME</text><text class="t-small" x="190" y="131">follows the same path as every program</text>
+      <rect class="priv" x="10" y="160" width="740" height="56" rx="5"/><text class="t-mono" x="26" y="184">dig NAME</text><text class="t-small" x="120" y="184">asks a DNS server directly. It skips /etc/hosts and nsswitch entirely,</text><text class="t-small" x="120" y="204">so a stale /etc/hosts line can make the app and dig give different answers.</text>
+      <path class="wire-dash" d="M700 160 V84" marker-end="url(#c13ah2)"/>
+    </svg>
+  </div>
+  <figcaption><b>Figure 13.2</b> Programs ask the C library, which tries <code>/etc/hosts</code> first. <code>dig</code> asks DNS directly. To see what a program will get, use <code>getent hosts</code>.</figcaption>
+</figure>
+
+<ul>
+  <li><strong><code>/etc/hosts</code></strong> is a plain list of addresses and names. It's handy for one machine's own name and for testing, and dangerous for anything else: an entry there wins over DNS on that machine, silently and for ever, long after everyone has forgotten it.</li>
+  <li><strong><code>/etc/resolv.conf</code></strong> names the DNS servers. On Ubuntu it points at <code>127.0.0.53</code>, a local stub run by <span class="term">systemd-resolved</span>, which forwards queries to the real servers (from DHCP or netplan) and caches the answers. <code>resolvectl status</code> shows the real servers per interface; <code>resolvectl query name</code> resolves through it; <code>resolvectl flush-caches</code> empties its cache.</li>
+  <li><strong><code>dig</code></strong> asks a DNS server directly and shows the whole answer, with its TTL (how long it may be cached, Handbook 1, Chapter 5). <code>dig @10.40.0.1 name</code> asks a particular server; <code>dig +short name</code> prints only the answer.</li>
+</ul>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: “DNS is fine, I checked with dig”</p>
+  <p><code>dig</code> proves what DNS says, not what your program gets. Applications also cache addresses themselves (connection pools, the JVM's DNS cache, long-lived connections that never look the name up again). To know what the app will do, use <code>getent hosts</code> on the same machine, and look at its real connections with <code>ss -tnp</code>.</p>
+</div>
+
+<!-- ======================================================== 13.5 -->
+<h2 class="sec" id="s13-5"><span class="n">13.5</span>Making it permanent: netplan</h2>
+
+<p>On Ubuntu servers, the network configuration is written in YAML under <code>/etc/netplan/</code>, and <span class="term">netplan</span> turns it into configuration for <code>systemd-networkd</code> (on servers) or NetworkManager (on desktops). Cloud images ship a file written by cloud-init that asks for an address by DHCP; servers on a private network like Atlantica's usually have static addresses:</p>
+
+<p class="code-title"><span>/etc/netplan/60-stagedoor.yaml</span><span>netplan (an illustration of door-4's configuration)</span></p>
+<pre><code>network:
+  version: 2
+  ethernets:
+    eth0:
+      addresses: [10.40.0.14/24]
+      routes:
+        - to: default
+          via: 10.40.0.1
+      nameservers:
+        addresses: [10.40.0.1]
+        search: [stagedoor.internal]</code></pre>
+
+<p>Apply changes with <code>sudo netplan try</code>, not <code>apply</code>: it applies the new configuration and rolls it back after 120 seconds unless you confirm. If the change cuts off your SSH session, you can't confirm, and the old configuration returns by itself. On a remote server, that's the difference between a typo and a trip to the provider's console. <code>netplan get</code> shows the merged configuration; <code>networkctl status</code> shows what <code>systemd-networkd</code> did with it. File permissions matter too: netplan warns if a file is readable by others, since it may hold Wi-Fi or VPN secrets.</p>
+
+<!-- ======================================================== 13.6 -->
+<h2 class="sec" id="s13-6"><span class="n">13.6</span>A lab network from namespaces</h2>
+
+<p>To practise on several servers without renting any, this book uses <span class="term">network namespaces</span>: the kernel can give a group of processes its own complete network stack, with its own interfaces, addresses, routes, firewall and sockets. Containers are built on exactly this (<a href="19-containers.html">Chapter 19</a>). A <strong>veth pair</strong> is a virtual cable with one end in each namespace; a <strong>bridge</strong> is a virtual switch. <code>ip netns exec door-2 COMMAND</code> runs a command “on” <code>door-2</code>: it sees only that namespace's network, while sharing the rest of the machine (files, users, processes).</p>
+
+<p>The lab's script builds three pretend servers on one switch, with your machine as <code>10.40.0.1</code>, their gateway and DNS server. Chapters 14–16 reuse it.</p>
+
+<!-- ======================================================== 13.7 -->
+<h2 class="sec" id="s13-7"><span class="n">13.7</span>Across distributions</h2>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 13.2 · Where network configuration lives</caption>
+    <thead><tr><th></th><th>Ubuntu</th><th>Debian</th><th>RHEL family, Amazon Linux 2023</th></tr></thead>
+    <tbody>
+      <tr><td>Configuration</td><td>netplan YAML in <code>/etc/netplan/</code></td><td><code>/etc/network/interfaces</code> (ifupdown) on servers; netplan on cloud images</td><td>NetworkManager (<code>nmcli</code>, files in <code>/etc/NetworkManager/</code>); Amazon Linux: <code>systemd-networkd</code></td></tr>
+      <tr><td>Resolver</td><td>systemd-resolved, stub <code>127.0.0.53</code></td><td>usually plain <code>/etc/resolv.conf</code></td><td>NetworkManager writes <code>/etc/resolv.conf</code>; AL2023 uses systemd-resolved</td></tr>
+      <tr><td>Tools</td><td colspan="3"><code>ip</code>, <code>ss</code>, <code>dig</code> (<code>dnsutils</code> / <code>bind-utils</code>) everywhere</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On the cloud</p>
+  <p>Cloud VMs get their address by DHCP from the provider, along with the provider's DNS resolver (on AWS, the VPC's resolver at the network's base address plus two, Handbook 1, Chapter 5). You rarely configure addresses on the VM itself: you configure the network around it (subnets, route tables, security groups) and the VM picks it up. The host-side tools in this chapter are how you check that what you configured is what the VM actually got.</p>
+</div>
+
+<!-- ======================================================== 13.8 -->
+<h2 class="sec" id="s13-8"><span class="n">13.8</span>Lab: Stagedoor's dry run, in miniature</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 13 · Three servers, one switch, two bugs</p>
+  <p><strong>You'll</strong> build a pretend Stagedoor network from network namespaces, look at it with <code>ip</code>, reproduce the dry run's two failures (a service listening on localhost, and a stale <code>/etc/hosts</code> entry beating DNS) and fix both. <strong>You need</strong> a Linux VM with <code>sudo</code> (not a container) and <code>sudo apt install iproute2 iputils-ping netcat-openbsd dnsutils dnsmasq-base</code>. <strong>Cost:</strong> nothing; nothing leaves your machine. <strong>Clean-up:</strong> the last step. MAC addresses, interface numbers and times will differ.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Build the network.</strong> Save the script as <code>netlab.sh</code>, make it executable, and run it:
+<p class="code-title"><span>netlab.sh</span><span>bash</span></p>
+<pre><code>#!/usr/bin/env bash
+<span class="c"># netlab.sh up|down · a pretend Stagedoor network on one Linux machine, built from network namespaces.</span>
+<span class="c"># Three "servers" (door-2, door-3, door-4) share a switch (a Linux bridge) with your machine, which is 10.40.0.1.</span>
+<span class="k">set</span> -euo pipefail
+hosts=(door-2:10.40.0.12 door-3:10.40.0.13 door-4:10.40.0.14)
+
+up() {
+  ip link add br-lab type bridge
+  ip addr add 10.40.0.1/24 dev br-lab
+  ip link <span class="k">set</span> br-lab up
+  <span class="k">for</span> h <span class="k">in</span> <span class="s">"${hosts[@]}"</span>; <span class="k">do</span>
+    name=${h%%:*} addr=${h##*:} n=${name#door-}
+    ip netns add <span class="s">"$name"</span>
+    ip link add <span class="s">"veth$n"</span> type veth peer name eth0 netns <span class="s">"$name"</span>   <span class="c"># a cable: one end on the switch, one in the server</span>
+    ip link <span class="k">set</span> <span class="s">"veth$n"</span> master br-lab up
+    ip -n <span class="s">"$name"</span> addr add <span class="s">"$addr/24"</span> dev eth0
+    ip -n <span class="s">"$name"</span> link <span class="k">set</span> eth0 up
+    ip -n <span class="s">"$name"</span> link <span class="k">set</span> lo up
+    ip -n <span class="s">"$name"</span> route add default via 10.40.0.1
+    mkdir -p <span class="s">"/etc/netns/$name"</span>                                   <span class="c"># ip netns exec mounts these over /etc</span>
+    echo <span class="s">"nameserver 10.40.0.1"</span> &gt; <span class="s">"/etc/netns/$name/resolv.conf"</span>
+  <span class="k">done</span>
+  <span class="k">if</span> iptables -L DOCKER-USER -n &gt;/dev/null 2&gt;&amp;1; <span class="k">then</span>              <span class="c"># Docker's firewall drops bridged traffic</span>
+    iptables -I DOCKER-USER -i br-lab -o br-lab -j ACCEPT           <span class="c"># by default; let the lab's own through</span>
+  <span class="k">fi</span>
+  echo <span class="s">"lab network up: 10.40.0.0/24 on br-lab"</span>
+}
+
+down() {
+  <span class="k">for</span> h <span class="k">in</span> <span class="s">"${hosts[@]}"</span>; <span class="k">do</span>
+    name=${h%%:*}
+    ip netns del <span class="s">"$name"</span> 2&gt;/dev/null || true
+    rm -rf <span class="s">"/etc/netns/$name"</span>
+  <span class="k">done</span>
+  ip link del br-lab 2&gt;/dev/null || true
+  iptables -D DOCKER-USER -i br-lab -o br-lab -j ACCEPT 2&gt;/dev/null || true
+  echo <span class="s">"lab network removed"</span>
+}
+
+<span class="k">case</span> <span class="s">"${1:-}"</span> <span class="k">in</span>
+  up) up ;;
+  down) down ;;
+  *) echo <span class="s">"usage: sudo $0 up|down"</span> &gt;&amp;2; <span class="k">exit</span> 2 ;;
+<span class="k">esac</span></code></pre>
+<pre><code>chmod +x netlab.sh
+sudo ./netlab.sh up</code></pre>
+  It prints <code>lab network up: 10.40.0.0/24 on br-lab</code>. The <code>DOCKER-USER</code> lines matter only on machines with Docker installed, whose firewall otherwise drops traffic across other bridges: the test machine for this book was one, which is how this line got into the script (<a href="15-host-firewalls.html">Chapter 15</a> explains why).</li>
+  <li><strong>Look at <code>door-2</code>.</strong> Its interfaces and routes, then a ping to <code>door-4</code> and the neighbour entry it leaves:
+<pre><code>sudo ip netns exec door-2 ip -br address
+sudo ip netns exec door-2 ip route</code></pre>
+<pre><code>lo               UNKNOWN        127.0.0.1/8 
+eth0@if13        UP             10.40.0.12/24 
+default via 10.40.0.1 dev eth0 
+10.40.0.0/24 dev eth0 proto kernel scope link src 10.40.0.12 </code></pre>
+<pre><code>sudo ip netns exec door-2 ping -c 2 10.40.0.14
+sudo ip netns exec door-2 ip neigh</code></pre>
+<pre><code>PING 10.40.0.14 (10.40.0.14) 56(84) bytes of data.
+64 bytes from 10.40.0.14: icmp_seq=1 ttl=64 time=0.051 ms
+64 bytes from 10.40.0.14: icmp_seq=2 ttl=64 time=0.069 ms
+
+--- 10.40.0.14 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1002ms
+rtt min/avg/max/mdev = 0.051/0.060/0.069/0.009 ms
+10.40.0.14 dev eth0 lladdr a2:73:bf:e5:6a:98 REACHABLE </code></pre>
+  Ask the kernel which route it would use for a neighbour and for an outside address:
+<pre><code>sudo ip netns exec door-2 ip route get 10.40.0.14
+sudo ip netns exec door-2 ip route get 203.0.113.40</code></pre>
+<pre><code>10.40.0.14 dev eth0 src 10.40.0.12 uid 0 
+    cache 
+203.0.113.40 via 10.40.0.1 dev eth0 src 10.40.0.12 uid 0 
+    cache </code></pre>
+  Directly on <code>eth0</code> for the neighbour; <code>via 10.40.0.1</code>, the default route, for everything else.</li>
+  <li><strong>A database that listens on localhost.</strong> Start a stand-in on <code>door-4</code> (<code>nc -lk</code> listens and keeps listening) exactly as PostgreSQL does by default, then try to reach it from <code>door-2</code>:
+<pre><code>sudo ip netns exec door-4 nc -lk 127.0.0.1 5432 &amp;
+sudo ip netns exec door-4 ss -tlnp</code></pre>
+<pre><code>State  Recv-Q Send-Q Local Address:Port Peer Address:PortProcess
+LISTEN 0      1          127.0.0.1:5432      0.0.0.0:*    users:(("nc",pid=1431,fd=3))</code></pre>
+<pre><code>sudo ip netns exec door-2 nc -zv -w 2 10.40.0.14 5432; echo "exit status: $?"</code></pre>
+<pre><code>nc: connect to 10.40.0.14 port 5432 (tcp) failed: Connection refused
+exit status: 1</code></pre>
+  Refused, instantly: <code>door-4</code> got the packet, and nothing listens on <code>10.40.0.14:5432</code>. That was <code>door-2</code>'s error in the dry run.</li>
+  <li><strong>Fix it</strong>: stop the stand-in (<code>sudo pkill -f "nc -lk 127.0.0.1 5432"</code>) and listen on the server's own address, as <code>listen_addresses = '10.40.0.14'</code> would:
+<pre><code>sudo ip netns exec door-4 nc -lk 10.40.0.14 5432 &amp;
+sudo ip netns exec door-4 ss -tlnp
+sudo ip netns exec door-2 nc -zv -w 2 10.40.0.14 5432</code></pre>
+<pre><code>State  Recv-Q Send-Q Local Address:Port Peer Address:PortProcess
+LISTEN 0      1         10.40.0.14:5432      0.0.0.0:*    users:(("nc",pid=1444,fd=3))
+Connection to 10.40.0.14 5432 port [tcp/postgresql] succeeded!</code></pre></li>
+  <li><strong>A DNS server for the lab.</strong> Start <code>dnsmasq</code> on <code>10.40.0.1</code> with two records, answering only on the lab network:
+<pre><code>sudo dnsmasq --listen-address=10.40.0.1 --bind-interfaces --no-resolv --no-hosts --port=53 \
+  --host-record=db.stagedoor.internal,10.40.0.14 --host-record=door-1.stagedoor.internal,10.40.0.11 \
+  --local-ttl=300 --pid-file=/run/lab-dnsmasq.pid
+sudo ip netns exec door-2 dig db.stagedoor.internal</code></pre>
+<pre><code>
+; &lt;&lt;&gt;&gt; DiG 9.18.39-0ubuntu0.24.04.9-Ubuntu &lt;&lt;&gt;&gt; db.stagedoor.internal
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 44357
+;; flags: qr aa rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;db.stagedoor.internal.		IN	A
+
+;; ANSWER SECTION:
+db.stagedoor.internal.	300	IN	A	10.40.0.14
+
+;; Query time: 0 msec
+;; SERVER: 10.40.0.1#53(10.40.0.1) (UDP)
+;; WHEN: Fri Nov 27 09:33:47 UTC 2026
+;; MSG SIZE  rcvd: 66</code></pre>
+  <code>status: NOERROR</code>, one answer, <code>10.40.0.14</code> with a TTL of 300 seconds, from <code>SERVER: 10.40.0.1#53</code>. The <code>aa</code> flag means the answer is authoritative: dnsmasq owns this name.</li>
+  <li><strong>The stale <code>/etc/hosts</code> line.</strong> Give <code>door-3</code> its own hosts file (<code>ip netns exec</code> mounts files from <code>/etc/netns/door-3/</code> over <code>/etc</code>) with the entry Leonor added in 2025, then compare what a program gets with what DNS says:
+<pre><code>echo "10.40.0.11  db.stagedoor.internal" | sudo tee /etc/netns/door-3/hosts
+sudo ip netns exec door-3 getent hosts db.stagedoor.internal
+sudo ip netns exec door-3 dig +short db.stagedoor.internal
+grep '^hosts:' /etc/nsswitch.conf</code></pre>
+<pre><code>10.40.0.11      db.stagedoor.internal
+10.40.0.14
+hosts:          files dns</code></pre>
+  The app on <code>door-3</code> would connect to the old server, while <code>dig</code> reports the new one: <code>files</code> comes before <code>dns</code>. Delete the line (<code>sudo rm /etc/netns/door-3/hosts</code>) and run <code>getent</code> again: <code>10.40.0.14</code>.</li>
+  <li><strong>Clean up.</strong>
+<pre><code>sudo pkill -f "nc -lk 10.40.0.14 5432"
+sudo kill "$(cat /run/lab-dnsmasq.pid)"
+sudo ./netlab.sh down</code></pre>
+  Keep <code>netlab.sh</code>: Chapters 14 to 16 use it again.</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) In <code>door-2</code>, delete the default route (<code>sudo ip -n door-2 route del default</code>) and run <code>ip route get 203.0.113.40</code>: what error do you get, and what would an app see? (2) Run <code>sudo ip netns exec door-2 ss -tn</code> while <code>nc 10.40.0.14 5432</code> is connected: find both ends of the connection. (3) Run <code>dig +trace</code> on your own machine for a public name, if your network allows DNS out, and follow the delegation (Handbook 1, Chapter 5).</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: Thursday night</p>
+  <p><code>sudo ss -tlnp</code> on <code>door-4</code> shows PostgreSQL on <code>127.0.0.1:5432</code>: the checklist installed it but never set <code>listen_addresses</code>. It becomes <code>'localhost, 10.40.0.14'</code>, with <code>pg_hba.conf</code> allowing only the two web servers' addresses (Handbook 6 covers the database side). On <code>door-3</code>, <code>getent hosts db.stagedoor.internal</code> answers <code>10.40.0.11</code> while <code>dig</code> answers <code>10.40.0.14</code>; <code>/etc/hosts</code> holds a line Leonor added during a DNS outage in 2025. It's removed, and a new checklist item says: <em>internal names live in DNS, and nowhere else</em>.</p>
+  <p>The move happens on Thursday 27 August between 23:00 and 01:30, with the app in maintenance mode. By Friday morning the web servers talk to <code>door-4</code>. <code>door-1</code> stays read-only as a fallback until Monday 31 August, the last day of Debian 11's security support, and is then switched off.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s13-9"><span class="n">13.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Opening the firewall when the service listens on <code>127.0.0.1</code></td><td>Still refused; time wasted on the wrong layer.</td><td><code>ss -tlnp</code> on the server first.</td></tr>
+      <tr><td>Checking names only with <code>dig</code></td><td><code>/etc/hosts</code> and app caches go unnoticed.</td><td><code>getent hosts</code> on the same machine as the app.</td></tr>
+      <tr><td>Internal names in <code>/etc/hosts</code> on many servers</td><td>One forgotten copy points somewhere old for years.</td><td>One internal DNS zone.</td></tr>
+      <tr><td><code>netplan apply</code> over SSH</td><td>A typo cuts you off; only the console helps.</td><td><code>netplan try</code>, which rolls back by itself.</td></tr>
+      <tr><td>Using <code>ifconfig</code> and <code>netstat</code></td><td>Missing information (several addresses per interface, policy routes), and absent on new systems.</td><td><code>ip</code> and <code>ss</code>.</td></tr>
+      <tr><td>Treating “refused” and “timed out” as the same</td><td>Debugging the wrong layer.</td><td>Refused: nothing listening. Timeout: no route, or a firewall drops.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum13">
+  <h2 class="sec" id="sum13"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>On one host, a connection depends on four things: the <strong>name</strong>, the <strong>route</strong>, the <strong>interface</strong>, and a <strong>listening socket</strong> at the far end.</li>
+    <li><code>ip -br address</code>, <code>ip route</code>, <code>ip route get</code> and <code>ip neigh</code> show addresses, routes, the chosen route and neighbours.</li>
+    <li><code>ss -tlnp</code> lists listening sockets. A service on <code>127.0.0.1</code> can't be reached from other machines. Refused means nothing listening; a timeout means no answer.</li>
+    <li>Programs resolve names through <code>nsswitch.conf</code>: <code>/etc/hosts</code> first, then DNS (on Ubuntu via systemd-resolved at <code>127.0.0.53</code>). <code>getent hosts</code> shows what a program gets; <code>dig</code> shows what DNS says.</li>
+    <li>Permanent configuration on Ubuntu is netplan; change it with <code>netplan try</code>.</li>
+    <li><strong>Network namespaces</strong> give a process its own network stack: a cheap lab, and the basis of containers.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Routing table</dt><dd>The kernel's list of destination ranges and where to send packets for each: directly on an interface or via a gateway.</dd>
+    <dt>Default route</dt><dd>The route used for any destination no more specific route matches, usually via a gateway.</dd>
+    <dt>Listening socket</dt><dd>An address and port on which a program accepts incoming connections.</dd>
+    <dt>Loopback</dt><dd>The interface (<code>lo</code>, <code>127.0.0.1</code>) through which a machine talks to itself; unreachable from other machines.</dd>
+    <dt>nsswitch.conf</dt><dd>The file that tells the C library which sources to use, in which order, for names, users and other lookups.</dd>
+    <dt>systemd-resolved</dt><dd>The local DNS stub resolver and cache on Ubuntu, listening on <code>127.0.0.53</code>.</dd>
+    <dt>netplan</dt><dd>Ubuntu's YAML network configuration, rendered for systemd-networkd or NetworkManager.</dd>
+    <dt>Network namespace</dt><dd>An isolated copy of the network stack (interfaces, routes, firewall, sockets) for a group of processes.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Which command tells you which interface and source address the kernel would use to reach <code>10.50.3.7</code>? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p><code>ip route get 10.50.3.7</code>. It prints the chosen route, the outgoing device, the gateway if any, and the source address.</p></details>
+    </li>
+    <li>
+      <p><code>ss -tlnp</code> on a server shows <code>127.0.0.1:6379</code> for Redis. A web server on another machine needs it. What do you change, and what else must you check before you do? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Make Redis listen on the server's private address (<code>bind 10.x.y.z</code> in its configuration) and restart it. Before that: require authentication, and make sure a firewall or security group allows only the web servers to reach the port, because Redis on a reachable address with no password is a well-known way to be compromised.</p></details>
+    </li>
+    <li>
+      <p>Explain why <code>dig</code> and the app on the same server can disagree about a name's address. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p><code>dig</code> asks a DNS server directly. The app resolves through the C library, which follows <code>nsswitch.conf</code> and usually checks <code>/etc/hosts</code> first; it may also go through a local cache (systemd-resolved) or cache addresses itself. A stale <code>/etc/hosts</code> entry or cache gives the app a different answer from DNS.</p></details>
+    </li>
+    <li>
+      <p>From a web server, <code>nc -zv 10.40.0.14 5432</code> hangs for its whole timeout instead of failing at once. List three causes, and the command that checks each. <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p>No route or wrong gateway (<code>ip route get 10.40.0.14</code>); the machine is down or not on that network (<code>ip neigh</code> showing <code>FAILED</code>, no ping reply); a firewall dropping the packets on either host or in between (<a href="15-host-firewalls.html">Chapter 15</a>: <code>nft list ruleset</code>, the cloud's security groups). A refused connection would have meant the packet arrived and nothing listened.</p></details>
+    </li>
+    <li>
+      <p>Design how Stagedoor's servers should find each other by name. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>One internal DNS zone (<code>stagedoor.internal</code>) served by the provider's private DNS or a small resolver, with records per service (<code>db</code>, <code>scan-api</code>) rather than per machine, so a move changes one record; short TTLs (a few minutes) on records that move; no internal names in <code>/etc/hosts</code>; netplan pointing each server at that resolver with <code>search: [stagedoor.internal]</code>.</p></details>
+    </li>
+    <li>
+      <p>Compare <code>netplan apply</code> and <code>netplan try</code> for a change on a remote server. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p><code>apply</code> makes the change at once and permanently; if it breaks connectivity, you need a console to fix it. <code>try</code> applies it and reverts after a timeout unless you confirm, so a change that cuts your SSH session undoes itself. Use <code>try</code> on anything you reach over the network.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li><code>man ip-address</code>, <code>man ip-route</code>, <code>man ss</code>, <code>man nsswitch.conf</code>, <code>man resolv.conf</code>, <code>man ip-netns</code>.</li>
+    <li><a href="https://netplan.readthedocs.io/">Netplan documentation</a>, especially the YAML reference.</li>
+    <li><code>man systemd-resolved</code> and <code>man resolvectl</code>.</li>
+    <li>Handbook 1: Chapters 2 (addresses and CIDR), 4 (routing) and 5 (DNS).</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="14-debugging-connections.html">14 · Debugging connections</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 3 · Linux for Cloud Engineers</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

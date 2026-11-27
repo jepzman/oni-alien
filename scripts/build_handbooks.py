@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PUBLIC = ROOT / "public"
 CONTENT = ROOT / "content" / "handbooks"
 AUTHOR = "Jefrey Romel Tagunicar"
-BOOKS = ["cloud-networking", "cloud-identity"]
+BOOKS = ["cloud-networking", "cloud-identity", "linux"]
 FONTS = ("https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&"
          "family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap")
 
@@ -116,7 +116,8 @@ def appendices(book):
         hand = CONTENT / book["key"] / page
         gen = GENERATED.get(slug)
         out.append(dict(letter=letter, slug=slug, title=title, desc=desc, page=page,
-                        available=hand.exists() or gen is not None, hand=hand if hand.exists() else None, gen=gen))
+                        available=hand.exists() or (gen is not None and bool(written(book))),
+                        hand=hand if hand.exists() else None, gen=gen))
     return out
 
 
@@ -244,6 +245,17 @@ def render_all(book, css_href, home):
         '</body>', '</html>', ''])
 
 
+def start_html(book, done, complete, pdf):
+    """The 'where to start' line of a contents page; an unstarted book (no chapter written yet) says so instead."""
+    if not done:
+        nxt = f' The first to be written is <a href="#ch{book["next"]}">Chapter {book["next"]}</a>.' if book.get("next") else ""
+        return (f'<p>This book is being written. No chapters are finished yet; the contents below show every planned '
+                f'chapter and the topics it will cover.{nxt}</p>')
+    return (f'<p>Start at <a href="{page_name(book, min(done))}">Chapter {min(done)}</a>, or <a href="all.html">read '
+            f'{"the whole book" if complete else "every written chapter"} on one page</a> (also as a <a href="{pdf}">PDF</a>).'
+            f'{"" if complete else " Chapters marked “coming” are planned; the topics they will cover are listed."}</p>')
+
+
 def render_index(book, css_href, home):
     done = written(book)
     n_ch = sum(1 for _ in chapters(book))
@@ -253,6 +265,8 @@ def render_index(book, css_href, home):
         for num, slug, title, summary, covers in part["chapters"]:
             if num in done:
                 t, cls = f'<a href="{page_name(book, num)}">{esc(title)}</a>', ""
+            elif num == book.get("next"):
+                t, cls = f'{esc(title)}<span class="badge badge--soon">next up</span>', ' class="planned"'
             else:
                 t, cls = f'{esc(title)}<span class="badge badge--soon">coming</span>', ' class="planned"'
             items.append(f'''      <li id="ch{num}"{cls}><span class="cn">{num}</span><div>
@@ -271,7 +285,6 @@ def render_index(book, css_href, home):
          if a["available"] else
          f'      <li id="app{a["letter"]}" class="planned"><span class="cn">{a["letter"]}</span><div><h3>{esc(a["title"])}<span class="badge badge--soon">coming</span></h3><p>{esc(a["desc"])}</p></div></li>')
         for a in appendices(book))
-    first = page_name(book, min(done))
     n_apps = sum(1 for a in appendices(book) if a["available"])
     complete = len(done) == n_ch and n_apps == len(book["appendices"])
     pdf = f'pdf/{book["key"]}-handbook.pdf'
@@ -289,7 +302,7 @@ def render_index(book, css_href, home):
   <div><h2>How it's built</h2><p>{esc(book['promise'])}</p></div>
   <div><h2>The running example</h2><p>{book['example']}</p></div>
 </section>
-<p>Start at <a href="{first}">Chapter {min(done)}</a>, or <a href="all.html">read {"the whole book" if complete else "every written chapter"} on one page</a> (also as a <a href="{pdf}">PDF</a>).{"" if complete else " Chapters marked “coming” are planned; the topics they'll cover are listed."}</p>
+{start_html(book, done, complete, pdf)}
 <h2 class="sec" id="contents"><span class="n">§</span>Contents</h2>''',
         "\n".join(parts_html),
         f'''  <section class="toc-part" aria-labelledby="appendices">
@@ -313,13 +326,17 @@ def build(out_root=None, css_href=None, home="../../index.html"):
         out.mkdir(parents=True, exist_ok=True)
         css = css_href or default_css_href(2)
         (out / "index.html").write_text(render_index(book, css, home), encoding="utf-8")
-        (out / "all.html").write_text(render_all(book, css, home), encoding="utf-8")
+        if done:  # an unstarted book has only its contents page: no whole-book page, PDF or journals entry yet
+            (out / "all.html").write_text(render_all(book, css, home), encoding="utf-8")
         for num in done:
             (out / page_name(book, num)).write_text(render_chapter(book, num, css, home), encoding="utf-8")
         apps = [a for a in appendices(book) if a["available"]]
         for a in apps:
             (out / a["page"]).write_text(render_appendix(book, a, css, home), encoding="utf-8")
         print(f"[handbooks/{key}] index + {len(done)} chapter(s) + {len(apps)} appendices")
+        books.append(dict(book, written=done, n_chapters=sum(1 for _ in chapters(book))))
+        if not done:
+            continue
         base = f"handbooks/{key}"
         listing.append(dict(key=base, title=book["title"], all=f"{base}/all.html", pdf=f"{base}/pdf/{key}-handbook.pdf",
                             notes=[dict(num=n, slug=page_name(book, n)[3:-5], title=next(c[2] for _, c in chapters(book) if c[0] == n),
@@ -328,7 +345,6 @@ def build(out_root=None, css_href=None, home="../../index.html"):
                                   + [dict(num=100 + i, slug=a["page"][:-5], title=f"Appendix {a['letter']}: {a['title']}",
                                           page=f"{base}/{a['page']}", pdf=f"{base}/pdf/{a['page'][:-5]}.pdf")
                                      for i, a in enumerate(apps)]))
-        books.append(dict(book, written=done, n_chapters=sum(1 for _ in chapters(book))))
     return books, listing
 
 

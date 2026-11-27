@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>SSH done right · Linux for Cloud Engineers</title>
+<meta name="description" content="Keys, agents and ssh_config, bastions and jump hosts, hardening sshd, and removing access properly. The contractor&#x27;s key that was still there.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 3</a> · <a href="index.html">Linux for Cloud Engineers</a></span><span>Part IV · Chapter 16</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part IV · Networking from the host</p>
+  <p class="chno">16</p>
+  <h1>SSH done right</h1>
+  <p class="promise">SSH is how people get into Linux servers, so it's also how the wrong people get in. This chapter explains how SSH proves both the server's identity and yours, how to use keys, agents and jump hosts comfortably, how to harden the server side, and how to find and remove access that should no longer exist, the part most teams forget until someone finds it for them.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain host keys, user keys and what each side verifies.</li>
+      <li>Create a key, use an agent, and write an <code>ssh_config</code> with a jump host.</li>
+      <li>Harden <code>sshd</code> with a drop-in, and read its effective configuration.</li>
+      <li>Audit every authorized key on a server and remove a leaver's access completely.</li>
+      <li>Issue a short-lived SSH certificate, and compare it with keys and with session managers.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li><a href="04-permissions.html">Chapter 4</a> (users, locking accounts), <a href="13-network-config.html">Chapter 13</a> (<code>netlab.sh</code>) and <a href="15-host-firewalls.html">Chapter 15</a> (firewalls).</li>
+      <li>Handbook 2, Chapter 2 (proving identity) and Chapter 15 (Session Manager) for the bigger picture.</li>
+      <li>A Linux VM with <code>sudo</code>, and <code>sudo apt install openssh-server openssh-client</code>.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>40 minutes, a Linux VM with <code>sudo</code>, free; the lab's sshd instances run inside the lab namespaces</dd>
+      <dt>Main distribution</dt><dd>Ubuntu 24.04 (OpenSSH 9.6), with others in 16.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>Monday 19 October 2026. Since <a href="14-debugging-connections.html">Chapter 14</a>'s certificate, Rafaela has had one question on her list: if Marco's address was still on the CA account, where else is he still? She lists every <code>authorized_keys</code> file on every server and prints each key's fingerprint and comment.</p>
+  <p>On <code>door-2</code> and <code>door-3</code>, <code>/root/.ssh/authorized_keys</code> holds three keys: <code>leonor@macbook</code> from 2023, <code>deploy@old-ci</code> from a CI system switched off in 2025, and <code>marco@contractor-laptop</code>, added in April 2024. Marco's account was locked and expired in February (<a href="04-permissions.html">Chapter 4</a>); his key was never in his account. It's in root's, and sshd's configuration still allows root to log in with a key. Anyone holding Marco's old laptop could have logged in as root, to both web servers, on any day in the last two years.</p>
+</aside>
+
+<!-- ======================================================== 16.1 -->
+<h2 class="sec" id="s16-1"><span class="n">16.1</span>How SSH authenticates</h2>
+
+<p class="lead">An SSH connection proves two identities, in this order: the <strong>server</strong> proves it's the machine you meant, then <strong>you</strong> prove you're allowed in. Both use public-key cryptography (Handbook 2, Chapter 2).</p>
+
+<figure class="wide" id="fig16-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 270" role="img" aria-labelledby="fig16-1-t fig16-1-d">
+      <title id="fig16-1-t">The two halves of SSH authentication</title>
+      <desc id="fig16-1-d">Client on the left, server on the right. Step 1, the server proves itself: it signs the key exchange with its host private key; the client checks the host public key against ~/.ssh/known_hosts; the first time, the client asks you to confirm the fingerprint, which is called trust on first use; a changed key produces a loud warning. Step 2, the user proves themselves: the client offers a public key, from a file or the agent; the server checks it against the user's authorized_keys file, or checks that it's a certificate signed by a trusted user CA; the client signs a challenge with the private key, which never leaves the client. Step 3, sshd checks the account: AllowUsers or AllowGroups, and, through PAM, whether the account has expired. Then the session starts.</desc>
+      <defs><marker id="c16ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="10" y="14" width="190" height="244" rx="6"/><text class="t-title" x="24" y="38">client (your laptop)</text>
+      <text class="t-small" x="24" y="64">~/.ssh/known_hosts</text><text class="t-small" x="24" y="82">(server keys you trust)</text>
+      <text class="t-small" x="24" y="160">private key: ~/.ssh/id_ed25519</text><text class="t-small" x="24" y="178">or held by ssh-agent;</text><text class="t-small" x="24" y="196">never leaves the client</text>
+      <rect class="node" x="560" y="14" width="190" height="244" rx="6"/><text class="t-title" x="574" y="38">server (sshd)</text>
+      <text class="t-small" x="574" y="64">host private key:</text><text class="t-small" x="574" y="82">/etc/ssh/ssh_host_*_key</text>
+      <text class="t-small" x="574" y="148">~user/.ssh/authorized_keys</text><text class="t-small" x="574" y="166">or TrustedUserCAKeys</text>
+      <text class="t-small" x="574" y="214">AllowUsers/AllowGroups,</text><text class="t-small" x="574" y="232">PAM account (expiry)</text>
+      <rect class="node-accent" x="220" y="40" width="320" height="56" rx="5"/><text class="t-label on-accent" x="380" y="62" text-anchor="middle">1 server proves itself with its host key</text><text class="t-small on-accent" x="380" y="82" text-anchor="middle">client: known? first time? changed?</text>
+      <rect class="node-accent" x="220" y="126" width="320" height="56" rx="5"/><text class="t-label on-accent" x="380" y="148" text-anchor="middle">2 you prove yourself with your key</text><text class="t-small on-accent" x="380" y="168" text-anchor="middle">server: listed, or signed by a trusted CA?</text>
+      <rect class="pub" x="220" y="200" width="320" height="48" rx="5"/><text class="t-label" x="380" y="222" text-anchor="middle">3 account allowed and not expired</text><text class="t-small" x="380" y="240" text-anchor="middle">then the session starts</text>
+      <path class="wire" d="M540 68 H556" marker-end="url(#c16ah)"/><path class="wire" d="M220 68 H204" marker-end="url(#c16ah)"/>
+      <path class="wire" d="M220 154 H204" marker-end="url(#c16ah)"/><path class="wire" d="M540 154 H556" marker-end="url(#c16ah)"/>
+    </svg>
+  </div>
+  <figcaption><b>Figure 16.1</b> Host keys protect you from talking to the wrong server; user keys protect the server from the wrong people. Private keys never cross the network.</figcaption>
+</figure>
+
+<ul>
+  <li>The <strong>host key</strong> lives in <code>/etc/ssh/ssh_host_*_key</code> on the server. The first time you connect, your client shows its fingerprint and asks you to confirm it, then remembers it in <code>~/.ssh/known_hosts</code>. This is <strong>trust on first use</strong>: check the fingerprint against one obtained another way (the provider's console output, a colleague, <code>ssh-keygen -lf</code> on the server) rather than typing “yes” from habit. If the key later changes, SSH refuses with a loud warning: the server was rebuilt, or someone is in the middle.</li>
+  <li>Your <strong>user key</strong> is a key pair you create. The public half goes into <code>~/.ssh/authorized_keys</code> in the account you log in to, one key per line; the private half stays on your machine, protected by a passphrase. Logging in, the server checks that your key is listed (or that it's a certificate signed by a CA it trusts, 16.6) and the client proves it holds the private key by signing a challenge.</li>
+  <li>Then sshd checks the <strong>account</strong>: <code>AllowUsers</code>/<code>AllowGroups</code>, <code>PermitRootLogin</code>, and, through PAM, things like account expiry.</li>
+</ul>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: a locked password doesn't lock SSH keys</p>
+  <p><code>usermod -L</code> locks an account's <em>password</em>. On Ubuntu, where sshd uses PAM, a key login to a password-locked account still works, as the lab shows. Expiring the account (<code>usermod -e 1</code>) is what PAM refuses. And neither does anything about the person's key sitting in <em>another</em> account's <code>authorized_keys</code>, such as root's. Removing access means finding every key, not only locking the account.</p>
+</div>
+
+<!-- ======================================================== 16.2 -->
+<h2 class="sec" id="s16-2"><span class="n">16.2</span>Keys and the agent</h2>
+
+<p>Create a key with <code>ssh-keygen -t ed25519 -C "you@laptop"</code>. Ed25519 keys are short, fast and safe; RSA keys are fine at 3,072 bits or more, and needed only for very old servers. Always set a <strong>passphrase</strong>: it encrypts the private key on disk, so a stolen laptop or backup isn't a stolen login. The comment (<code>-C</code>) is just a label, but it's what makes an audit readable: name the person and the device.</p>
+
+<p>Typing a passphrase for every connection gets old; <span class="term">ssh-agent</span> fixes that. It holds your decrypted keys in memory and signs challenges on your behalf; you unlock each key once per session with <code>ssh-add</code>. <code>ssh-add -l</code> lists loaded keys; <code>ssh-add -D</code> forgets them; <code>ssh-add -t 8h</code> forgets after eight hours. Desktop environments and macOS start an agent for you. A hardware key (a FIDO2 security key, <code>ssh-keygen -t ed25519-sk</code>) goes further: the private key can't be copied at all, and each login needs a touch.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: agent forwarding</p>
+  <p><code>ssh -A</code> (<code>ForwardAgent yes</code>) lets the remote server use your agent, so you can hop onwards with your key. It also lets anyone with root on that server use your agent for as long as you're connected. To reach a server through another, use a jump host (16.3) instead: the connection is tunnelled, and your keys never become usable on the middle machine.</p>
+</div>
+
+<!-- ======================================================== 16.3 -->
+<h2 class="sec" id="s16-3"><span class="n">16.3</span><code>ssh_config</code> and jump hosts</h2>
+
+<p>Everything you'd type on the command line can live in <code>~/.ssh/config</code>, per host or for groups of hosts. The first value found for each setting wins, so specific <code>Host</code> blocks go before general ones. The lab's configuration:</p>
+
+<p class="code-title"><span>ssh_config</span><span>OpenSSH client configuration</span></p>
+<pre><code><span class="c"># ssh_config for the lab · in real life, these lines go in ~/.ssh/config</span>
+Host door-2
+    HostName 10.40.0.12
+Host door-4
+    HostName 10.40.0.14
+    ProxyJump door-2                    <span class="c"># reachable only through door-2</span>
+Host door-*
+    User tiago
+    IdentityFile ~/lab16/id_tiago
+    IdentitiesOnly yes                  <span class="c"># offer only this key, not every key the agent holds</span>
+    UserKnownHostsFile ~/lab16/known_hosts</code></pre>
+
+<p>With this, <code>ssh door-4</code> works, and so do <code>scp</code>, <code>rsync -e ssh</code> and Ansible, which read the same file. A <span class="term">jump host</span> (or bastion) is a server you connect through to reach others: <code>ProxyJump</code> (or <code>ssh -J door-2 door-4</code>) opens an SSH connection to <code>door-2</code> and tunnels a second, end-to-end encrypted SSH connection through it to <code>door-4</code>. Authentication to <code>door-4</code> happens from your laptop, with your key; <code>door-2</code> only forwards encrypted bytes. That lets the database server accept SSH from the jump host alone (<a href="15-host-firewalls.html">Chapter 15</a>).</p>
+
+<figure class="wide" id="fig16-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 190" role="img" aria-labelledby="fig16-2-t fig16-2-d">
+      <title id="fig16-2-t">Reaching door-4 through a jump host</title>
+      <desc id="fig16-2-d">Your laptop, 10.40.0.1, opens an SSH connection to door-2, 10.40.0.12, the jump host. Through that connection it tunnels a second SSH connection, end to end, to door-4, 10.40.0.14. door-4's firewall allows port 22 only from door-2. A direct connection from the laptop to door-4 is dropped by that firewall and times out. Keys and the agent stay on the laptop; door-2 sees only encrypted traffic for door-4.</desc>
+      <defs><marker id="c16ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="ext" x="10" y="40" width="170" height="64" rx="5"/><text class="t-label" x="95" y="66" text-anchor="middle">your laptop</text><text class="t-mono" x="95" y="88" text-anchor="middle">10.40.0.1</text>
+      <rect class="node" x="290" y="40" width="170" height="64" rx="5"/><text class="t-label" x="375" y="60" text-anchor="middle">door-2 (jump host)</text><text class="t-mono" x="375" y="78" text-anchor="middle">10.40.0.12</text>
+      <rect class="node-accent" x="570" y="40" width="180" height="64" rx="5"/><text class="t-label on-accent" x="660" y="66" text-anchor="middle">door-4 (database)</text><text class="t-small on-accent" x="660" y="88" text-anchor="middle">SSH from 10.40.0.12 only</text>
+      <path class="wire" d="M180 62 H286" marker-end="url(#c16ah2)"/><text class="t-small" x="233" y="54" text-anchor="middle">SSH 1</text>
+      <path class="wire-accent" d="M180 96 H566" marker-end="url(#c16ah2)"/><text class="t-small t-accent" x="515" y="90" text-anchor="middle">SSH 2, tunnelled</text>
+      <path class="wire-dash" d="M95 104 V150 H660 V108" marker-end="url(#c16ah2)"/>
+      <text class="t-small t-warn" x="378" y="168" text-anchor="middle">direct: dropped by door-4's firewall, times out</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 16.2</b> The second connection is authenticated end to end from your laptop; the jump host can't read it or use your keys.</figcaption>
+</figure>
+
+<!-- ======================================================== 16.4 -->
+<h2 class="sec" id="s16-4"><span class="n">16.4</span>Hardening sshd</h2>
+
+<p>Ubuntu's defaults are reasonable, but two of them are wrong for a server reached by a team. <code>sudo sshd -T</code> prints the <em>effective</em> configuration, every setting including defaults, which is the only reliable way to know what sshd will do. On a fresh Ubuntu 24.04 machine:</p>
+<pre><code>usepam yes
+permitrootlogin without-password
+pubkeyauthentication yes
+passwordauthentication yes
+kbdinteractiveauthentication no
+x11forwarding yes</code></pre>
+
+<p>Password logins are on, and root may log in with a key (<code>without-password</code> is an old name for <code>prohibit-password</code>: “root by key only”). Change both, in a drop-in, never in the main file, which package upgrades may want to replace:</p>
+
+<p class="code-title"><span>/etc/ssh/sshd_config.d/50-stagedoor.conf</span><span>sshd configuration</span></p>
+<pre><code>PermitRootLogin no                <span class="c"># people log in as themselves and use sudo (Chapter 4)</span>
+PasswordAuthentication no         <span class="c"># keys or certificates only: nothing to guess</span>
+KbdInteractiveAuthentication no
+AllowGroups ssh-users             <span class="c"># only members of this group, whatever keys exist elsewhere</span>
+MaxAuthTries 3
+X11Forwarding no
+AllowAgentForwarding no
+LogLevel VERBOSE                  <span class="c"># log the fingerprint of the key used for each login</span></code></pre>
+
+<p>Then <code>sudo sshd -t</code> (test: it prints nothing if the configuration is valid), and <code>sudo systemctl reload ssh</code>. As with firewalls (<a href="15-host-firewalls.html">Chapter 15</a>), keep your current session open and test with a <em>new</em> one before you log out. With <code>LogLevel VERBOSE</code>, every login names the key that was used, in <code>/var/log/auth.log</code> and the journal; without it, an audit can tell you who logged in, but not with which of their keys.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">One identity per person (no shared accounts, no root logins), keys or certificates only, and a list of who may log in that's enforced by sshd, not by hoping the key files are clean.</p>
+</div>
+
+<!-- ======================================================== 16.5 -->
+<h2 class="sec" id="s16-5"><span class="n">16.5</span>Auditing and removing access</h2>
+
+<p>A server's real access list is every line of every <code>authorized_keys</code> file, plus every account that has a password, plus whatever sshd's configuration allows. Audit it regularly, and always when someone leaves:</p>
+<pre><code>sudo sh -c 'for f in /root/.ssh/authorized_keys /home/*/.ssh/authorized_keys; do
+  [ -f "$f" ] &amp;&amp; { echo "== $f"; ssh-keygen -lf "$f"; }; done'
+sudo grep -h "Accepted" /var/log/auth.log*                 <span class="c"># who logged in, with which key (VERBOSE)</span>
+sudo lastlog | grep -v "Never logged in"                  <span class="c"># each account's last login</span></code></pre>
+
+<p>When someone leaves, removing their access is a checklist, not a command: expire their account (<code>usermod -e 1</code>) and lock its password; remove their keys from <em>every</em> <code>authorized_keys</code>, their own and any shared ones; revoke any certificates they hold (16.6); check <code>crontab -l -u</code> and running processes for anything of theirs; change any shared secret they knew; and look at the logs for their keys' fingerprints. Logs only go back as far as they're kept, which is why <a href="07-logs.html">Chapter 7</a> ships them somewhere with longer retention.</p>
+
+<!-- ======================================================== 16.6 -->
+<h2 class="sec" id="s16-6"><span class="n">16.6</span>Beyond keys: certificates and session managers</h2>
+
+<p>Keys in <code>authorized_keys</code> never expire and live on every server, which is how Marco's lasted two years. Two better models are common:</p>
+<ul>
+  <li><strong>SSH certificates.</strong> An <span class="term">SSH certificate</span> is a user's public key signed by a <strong>user CA</strong>, with a principal (the account it's for), an identity for the logs and a validity period. Servers trust the CA once (<code>TrustedUserCAKeys</code>) and need no <code>authorized_keys</code> at all. Each morning, a person gets a certificate valid for, say, eight hours, after signing in to the company's identity provider; when they leave, nothing needs to be removed from servers, because tomorrow they simply don't get a certificate. Tools such as Smallstep, Teleport and HashiCorp Vault run the CA; the lab does it by hand with <code>ssh-keygen</code>.</li>
+  <li><strong>Session managers.</strong> AWS Systems Manager Session Manager (Handbook 2, Chapter 15), Azure Bastion and Google Cloud's IAP TCP forwarding open a shell through the provider's API, authorised by cloud IAM and recorded, with no SSH port open at all. On the cloud, this is often the best answer for people; SSH remains for automation and for machines outside the cloud.</li>
+</ul>
+
+<!-- ======================================================== 16.7 -->
+<h2 class="sec" id="s16-7"><span class="n">16.7</span>Brute force and noise</h2>
+
+<p>Any server with SSH open to the internet receives password guesses within minutes of booting: <code>auth.log</code> fills with “Invalid user admin”. With <code>PasswordAuthentication no</code>, these attempts can't succeed, and they're noise rather than a threat. Restricting the source with a firewall or security group (only the VPN or office), or not exposing SSH at all (a session manager), removes the noise too. Tools like <code>fail2ban</code>, which ban addresses after repeated failures, help with logs and load, but they're not what keeps you safe; keys are.</p>
+
+<!-- ======================================================== 16.8 -->
+<h2 class="sec" id="s16-8"><span class="n">16.8</span>Across distributions</h2>
+
+<div class="box box-provider">
+  <p class="label">On the RHEL family and Amazon Linux</p>
+  <p>The service is <code>sshd</code>, not <code>ssh</code> (<code>sudo systemctl reload sshd</code>), and recent releases also read drop-ins from <code>/etc/ssh/sshd_config.d/</code>. SELinux checks that <code>authorized_keys</code> files have the right label: a file copied in from elsewhere may be ignored until <code>restorecon -R ~/.ssh</code>. Amazon Linux and RHEL cloud images log in as <code>ec2-user</code> with the key pair chosen at launch, installed by cloud-init (<a href="01-what-a-server-is.html">Chapter 1</a>). Ubuntu's default <code>PermitRootLogin</code> is <code>prohibit-password</code>; check every distribution's with <code>sshd -T</code> rather than assuming.</p>
+</div>
+
+<!-- ======================================================== 16.9 -->
+<h2 class="sec" id="s16-9"><span class="n">16.9</span>Lab: keys, a jump host, a leaver and a certificate</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 16 · Four ways in, and how to close them</p>
+  <p><strong>You'll</strong> run hardened sshd instances on <code>door-2</code> and <code>door-4</code>, log in with a key and check the host key, reach <code>door-4</code> only through <code>door-2</code>, see that a password-locked account still lets a key in while an expired one doesn't, audit the keys, and replace a key with an eight-hour certificate. <strong>You need</strong> <a href="13-network-config.html">Chapter 13</a>'s <code>netlab.sh</code>, <code>sudo apt install openssh-server openssh-client</code>, and a normal user account (yours; the outputs show <code>tiago</code>). <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> the last step. Fingerprints, ports and times will differ.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>The servers.</strong> In <code>~/lab16</code>, save the sshd configuration and the script that starts one sshd per lab server, each with its own host key, its own <code>authorized_keys</code> directory and its own log file:
+<p class="code-title"><span>sshd_lab.conf</span><span>sshd configuration</span></p>
+<pre><code># sshd_lab.conf · a hardened sshd for the lab; started by sshlab.sh, one per server
+Port 22
+PidFile none
+LogLevel VERBOSE                         # log the fingerprint of the key each login used
+
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys        # the default; sshlab.sh gives each lab server its own
+TrustedUserCAKeys /etc/ssh/lab/user_ca.pub
+AllowUsers tiago marco
+MaxAuthTries 3
+X11Forwarding no
+AllowAgentForwarding no
+UsePAM yes                               # Ubuntu's default; see the note on locked accounts</code></pre>
+<p class="code-title"><span>sshlab.sh</span><span>bash</span></p>
+<pre><code>#!/usr/bin/env bash
+<span class="c"># sshlab.sh up|down · run a lab sshd inside door-2 and door-4 (run "netlab.sh up" first)</span>
+<span class="k">set</span> -euo pipefail
+dir=/etc/ssh/lab
+
+up() {
+  install -d -m 755 <span class="s">"$dir"</span> /run/sshd
+  install -m 644 sshd_lab.conf <span class="s">"$dir/sshd_lab.conf"</span>
+  touch <span class="s">"$dir/user_ca.pub"</span>                                   <span class="c"># filled in later, in the certificate step</span>
+  <span class="k">for</span> h <span class="k">in</span> door-2:10.40.0.12 door-4:10.40.0.14; <span class="k">do</span>
+    name=${h%%:*} addr=${h##*:}
+    install -d -m 755 <span class="s">"$dir/keys-$name"</span>                       <span class="c"># this server's authorized_keys, one file per user</span>
+    [ -f <span class="s">"$dir/$name.key"</span> ] || ssh-keygen -q -t ed25519 -N <span class="s">''</span> -C <span class="s">"$name host key"</span> -f <span class="s">"$dir/$name.key"</span>
+    ip netns exec <span class="s">"$name"</span> /usr/sbin/sshd -f <span class="s">"$dir/sshd_lab.conf"</span> \
+      -o <span class="s">"HostKey=$dir/$name.key"</span> -o <span class="s">"ListenAddress=$addr"</span> \
+      -o <span class="s">"AuthorizedKeysFile=$dir/keys-$name/%u"</span> -E <span class="s">"/var/log/sshd-$name.log"</span>
+    echo <span class="s">"sshd on $name ($addr), host key $(ssh-keygen -lf "</span>$dir/$name.key.pub<span class="s">" | cut -d' ' -f2)"</span>
+  <span class="k">done</span>
+}
+
+down() {
+  pkill -f <span class="s">"sshd -f $dir/sshd_lab.conf"</span> || true
+  rm -rf <span class="s">"$dir"</span> /var/log/sshd-door-2.log /var/log/sshd-door-4.log
+  echo <span class="s">"lab sshd stopped"</span>
+}
+
+<span class="k">case</span> <span class="s">"${1:-}"</span> <span class="k">in</span>
+  up) up ;;
+  down) down ;;
+  *) echo <span class="s">"usage: sudo $0 up|down"</span> &gt;&amp;2; <span class="k">exit</span> 2 ;;
+<span class="k">esac</span></code></pre>
+  Edit <code>AllowUsers</code> to name your own user (and <code>marco</code>, for step 5). Then start the network, the servers, and a firewall on <code>door-4</code> that accepts SSH from <code>door-2</code> only:
+<pre><code>sudo ~/netlab.sh up
+chmod +x sshlab.sh; sudo ./sshlab.sh up
+sudo ip netns exec door-4 nft -f - &lt;&lt;'EOF'
+table inet filter {
+  chain input {
+    type filter hook input priority filter; policy drop;
+    ct state established,related accept
+    iif "lo" accept
+    tcp dport 22 ip saddr 10.40.0.12 accept comment "SSH only through the jump host"
+  }
+}
+EOF</code></pre>
+<pre><code>sshd on door-2 (10.40.0.12), host key SHA256:eiXwwhSHOyeColxKCfNcta73guPB5cwpnvp3Wq1MZu8
+sshd on door-4 (10.40.0.14), host key SHA256:5qVphh9UJAKqGx2i3Nq59NXp0WBDStiNjTXaTOyl1kU</code></pre>
+  Note <code>door-2</code>'s host key fingerprint.</li>
+  <li><strong>Your key, installed on both servers.</strong>
+<pre><code>ssh-keygen -t ed25519 -C "$USER@laptop" -f ~/lab16/id_tiago      <span class="c"># set a passphrase; the outputs were made without one</span>
+ssh-keygen -lf ~/lab16/id_tiago.pub
+cat ~/lab16/id_tiago.pub | sudo tee /etc/ssh/lab/keys-door-2/$USER /etc/ssh/lab/keys-door-4/$USER &gt; /dev/null</code></pre>
+<pre><code>256 SHA256:WUd2mEp/Vm6qeY9v48O9wOlw/aox5HVz98dxkZ335po tiago@laptop (ED25519)</code></pre>
+  (Use your own file names throughout; the lab's <code>ssh_config</code> below says <code>id_tiago</code>.)</li>
+  <li><strong>First login, with the host key check.</strong> Save the <code>ssh_config</code> from 16.3 as <code>~/lab16/ssh_config</code>, then:
+<pre><code>cd ~/lab16; ssh -F ssh_config door-2 ip -br address show eth0</code></pre>
+<pre><code>The authenticity of host '10.40.0.12 (10.40.0.12)' can't be established.
+ED25519 key fingerprint is SHA256:eiXwwhSHOyeColxKCfNcta73guPB5cwpnvp3Wq1MZu8.
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added '10.40.0.12' (ED25519) to the list of known hosts.
+eth0@if25        UP             10.40.0.12/24 </code></pre>
+  The fingerprint matches the one <code>sshlab.sh</code> printed, so “yes” was safe; the key is now in <code>~/lab16/known_hosts</code>, and the command ran on <code>door-2</code> (its address proves it). One detail from testing: the test user's password was locked, and with <code>UsePAM no</code> sshd refuses locked accounts outright, so this login failed until the configuration said <code>UsePAM yes</code>, Ubuntu's default. Step 5 shows why that difference matters.</li>
+  <li><strong>Through the jump host.</strong> <code>door-4</code> via <code>door-2</code>, then directly:
+<pre><code>ssh -F ssh_config -o StrictHostKeyChecking=accept-new door-4 ip -br address show eth0
+ssh -F ssh_config -o ProxyJump=none -o ConnectTimeout=3 door-4 true; echo "exit status: $?"</code></pre>
+<pre><code>Warning: Permanently added '10.40.0.14' (ED25519) to the list of known hosts.
+eth0@if27        UP             10.40.0.14/24 
+ssh: connect to host 10.40.0.14 port 22: Connection timed out
+exit status: 255</code></pre>
+  Through <code>door-2</code> it works; directly, <code>door-4</code>'s firewall drops it. <code>door-4</code>'s log shows where the connection came from:
+<pre><code>sudo grep Accepted /var/log/sshd-door-4.log | tail -1</code></pre>
+<pre><code>Accepted publickey for tiago from 10.40.0.12 port 46842 ssh2: ED25519 SHA256:WUd2mEp/Vm6qeY9v48O9wOlw/aox5HVz98dxkZ335po</code></pre>
+  From <code>10.40.0.12</code>, the jump host, but authenticated with <em>your</em> key: end to end.</li>
+  <li><strong>A leaver.</strong> Create <code>marco</code>, give him a key on <code>door-2</code>, and lock his password, as Stagedoor did in February:
+<pre><code>sudo useradd --create-home --shell /bin/bash marco
+ssh-keygen -q -t ed25519 -N "" -C "marco@contractor-laptop" -f ~/lab16/id_marco
+sudo cp ~/lab16/id_marco.pub /etc/ssh/lab/keys-door-2/marco
+sudo usermod -L marco
+sudo grep '^marco:' /etc/shadow | cut -d: -f1,2
+ssh -F ssh_config -i ~/lab16/id_marco -l marco door-2 'echo logged in as $(whoami)'</code></pre>
+<pre><code>marco:!
+logged in as marco</code></pre>
+  The <code>!</code> means the password is locked, and the key got in anyway. Now expire the account:
+<pre><code>sudo usermod -e 1 marco
+ssh -F ssh_config -i ~/lab16/id_marco -l marco door-2 'echo logged in as $(whoami)'; echo "exit status: $?"</code></pre>
+<pre><code>Your account has expired; please contact your system administrator.
+Connection closed by 10.40.0.12 port 22
+exit status: 255</code></pre>
+  PAM's account check refused it. But had Marco's key been in <em>root's</em> file, with root logins allowed, neither command would have mattered.</li>
+  <li><strong>Audit.</strong> Every key on both servers, with fingerprints and comments, and the log lines that say which key logged in:
+<pre><code>for f in /etc/ssh/lab/keys-*/*; do echo "== $f"; ssh-keygen -lf "$f"; done
+sudo grep -E "Accepted publickey" /var/log/sshd-door-2.log | tail -2</code></pre>
+<pre><code>== /etc/ssh/lab/keys-door-2/marco
+256 SHA256:bv9Dy48RlnxCOVo97J7BHF6hnr0fUNd2eG28jIDufYk marco@contractor-laptop (ED25519)
+== /etc/ssh/lab/keys-door-2/tiago
+256 SHA256:WUd2mEp/Vm6qeY9v48O9wOlw/aox5HVz98dxkZ335po tiago@laptop (ED25519)
+== /etc/ssh/lab/keys-door-4/tiago
+256 SHA256:WUd2mEp/Vm6qeY9v48O9wOlw/aox5HVz98dxkZ335po tiago@laptop (ED25519)
+Accepted publickey for tiago from 10.40.0.1 port 46336 ssh2: ED25519 SHA256:WUd2mEp/Vm6qeY9v48O9wOlw/aox5HVz98dxkZ335po
+Accepted publickey for marco from 10.40.0.1 port 51386 ssh2: ED25519 SHA256:bv9Dy48RlnxCOVo97J7BHF6hnr0fUNd2eG28jIDufYk</code></pre>
+  The fingerprints in the log match the audit, so you can tell which key, not only which account, was used.</li>
+  <li><strong>The agent.</strong>
+<pre><code>eval "$(ssh-agent -s)"; ssh-add id_tiago; ssh-add -l; ssh-add -D; ssh-agent -k</code></pre>
+<pre><code>Identity added: id_tiago (tiago@laptop)
+256 SHA256:WUd2mEp/Vm6qeY9v48O9wOlw/aox5HVz98dxkZ335po tiago@laptop (ED25519)
+All identities removed.</code></pre>
+  With a passphrase, <code>ssh-add</code> asks for it once, and the agent signs for you until you remove the key or the agent stops.</li>
+  <li><strong>A certificate instead of a key.</strong> Make a user CA, tell the servers to trust it, remove your plain key from <code>door-4</code>, and sign your key for eight hours:
+<pre><code>ssh-keygen -q -t ed25519 -N "" -C "stagedoor lab user CA" -f user_ca
+sudo install -m 644 user_ca.pub /etc/ssh/lab/user_ca.pub
+sudo truncate -s 0 /etc/ssh/lab/keys-door-4/$USER
+ssh-keygen -s user_ca -I tiago-lab -n "$USER" -V +8h id_tiago.pub</code></pre>
+<pre><code>Signed user key id_tiago-cert.pub: id "tiago-lab" serial 0 for tiago valid from 2026-11-27T09:44:00 to 2026-11-27T17:45:41</code></pre>
+<pre><code>ssh-keygen -Lf id_tiago-cert.pub</code></pre>
+<pre><code>id_tiago-cert.pub:
+        Type: ssh-ed25519-cert-v01@openssh.com user certificate
+        Public key: ED25519-CERT SHA256:WUd2mEp/Vm6qeY9v48O9wOlw/aox5HVz98dxkZ335po
+        Signing CA: ED25519 SHA256:CNxHMQgV/ewo+DX1/NwC/wBQdbdGnvAJCPHe2vI0wXg (using ssh-ed25519)
+        Key ID: "tiago-lab"
+        Serial: 0
+        Valid: from 2026-11-27T09:44:00 to 2026-11-27T17:45:41
+        Principals: 
+                tiago
+        Critical Options: (none)
+        Extensions: 
+                permit-X11-forwarding
+                permit-agent-forwarding
+                permit-port-forwarding
+                permit-pty
+                permit-user-rc</code></pre>
+  ssh uses <code>id_tiago-cert.pub</code> automatically because it sits next to the key:
+<pre><code>ssh -F ssh_config door-4 'echo logged in to door-4 as $(whoami)'
+sudo grep Accepted /var/log/sshd-door-4.log | tail -1</code></pre>
+<pre><code>logged in to door-4 as tiago
+Accepted publickey for tiago from 10.40.0.12 port 49322 ssh2: ED25519-CERT SHA256:WUd2mEp/Vm6qeY9v48O9wOlw/aox5HVz98dxkZ335po ID tiago-lab (serial 0) CA ED25519 SHA256:CNxHMQgV/ewo+DX1/NwC/wBQdbdGnvAJCPHe2vI0wXg</code></pre>
+  No <code>authorized_keys</code> entry on <code>door-4</code> at all, and the log names the certificate's ID and the CA. Restrict the extensions in real use (<code>-O clear -O permit-pty</code>), and keep the CA's private key somewhere much safer than a lab directory.</li>
+  <li><strong>Break it: an expired certificate.</strong> Sign one valid for a day in January, and try again:
+<pre><code>ssh-keygen -q -s user_ca -I tiago-lab -n "$USER" -V 20260101:20260102 id_tiago.pub
+ssh -F ssh_config door-4 true; echo "exit status: $?"
+sudo grep 'Certificate invalid' /var/log/sshd-door-4.log | tail -1</code></pre>
+<pre><code>tiago@10.40.0.14: Permission denied (publickey).
+exit status: 255
+Certificate invalid: expired</code></pre>
+  Expiry is the revocation you never have to remember.</li>
+  <li><strong>Clean up.</strong>
+<pre><code>sudo ./sshlab.sh down
+sudo ~/netlab.sh down
+sudo userdel -r marco</code></pre></li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Add <code>from="10.40.0.1",no-port-forwarding</code> in front of your key in <code>keys-door-2</code> and test from <code>door-3</code> (<code>sudo ip netns exec door-3 ssh …</code>, with your user's key): refused. (2) Run <code>sudo sshd -T -f /etc/ssh/lab/sshd_lab.conf -o HostKey=/etc/ssh/lab/door-2.key | grep -E 'permitroot|password|allowusers'</code>. (3) Sign a <em>host</em> certificate for <code>door-2</code> (<code>ssh-keygen -s host_ca -h -n 10.40.0.12 …</code>), add <code>@cert-authority</code> to <code>known_hosts</code>, and connect without a fingerprint prompt.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: closing the old doors</p>
+  <p>That afternoon, every key in root's <code>authorized_keys</code> on all servers is removed, and a drop-in like 16.4's goes on each one: no root logins, no passwords (still on, until then, for everyone: <code>auth.log</code> showed thousands of guesses a day from the internet), <code>AllowGroups ssh-users</code>, <code>LogLevel VERBOSE</code>. Each engineer's key lives in their own account, with a passphrase and a comment naming the person and device; SSH is reachable only from the office VPN, through <code>door-2</code> as the jump host for <code>door-4</code>.</p>
+  <p>Was Marco's key ever used? The local logs went back four weeks, and showed nothing. Before that, nobody can say, which is the real finding: Rafaela ships authentication logs off the servers with a year's retention the same week. The longer-term plan is in the wiki: short-lived certificates from a small CA, or, after the move to AWS, Session Manager with no SSH port at all (Handbook 5). And the leaver checklist from <a href="04-permissions.html">Chapter 4</a> gains three lines: keys in every account, supplier accounts' contacts, certificates.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s16-10"><span class="n">16.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Keys in root's (or a shared account's) <code>authorized_keys</code></td><td>Nobody knows whose they are; leavers keep root.</td><td>Personal accounts, <code>PermitRootLogin no</code>, <code>sudo</code>.</td></tr>
+      <tr><td>Locking a leaver's password and stopping there</td><td>Key logins still work; keys elsewhere stay.</td><td>Expire the account and remove every key.</td></tr>
+      <tr><td>Typing “yes” to every host key prompt</td><td>A man-in-the-middle is accepted as easily as the real server.</td><td>Compare the fingerprint, or use host certificates.</td></tr>
+      <tr><td>Keys without passphrases on laptops</td><td>A stolen laptop or backup is a working login.</td><td>Passphrase plus agent, or a hardware key.</td></tr>
+      <tr><td><code>ForwardAgent yes</code> everywhere</td><td>Root on any server you visit can use your keys.</td><td><code>ProxyJump</code>.</td></tr>
+      <tr><td>Editing <code>/etc/ssh/sshd_config</code> and reloading blind</td><td>A typo or wrong setting locks everyone out.</td><td>A drop-in, <code>sshd -t</code>, a second session, then reload.</td></tr>
+      <tr><td>Short local log retention</td><td>“Was this key ever used?” has no answer.</td><td><code>LogLevel VERBOSE</code>, logs shipped and kept.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum16">
+  <h2 class="sec" id="sum16"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>SSH authenticates the <strong>server</strong> with its host key (checked against <code>known_hosts</code>, trust on first use) and then <strong>you</strong> with your key (checked against <code>authorized_keys</code> or a trusted CA), then checks the account.</li>
+    <li>Use Ed25519 keys with passphrases and an agent; reach inner servers with <code>ProxyJump</code>, not agent forwarding.</li>
+    <li>Harden sshd with a drop-in: no root logins, no passwords, <code>AllowGroups</code>, <code>LogLevel VERBOSE</code>. Check with <code>sshd -t</code> and <code>sshd -T</code>.</li>
+    <li>A locked password doesn't stop key logins; expire the account and remove every key, everywhere. Audit keys regularly.</li>
+    <li><strong>SSH certificates</strong> expire by themselves and need no keys on servers; <strong>session managers</strong> need no SSH port at all.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Host key</dt><dd>The key pair that identifies an SSH server; clients remember its public half in <code>known_hosts</code>.</dd>
+    <dt>Trust on first use</dt><dd>Accepting a server's key the first time you connect, and checking it on every later connection.</dd>
+    <dt>authorized_keys</dt><dd>The file listing the public keys allowed to log in to an account.</dd>
+    <dt>ssh-agent</dt><dd>A program that holds decrypted private keys in memory and signs authentication challenges on your behalf.</dd>
+    <dt>Jump host</dt><dd>A server you connect through to reach others, with the inner connection tunnelled end to end (<code>ProxyJump</code>).</dd>
+    <dt>SSH certificate</dt><dd>A public key signed by an SSH CA, with principals and a validity period, accepted by servers that trust the CA.</dd>
+    <dt>Session manager</dt><dd>A cloud service that opens a shell on a VM through the provider's API, authorised by IAM, without an open SSH port.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>What does SSH's warning “REMOTE HOST IDENTIFICATION HAS CHANGED” mean, and what should you do before removing the old entry? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>The server presented a host key different from the one in your <code>known_hosts</code>. Either the server was rebuilt or reinstalled (a new host key), or something is intercepting the connection. Confirm the new fingerprint another way (the provider's console, the person who rebuilt it) before running <code>ssh-keygen -R host</code> and accepting the new key.</p></details>
+    </li>
+    <li>
+      <p>Write an <code>~/.ssh/config</code> entry so that <code>ssh db</code> reaches <code>10.40.0.14</code> as user <code>rafaela</code> through the jump host <code>jump.stagedoor.example</code>, using only the key <code>~/.ssh/id_stagedoor</code>. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>Host db</code> / <code>HostName 10.40.0.14</code> / <code>User rafaela</code> / <code>ProxyJump rafaela@jump.stagedoor.example</code> / <code>IdentityFile ~/.ssh/id_stagedoor</code> / <code>IdentitiesOnly yes</code>. (A separate <code>Host jump.stagedoor.example</code> block can set its own user and key.)</p></details>
+    </li>
+    <li>
+      <p>Explain why an attacker who has root on a jump host can use your agent if you connect with <code>ssh -A</code>, but not if you use <code>ProxyJump</code>. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>With agent forwarding, the jump host gets a socket connected to your agent, and anyone with root there can ask your agent to sign logins to other servers while you're connected. With <code>ProxyJump</code>, the jump host only forwards an encrypted TCP stream; the inner SSH session's authentication happens between your laptop and the target, so the jump host never has access to your agent or keys.</p></details>
+    </li>
+    <li>
+      <p>After you add <code>PasswordAuthentication no</code> to <code>/etc/ssh/sshd_config</code> and reload, <code>ssh -o PubkeyAuthentication=no server</code> still offers a password prompt. What's the likely cause, and how do you confirm? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p>Another file sets it first: in sshd, the first value obtained wins, and <code>Include /etc/ssh/sshd_config.d/*.conf</code> at the top of the main file reads drop-ins (such as a cloud image's <code>50-cloud-init.conf</code> with <code>PasswordAuthentication yes</code>) before your line. Confirm with <code>sudo sshd -T | grep passwordauthentication</code> and <code>grep -r PasswordAuthentication /etc/ssh/</code>; put your setting in an earlier-sorting drop-in or fix the other file. (Also check <code>KbdInteractiveAuthentication</code>.)</p></details>
+    </li>
+    <li>
+      <p>Design SSH access for Stagedoor's servers so that a leaver's access ends without anyone editing files on servers. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Servers trust a user CA (<code>TrustedUserCAKeys</code>) and have no personal <code>authorized_keys</code>; <code>AllowGroups</code> limits who may log in. People get short-lived certificates (for example eight hours) from the CA after signing in through the company identity provider with MFA; leaving means being removed from the identity provider, after which no new certificates are issued and old ones expire within hours. SSH is reachable only from the VPN or through a jump host; logins are logged with the certificate ID and shipped centrally. On AWS, Session Manager can replace the people part entirely.</p></details>
+    </li>
+    <li>
+      <p>Compare <code>authorized_keys</code> keys, SSH certificates and a session manager for a ten-person team. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Keys: simple, no infrastructure, but never expire and must be added and removed on every server. Certificates: one CA trusted by all servers, short-lived credentials, leavers age out; needs a CA and a way to issue certificates safely. Session manager: no SSH port, IAM-controlled and recorded access, nothing on servers to manage; only for that cloud's VMs and requires its agent. Many teams use a session manager for people and certificates or keys for automation.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li><code>man ssh_config</code>, <code>man sshd_config</code> (especially <code>Match</code>, <code>AllowGroups</code>, <code>TrustedUserCAKeys</code>), <code>man ssh-keygen</code> (the “CERTIFICATES” section), <code>man ssh-agent</code>.</li>
+    <li>Mozilla's <a href="https://infosec.mozilla.org/guidelines/openssh">OpenSSH security guidelines</a>.</li>
+    <li>Smallstep, <a href="https://smallstep.com/blog/use-ssh-certificates/">If you're not using SSH certificates you're doing SSH wrong</a>.</li>
+    <li>Handbook 2: Chapter 13 (joiners, movers and leavers) and Chapter 15 (Session Manager instead of SSH).</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="17-scripts.html">17 · Shell scripts that don't bite</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 3 · Linux for Cloud Engineers</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>
