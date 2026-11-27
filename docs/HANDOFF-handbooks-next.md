@@ -1,6 +1,6 @@
 # Handoff: Series 3, the next handbooks (3–8). Draft for owner review
 
-Status as of **2026-11-27**: **Handbook 3 (Linux) approved and started: Part I (chapters 1–4) written.** Progress and
+Status as of **2026-11-27**: **Handbook 3 (Linux) approved and in progress: Parts I–III (chapters 1–12) written.** Progress and
 briefs: **`docs/HANDOFF-handbook-3-linux.md`**. Handbooks 4–8 are still outlines. Handbooks 1 (*Networking in the
 Cloud*) and 2 (*Identity and Access in the Cloud*) are complete.
 

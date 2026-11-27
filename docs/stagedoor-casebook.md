@@ -91,6 +91,48 @@ load balancer (public address `203.0.113.40`).
   `door-2` to `door-3` now copies `/var/lib/stagedoor/uploads` with `rsync -a`. The new root password is in the
   company password manager, for emergencies only.
 
+### Parts II and III (ch. 5–12), written 2026-11-27
+
+- **Ch. 5 (Thu 26 Feb 2026, 15:10):** the deploy script's `pkill -9 -f uvicorn` kills three checkouts mid-payment;
+  three fans charged without tickets, refunded by Joana. New deploy: fail health check → `SIGTERM`, wait 30 s
+  (slowest normal checkout ~8 s) → `SIGKILL` only if needed → start → health check → next server (`door-2` first).
+- **Ch. 6 (Mon 2 – Wed 4 Mar):** the payouts cron job on `door-1` (03:00) failed from Wed 25 Feb to Sun 1 Mar:
+  Leonor reinstalled the report tool with `pip` on Tue 24 Feb (now `/usr/local/bin`); Debian 11's cron `PATH` is
+  `/usr/bin:/bin`; errors went to `/var/mail/root`. Replaced by `payouts.service` + `payouts.timer`
+  (`OnCalendar=*-*-* 03:00:00 Europe/Lisbon`, `Persistent=true`, full path); alert on failed units. Wed 4 Mar:
+  the app becomes `stagedoor.service` (user `stagedoor`, `UMask=0027`, `EnvironmentFile=/etc/stagedoor/stagedoor.env`,
+  release `/opt/stagedoor/releases/2026.03.1`); `nohup.out` deleted and the space freed. Deploys: unpack, `mv -T`,
+  `systemctl restart`, one server at a time. The app still writes `/var/log/stagedoor/stagedoor.log` at DEBUG.
+- **Ch. 7 (Fri 20 Mar, 10:04–10:11):** `door-2`'s disk full: `stagedoor.log` 131 GB (DEBUG since February);
+  `door-3` at 97%. Deleting didn't free it; truncated through `/proc/<pid>/fd`. Seven minutes of failed checkouts;
+  the tour sold out in forty. Fixes: INFO level, a DEBUG switch that turns itself off after an hour, app logs to
+  stdout/journal, journald capped (4 GB, 20 GB kept free), disk alert at 80%. Wiki rule: *every log has an owner, a
+  level, a size limit and a destination*.
+- **Ch. 8 (Tue 7 – Tue 14 Apr):** unattended-upgrades had been disabled since June 2025 (an automatic update restarted
+  the app during an on-sale); ~140 pending updates per web server. Policy (Figure 8.2): security updates daily,
+  needrestart `'l'`, no automatic reboots; Tuesdays 05:00 Lisbon maintenance, one server at a time, skipped on on-sale
+  days. 14 Apr: `door-1` rebooted after 500 days. Decision: a **new database server on Ubuntu 24.04**, built from a
+  checklist by end of August 2026, data moved to it (Handbook 6 tells the database side); not an in-place upgrade.
+- **Ch. 9 (Fri 8 May, 10:02):** alert “door-1 load average 14.2” (8 vCPU); CPUs 30% busy, I/O wait > 50%, ~10
+  threads in `D`: a weekly full backup timer `OnCalendar=Fri 08:00` (UTC; 09:00 Lisbon in summer) ran into the 10:00
+  on-sale, taking 80 min instead of 40. Stopped at 10:05; moved to `Sun 04:00 Europe/Lisbon` with `Nice=10`,
+  `IOSchedulingClass=idle`; load alert replaced by CPU-busy and I/O-wait alerts. Handbook 6: back up from a replica.
+- **Ch. 10 (Fri 5 Jun, 10:12, 40 s outage):** the kernel OOM-killed a PostgreSQL backend (19 GB RSS) running an
+  analyst's settlement report with `work_mem` set to 4 GB; PostgreSQL restarted all connections and ran crash
+  recovery. 32 GB, no swap, 8 GB shared buffers, ~200 connections. Fixes: a report role with `work_mem` 64 MB and a
+  statement timeout, reports outside on-sales, an 8 GB swap file on `door-1`, postmaster `OOMScoreAdjust=-1000`,
+  alert on `MemAvailable` < 10%. Handbook 6: a read replica for reports.
+- **Ch. 11 (Thu 25 Jun, 14:20–15:05):** `door-2` uploads fail with “No space left on device” at 61% used: inodes
+  exhausted by 9.8 million thumbnails in `/var/cache/stagedoor/thumbs` (~10 million inodes on the 160 GB ext4 root).
+  Fixes: delete thumbnails unused for 30 days (nightly timer), three standard sizes instead of one per device,
+  inode alert at 80%. Same week: Atlantica grows `door-1`'s disk from 1 TB to 1.5 TB; `growpart` + `resize2fs`
+  online. The new database server will keep data on its own volume.
+- **Ch. 12 (Fri 10 Jul, 10:00:38–10:07):** biggest on-sale yet (a stadium date); nginx on `door-2` hits errno 24
+  and “768 worker_connections are not enough” (soft limit 1024 per worker). Fixed live, then properly: `LimitNOFILE=65536`
+  drop-ins for nginx and `stagedoor.service`, `worker_rlimit_nofile 65536`, `worker_connections 8192`,
+  `listen … backlog=4096`, keep-alive to the app; alerts on `TcpExtListenOverflows` and descriptors per worker. Sold
+  out at 10:31. Joana's question leads to load tests before big on-sales, against a copy of the servers.
+
 ### Promised for later chapters (keep consistent)
 
 - Ch. 5: a deploy kills requests mid-checkout (uvicorn killed with `kill -9` by the deploy script).
