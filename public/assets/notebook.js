@@ -100,8 +100,68 @@
     });
   }
 
+
+  /* 6. Landing page: the bookcase. Tap a series tile and its panel, with every volume, comes down.
+     The choice follows the address (#deep-dives, #series-2 …) and is remembered for the next visit. */
+  function wireBookcase() {
+    var cases = document.querySelector('[data-bookcase]');
+    if (!cases) return;
+    var tabs = Array.prototype.slice.call(cases.querySelectorAll('.series-tile'));
+    var panelOf = function (t) { return document.getElementById(t.getAttribute('aria-controls')); };
+    function tabFor(hash) {
+      if (!hash || hash.length < 2) return null;
+      var el = document.getElementById(decodeURIComponent(hash.slice(1)));
+      if (!el) return null;
+      if (el.id === 'shelf') return null;
+      var panel = el.closest ? el.closest('.series-panel') : null;
+      return panel ? tabs.filter(function (t) { return panelOf(t) === panel; })[0] || null : null;
+    }
+    function pick(tab, opts) {
+      opts = opts || {};
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+        t.tabIndex = on ? 0 : -1;
+        panelOf(t).hidden = !on;
+      });
+      try { localStorage.setItem('jef-shelf', tab.getAttribute('aria-controls')); } catch (e) {}
+      if (opts.focus) tab.focus();
+      if (opts.hash && history.replaceState) history.replaceState(null, '', '#' + tab.getAttribute('aria-controls'));
+      if (opts.scroll) panelOf(tab).scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+    tabs.forEach(function (t, i) {
+      t.addEventListener('click', function () {
+        pick(t, { hash: true });
+        // on a phone the panel starts below the fold: bring its heading up
+        var top = panelOf(t).getBoundingClientRect().top;
+        if (top > window.innerHeight * 0.75) panelOf(t).scrollIntoView({ block: 'start', behavior: 'smooth' });
+      });
+      t.addEventListener('keydown', function (e) {
+        var n = null;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') n = tabs[(i + 1) % tabs.length];
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') n = tabs[(i + tabs.length - 1) % tabs.length];
+        if (e.key === 'Home') n = tabs[0];
+        if (e.key === 'End') n = tabs[tabs.length - 1];
+        if (n) { pick(n, { focus: true, hash: true }); e.preventDefault(); }
+      });
+    });
+    function fromHash(scroll) {
+      var t = tabFor(location.hash);
+      if (t) { pick(t, { scroll: scroll }); return true; }
+      return false;
+    }
+    window.addEventListener('hashchange', function () { fromHash(true); });
+    if (!fromHash(true)) {
+      var saved = null;
+      try { saved = localStorage.getItem('jef-shelf'); } catch (e) {}
+      var t = saved && tabs.filter(function (x) { return x.getAttribute('aria-controls') === saved; })[0];
+      if (t) pick(t);
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     wireSpines();
+    wireBookcase();
     renderRatings(document);
     wirePrint(document);
     var main = document.querySelector('[data-collect]');
