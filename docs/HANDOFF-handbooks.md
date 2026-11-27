@@ -180,3 +180,9 @@ facts above. 5. Sample chapter: **9** (policies). 6. On the Series 3 shelf now, 
 - PDFs: `scripts/build-pdf.mjs` renders never-rendered PDFs automatically, so the handbook's 11 PDFs build on the
   next deploy without touching `pdf-build.json`. Verified locally with
   `CHROMIUM_PATH=/opt/pw-browsers/chromium PDF_JOURNALS=handbooks/cloud-networking npm run pdf`.
+
+## 8. Next handbooks (proposed 2026-11-27)
+
+Outlines for Handbook 3 (Kubernetes), 4 (Terraform) and 5 (PostgreSQL), sketches for 6–8, the mechanics of starting a
+book, and the Larder canon to respect (including the Kubernetes conflict between Handbook 1 ch. 19 and Handbook 2
+ch. 16): **`docs/HANDOFF-handbooks-next.md`**.
