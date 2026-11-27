@@ -1,0 +1,580 @@
+<!-- Handbook 3 · Linux for Cloud Engineers · Chapter 6. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part II · Processes and services</p>
+  <p class="chno">6</p>
+  <h1>systemd: services, units and timers</h1>
+  <p class="promise">A program you started by hand runs until something stops it. A service runs because the machine was told it should: started at boot, restarted when it crashes, stopped gracefully, logged, and limited. This chapter turns a hand-started app into a systemd service, explains the unit files behind every service on the machine, and replaces a fragile cron job with a timer.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Write a service unit that runs an app as its own user, with its configuration, umask and restart policy.</li>
+      <li>Start, stop, enable and inspect services with <code>systemctl</code>, and find out why one failed.</li>
+      <li>Override a packaged unit safely with a drop-in file.</li>
+      <li>Explain the difference between ordering (<code>After=</code>) and requirement (<code>Wants=</code>, <code>Requires=</code>).</li>
+      <li>Replace a cron job with a timer, and avoid the PATH and time-zone traps of scheduled jobs.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li><a href="#ch5">Chapter 5</a>: processes, signals, graceful shutdown. <a href="#ch4">Chapter 4</a>: users, umask.</li>
+      <li>A Linux machine where <strong>PID 1 is systemd</strong>: a VM or cloud server, not a plain container (<a href="#appC">Appendix C</a>). Check with <code>ps -o comm= -p 1</code>.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 50 minutes</dd>
+      <dt>Lab</dt><dd>40 minutes, a VM with systemd and <code>sudo</code>, free</dd>
+      <dt>Main distribution</dt><dd>Ubuntu 24.04 (systemd 255), with others in 6.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>On Monday 2 March 2026, three venues ask Joana the same question: where is last week's payout file? Every night at 03:00, a cron job on <code>door-1</code> runs the payouts report, which tells the bank how much to transfer to each venue. It hasn't produced anything since Wednesday.</p>
+  <p>Rafaela runs the job by hand. It works. She checks the crontab: unchanged since 2023. Then she finds root's local mailbox, <code>/var/mail/root</code>, which nobody has ever read: five messages from cron, one a night since Wednesday, each saying <code>payouts-report: command not found</code>. On Tuesday 24 February, Leonor had upgraded the report tool by reinstalling it with <code>pip</code>, which put it in <code>/usr/local/bin</code> instead of <code>/usr/bin</code>. In her shell, <code>/usr/local/bin</code> is on the <code>PATH</code>. In cron's, on Debian 11, it isn't.</p>
+  <p>The same week, Rafaela has a list from Chapters 1, 4 and 5 that ends in one word: services. The app still runs from a terminal, as root, stopped with signals by a script. Both problems have the same fix.</p>
+</aside>
+
+<!-- ======================================================== 6.1 -->
+<h2 class="sec" id="s6-1"><span class="n">6.1</span>What systemd does</h2>
+
+<p class="lead"><span class="term">systemd</span> is PID 1 on almost every Linux server (<a href="#ch1">Chapter 1</a>). It starts everything else, and it keeps doing a job for every service afterwards: a <strong>service manager</strong>, or supervisor.</p>
+
+<figure class="wide" id="fig6-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 280" role="img" aria-labelledby="fig6-1-t fig6-1-d">
+      <title id="fig6-1-t">What systemd does for one service</title>
+      <desc id="fig6-1-d">In the centre, a box for the service stagedoor.service, containing the app's process in its own control group. Around it, six jobs systemd does. Start: at boot or on demand, in dependency order, as the configured user, with the configured environment, working directory and umask. Supervise: notices when the main process exits and restarts it according to Restart=. Stop: sends SIGTERM, waits up to TimeoutStopSec, then SIGKILL, to every process in the control group. Log: connects standard output and standard error to the journal. Limit: applies resource limits such as memory and file descriptors through the control group. Report: systemctl status shows state, main PID, memory and recent log lines.</desc>
+      <rect class="node-accent" x="270" y="96" width="220" height="88" rx="6"/>
+      <text class="t-title on-accent" x="380" y="124" text-anchor="middle">stagedoor.service</text>
+      <text class="t-small on-accent" x="380" y="146" text-anchor="middle">python3 app.py (user stagedoor)</text>
+      <text class="t-small on-accent" x="380" y="166" text-anchor="middle">in its own control group</text>
+      <rect class="node" x="10" y="14" width="230" height="72" rx="5"/>
+      <text class="t-title" x="24" y="36">Start</text>
+      <text class="t-small" x="24" y="56">at boot, in dependency order; as the</text>
+      <text class="t-small" x="24" y="74">right user, env, directory, umask</text>
+      <rect class="node" x="520" y="14" width="230" height="72" rx="5"/>
+      <text class="t-title" x="534" y="36">Supervise</text>
+      <text class="t-small" x="534" y="56">notices the process exit; restarts</text>
+      <text class="t-small" x="534" y="74">it according to Restart=</text>
+      <rect class="node" x="10" y="104" width="230" height="72" rx="5"/>
+      <text class="t-title" x="24" y="126">Stop</text>
+      <text class="t-small" x="24" y="146">SIGTERM, wait TimeoutStopSec,</text>
+      <text class="t-small" x="24" y="164">then SIGKILL (Chapter 5)</text>
+      <rect class="node" x="520" y="104" width="230" height="72" rx="5"/>
+      <text class="t-title" x="534" y="126">Log</text>
+      <text class="t-small" x="534" y="146">stdout and stderr to the journal</text>
+      <text class="t-small" x="534" y="164">(Chapter 7)</text>
+      <rect class="node" x="10" y="194" width="230" height="72" rx="5"/>
+      <text class="t-title" x="24" y="216">Limit</text>
+      <text class="t-small" x="24" y="236">memory, CPU, file descriptors</text>
+      <text class="t-small" x="24" y="254">(Chapters 10 and 12)</text>
+      <rect class="node" x="520" y="194" width="230" height="72" rx="5"/>
+      <text class="t-title" x="534" y="216">Report</text>
+      <text class="t-small" x="534" y="236">systemctl status: state, PID,</text>
+      <text class="t-small" x="534" y="254">memory, last log lines</text>
+      <path class="wire" d="M240 50 H300 V96 M520 50 H460 V96 M240 140 H270 M520 140 H490 M240 230 H300 V184 M520 230 H460 V184"/>
+    </svg>
+  </div>
+  <figcaption><b>Figure 6.1</b> Six jobs that a hand-started program has nobody to do. Each one replaces something Stagedoor did by hand or not at all.</figcaption>
+</figure>
+
+<p>Everything systemd manages is a <span class="term">unit</span>, described by a small text file. The unit's type is its file extension: <code>.service</code> (a program), <code>.timer</code> (a schedule), <code>.target</code> (a group of units, like a milestone in the boot), <code>.socket</code>, <code>.mount</code>, <code>.path</code>. Unit files live in three places, and the order matters:</p>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 6.1 · Where unit files live</caption>
+    <thead><tr><th>Directory</th><th>Who writes it</th><th>Wins over</th></tr></thead>
+    <tbody>
+      <tr><td><code>/etc/systemd/system/</code></td><td>you, the administrator</td><td>everything below</td></tr>
+      <tr><td><code>/run/systemd/system/</code></td><td>programs, at runtime; gone at reboot</td><td>packages</td></tr>
+      <tr><td><code>/usr/lib/systemd/system/</code> (also <code>/lib/…</code>)</td><td>packages; overwritten on upgrade</td><td>nothing</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Never edit a file under <code>/usr/lib</code>: the next package upgrade replaces it. Put your own units in <code>/etc/systemd/system/</code>, and change a packaged one with a drop-in (6.4).</p>
+
+<!-- ======================================================== 6.2 -->
+<h2 class="sec" id="s6-2"><span class="n">6.2</span>A service unit, line by line</h2>
+
+<p>Here is the unit Rafaela and Tiago wrote for Stagedoor's app. It's the same one the lab installs, with a stand-in app:</p>
+
+<p class="code-title"><span>/etc/systemd/system/stagedoor.service</span><span>systemd unit</span></p>
+<pre><code>[Unit]
+Description=Stagedoor ticketing app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=stagedoor
+Group=stagedoor
+UMask=0027
+EnvironmentFile=/etc/stagedoor/stagedoor.env
+WorkingDirectory=/opt/stagedoor/current
+ExecStart=/usr/bin/python3 /opt/stagedoor/current/app.py
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 6.2 · What each line does</caption>
+    <thead><tr><th>Line</th><th>Means</th></tr></thead>
+    <tbody>
+      <tr><td><code>[Unit]</code> <code>Description=</code></td><td>the name shown in status and logs</td></tr>
+      <tr><td><code>After=network-online.target</code><br><code>Wants=network-online.target</code></td><td>start after the network is configured, and ask for that milestone to be reached (6.5)</td></tr>
+      <tr><td><code>Type=exec</code></td><td>the service is “started” once the program has been executed successfully. <code>simple</code> (the default) doesn't even wait for that; <code>notify</code> waits for the app to say it's ready; <code>oneshot</code> is for jobs that run and finish</td></tr>
+      <tr><td><code>User=</code>, <code>Group=</code></td><td>run as this user, never root (<a href="#ch4">Chapter 4</a>)</td></tr>
+      <tr><td><code>UMask=0027</code></td><td>new files: <code>640</code>, directories <code>750</code> (<a href="#ch4">Chapter 4</a>)</td></tr>
+      <tr><td><code>EnvironmentFile=</code></td><td>read <code>NAME=value</code> lines into the environment; keeps secrets out of the unit file, which everyone may read</td></tr>
+      <tr><td><code>WorkingDirectory=</code></td><td>the current directory; through the <code>current</code> symlink (<a href="#ch3">Chapter 3</a>)</td></tr>
+      <tr><td><code>ExecStart=</code></td><td>the command, with a <strong>full path</strong>: it's not run through a shell, so no <code>|</code>, <code>&gt;</code> or <code>&amp;&amp;</code></td></tr>
+      <tr><td><code>Restart=on-failure</code>, <code>RestartSec=2</code></td><td>restart if it exits with an error or is killed by a signal, after 2 seconds; not after a clean stop</td></tr>
+      <tr><td><code>TimeoutStopSec=30</code></td><td>on stop, wait 30 s after <code>SIGTERM</code> before <code>SIGKILL</code> (<a href="#ch5">Chapter 5</a>)</td></tr>
+      <tr><td><code>[Install]</code> <code>WantedBy=multi-user.target</code></td><td>what <code>systemctl enable</code> hooks it into: start it whenever the normal multi-user system starts, at every boot</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Notice what isn't there: no <code>nohup</code>, no <code>&amp;</code>, no PID file, no redirection to a log. The app runs in the foreground and writes to standard output; systemd does the rest. That's the right shape for any program you write for a server, and for containers too.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">A server program should run in the foreground, log to standard output, and exit cleanly on <code>SIGTERM</code>. The service manager handles starting, restarting, stopping and logging.</p>
+</div>
+
+<!-- ======================================================== 6.3 -->
+<h2 class="sec" id="s6-3"><span class="n">6.3</span>Driving services with <code>systemctl</code></h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 6.3 · The <code>systemctl</code> commands you'll use every day</caption>
+    <thead><tr><th>Command</th><th>Does</th></tr></thead>
+    <tbody>
+      <tr><td><code>systemctl status stagedoor</code></td><td>state, main PID, memory, the last log lines</td></tr>
+      <tr><td><code>sudo systemctl start</code> / <code>stop</code> / <code>restart</code></td><td>now, this boot only</td></tr>
+      <tr><td><code>sudo systemctl reload</code></td><td>ask the service to re-read its configuration (for nginx, <code>SIGHUP</code>); only if the unit supports it</td></tr>
+      <tr><td><code>sudo systemctl enable</code> / <code>disable</code></td><td>start (or not) at every boot; <code>enable --now</code> also starts it now</td></tr>
+      <tr><td><code>sudo systemctl daemon-reload</code></td><td>re-read unit files after you change them</td></tr>
+      <tr><td><code>systemctl cat stagedoor</code></td><td>the unit file and all its drop-ins, as systemd sees them</td></tr>
+      <tr><td><code>systemctl show stagedoor -p User -p Restart</code></td><td>individual settings, including defaults you didn't write</td></tr>
+      <tr><td><code>systemctl list-units --type=service --failed</code></td><td>what has failed</td></tr>
+      <tr><td><code>sudo systemctl reset-failed stagedoor</code></td><td>clear a failed state and the start-rate counter</td></tr>
+      <tr><td><code>journalctl -u stagedoor</code></td><td>the service's log (<a href="#ch7">Chapter 7</a>); add <code>-f</code> to follow, <code>-b</code> for this boot</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Two states are easy to confuse. <strong>Enabled</strong> means “starts at boot”; <strong>active</strong> means “running now”. A service can be either without the other, and after a reboot only enabled services come back. On a server you've inherited, compare <code>systemctl list-unit-files --state=enabled</code> with what's actually running.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: restart loops</p>
+  <p>A service that fails immediately and has <code>Restart=on-failure</code> is restarted, fails, is restarted again: a <strong>restart loop</strong>. systemd stops it if it's started more than five times in ten seconds (<code>StartLimitBurst=</code>, <code>StartLimitIntervalSec=</code>), and then refuses to start it again with “Start request repeated too quickly” until you run <code>systemctl reset-failed</code>. With a long enough <code>RestartSec=</code>, the limit is never reached and the loop goes on for ever, filling the journal. Watch the restart counter in the log.</p>
+</div>
+
+<!-- ======================================================== 6.4 -->
+<h2 class="sec" id="s6-4"><span class="n">6.4</span>Changing a unit: drop-ins</h2>
+
+<p>To change one setting of a unit, especially one a package installed, don't copy the whole file. Add a <span class="term">drop-in</span>: a file in <code>/etc/systemd/system/&lt;unit&gt;.d/</code> ending in <code>.conf</code>, containing just the sections and lines you want to change. <code>sudo systemctl edit nginx</code> opens an editor on <code>/etc/systemd/system/nginx.service.d/override.conf</code> and runs <code>daemon-reload</code> for you; or write the file and reload yourself.</p>
+
+<pre><code><span class="c"># /etc/systemd/system/nginx.service.d/limits.conf: raise nginx's file-descriptor limit (Chapter 12)</span>
+[Service]
+LimitNOFILE=65536</code></pre>
+
+<p>Drop-ins survive package upgrades, and <code>systemctl cat</code> shows the original and every drop-in together, so the next person can see exactly what you changed. Most settings in a drop-in replace the original's; list settings such as <code>ExecStart=</code> add to it, so to replace a command you first clear it with an empty line, <code>ExecStart=</code>, then give the new one.</p>
+
+<!-- ======================================================== 6.5 -->
+<h2 class="sec" id="s6-5"><span class="n">6.5</span>Dependencies and the boot</h2>
+
+<p>systemd starts units in parallel wherever it can, so the order has to be stated. Two separate kinds of relationship do that, and mixing them up is the most common unit-file mistake:</p>
+
+<figure class="wide" id="fig6-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 210" role="img" aria-labelledby="fig6-2-t fig6-2-d">
+      <title id="fig6-2-t">Requirement and ordering are separate</title>
+      <desc id="fig6-2-d">Two columns. Left, requirement: Wants=B means starting A also starts B, but A starts even if B fails; Requires=B means if B fails to start, or is stopped, A is stopped too. Neither says anything about order: A and B may start at the same time. Right, ordering: After=B means if both are being started, A waits until B has finished starting; Before= is the reverse. Neither starts B. Bottom: to depend on B and start after it, write both lines, Wants=B and After=B.</desc>
+      <rect class="node" x="10" y="14" width="360" height="132" rx="6"/>
+      <text class="t-title" x="26" y="40">Requirement: is B started too?</text>
+      <text class="t-mono" x="26" y="70">Wants=B</text>
+      <text class="t-small" x="140" y="70">start B as well; carry on if B fails</text>
+      <text class="t-mono" x="26" y="98">Requires=B</text>
+      <text class="t-small" x="140" y="98">start B; if B fails or stops, so does A</text>
+      <text class="t-small" x="26" y="130">Says nothing about order: both may start at once.</text>
+      <rect class="node" x="390" y="14" width="360" height="132" rx="6"/>
+      <text class="t-title" x="406" y="40">Ordering: in which order?</text>
+      <text class="t-mono" x="406" y="70">After=B</text>
+      <text class="t-small" x="510" y="70">if both start, A waits for B</text>
+      <text class="t-mono" x="406" y="98">Before=B</text>
+      <text class="t-small" x="510" y="98">if both start, B waits for A</text>
+      <text class="t-small" x="406" y="130">Says nothing about starting B at all.</text>
+      <rect class="pub" x="10" y="160" width="740" height="40" rx="6"/>
+      <text class="t-small" x="26" y="185">To need B <tspan font-weight="700">and</tspan> start after it, write both:</text>
+      <text class="t-mono" x="330" y="185">Wants=B  +  After=B</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 6.2</b> Requirement and ordering are independent. <code>After=</code> alone doesn't start anything, and <code>Wants=</code> alone doesn't wait for anything.</figcaption>
+</figure>
+
+<p>Boot milestones are <span class="term">targets</span>. <code>multi-user.target</code> is “the normal server is up” (what <code>WantedBy=</code> usually names); <code>network-online.target</code> is “the network is configured”, which matters for an app that connects to a database on another machine at start-up. <code>systemctl list-dependencies multi-user.target</code> shows the tree, and <code>systemd-analyze blame</code> shows what made the last boot slow.</p>
+
+<p>Even with the right order, a dependency on another <em>machine</em> can't be guaranteed: the database on <code>door-1</code> might be restarting when <code>door-2</code> boots. Apps should retry their connections for a while rather than exit on the first failure; <code>Restart=on-failure</code> is a safety net, not a substitute.</p>
+
+<!-- ======================================================== 6.6 -->
+<h2 class="sec" id="s6-6"><span class="n">6.6</span>Scheduled jobs: cron and timers</h2>
+
+<p><strong>cron</strong> has run scheduled jobs on Unix since the 1970s, and you'll find it on every server. A line in a crontab (<code>crontab -e</code> for your user; files in <code>/etc/cron.d/</code> for the system) has five time fields and a command: <code>0 3 * * * /opt/jobs/payouts.sh</code> means 03:00 every day. It's simple, and it has three traps that all bit Stagedoor at once:</p>
+
+<ul>
+  <li><strong>A minimal environment.</strong> cron doesn't read your shell's startup files. On Debian 11 and older releases, cron's <code>PATH</code> is only <code>/usr/bin:/bin</code>; newer versions, such as Ubuntu 24.04's, inherit a fuller one, which is exactly why a job can work on one server and not on the next. Your <code>~/.bashrc</code> variables aren't there either.</li>
+  <li><strong>Output goes to mail.</strong> Anything a job prints is emailed to the crontab's owner, which on most servers means a local mailbox nobody reads, or nowhere at all. A failing job fails silently.</li>
+  <li><strong>No memory.</strong> If the machine was off or rebooting at 03:00, the job simply doesn't run that night. And two runs can overlap if one takes longer than the interval.</li>
+</ul>
+
+<p>A systemd <span class="term">timer</span> is a unit that starts another unit on a schedule. The job itself becomes an ordinary <code>oneshot</code> service, so it gets everything a service gets: a user, an environment, limits, its output in the journal with a timestamp and an exit status, and <code>systemctl start</code> to run it now, exactly as the schedule would.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 6.4 · cron and timers compared</caption>
+    <thead><tr><th></th><th>cron</th><th>systemd timer</th></tr></thead>
+    <tbody>
+      <tr><td>Schedule</td><td><code>0 3 * * *</code></td><td><code>OnCalendar=*-*-* 03:00:00 Europe/Lisbon</code></td></tr>
+      <tr><td>Environment</td><td>minimal, varies by version</td><td>defined in the service unit; same every time</td></tr>
+      <tr><td>Output and failures</td><td>mailed, often nowhere</td><td>in the journal; failed state visible in <code>systemctl --failed</code></td></tr>
+      <tr><td>Missed runs</td><td>skipped</td><td><code>Persistent=true</code> runs a missed job at the next boot</td></tr>
+      <tr><td>Overlapping runs</td><td>possible</td><td>impossible: a running service isn't started twice</td></tr>
+      <tr><td>Run it now, the same way</td><td>copy the command and hope the environment matches</td><td><code>systemctl start payouts.service</code></td></tr>
+      <tr><td>Next run</td><td>work it out</td><td><code>systemctl list-timers</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: which time zone?</p>
+  <p>Cloud servers usually run in UTC, and both cron and timers use the machine's time zone unless told otherwise. Portugal is UTC in winter and UTC+1 in summer, so “03:00” on a UTC server is 03:00 in Lisbon for half the year and 04:00 for the other half. Write the zone into the timer (<code>OnCalendar=… Europe/Lisbon</code>) when the time matters to people, and check it with <code>systemd-analyze calendar</code>.</p>
+</div>
+
+<!-- ======================================================== 6.7 -->
+<h2 class="sec" id="s6-7"><span class="n">6.7</span>A first look at sandboxing</h2>
+
+<p>Because systemd starts the process, it can also take things away from it before it starts. A few lines in the <code>[Service]</code> section shrink what a compromised app could do:</p>
+
+<pre><code>NoNewPrivileges=yes          <span class="c"># can't gain privileges, e.g. through setuid programs (Chapter 4)</span>
+ProtectSystem=strict         <span class="c"># the whole filesystem is read-only to it…</span>
+ReadWritePaths=/var/lib/stagedoor /var/log/stagedoor   <span class="c"># …except these</span>
+ProtectHome=yes              <span class="c"># /home and /root are invisible</span>
+PrivateTmp=yes               <span class="c"># its own empty /tmp</span></code></pre>
+
+<p><code>systemd-analyze security stagedoor</code> scores a unit and lists what else could be restricted. <a href="#ch18">Chapter 18</a> hardens Stagedoor's units this way; add these lines one at a time and test after each, because an app that writes somewhere unexpected will fail with “Read-only file system”.</p>
+
+<!-- ======================================================== 6.8 -->
+<h2 class="sec" id="s6-8"><span class="n">6.8</span>Across distributions</h2>
+
+<p>Ubuntu, Debian, the RHEL family and Amazon Linux all use systemd, so units, <code>systemctl</code> and timers are the same. Versions differ (Ubuntu 24.04 has systemd 255, Debian 11 has 247, RHEL 9 has 252), and a few newer settings don't exist on older ones: <code>systemd-analyze verify</code> on the target machine catches that. Package-provided services differ in name: <code>ssh</code> on Ubuntu is <code>sshd</code> on RHEL, <code>cron</code> is <code>crond</code>.</p>
+
+<div class="box box-provider">
+  <p class="label">On containers and minimal systems</p>
+  <p>Containers normally don't run systemd: the container's main process is PID 1, and the container runtime or Kubernetes does the supervising, restarting, stopping and logging (<a href="#ch19">Chapter 19</a>). The ideas carry over directly: run in the foreground, log to standard output, handle <code>SIGTERM</code>. Alpine Linux uses OpenRC instead of systemd, and a few minimal distributions use others; their service files look different, but do the same jobs.</p>
+</div>
+
+<!-- ======================================================== 6.9 -->
+<h2 class="sec" id="s6-9"><span class="n">6.9</span>Lab: from terminal to service</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 6 · A service, a crash, a stop, and a timer</p>
+  <p><strong>You'll</strong> install a stand-in for Stagedoor's app as a service in the layout from Chapter 3, crash it and watch systemd restart it, stop it gracefully, break it on purpose, reproduce the cron <code>PATH</code> failure, and replace the job with a timer. <strong>You need</strong> an Ubuntu 24.04 VM with <code>sudo</code> where PID 1 is systemd (Multipass is easiest, <a href="#appC">Appendix C</a>), plus <code>curl</code>. <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> the last step. These outputs came from an Ubuntu 24.04 system container on the test machine, user <code>tiago</code>, host <code>lab</code>; times and PIDs will differ, and on a VM the <code>CGroup:</code> line reads <code>/system.slice/stagedoor.service</code>.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Get the files.</strong> In a directory <code>~/lab6</code>, save the unit from 6.2 as <code>stagedoor.service</code>, and these three files:
+<p class="code-title"><span>app.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># app.py · a stand-in for Stagedoor's app: says who it runs as, and stops gracefully on SIGTERM</span>
+<span class="k">import</span> http.server, os, pwd, signal, threading
+
+<span class="k">class</span> App(http.server.BaseHTTPRequestHandler):
+    <span class="k">def</span> do_GET(self):
+        umask = os.umask(0); os.umask(umask)            <span class="c"># read the umask without changing it</span>
+        body = (f<span class="s">"stagedoor {os.environ.get('STAGEDOOR_VERSION', '?')} as {pwd.getpwuid(os.getuid()).pw_name}, "</span>
+                f<span class="s">"umask {umask:04o}, database {os.environ.get('STAGEDOOR_DB_HOST', 'not set')}\n"</span>).encode()
+        self.send_response(200)
+        self.send_header(<span class="s">"Content-Length"</span>, str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+server = http.server.ThreadingHTTPServer((<span class="s">"127.0.0.1"</span>, 8000), App)
+server.daemon_threads = <span class="k">False</span>
+
+<span class="k">def</span> graceful(signum, frame):
+    print(<span class="s">"SIGTERM: finishing requests in progress"</span>, flush=<span class="k">True</span>)
+    threading.Thread(target=server.shutdown).start()
+
+signal.signal(signal.SIGTERM, graceful)
+print(f<span class="s">"listening on 127.0.0.1:8000 as pid {os.getpid()}"</span>, flush=<span class="k">True</span>)
+server.serve_forever()
+server.server_close()
+print(<span class="s">"stopped cleanly"</span>, flush=<span class="k">True</span>)</code></pre>
+<p class="code-title"><span>stagedoor.env</span><span>environment file</span></p>
+<pre><code>STAGEDOOR_VERSION=2026.03.1
+STAGEDOOR_DB_HOST=10.40.0.11</code></pre></li>
+  <li><strong>Install it the way Chapters 3 and 4 laid it out</strong>: a system user, a release directory with a <code>current</code> link, configuration readable only by root and the app's group. <code>install</code> copies a file and sets its owner and mode in one step. Then check the unit:
+<pre><code>sudo useradd --system --user-group --no-create-home --shell /usr/sbin/nologin stagedoor
+sudo install -d -o root -g root -m 755 /opt/stagedoor/releases/2026.03.1
+sudo install -o root -g root -m 644 app.py /opt/stagedoor/releases/2026.03.1/app.py
+sudo ln -s releases/2026.03.1 /opt/stagedoor/current
+sudo install -d -o root -g stagedoor -m 750 /etc/stagedoor
+sudo install -o root -g stagedoor -m 640 stagedoor.env /etc/stagedoor/stagedoor.env
+sudo install -o root -g root -m 644 stagedoor.service /etc/systemd/system/stagedoor.service
+systemd-analyze verify /etc/systemd/system/stagedoor.service &amp;&amp; echo "unit file OK"</code></pre>
+<pre><code>unit file OK</code></pre>
+  The app's code belongs to root, not to <code>stagedoor</code>: the app can read its code but not change it.</li>
+  <li><strong>Start it, enable it, look at it.</strong>
+<pre><code>sudo systemctl daemon-reload
+sudo systemctl enable --now stagedoor
+systemctl status stagedoor --no-pager</code></pre>
+<pre><code>● stagedoor.service - Stagedoor ticketing app
+     Loaded: loaded (/etc/systemd/system/stagedoor.service; enabled; preset: enabled)
+     Active: active (running) since Fri 2026-11-27 08:23:26 UTC; 5s ago
+   Main PID: 230 (python3)
+      Tasks: 1 (limit: 19281)
+     Memory: 11.0M ()
+     CGroup: /docker/16df4c906790d65db95b829c7aaa291ec22255662bc963de5f2dfc74f8b4a196/system.slice/stagedoor.service
+             └─230 /usr/bin/python3 /opt/stagedoor/current/app.py</code></pre>
+  <code>enabled</code>: it will start at boot. <code>active (running)</code>: it's running now. Ask it who it is:
+<pre><code>curl -s http://127.0.0.1:8000/</code></pre>
+<pre><code>stagedoor 2026.03.1 as stagedoor, umask 0027, database 10.40.0.11</code></pre>
+  User, umask and configuration all came from the unit, not from whoever started it.</li>
+  <li><strong>Crash it.</strong> Send <code>SIGKILL</code> to the app through systemd, wait, and read the log:
+<pre><code>sudo systemctl kill --signal=SIGKILL stagedoor
+sleep 3
+sudo journalctl -u stagedoor --no-pager -n 6 -o short</code></pre>
+<pre><code>Nov 27 08:23:41 lab systemd[1]: stagedoor.service: Main process exited, code=killed, status=9/KILL
+Nov 27 08:23:41 lab systemd[1]: stagedoor.service: Failed with result 'signal'.
+Nov 27 08:23:43 lab systemd[1]: stagedoor.service: Scheduled restart job, restart counter is at 1.
+Nov 27 08:23:43 lab systemd[1]: Starting stagedoor.service - Stagedoor ticketing app...
+Nov 27 08:23:43 lab systemd[1]: Started stagedoor.service - Stagedoor ticketing app.
+Nov 27 08:23:43 lab python3[296]: listening on 127.0.0.1:8000 as pid 296</code></pre>
+  systemd saw the main process die from signal 9, waited <code>RestartSec</code>, and started a new one: no person, no terminal, no <code>nohup</code>.</li>
+  <li><strong>Stop it gracefully.</strong>
+<pre><code>sudo systemctl stop stagedoor
+sudo journalctl -u stagedoor --no-pager -n 5 -o short</code></pre>
+<pre><code>Nov 27 08:23:51 lab python3[316]: SIGTERM: finishing requests in progress
+Nov 27 08:23:51 lab systemd[1]: Stopping stagedoor.service - Stagedoor ticketing app...
+Nov 27 08:23:52 lab python3[316]: stopped cleanly
+Nov 27 08:23:52 lab systemd[1]: stagedoor.service: Deactivated successfully.
+Nov 27 08:23:52 lab systemd[1]: Stopped stagedoor.service - Stagedoor ticketing app.</code></pre>
+  systemd sent <code>SIGTERM</code>; the app's handler (from <a href="#ch5">Chapter 5</a>) finished cleanly, well inside the 30 seconds. Start it again: <code>sudo systemctl start stagedoor</code>.</li>
+  <li><strong>Override one setting with a drop-in</strong>, and check what systemd now uses:
+<pre><code>sudo mkdir -p /etc/systemd/system/stagedoor.service.d
+printf "[Service]\nTimeoutStopSec=45\n" | sudo tee /etc/systemd/system/stagedoor.service.d/override.conf &gt; /dev/null
+sudo systemctl daemon-reload
+systemctl cat stagedoor --no-pager | tail -4
+systemctl show stagedoor -p TimeoutStopUSec</code></pre>
+<pre><code>
+# /etc/systemd/system/stagedoor.service.d/override.conf
+[Service]
+TimeoutStopSec=45
+TimeoutStopUSec=45s</code></pre></li>
+  <li><strong>Break it on purpose: a typo in <code>ExecStart=</code>.</strong> Change <code>app.py</code> to <code>ap.py</code> in the unit file, reload, start, and look:
+<pre><code>sudo sed -i "s|/opt/stagedoor/current/app.py|/opt/stagedoor/current/ap.py|" /etc/systemd/system/stagedoor.service
+sudo systemctl daemon-reload; sudo systemctl start stagedoor; sleep 7
+systemctl is-active stagedoor; sudo journalctl -u stagedoor --no-pager -n 3 -o cat</code></pre>
+<pre><code>activating
+/usr/bin/python3: can't open file '/opt/stagedoor/current/ap.py': [Errno 2] No such file or directory
+stagedoor.service: Main process exited, code=exited, status=2/INVALIDARGUMENT
+stagedoor.service: Failed with result 'exit-code'.</code></pre>
+  <code>activating</code>, because it's between restarts. Leave it for a minute and the counter keeps climbing (<code>sudo journalctl -u stagedoor -o cat | grep "restart counter" | tail -1</code>):
+<pre><code>stagedoor.service: Scheduled restart job, restart counter is at 13.</code></pre>
+  This is the restart loop from 6.3: with <code>RestartSec=2</code>, each attempt is just slow enough not to hit the start limit. Put <code>app.py</code> back (the same <code>sed</code>, the other way round), <code>daemon-reload</code> and <code>sudo systemctl restart stagedoor</code>. On the test machine that restart was refused:
+<pre><code>Job for stagedoor.service failed because the control process exited with error code.
+See "systemctl status stagedoor.service" and "journalctl -xeu stagedoor.service" for details.</code></pre>
+  and the status explained why:
+<pre><code>Nov 27 08:31:31 lab systemd[1]: Stopped stagedoor.service - Stagedoor ticketing app.
+Nov 27 08:31:31 lab systemd[1]: stagedoor.service: Start request repeated too quickly.
+Nov 27 08:31:31 lab systemd[1]: stagedoor.service: Failed with result 'exit-code'.
+Nov 27 08:31:31 lab systemd[1]: Failed to start stagedoor.service - Stagedoor ticketing app.</code></pre>
+  The restart, on top of the loop's attempts, crossed the limit of five starts in ten seconds. Clear the counter and start again:
+<pre><code>sudo systemctl reset-failed stagedoor; sudo systemctl start stagedoor; sleep 1; systemctl is-active stagedoor</code></pre>
+<pre><code>active</code></pre></li>
+  <li><strong>The cron job that works by hand.</strong> Save the stand-in report tool and the job script:
+<p class="code-title"><span>payouts-report</span><span>bash</span></p>
+<pre><code>#!/usr/bin/env bash
+<span class="c"># payouts-report · stands in for the tool that writes the venues' payout file</span>
+echo <span class="s">"$(date '+%F %T') payouts written for 612 venues"</span></code></pre>
+<p class="code-title"><span>payouts.sh</span><span>bash</span></p>
+<pre><code>#!/usr/bin/env bash
+<span class="c"># payouts.sh · the nightly job: run the report tool, by name, as it worked by hand</span>
+payouts-report</code></pre>
+  Install the tool where <code>pip</code> put Leonor's, and run the job by hand:
+<pre><code>sudo install -m 755 payouts-report /usr/local/bin/payouts-report
+sudo install -d /opt/jobs
+sudo install -m 755 payouts.sh /opt/jobs/payouts.sh
+/opt/jobs/payouts.sh; echo "exit status: $?"</code></pre>
+<pre><code>2026-11-27 08:23:52 payouts written for 612 venues
+exit status: 0</code></pre>
+  Now schedule it every minute with cron. Ubuntu 24.04's cron would inherit a <code>PATH</code> that includes <code>/usr/local/bin</code>, so to reproduce <code>door-1</code> (Debian 11), set cron's old default explicitly in the crontab:
+<pre><code>printf "PATH=/usr/bin:/bin\n* * * * * /opt/jobs/payouts.sh &gt;&gt; /tmp/payouts.log 2&gt;&amp;1\n" | crontab -
+crontab -l</code></pre>
+<pre><code>PATH=/usr/bin:/bin
+* * * * * /opt/jobs/payouts.sh &gt;&gt; /tmp/payouts.log 2&gt;&amp;1</code></pre>
+  After a minute, <code>cat /tmp/payouts.log</code>:
+<pre><code>/opt/jobs/payouts.sh: line 3: payouts-report: command not found</code></pre>
+  Exactly <code>door-1</code>'s five nights. (Without <code>&gt;&gt; /tmp/payouts.log 2&gt;&amp;1</code>, that line would have gone to local mail.) Remove the crontab: <code>crontab -r</code>.</li>
+  <li><strong>The same job as a timer.</strong> Save these two units:
+<p class="code-title"><span>payouts.service</span><span>systemd unit</span></p>
+<pre><code>[Unit]
+Description=Nightly venue payouts report
+
+[Service]
+Type=oneshot
+User=stagedoor
+ExecStart=/opt/jobs/payouts.sh</code></pre>
+<p class="code-title"><span>payouts.timer</span><span>systemd unit</span></p>
+<pre><code>[Unit]
+Description=Run the payouts report every night at 03:00 Lisbon time
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 Europe/Lisbon
+Persistent=true
+
+[Install]
+WantedBy=timers.target</code></pre>
+  Install them, and run the job now, exactly as the timer will:
+<pre><code>sudo install -m 644 payouts.service payouts.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start payouts.service
+sudo journalctl -u payouts.service --no-pager -n 4 -o short</code></pre>
+<pre><code>Nov 27 08:30:25 lab systemd[1]: Starting payouts.service - Nightly venue payouts report...
+Nov 27 08:30:25 lab payouts.sh[465]: 2026-11-27 08:30:25 payouts written for 612 venues
+Nov 27 08:30:25 lab systemd[1]: payouts.service: Deactivated successfully.
+Nov 27 08:30:25 lab systemd[1]: Finished payouts.service - Nightly venue payouts report.</code></pre>
+  It worked, and its output is in the journal with the service's name. (systemd's default <code>PATH</code> for services includes <code>/usr/local/bin</code>; even so, the real fix for a job like this is a full path in the script, so it doesn't depend on anyone's default.) Enable the timer and see when it fires:
+<pre><code>sudo systemctl enable --now payouts.timer
+systemctl list-timers payouts.timer --no-pager</code></pre>
+<pre><code>Created symlink /etc/systemd/system/timers.target.wants/payouts.timer → /etc/systemd/system/payouts.timer.
+NEXT                        LEFT LAST PASSED UNIT          ACTIVATES
+Sat 2026-11-28 03:00:00 UTC  18h -         - payouts.timer payouts.service
+
+1 timers listed.
+Pass --all to see loaded but inactive timers, too.</code></pre></li>
+  <li><strong>Check the time zone.</strong> The test machine runs in UTC. In November, Lisbon is on UTC too:
+<pre><code>systemd-analyze calendar --iterations=2 "*-*-* 03:00:00 Europe/Lisbon"</code></pre>
+<pre><code>Normalized form: *-*-* 03:00:00 Europe/Lisbon
+    Next elapse: Sat 2026-11-28 03:00:00 UTC
+       From now: 18h left
+   Iteration #2: Sun 2026-11-29 03:00:00 UTC
+       From now: 1 day 18h left</code></pre>
+  and in summer the same 03:00 in Lisbon is 02:00 UTC:
+<pre><code>systemd-analyze calendar --base-time="2026-07-01 12:00 UTC" "*-*-* 03:00:00 Europe/Lisbon" | head -2</code></pre>
+<pre><code>Normalized form: *-*-* 03:00:00 Europe/Lisbon
+    Next elapse: Thu 2026-07-02 02:00:00 UTC</code></pre></li>
+  <li><strong>Clean up.</strong>
+<pre><code>sudo systemctl disable --now payouts.timer stagedoor
+sudo rm /etc/systemd/system/payouts.service /etc/systemd/system/payouts.timer /etc/systemd/system/stagedoor.service
+sudo rm -r /etc/systemd/system/stagedoor.service.d /etc/stagedoor /opt/stagedoor /opt/jobs
+sudo rm /usr/local/bin/payouts-report
+sudo systemctl daemon-reload
+sudo userdel stagedoor</code></pre></li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Add the sandboxing lines from 6.7 one at a time, restarting after each, and run <code>systemd-analyze security stagedoor</code> before and after. (2) Change <code>Restart=on-failure</code> to <code>Restart=always</code>, stop the service with <code>systemctl stop</code>, and confirm it stays stopped: <code>always</code> still respects a deliberate stop. (3) Make <code>payouts.sh</code> exit with status 1 and look at <code>systemctl status payouts.service</code> and <code>systemctl --failed</code>.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: Wednesday 4 March</p>
+  <p>On <code>door-1</code>, the payouts job becomes <code>payouts.service</code> and <code>payouts.timer</code>, at 03:00 Lisbon time, with <code>Persistent=true</code> and the tool's full path in the script. Rafaela runs it with <code>systemctl start</code> on Monday afternoon; the missing files reach the bank that evening. She also adds an alert for any unit in the failed state, so a job that fails is noticed the same morning rather than after five nights.</p>
+  <p>On Wednesday 4 March, between on-sales, the app moves on each web server in turn: into <code>/opt/stagedoor/releases/2026.03.1</code>, running as <code>stagedoor</code> under <code>stagedoor.service</code>, with <code>UMask=0027</code> and its settings in <code>/etc/stagedoor/stagedoor.env</code>. The old hand-started process is stopped with <code>SIGTERM</code>, the new service started, the health check confirmed, then the next server. Once nothing has <code>nohup.out</code> open any more, Tiago deletes it, and this time the space comes back (<a href="#ch3">Chapter 3</a>). The deploy script shrinks to three steps per server: unpack the release, switch <code>current</code> with <code>mv -T</code>, <code>systemctl restart stagedoor</code>.</p>
+  <p>One thing comes along unchanged: the app's own log file, <code>/var/log/stagedoor/stagedoor.log</code>, still at the debug level Sasha's team switched on in February. Nobody looks at its size. <a href="#ch7">Chapter 7</a> does.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s6-10"><span class="n">6.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Editing a unit under <code>/usr/lib/systemd</code></td><td>The next package upgrade silently undoes it.</td><td>A drop-in in <code>/etc/systemd/system/&lt;unit&gt;.d/</code>.</td></tr>
+      <tr><td>Forgetting <code>daemon-reload</code></td><td>systemd keeps using the old unit; it warns in <code>status</code>.</td><td>Reload after every change (or use <code>systemctl edit</code>).</td></tr>
+      <tr><td><code>start</code> without <code>enable</code></td><td>Runs now, gone after the next reboot.</td><td><code>enable --now</code>.</td></tr>
+      <tr><td>Shell syntax in <code>ExecStart=</code></td><td>Pipes, redirections and <code>&amp;&amp;</code> are passed as arguments, not interpreted.</td><td>A script with <code>exec</code>, or <code>ExecStart=/bin/sh -c '…'</code> if you must.</td></tr>
+      <tr><td><code>After=</code> without <code>Wants=</code> (or the reverse)</td><td>No order, or no dependency, and a race at boot.</td><td>Both, when you mean both (Figure 6.2).</td></tr>
+      <tr><td>Relying on a default <code>PATH</code> in scheduled jobs</td><td>Works by hand, fails at 03:00, silently.</td><td>Full paths in the job; journal output; alert on failed units.</td></tr>
+      <tr><td>Schedules without a time zone on a UTC server</td><td>Jobs move by an hour twice a year.</td><td><code>OnCalendar=… Europe/Lisbon</code>, checked with <code>systemd-analyze calendar</code>.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum6">
+  <h2 class="sec" id="sum6"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li><strong>systemd</strong> starts, supervises, stops, logs and limits services. Everything it manages is a <strong>unit</strong>.</li>
+    <li>Your units go in <code>/etc/systemd/system/</code>; change packaged ones with <strong>drop-ins</strong>; <code>daemon-reload</code> after every change.</li>
+    <li>A service unit names the user, environment, working directory, command (full path), restart policy and stop timeout. The app stays in the foreground and logs to standard output.</li>
+    <li><strong>Enabled</strong> means it starts at boot; <strong>active</strong> means it runs now.</li>
+    <li><code>Wants=</code>/<code>Requires=</code> pull units in; <code>After=</code>/<code>Before=</code> order them. Use both when you need both.</li>
+    <li>A <strong>timer</strong> runs a <code>oneshot</code> service on a schedule, with a known environment, logs, missed-run catch-up and a time zone; cron has none of these by default.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Service manager</dt><dd>The program (systemd on most servers) that starts, supervises, restarts and stops services.</dd>
+    <dt>Unit</dt><dd>Anything systemd manages, described by a unit file: a service, timer, target, socket, mount or path.</dd>
+    <dt>Unit file</dt><dd>The text file that describes a unit, in sections such as <code>[Unit]</code>, <code>[Service]</code> and <code>[Install]</code>.</dd>
+    <dt>Drop-in</dt><dd>A small <code>.conf</code> file in a unit's <code>.d/</code> directory that overrides or adds settings.</dd>
+    <dt>Target</dt><dd>A unit that groups other units into a milestone, such as <code>multi-user.target</code>.</dd>
+    <dt>Enabled</dt><dd>Hooked into a target so that the unit starts automatically at boot.</dd>
+    <dt>Restart loop</dt><dd>A service that fails at start and is restarted repeatedly by its restart policy.</dd>
+    <dt>Timer</dt><dd>A systemd unit that starts another unit on a schedule or after a delay.</dd>
+    <dt>cron</dt><dd>The traditional scheduler that runs commands from crontab files at given times.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>A service is <code>enabled</code> but <code>inactive (dead)</code>. What do those two words tell you? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>It will be started at the next boot (enabled), but it isn't running now (inactive): someone stopped it, or it finished or failed without a restart policy. <code>systemctl status</code> and <code>journalctl -u</code> show which.</p></details>
+    </li>
+    <li>
+      <p>Write a drop-in that makes nginx restart automatically if it crashes, without touching the packaged unit. Where does the file go? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>/etc/systemd/system/nginx.service.d/restart.conf</code> containing <code>[Service]</code>, <code>Restart=on-failure</code> and, say, <code>RestartSec=2</code>; then <code>sudo systemctl daemon-reload</code>. <code>systemctl cat nginx</code> confirms it's applied.</p></details>
+    </li>
+    <li>
+      <p>Explain why a unit with only <code>After=postgresql.service</code> may start before PostgreSQL on one machine and never start PostgreSQL at all on another. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p><code>After=</code> only orders: <em>if</em> both are being started in the same transaction, this unit waits. If PostgreSQL isn't enabled, nothing pulls it in, so it never starts. Add <code>Wants=</code> (or <code>Requires=</code>) to pull it in, and keep <code>After=</code> for the order.</p></details>
+    </li>
+    <li>
+      <p>After you fix a typo in a unit and run <code>systemctl restart</code>, you get “Start request repeated too quickly”. What happened, and what do you run? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p>The broken unit had been in a restart loop; with your restart, it crossed the start limit (by default five starts in ten seconds), so systemd refuses further starts. Run <code>sudo systemctl reset-failed &lt;unit&gt;</code>, then start it. Make sure you ran <code>daemon-reload</code> after fixing the file.</p></details>
+    </li>
+    <li>
+      <p>Design a timer for a backup that must run once a night at 02:30 Lisbon time, must never run twice at once, and must run after a reboot if the machine was off at 02:30. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>A <code>backup.service</code> with <code>Type=oneshot</code>, its own user and full paths, and a <code>backup.timer</code> with <code>OnCalendar=*-*-* 02:30:00 Europe/Lisbon</code> and <code>Persistent=true</code>, enabled with <code>systemctl enable --now backup.timer</code>. systemd never starts a service that's already running, so runs can't overlap; check with <code>systemd-analyze calendar</code> and test with <code>systemctl start backup.service</code>.</p></details>
+    </li>
+    <li>
+      <p>Compare running an app with <code>nohup … &amp;</code> and as a systemd service, for a reboot, a crash, a deploy and a question about last night's logs. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Reboot: <code>nohup</code> doesn't come back; an enabled service does. Crash: <code>nohup</code> stays dead; the service is restarted. Deploy: with <code>nohup</code> someone signals and restarts by hand; the service gets <code>systemctl restart</code> with <code>SIGTERM</code> and a timeout. Logs: <code>nohup.out</code> grows without timestamps or limits; the journal stores timestamped, per-service logs with retention (<a href="#ch7">Chapter 7</a>).</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li><code>man systemd.service</code>, <code>man systemd.unit</code>, <code>man systemd.exec</code> (users, environment, sandboxing), <code>man systemd.timer</code>, <code>man systemd.time</code> (calendar syntax).</li>
+    <li>The systemd project's <a href="https://systemd.io/">documentation</a>.</li>
+    <li>Ubuntu Server documentation on <a href="https://documentation.ubuntu.com/server/">services and systemd</a>.</li>
+    <li><code>man 5 crontab</code> on the server you're using: it states that version's environment and <code>PATH</code>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="#ch7">7 · Logs</a></div>
+</nav>
