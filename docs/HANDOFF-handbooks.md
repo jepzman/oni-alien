@@ -183,6 +183,6 @@ facts above. 5. Sample chapter: **9** (policies). 6. On the Series 3 shelf now, 
 
 ## 8. Next handbooks (proposed 2026-11-27)
 
-Outlines for Handbook 3 (Kubernetes), 4 (Terraform) and 5 (PostgreSQL), sketches for 6–8, the mechanics of starting a
-book, and the Larder canon to respect (including the Kubernetes conflict between Handbook 1 ch. 19 and Handbook 2
-ch. 16): **`docs/HANDOFF-handbooks-next.md`**.
+Owner, 2026-11-27: Linux first, then Kubernetes, Terraform (main tool) and PostgreSQL; a new fictional story instead
+of Larder (Stagedoor, a Lisbon ticketing platform, proposed); no sample chapters yet. Outlines for Handbooks 3–6,
+sketches for 7–8, and the mechanics of starting a book: **`docs/HANDOFF-handbooks-next.md`**.
