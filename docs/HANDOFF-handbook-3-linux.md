@@ -1,7 +1,7 @@
 # Handoff: Handbook 3 · Linux for Cloud Engineers
 
-Status as of **2026-11-27**: **Parts I–IV (chapters 1–16) written and checked**; chapters 17–21 and appendices
-A–C still to write (D and E are generated). `BOOK["next"] = 17`.
+Status as of **2026-11-27**: **complete: all 21 chapters (Parts I–VI) and appendices A–E written and checked.**
+`BOOK["next"]` has been removed. What remains is in §5 (runs on a real VM of what couldn't run here).
 
 Read first: `docs/HANDOFF-handbooks.md` §1–2 (what a handbook is, voice, building blocks, look),
 `docs/HANDOFF-handbooks-next.md` §0 (mechanics) and §3 (this book's outline), and **`docs/stagedoor-casebook.md`**
@@ -21,8 +21,8 @@ Read first: `docs/HANDOFF-handbooks.md` §1–2 (what a handbook is, voice, buil
 
 | What | Where |
 | --- | --- |
-| Outline | `content/handbooks/linux/book.py` (key `linux`, no. 3, `next=17`) |
-| Chapters | `content/handbooks/linux/<nn>-<slug>.html`; written: 01–16 |
+| Outline | `content/handbooks/linux/book.py` (key `linux`, no. 3; complete, no `next`) |
+| Chapters | `content/handbooks/linux/<nn>-<slug>.html`; written: 01–21; appendices A–C hand-written (`appendix-a-cheat-sheet.html`, `appendix-b-distributions.html`, `appendix-c-lab-setup.html`), D and E generated |
 | Build | `BOOKS` in `scripts/build_handbooks.py` includes `linux`; `python3 scripts/build_notes.py` |
 | Cover | `.book--hb3` in `public/assets/bujo.css` (graphite `#2A2A2A`, silver band `#B5B5B5`) |
 | PDFs | `handbooks/linux` added to `rebuild` in `pdf-build.json` |
@@ -131,6 +131,40 @@ Forum lifetimes (200 days from March 2026, 100 from 2027, 47 from 2029).
 
 Checks: same as before; 8 new figures inspected (13.2 and 16.2 fixed); print check below.
 
+## 3d. Parts V and VI (chapters 17–21) and appendices: written 2026-11-27
+
+| Ch. | Story (casebook §4) | Lab | Run where |
+| --- | --- | --- | --- |
+| 17 | clean-up script deletes uploads | `cleanup-v1.sh` (disaster in a scratch tree), ShellCheck, `cleanup-releases.sh`, `tmpdemo.sh` | VM |
+| 18 | assessment's other findings; a baseline | inventory, `systemd-analyze security` 9.2 → 1.5 with `hardening.conf`, ProtectSystem break, `cloud-init schema` on `baseline.yaml`, Lynis | systemd container (image `hb3-systemd2` adds nftables, openssh-server, cloud-init, lynis, apache2-utils) |
+| 19 | 10-second container stops, zombies | `unshare` one namespace at a time, `minibox.sh` on an exported `ubuntu:24.04` rootfs, overlayfs whiteout, shell vs exec `CMD`, `--init`, cgroup of a container, OOM | VM + Docker (`python:3.12-slim`) |
+| 20 | Tiago's first on-call | `first5.sh`, `mystery.sh` (disguised `dd` loop) | fresh systemd container `door-2` |
+| 21 | `door-5` built, drilled | `build-web.sh` + `files/` + `keys/`: check, build, idempotent re-run, drift, `ab` drill (fails: app backlog 5), release 2026.11.2, drill again, crash drill | fresh systemd container `door-5` |
+
+**Bugs found by testing, kept in the text as lessons:** `cleanup-releases.sh` counted one empty “release” with no
+matches (ch. 17 says so); `hardening.conf` first had end-of-line comments, which systemd reads as values (logged
+“path is not absolute, ignoring”, settings silently skipped, score 1.8): found by ch. 20's `first5.sh`; ch. 6 §6.7
+and ch. 18 §18.4/§18.7 examples were also changed to comments-on-their-own-line, and both chapters now say why;
+`build-web.sh` drafts: `set -e` off inside `if`, `grep -q` + `pipefail` SIGPIPE, release switched without restart,
+`/run/sshd` missing before `sshd -t` on 24.04 (ch. 21 §21.3 lists all four). sshd itself tolerates end-of-line
+comments (tested), so ch. 16's files were left as they were.
+
+**Real findings used in the text:** Python's `http.server` listen backlog of 5 caused the first drill's 504s (ch. 21);
+Docker reported `OOMKilled false` for a container the kernel had OOM-killed (cgroup v1 here; ch. 19 says to trust
+the kernel log); a PID-1 shell (`/bin/sh -c`, dash) and a PID-1 Python without a handler both ignore SIGTERM (10 s,
+137); an orphan under a Python PID 1 stays a zombie, `--init` reaps it.
+
+**Not run here:** auditd rules (no kernel audit in the container; ch. 18 says so); the cloud-init baseline was
+validated, not booted; `ab` drills ran on one machine against itself (not a real load-balanced pair).
+
+**Appendices:** A (cheat sheet, grouped by question, every row from a chapter), B (distributions compared,
+consolidated from the chapters' boxes), C (lab setup: Multipass recommended, which chapters need a VM, the package
+list, how the labs were tested and what the test machine couldn't do). D: 162 terms; E: 126 answers.
+
+Final checks: lab files byte-identical (checker), outputs verbatim, unique ids and resolving references across
+`all.html`, every figure screenshotted at 1280 px light and dark and 375 px dark (each inspected at least once, 7 fixed), every page checked for overflow, appendices and contents page with
+no page overflow, print of `all.html` 408 A4 pages with 0 clipped blocks.
+
 ## 4. Promises Part I made (keep them)
 
 - Ch. 5: exit code 137 = 128 + SIGKILL; graceful restart so in-flight requests finish (ch. 3 promised).
@@ -160,17 +194,11 @@ Promises from Parts II–III for later chapters:
 - Ch. 21: rebuild a web server from a script; a load test against a copy (Joana's question, ch. 12); the new database
   server built from a checklist by end of August (ch. 8, 11).
 
-## 5. Next
+## 5. Open items
 
-1. ~~Part IV~~ done. Next: Part V (17–19): scripts (ShellCheck is installed here), hardening (`systemd-analyze
-   security` in the systemd container; a tested cloud-init baseline needs cloud-init: try `cloud-init schema` /
-   `cloud-init single` in a container, or say what wasn't run), containers by hand (`unshare`, cgroups: this kernel has
-   cgroup v1 controllers plus a v2 mount at `/sys/fs/cgroup/unified`). Old note on Part IV: Ch. 13 (`ip`, `ss`, `dig`, netplan) and 14 (curl -v, openssl s_client,
-   tcpdump; the certificate that expired on a Sunday) can mostly run here; IPv6 is disabled in this kernel. Ch. 15
-   (nftables/ufw) needs a kernel that allows nftables: try the privileged container, else say what wasn't run.
-   Ch. 16 (SSH; Marco's key in root's `authorized_keys`) can run with `sshd` in the systemd container.
-2. Then Part V (17–19), Part VI (20–21), appendices A–C, then remove `next` from `book.py`.
-3. After each part: the checks in `HANDOFF-handbooks-next.md` §0.8, update this file and the casebook.
-4. To get the systemd container back in a new session: start `dockerd`, build the image from a Dockerfile like the
-   one above (`FROM ubuntu:24.04`, apt-get install systemd systemd-sysv python3 nginx-light logrotate cron curl procps
-   iproute2 sudo less unattended-upgrades needrestart), and run it with the flags above.
+- [ ] Run the systemd chapters' labs (6, 7, 10, 18, 20, 21) once on a real Ubuntu 24.04 VM (Multipass), especially
+  cgroup v2 behaviour (ch. 10's `oom-kill` result, ch. 19's `memory.max`), online `resize2fs` (ch. 11), LVM, auditd.
+- [ ] Boot `baseline.yaml` once with `multipass launch --cloud-init` (ch. 18).
+- [ ] Run ch. 6's cron step on a real Debian 11 machine to confirm its default `PATH` (documented, not run).
+- [ ] Confirm the Pages workflow renders Handbook 3's PDFs (listed in `pdf-build.json`).
+- Handbook 4 (Kubernetes) is next in `docs/HANDOFF-handbooks-next.md`; Stagedoor's 2028 is its story.

@@ -98,13 +98,17 @@
 
 <p class="code-title"><span>hardening.conf</span><span>systemd drop-in</span></p>
 <pre><code># /etc/systemd/system/stagedoor.service.d/hardening.conf · take away what the app doesn't need
+# (systemd allows comments only on lines of their own, never after a setting)
 [Service]
-NoNewPrivileges=yes                     # no setuid programs, no gaining privileges
-CapabilityBoundingSet=                  # no root powers at all, even by accident
-ProtectSystem=strict                    # the whole filesystem is read-only…
-ReadWritePaths=/var/lib/stagedoor       # …except its own data
+# no setuid programs, no gaining privileges, and no root powers at all
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+# the whole filesystem read-only, except the app's own data
+ProtectSystem=strict
+ReadWritePaths=/var/lib/stagedoor
 ProtectHome=yes
 PrivateTmp=yes
+# no devices, no changes to the kernel, its logs, the clock or the hostname
 PrivateDevices=yes
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
@@ -116,6 +120,7 @@ RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
+# only IP and local sockets, only the system calls a normal service makes
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
@@ -128,7 +133,7 @@ SystemCallFilter=~@privileged @resources</code></pre>
   <li><strong>System calls</strong>: <code>SystemCallFilter=@system-service</code> allows the calls a normal service makes and refuses the rest (mounting, rebooting, loading kernel modules, tracing other processes); <code>RestrictAddressFamilies</code> allows only IP and local sockets.</li>
 </ul>
 
-<p><code>systemd-analyze security</code> scores a unit's exposure from 0 (locked down) to 10 (nothing restricted) and lists each missing setting. In the lab, Stagedoor's app goes from 9.2 to 1.8 with this drop-in, and still works. Add settings in small groups and test the app after each: a service that writes somewhere you forgot fails with “Read-only file system”, and one that needs a refused system call is killed with <code>SIGSYS</code>, both of which the journal records.</p>
+<p><code>systemd-analyze security</code> scores a unit's exposure from 0 (locked down) to 10 (nothing restricted) and lists each missing setting. In the lab, Stagedoor's app goes from 9.2 to 1.5 with this drop-in, and still works. Add settings in small groups and test the app after each: a service that writes somewhere you forgot fails with “Read-only file system”, and one that needs a refused system call is killed with <code>SIGSYS</code>, both of which the journal records.</p>
 
 <div class="box box-key">
   <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
@@ -139,10 +144,12 @@ SystemCallFilter=~@privileged @resources</code></pre>
 <h2 class="sec" id="s18-4"><span class="n">18.4</span>An audit trail</h2>
 
 <p>Logs (<a href="#ch7">Chapter 7</a>) record what programs say. An <span class="term">audit trail</span> records what <em>happened</em>, from the kernel's point of view, whether or not any program mentions it: who changed <code>/etc/sudoers</code>, who ran a command as root, which process opened a sensitive file. On Linux this is the kernel's audit system, configured with <code>auditd</code> (<code>sudo apt install auditd</code>):</p>
-<pre><code>-w /etc/sudoers -p wa -k sudoers                 <span class="c"># writes or attribute changes to sudoers, tagged "sudoers"</span>
+<pre><code><span class="c"># writes or attribute changes to sudoers and the SSH configuration, tagged for searching</span>
+-w /etc/sudoers -p wa -k sudoers
 -w /etc/sudoers.d/ -p wa -k sudoers
 -w /etc/ssh/sshd_config.d/ -p wa -k sshd
--a always,exit -F arch=b64 -S execve -F euid=0 -F auid&gt;=1000 -F auid!=-1 -k root-commands   <span class="c"># commands run as root by a real person</span></code></pre>
+<span class="c"># commands run as root by a real person (audit UID 1000 and up)</span>
+-a always,exit -F arch=b64 -S execve -F euid=0 -F auid&gt;=1000 -F auid!=-1 -k root-commands</code></pre>
 <p>Rules like these go in <code>/etc/audit/rules.d/</code>; <code>sudo ausearch -k sudoers -i</code> finds the events, each with the <strong>audit UID</strong>: the person who logged in, which stays the same through <code>sudo</code> and <code>su</code>. That's the accountability question from Handbook 2, Chapter 1, answered at the level of the kernel. The audit trail is only useful if it survives an attacker: ship it off the server with the other logs. (The test system for this book is a container, where the kernel's audit system isn't available, so these rules are shown, not run.)</p>
 
 <!-- ======================================================== 18.5 -->
@@ -182,12 +189,16 @@ SystemCallFilter=~@privileged @resources</code></pre>
 <h2 class="sec" id="s18-7"><span class="n">18.7</span>A few kernel settings</h2>
 
 <p>A handful of <code>sysctl</code> settings (<a href="#ch12">Chapter 12</a>) are worth including in a baseline. Ubuntu already sets several; check each with <code>sysctl</code> before adding it:</p>
-<pre><code>kernel.kptr_restrict = 2               <span class="c"># hide kernel addresses from unprivileged users</span>
-kernel.dmesg_restrict = 1              <span class="c"># only root reads the kernel log</span>
-kernel.unprivileged_bpf_disabled = 1   <span class="c"># no BPF programs for ordinary users</span>
-net.ipv4.conf.all.rp_filter = 1        <span class="c"># drop packets with source addresses that can't be right</span>
-net.ipv4.conf.all.accept_redirects = 0 <span class="c"># ignore ICMP redirects</span>
-fs.protected_symlinks = 1              <span class="c"># the /tmp symlink tricks from Chapter 17's warning</span></code></pre>
+<pre><code><span class="c"># hide kernel addresses, and the kernel log, from unprivileged users</span>
+kernel.kptr_restrict = 2
+kernel.dmesg_restrict = 1
+<span class="c"># no BPF programs for ordinary users</span>
+kernel.unprivileged_bpf_disabled = 1
+<span class="c"># drop packets with impossible source addresses; ignore ICMP redirects</span>
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.conf.all.accept_redirects = 0
+<span class="c"># the /tmp symlink tricks from Chapter 17's warning</span>
+fs.protected_symlinks = 1</code></pre>
 
 <!-- ======================================================== 18.8 -->
 <h2 class="sec" id="s18-8"><span class="n">18.8</span>Across distributions: AppArmor and SELinux</h2>
@@ -203,7 +214,7 @@ fs.protected_symlinks = 1              <span class="c"># the /tmp symlink tricks
 <h2 class="sec" id="s18-9"><span class="n">18.9</span>Lab: measure, sandbox, baseline</h2>
 
 <div class="box box-lab">
-  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 18 · From 9.2 to 1.8</p>
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 18 · From 9.2 to 1.5</p>
   <p><strong>You'll</strong> inventory a server, install <a href="#ch6">Chapter 6</a>'s stand-in app, score its unit, sandbox it and score it again, break the sandbox on purpose, validate a cloud-init baseline, and run Lynis. <strong>You need</strong> an Ubuntu 24.04 VM with systemd and <code>sudo</code>, Lab 6's <code>app.py</code>, <code>stagedoor.service</code> and <code>stagedoor.env</code> in <code>~/lab18</code>, and <code>sudo apt install nginx openssh-server cloud-init lynis</code>. <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> as Lab 6, plus <code>sudo rm -r /etc/systemd/system/stagedoor.service.d /var/lib/stagedoor</code>. Outputs come from the systemd test system (a container, host <code>lab</code>).</p>
 </div>
 
@@ -274,8 +285,8 @@ systemctl is-active stagedoor; curl -s http://127.0.0.1:8000/
 systemd-analyze security stagedoor.service --no-pager | tail -1</code></pre>
 <pre><code>active
 stagedoor 2026.03.1 as stagedoor, umask 0027, database 10.40.0.11
-→ Overall exposure level for stagedoor.service: 1.8 OK :-)</code></pre>
-  Same app, same answer, a fraction of the exposure.</li>
+→ Overall exposure level for stagedoor.service: 1.5 OK :-)</code></pre>
+  Same app, same answer, a fraction of the exposure. Check the journal for warnings about the drop-in (<code>sudo journalctl --since -5min | grep hardening.conf</code>): there should be none. The first draft of this drop-in had comments at the ends of lines, which systemd read as part of the values; it logged <code>ReadWritePaths= path is not absolute, ignoring: …except</code> and silently skipped those settings, and the score still looked good (1.8). <a href="#ch20">Chapter 20</a>'s first-five-minutes check is what found it. Comments in unit files go on their own lines.</li>
   <li><strong>Break it on purpose: a path you forgot.</strong> Run a one-off command with the same filesystem protection, as the app's user, once without and once with <code>ReadWritePaths=</code>:
 <pre><code>sudo systemd-run --wait --quiet -p User=stagedoor -p ProtectSystem=strict touch /var/lib/stagedoor/report.csv; echo "exit status: $?"
 sudo systemd-run --wait --quiet -p User=stagedoor -p ProtectSystem=strict -p ReadWritePaths=/var/lib/stagedoor touch /var/lib/stagedoor/report.csv; echo "exit status: $?"</code></pre>
@@ -351,7 +362,7 @@ suggestion[]=BOOT-5264|Consider hardening system services</code></pre>
 
 <aside class="box box-story" aria-label="Stagedoor, solved">
   <p class="label">At Stagedoor: a baseline in three forms</p>
-  <p>By the end of the week, Table 18.2 is in the operations repository three times: as a checklist anyone can read, as <code>baseline.yaml</code> for first boots (checked with <code>cloud-init schema</code> in CI, next to ShellCheck), and as the beginning of a build script. <code>stagedoor.service</code> and the payouts timer get sandbox drop-ins; the app's score goes from 9.2 to 1.8, nginx's from 9.6 to 4.1 once its writable paths are listed. auditd records changes to sudoers, the SSH configuration and the firewall, and commands run as root by people, and its log ships with the rest. Unneeded packages go (a leftover FTP server on <code>door-3</code> among them).</p>
+  <p>By the end of the week, Table 18.2 is in the operations repository three times: as a checklist anyone can read, as <code>baseline.yaml</code> for first boots (checked with <code>cloud-init schema</code> in CI, next to ShellCheck), and as the beginning of a build script. <code>stagedoor.service</code> and the payouts timer get sandbox drop-ins; the app's score goes from 9.2 to 1.5, nginx's from 9.6 to 4.1 once its writable paths are listed. auditd records changes to sudoers, the SSH configuration and the firewall, and commands run as root by people, and its log ships with the rest. Unneeded packages go (a leftover FTP server on <code>door-3</code> among them).</p>
   <p>Lynis on <code>door-2</code> scores 58 before and 81 after; Rafaela writes the score into the wiki with a date, and a reason next to each suggestion left open. The retest on 15 October had already closed the network findings; the assessment firm closes the remaining seven on 12 November. And Tiago starts the script that will build <code>door-5</code>, <code>door-2</code>'s replacement, from the baseline (<a href="#ch21">Chapter 21</a>).</p>
 </aside>
 

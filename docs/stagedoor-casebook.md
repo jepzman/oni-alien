@@ -33,7 +33,7 @@ the door-scanning API at `scan.stagedoor.example`). Public IPs use documentation
 | --- | --- | --- |
 | Mar 2023 | Leonor rents one Debian server (`door-1`) and runs everything on it: the Python (FastAPI) app, nginx, PostgreSQL | background |
 | 2025 | three servers at Atlantica Hosting (fictional, Lisbon); 600 venues in Portugal; 9 engineers | background |
-| Jan–Oct 2026 | Rafaela and Tiago arrive; the servers are understood, fixed and made boring | **3 Linux** |
+| Jan–Nov 2026 | Rafaela and Tiago arrive; the servers are understood, fixed and made boring | **3 Linux** |
 | 2027 | move to AWS (eu-west-1, Ireland), everything in Terraform from day one; Spain launch | 5 Terraform |
 | 2027–2028 | the seat-hold double sell, locks behind a migration, bloat, RDS, read replicas, major upgrade | 6 PostgreSQL |
 | 2028 | containers and EKS for ~25 services; Maré Festival's on-sale (200,000 fans in ten minutes) | 4 Kubernetes |
@@ -42,7 +42,7 @@ the door-scanning API at `scan.stagedoor.example`). Public IPs use documentation
 Reading order differs from the chronology: each book says where Stagedoor is at its start, and cross-book references
 read "Handbook 5 tells how this was built", never "as you saw".
 
-## 4. Handbook 3 · Linux for Cloud Engineers (Jan–Oct 2026)
+## 4. Handbook 3 · Linux for Cloud Engineers (Jan–Nov 2026)
 
 ### The servers (as found on 5 Jan 2026, ch. 1)
 
@@ -158,6 +158,34 @@ load balancer (public address `203.0.113.40`).
   jump host for `door-4`. Local logs went back four weeks: no use of Marco's key found; earlier use unknowable.
   Auth logs now shipped with a year's retention. Plan: short-lived SSH certificates, or Session Manager after the
   move to AWS. Leaver checklist gains: keys in every account, supplier contacts, certificates.
+
+### Parts V and VI (ch. 17–21), written 2026-11-27
+
+- **Ch. 17 (Thu 22 Oct 2026, 03:15–07:40):** the nightly release clean-up timer (`stagedoor` user, working directory
+  `/var/lib/stagedoor`; a typo in the unit's variable name left `RELEASES_DIR` unset) ran `cd $RELEASES_DIR` →
+  failed → `ls -t | tail -n +6 | xargs rm -rf` in `/var/lib/stagedoor`, deleting `uploads` and `exports`. Restored
+  from `door-3` (rsync without `--delete`; `door-3`'s timer has a random delay) by 07:40; exports regenerated.
+  Uploads now backed up nightly to Atlantica's object storage. Rules: strict mode + `${VAR:?}`, dry runs, ShellCheck
+  in CI blocking merges, failed-unit alerts.
+- **Ch. 18 (Thu 29 Oct – Thu 12 Nov):** the assessment's remaining seven findings. Baseline written three ways
+  (checklist, `baseline.yaml` checked with `cloud-init schema` in CI, a build script). Sandbox drop-ins:
+  `stagedoor.service` 9.2 → 1.5, nginx 9.6 → 4.1. auditd for sudoers, SSH config, firewall, root commands; shipped.
+  A leftover FTP server removed from `door-3`. Lynis on `door-2`: 58 → 81. Findings closed 12 Nov.
+- **Ch. 19 (Thu 5 Nov):** the app's first container image (Sasha's team, for laptops, later the cloud): shell-form
+  `CMD` → 10 s stops and 137; ~4,000 zombie PDF-helper processes after a load test. Fixed: exec form, `tini`
+  entrypoint, non-root, read-only root, uploads on a volume. Decision: the payment service must not share a kernel
+  with other services; on AWS it gets its own VMs or Fargate (Firecracker).
+- **Ch. 20 (Fri 13 Nov, 19:40–19:52):** Tiago's first solo on-call: event pages at 10 s. `first5.sh`: `door-2`'s data
+  disk 94% busy, queue 30, I/O wait 40%, `find` in `D` from `thumbs-cleanup.service`, made hourly by Sasha's team on
+  Thu 12 Nov. Stopped at 19:48 (pages 280 ms); 20:00 on-sale fine. Timer back to nightly 03:30 Lisbon with `Nice=10`
+  and `IOSchedulingClass=idle`; the app deletes a poster's thumbnails when the poster changes.
+- **Ch. 21 (Thu 19 – Thu 26 Nov):** `door-5` (Ubuntu 24.04, replacing `door-2`, whose 22.04 support ends April 2027)
+  built at Atlantica by `build-web.sh` in four minutes; second run changes nothing. Drill Tue 24 Nov at 3× July's
+  peak: 3% failures, cause uvicorn started with `--backlog 64` from a 2023 config; release 2026.11.2 fixed it; second
+  drill clean. Crash drill: one app process per server = a 2-second outage per crash; `door-5` joins `door-3` behind
+  Atlantica's load balancer (health check removes a server in 1 s). `door-2` switched off Thu 26 Nov. Next: AWS in
+  2027 (Handbook 5) with the same baseline as Terraform and images. Not yet in the script: auditd, log shipping,
+  certificates (certbot on `door-3`), monitoring, uploads sync and backups, the data volume.
 
 ### Promised for later chapters (keep consistent)
 
