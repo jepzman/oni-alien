@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Debugging connections · Linux for Cloud Engineers</title>
+<meta name="description" content="A method for “it can&#x27;t connect”: DNS, route, port, TLS, application, with the tool for each step. The certificate that expired on a Sunday.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 3</a> · <a href="index.html">Linux for Cloud Engineers</a></span><span>Part IV · Chapter 14</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part IV · Networking from the host</p>
+  <p class="chno">14</p>
+  <h1>Debugging connections</h1>
+  <p class="promise">“It can't connect” is the most common sentence in operations, and the least informative. This chapter gives you a method: five questions, asked in order, each answered by one tool, from the name to the application. Then it takes apart TLS, the layer that fails most often for reasons that have nothing to do with the network, and shows how to watch the packets themselves when nothing else explains what's happening.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Locate a connection failure layer by layer: name, route, port, TLS, application.</li>
+      <li>Read <code>curl -v</code> output and curl's exit codes.</li>
+      <li>Inspect a server's certificate, chain and expiry with <code>openssl</code>.</li>
+      <li>Capture and read the packets of one connection with <code>tcpdump</code>.</li>
+      <li>Set up certificate renewal and expiry monitoring so certificates don't expire by surprise.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li><a href="13-network-config.html">Chapter 13</a>: addresses, routes, sockets, name resolution, and its <code>netlab.sh</code>.</li>
+      <li>Handbook 1, Chapter 6 (HTTP, TLS and certificates) helps.</li>
+      <li>A Linux VM with <code>sudo</code>, and <code>sudo apt install curl openssl tcpdump dnsutils netcat-openbsd dnsmasq-base</code>.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>35 minutes, a Linux VM with <code>sudo</code>, free</dd>
+      <dt>Main distribution</dt><dd>any; the tools are the same everywhere</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>Sunday 13 September 2026, 18:40. Doors have opened for an early show at a Lisbon venue, and the door staff's scanning app shows one message for every ticket: <em>Can't connect securely to Stagedoor</em>. At a second venue, the same. Staff start checking names against printed lists, and the queues reach the street.</p>
+  <p>Rafaela is on call. The rest of Stagedoor works. The scanners talk to one API, <code>scan.stagedoor.example</code>, served by nginx on the two web servers. From her laptop, the API's address resolves, the port answers, and her browser shows a full-page warning. She has the cause within five minutes, because she asks the questions in order.</p>
+</aside>
+
+<!-- ======================================================== 14.1 -->
+<h2 class="sec" id="s14-1"><span class="n">14.1</span>A method: five questions in order</h2>
+
+<p class="lead">Every connection passes through the same layers, and each one can fail independently. Start at the bottom and stop at the first layer that fails: everything above it is a symptom.</p>
+
+<figure class="wide" id="fig14-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 290" role="img" aria-labelledby="fig14-1-t fig14-1-d">
+      <title id="fig14-1-t">Five questions for a failing connection</title>
+      <desc id="fig14-1-d">Five layers from bottom to top, each with a question, a tool and typical failures. 1, Name: does the name resolve to the right address? getent hosts, dig. Failures: no answer, NXDOMAIN, a stale address. 2, Route: can packets get there? ip route get, ping, traceroute. Failures: no route, wrong gateway. 3, Port: does something accept the connection? nc -zv. Failures: refused, nothing listening; timeout, a firewall drops it. 4, TLS: does the handshake succeed and is the certificate trusted? openssl s_client. Failures: expired, wrong name, unknown issuer, missing intermediate. 5, Application: does the request get the right answer? curl -v. Failures: 4xx and 5xx statuses, redirects, timeouts in the app. Work upwards; stop at the first layer that fails.</desc>
+      <defs><marker id="c14ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="40" y="10" width="710" height="48" rx="5"/><text class="t-title" x="54" y="31">5 Application</text><text class="t-small" x="54" y="49">does the request get the right answer?</text><text class="t-mono" x="360" y="40">curl -v</text><text class="t-small" x="500" y="40">4xx/5xx, redirects, app timeouts</text>
+      <rect class="node-accent" x="40" y="64" width="710" height="48" rx="5"/><text class="t-title on-accent" x="54" y="85">4 TLS</text><text class="t-small on-accent" x="54" y="103">handshake done, certificate trusted?</text><text class="t-mono on-accent" x="360" y="94">openssl s_client</text><text class="t-small on-accent" x="500" y="94">expired, wrong name, unknown issuer</text>
+      <rect class="node" x="40" y="118" width="710" height="48" rx="5"/><text class="t-title" x="54" y="139">3 Port</text><text class="t-small" x="54" y="157">does something accept the connection?</text><text class="t-mono" x="360" y="148">nc -zv host port</text><text class="t-small" x="500" y="148">refused (no listener), timeout (dropped)</text>
+      <rect class="node" x="40" y="172" width="710" height="48" rx="5"/><text class="t-title" x="54" y="193">2 Route</text><text class="t-small" x="54" y="211">can packets get there?</text><text class="t-mono" x="360" y="202">ip route get, ping</text><text class="t-small" x="500" y="202">no route, wrong gateway, host down</text>
+      <rect class="node" x="40" y="226" width="710" height="48" rx="5"/><text class="t-title" x="54" y="247">1 Name</text><text class="t-small" x="54" y="265">right name, right address?</text><text class="t-mono" x="360" y="256">getent hosts, dig</text><text class="t-small" x="500" y="256">NXDOMAIN, no answer, stale address</text>
+      <path class="wire" d="M20 270 V20" marker-end="url(#c14ah)"/>
+    </svg>
+  </div>
+  <figcaption><b>Figure 14.1</b> Bottom to top. A TLS error isn't worth reading until you know the name resolved to the right address and the port accepted the connection.</figcaption>
+</figure>
+
+<ol class="steps">
+  <li><strong>Name.</strong> <code>getent hosts scan.stagedoor.example</code> on the machine that fails (<a href="13-network-config.html">Chapter 13</a>), and <code>dig</code> to see what DNS says. Is it the address you expect?</li>
+  <li><strong>Route.</strong> <code>ip route get ADDRESS</code>; <code>ping</code> if ICMP is allowed (many cloud firewalls block it, so a failed ping proves little); <code>traceroute -T -p 443 ADDRESS</code> to see how far packets get, using TCP so firewalls treat it like real traffic.</li>
+  <li><strong>Port.</strong> <code>nc -zv -w 3 ADDRESS 443</code>: “succeeded”, “Connection refused” (nothing listening) or a timeout (dropped on the way). The difference between the last two is the most useful fact in network debugging (<a href="13-network-config.html">Chapter 13</a>).</li>
+  <li><strong>TLS.</strong> <code>openssl s_client -connect ADDRESS:443 -servername NAME</code> (14.3).</li>
+  <li><strong>Application.</strong> <code>curl -v</code> (14.2), and the server's own logs for the same request.</li>
+</ol>
+
+<p>Run the checks <strong>from the machine that fails</strong>, or as close to it as you can. From your laptop, a different resolver, different routes and different firewall rules may give different answers, which is useful information in itself: if it works from here and not from there, the difference is in what's between.</p>
+
+<!-- ======================================================== 14.2 -->
+<h2 class="sec" id="s14-2"><span class="n">14.2</span>curl, verbosely</h2>
+
+<p><code>curl -v</code> narrates every layer of one request: the address it resolved, the TCP connection, the TLS handshake and certificate, the HTTP request and response headers. Lines starting with <code>*</code> are curl's own commentary, <code>&gt;</code> what it sent, <code>&lt;</code> what it received. A few options make it a precise instrument:</p>
+
+<pre><code>curl -v https://scan.stagedoor.example/health                     <span class="c"># the whole story</span>
+curl -sS -o /dev/null -w '%{http_code} %{time_total}s\n' URL     <span class="c"># just status and time</span>
+curl --resolve scan.stagedoor.example:443:10.40.0.12 URL          <span class="c"># this name, but at this address (test one server)</span>
+curl --connect-timeout 3 --max-time 10 URL                        <span class="c"># fail fast instead of hanging</span>
+curl -H 'Host: scan.stagedoor.example' http://10.40.0.12/          <span class="c"># a virtual host by IP (plain HTTP)</span></code></pre>
+
+<p><code>--resolve</code> deserves a special mention: it connects to an address you choose while keeping the real name for TLS and HTTP, so you can test one server behind a load balancer, or a new server before DNS points at it, with exactly the request a client would make. And curl's exit status names the layer that failed:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 14.1 · curl exit codes you'll see</caption>
+    <thead><tr><th>Code</th><th>Means</th><th>Layer</th></tr></thead>
+    <tbody>
+      <tr><td>6</td><td>couldn't resolve host</td><td>name</td></tr>
+      <tr><td>7</td><td>failed to connect (refused, or no route)</td><td>route or port</td></tr>
+      <tr><td>28</td><td>operation timed out</td><td>route, port (dropped), or a slow server</td></tr>
+      <tr><td>35</td><td>TLS handshake failed</td><td>TLS (protocol or cipher mismatch)</td></tr>
+      <tr><td>60</td><td>certificate problem: expired, untrusted, wrong name</td><td>TLS (trust)</td></tr>
+      <tr><td>22</td><td>HTTP status 400 or above, with <code>--fail</code></td><td>application</td></tr>
+      <tr><td>52</td><td>empty reply from server</td><td>application crashed or closed the connection (<a href="05-processes.html">Chapter 5</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: <code>curl -k</code></p>
+  <p><code>-k</code> (<code>--insecure</code>) skips certificate checks. It's fine for one look at what a server is sending; it never belongs in a script, a health check or application code, because it turns a broken certificate (or an attacker's) into a working connection. If a script needs a private CA, give it <code>--cacert</code>.</p>
+</div>
+
+<!-- ======================================================== 14.3 -->
+<h2 class="sec" id="s14-3"><span class="n">14.3</span>TLS and certificates from the command line</h2>
+
+<p>A TLS client checks four things about the server's certificate (Handbook 1, Chapter 6): it's <strong>within its validity dates</strong>; it's issued for the <strong>name</strong> the client asked for (in the Subject Alternative Name); it <strong>chains</strong>, through any intermediate certificates the server sends, to a <strong>root CA the client trusts</strong>; and it hasn't been revoked. Most failures are the first three:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 14.2 · Certificate errors and what they mean</caption>
+    <thead><tr><th>Error (curl / openssl)</th><th>Means</th><th>Usual fix</th></tr></thead>
+    <tbody>
+      <tr><td><code>certificate has expired</code> / <code>num=10</code></td><td>now is after <code>notAfter</code></td><td>renew; automate renewal</td></tr>
+      <tr><td><code>no alternative certificate subject name matches</code> / <code>num=62</code></td><td>wrong name: a certificate for another host</td><td>right certificate for the name, or the right server block in nginx</td></tr>
+      <tr><td><code>unable to get local issuer certificate</code> / <code>num=20</code></td><td>the client can't chain it to a root it trusts</td><td>send the intermediate (<code>fullchain.pem</code>), or install a private CA on clients</td></tr>
+      <tr><td><code>self-signed certificate</code> / <code>num=18</code></td><td>nobody vouches for it but itself</td><td>a certificate from a CA</td></tr>
+      <tr><td><code>certificate is not yet valid</code> / <code>num=9</code></td><td>now is before <code>notBefore</code>, often a client clock that's wrong</td><td>fix the clock (<code>timedatectl</code>, NTP)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p><code>openssl s_client</code> shows the server's side of the handshake, the chain it sent and the result of verification:</p>
+<pre><code>openssl s_client -connect scan.stagedoor.example:443 -servername scan.stagedoor.example &lt;/dev/null
+openssl s_client -connect HOST:443 -servername HOST &lt;/dev/null 2&gt;/dev/null | openssl x509 -noout -subject -issuer -dates -ext subjectAltName
+openssl x509 -in /etc/ssl/stagedoor/fullchain.pem -noout -enddate    <span class="c"># a certificate file on disk</span>
+openssl x509 -in cert.pem -noout -checkend 1814400                   <span class="c"># exit 1 if it expires within 21 days</span></code></pre>
+
+<p>Always pass <code>-servername</code>: it sends SNI, the name the client wants, and servers hosting several names pick the certificate by it. Without it, you may be looking at the wrong certificate and draw the wrong conclusion.</p>
+
+<!-- ======================================================== 14.4 -->
+<h2 class="sec" id="s14-4"><span class="n">14.4</span>Certificates that renew themselves</h2>
+
+<p>Certificates expire on purpose: short lifetimes limit the damage of a stolen key, and public certificates are getting shorter (under the CA/Browser Forum's schedule, at most 200 days since March 2026, 100 days from March 2027 and 47 days from March 2029, at the time of writing). A certificate renewed by a person once a year is an incident with a date already set, and it tends to land on whoever was on the renewal email. The fix is to stop renewing by hand:</p>
+<ul>
+  <li><strong>ACME</strong>, the protocol Let's Encrypt created and many CAs support, lets a program prove control of a domain and get a certificate without a person. <code>certbot</code> (or <code>acme.sh</code>, or Caddy and Traefik, which do it built-in) installs a systemd timer that renews certificates about 30 days before expiry and reloads nginx.</li>
+  <li><strong>Managed certificates</strong> on a cloud load balancer (AWS Certificate Manager, Azure and Google's managed certificates) renew themselves, as long as their DNS validation records stay in place.</li>
+  <li><strong>Monitoring is separate from renewal.</strong> Check every public endpoint's expiry from outside, daily, and alert at 21 days. A renewal job can fail silently (a changed DNS record, a firewall rule, a full disk); the monitor is how you find out while there are still three weeks left.</li>
+</ul>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Renew automatically, and monitor expiry independently of the renewal. Either one alone eventually fails on a Sunday.</p>
+</div>
+
+<!-- ======================================================== 14.5 -->
+<h2 class="sec" id="s14-5"><span class="n">14.5</span>Looking at packets</h2>
+
+<p>When every tool says something different, look at what actually crosses the wire. <code>tcpdump</code> captures packets on an interface, filtered by an expression, and prints one line per packet:</p>
+
+<pre><code>sudo tcpdump -i eth0 -nn 'host 10.40.0.14 and tcp port 5432'   <span class="c"># one conversation</span>
+sudo tcpdump -i any -nn -c 20 'tcp[tcpflags] &amp; tcp-syn != 0'     <span class="c"># only connection attempts</span>
+sudo tcpdump -i eth0 -nn -w capture.pcap 'port 443'              <span class="c"># save for Wireshark</span></code></pre>
+
+<p><code>-nn</code> keeps addresses and ports as numbers (no DNS lookups, which would themselves create traffic); <code>-c</code> stops after a number of packets. Each TCP line shows source and destination as <code>address.port</code>, then the <strong>flags</strong>: <code>[S]</code> SYN (open), <code>[S.]</code> SYN-ACK, <code>[.]</code> ACK, <code>[P.]</code> data pushed, <code>[F.]</code> FIN (close), <code>[R]</code> reset. The patterns tell the story at a glance:</p>
+<ul>
+  <li><code>[S]</code>, then nothing, then <code>[S]</code> again a second later: the SYN is being dropped (a firewall, or a wrong route back). That's a timeout in the making.</li>
+  <li><code>[S]</code> answered by <code>[R.]</code>: refused, nothing listening.</li>
+  <li>A full handshake, a little data, then <code>[R]</code> from the server: the application or a proxy cut the connection.</li>
+</ul>
+
+<p>Capture on the server and the client at the same time when you can: a SYN that leaves one and never arrives at the other was dropped in between. For TLS traffic, you'll see the handshake's packets but not the contents; that's the point of TLS.</p>
+
+<!-- ======================================================== 14.6 -->
+<h2 class="sec" id="s14-6"><span class="n">14.6</span>Across distributions</h2>
+
+<p>curl, OpenSSL, tcpdump and the <code>dig</code> family behave the same everywhere; the package names differ (<code>dnsutils</code> or <code>bind9-dnsutils</code> on Debian and Ubuntu, <code>bind-utils</code> on RHEL), and <code>nc</code> comes in two flavours with different options (<code>netcat-openbsd</code> on Ubuntu, <code>nmap-ncat</code> on RHEL). Where they differ is the system's trust store, the list of root CAs every program trusts:</p>
+
+<div class="box box-provider">
+  <p class="label">On the RHEL family</p>
+  <p>Ubuntu and Debian keep trusted CAs in <code>/etc/ssl/certs/</code>; you add a private CA by copying it into <code>/usr/local/share/ca-certificates/</code> (with a <code>.crt</code> extension) and running <code>sudo update-ca-certificates</code>. RHEL and Amazon Linux use <code>/etc/pki/ca-trust/source/anchors/</code> and <code>sudo update-ca-trust</code>. Some programs ignore the system store entirely: Java has its own keystore, Python's <code>requests</code> uses the <code>certifi</code> bundle unless told otherwise, and Node.js needs <code>NODE_EXTRA_CA_CERTS</code>.</p>
+</div>
+
+<!-- ======================================================== 14.7 -->
+<h2 class="sec" id="s14-7"><span class="n">14.7</span>Lab: an expired certificate, found in order</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 14 · Sunday 13 September, on your machine</p>
+  <p><strong>You'll</strong> create a private CA and a certificate for <code>scan.stagedoor.example</code> that expired at 17:59 Lisbon time on 13 September 2026, serve it from <code>door-4</code> in the lab network, find the failure layer by layer, replace it, add an expiry check, and capture one plain HTTP request with <code>tcpdump</code>. <strong>You need</strong> <a href="13-network-config.html">Chapter 13</a>'s <code>netlab.sh</code> and the packages in the chapter card. <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> the last step. (Run it before 13 September 2026 and the “expired” certificate won't be expired yet: change the dates in <code>mkcerts.sh</code> to a past range.)</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Make the certificates.</strong> In <code>~/lab14</code>, save and run:
+<p class="code-title"><span>mkcerts.sh</span><span>bash</span></p>
+<pre><code>#!/usr/bin/env bash
+<span class="c"># mkcerts.sh · a private CA and two certificates for scan.stagedoor.example: one expired, one valid</span>
+<span class="k">set</span> -euo pipefail
+mkdir -p ca/newcerts &amp;&amp; touch ca/index.txt &amp;&amp; echo 1000 &gt; ca/serial
+echo <span class="s">"unique_subject = no"</span> &gt; ca/index.txt.attr          <span class="c"># allow two certificates for the same name</span>
+cat &gt; ca/ca.cnf &lt;&lt;<span class="s">'CNF'</span>
+[ca]
+default_ca = lab
+[lab]
+dir = ca
+database = $dir/index.txt
+new_certs_dir = $dir/newcerts
+serial = $dir/serial
+default_md = sha256
+policy = any
+copy_extensions = copy
+[any]
+commonName = supplied
+CNF
+
+<span class="c"># 1. the certificate authority (CA): a key and a self-signed certificate</span>
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 3650 \
+  -subj <span class="s">"/CN=Stagedoor Lab CA"</span> -keyout ca.key -out ca.pem 2&gt;/dev/null
+
+<span class="c"># 2. the server's key and a certificate request for its name</span>
+openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+  -subj <span class="s">"/CN=scan.stagedoor.example"</span> -addext <span class="s">"subjectAltName=DNS:scan.stagedoor.example"</span> \
+  -keyout server.key -out server.csr 2&gt;/dev/null
+
+<span class="c"># 3. the CA signs it twice: once with dates in the past, once valid for 90 days from now</span>
+sign() {  <span class="c"># sign OUTFILE START END, dates as YYMMDDHHMMSSZ</span>
+  openssl ca -batch -config ca/ca.cnf -cert ca.pem -keyfile ca.key -<span class="k">in</span> server.csr \
+    -out <span class="s">"$1"</span> -startdate <span class="s">"$2"</span> -enddate <span class="s">"$3"</span> -notext 2&gt;/dev/null
+}
+sign expired.pem 250913160000Z 260913165900Z
+sign valid.pem <span class="s">"$(date -u +%y%m%d%H%M%SZ)"</span> <span class="s">"$(date -u -d '+90 days' +%y%m%d%H%M%SZ)"</span>
+<span class="k">for</span> c <span class="k">in</span> expired valid; <span class="k">do</span> echo <span class="s">"$c.pem: $(openssl x509 -in "</span>$c.pem<span class="s">" -noout -enddate)"</span>; <span class="k">done</span></code></pre>
+<pre><code>chmod +x mkcerts.sh &amp;&amp; ./mkcerts.sh</code></pre>
+  It prints each certificate's expiry, <code>expired.pem: notAfter=Sep 13 16:59:00 2026 GMT</code> and a <code>valid.pem</code> 90 days from now. <code>openssl ca</code> is used instead of the simpler <code>openssl x509 -req</code> because it can set an exact start and end date.</li>
+  <li><strong>Serve the expired one</strong> from <code>door-4</code>, with a DNS name for it on the lab's resolver. <code>openssl s_server -www</code> is a tiny TLS server for tests:
+<pre><code>sudo ~/netlab.sh up
+sudo dnsmasq --listen-address=10.40.0.1 --bind-interfaces --no-resolv --no-hosts \
+  --host-record=scan.stagedoor.example,10.40.0.14 --pid-file=/run/lab-dnsmasq.pid
+sudo ip netns exec door-4 openssl s_server -accept 10.40.0.14:443 -cert expired.pem -key server.key -www -quiet &amp;</code></pre>
+  (Adjust the path to wherever you keep <code>netlab.sh</code>.)</li>
+  <li><strong>The symptom</strong>, from <code>door-2</code>, the way a scanner would connect, trusting the lab CA:
+<pre><code>sudo ip netns exec door-2 curl -sS --cacert ca.pem https://scan.stagedoor.example/ -o /dev/null; echo "exit status: $?"</code></pre>
+<pre><code>curl: (60) SSL certificate problem: certificate has expired
+More details here: https://curl.se/docs/sslcerts.html
+
+curl failed to verify the legitimacy of the server and therefore could not
+establish a secure connection to it. To learn more about this situation and
+how to fix it, please visit the web page mentioned above.
+exit status: 60</code></pre></li>
+  <li><strong>Layer by layer.</strong> Name and port first:
+<pre><code>sudo ip netns exec door-2 dig +short scan.stagedoor.example
+sudo ip netns exec door-2 nc -zv -w 2 scan.stagedoor.example 443</code></pre>
+<pre><code>10.40.0.14
+Connection to scan.stagedoor.example (10.40.0.14) 443 port [tcp/https] succeeded!</code></pre>
+  Both fine, so the problem is at layer 4 or 5. curl's commentary, only the lines starting with <code>*</code>:
+<pre><code>sudo ip netns exec door-2 curl -sv --cacert ca.pem https://scan.stagedoor.example/ -o /dev/null 2&gt;&amp;1 | grep '^\*'</code></pre>
+<pre><code>* Host scan.stagedoor.example:443 was resolved.
+* IPv6: (none)
+* IPv4: 10.40.0.14
+*   Trying 10.40.0.14:443...
+* Connected to scan.stagedoor.example (10.40.0.14) port 443
+* ALPN: curl offers h2,http/1.1
+* TLSv1.3 (OUT), TLS handshake, Client hello (1):
+*  CAfile: ca.pem
+*  CApath: /etc/ssl/certs
+* TLSv1.3 (IN), TLS handshake, Server hello (2):
+* TLSv1.3 (IN), TLS handshake, Encrypted Extensions (8):
+* TLSv1.3 (IN), TLS handshake, Certificate (11):
+* TLSv1.3 (OUT), TLS alert, certificate expired (557):
+* SSL certificate problem: certificate has expired
+* Closing connection</code></pre>
+  Resolved, connected, TLS 1.3 handshake started, the certificate arrived, and the <em>client</em> sent an alert: <code>certificate expired</code>. The server, the network and the port are all fine. Confirm with OpenSSL's view of the chain:
+<pre><code>sudo ip netns exec door-2 openssl s_client -connect scan.stagedoor.example:443 -servername scan.stagedoor.example \
+  -CAfile ca.pem &lt;/dev/null 2&gt;&amp;1 | grep -E '^depth|^verify|NotAfter|Verify return'</code></pre>
+<pre><code>depth=1 CN = Stagedoor Lab CA
+verify return:1
+depth=0 CN = scan.stagedoor.example
+verify error:num=10:certificate has expired
+verify return:1
+depth=0 CN = scan.stagedoor.example
+verify return:1
+   v:NotBefore: Sep 13 16:00:00 2025 GMT; NotAfter: Sep 13 16:59:00 2026 GMT
+Verify return code: 10 (certificate has expired)</code></pre>
+  Depth 1 (the CA) verifies; depth 0 (the server's certificate) fails with error 10. And the dates themselves:
+<pre><code>sudo ip netns exec door-2 openssl s_client -connect scan.stagedoor.example:443 -servername scan.stagedoor.example \
+  &lt;/dev/null 2&gt;/dev/null | openssl x509 -noout -subject -issuer -dates</code></pre>
+<pre><code>subject=CN = scan.stagedoor.example
+issuer=CN = Stagedoor Lab CA
+notBefore=Sep 13 16:00:00 2025 GMT
+notAfter=Sep 13 16:59:00 2026 GMT</code></pre></li>
+  <li><strong>Break it differently: an unknown issuer.</strong> Without <code>--cacert</code>, curl doesn't trust the lab CA at all:
+<pre><code>sudo ip netns exec door-2 curl -sS https://scan.stagedoor.example/ -o /dev/null</code></pre>
+<pre><code>curl: (60) SSL certificate problem: unable to get local issuer certificate</code></pre>
+  Same exit code (60), a different cause: Table 14.2's error 20. Read the message, not just the number.</li>
+  <li><strong>Fix it</strong>: stop the server and start it with the valid certificate.
+<pre><code>sudo pkill -f "openssl s_server"
+sudo ip netns exec door-4 openssl s_server -accept 10.40.0.14:443 -cert valid.pem -key server.key -www -quiet &amp;
+sudo ip netns exec door-2 curl -sS --cacert ca.pem -o /dev/null -w '%{http_code} %{ssl_verify_result}\n' https://scan.stagedoor.example/</code></pre>
+<pre><code>200 0</code></pre>
+  Status 200, verification result 0 (success).</li>
+  <li><strong>The check that would have warned you.</strong> <code>-checkend</code> fails if a certificate expires within the given number of seconds, here 21 days:
+<pre><code>for c in expired.pem valid.pem; do
+  openssl x509 -in $c -noout -checkend $((21*24*3600)) &gt;/dev/null &amp;&amp; echo "$c: valid for at least 21 more days" || echo "$c: expires within 21 days, or already has"
+done</code></pre>
+<pre><code>expired.pem: expires within 21 days, or already has
+valid.pem: valid for at least 21 more days</code></pre>
+  Run against the live endpoint (with <code>s_client</code> as in step 4) from a timer every day, with its failure alerting someone, and the Sunday never happens.</li>
+  <li><strong>Packets.</strong> Serve plain HTTP from <code>door-4</code>, capture on its interface, and make one request from <code>door-2</code>:
+<pre><code>sudo ip netns exec door-4 python3 -m http.server 8000 --bind 10.40.0.14 --directory /tmp &gt;/dev/null 2&gt;&amp;1 &amp;
+sudo ip netns exec door-4 tcpdump -i eth0 -nn -c 10 'tcp port 8000' &amp;
+sudo ip netns exec door-2 curl -s -o /dev/null -w '%{http_code}\n' http://10.40.0.14:8000/</code></pre>
+<pre><code>09:37:29.819003 IP 10.40.0.12.56838 &gt; 10.40.0.14.8000: Flags [S], seq 3227688949, win 64240, options [mss 1460,sackOK,TS val 606748839 ecr 0,nop,wscale 10], length 0
+09:37:29.819018 IP 10.40.0.14.8000 &gt; 10.40.0.12.56838: Flags [S.], seq 3875582733, ack 3227688950, win 65160, options [mss 1460,sackOK,TS val 2825521294 ecr 606748839,nop,wscale 10], length 0
+09:37:29.819035 IP 10.40.0.12.56838 &gt; 10.40.0.14.8000: Flags [.], ack 1, win 63, options [nop,nop,TS val 606748839 ecr 2825521294], length 0
+09:37:29.819106 IP 10.40.0.12.56838 &gt; 10.40.0.14.8000: Flags [P.], seq 1:79, ack 1, win 63, options [nop,nop,TS val 606748839 ecr 2825521294], length 78
+09:37:29.819109 IP 10.40.0.14.8000 &gt; 10.40.0.12.56838: Flags [.], ack 79, win 64, options [nop,nop,TS val 2825521294 ecr 606748839], length 0
+09:37:29.822379 IP 10.40.0.14.8000 &gt; 10.40.0.12.56838: Flags [P.], seq 1:158, ack 79, win 64, options [nop,nop,TS val 2825521297 ecr 606748839], length 157
+09:37:29.822439 IP 10.40.0.12.56838 &gt; 10.40.0.14.8000: Flags [.], ack 158, win 63, options [nop,nop,TS val 606748842 ecr 2825521297], length 0
+09:37:29.822467 IP 10.40.0.14.8000 &gt; 10.40.0.12.56838: Flags [P.], seq 158:4424, ack 79, win 64, options [nop,nop,TS val 2825521298 ecr 606748842], length 4266
+09:37:29.822473 IP 10.40.0.12.56838 &gt; 10.40.0.14.8000: Flags [.], ack 4424, win 72, options [nop,nop,TS val 606748843 ecr 2825521298], length 0
+09:37:29.822506 IP 10.40.0.14.8000 &gt; 10.40.0.12.56838: Flags [F.], seq 4424, ack 79, win 64, options [nop,nop,TS val 2825521298 ecr 606748843], length 0</code></pre>
+  Read it line by line: <code>[S]</code>, <code>[S.]</code>, <code>[.]</code> is the three-way handshake (Handbook 1, Chapter 3); <code>[P.] … length 78</code> is curl's request; the server ACKs it, sends 157 bytes of headers and 4,266 bytes of body, and closes with <code>[F.]</code>. Everything took about 3.5 milliseconds.</li>
+  <li><strong>Clean up.</strong>
+<pre><code>sudo pkill -f "openssl s_server"; sudo pkill -f "http.server 8000"
+sudo kill "$(cat /run/lab-dnsmasq.pid)"
+sudo ~/netlab.sh down</code></pre></li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Make a certificate for a different name (<code>tickets.stagedoor.example</code>) and serve it: which error do you get, and what does <code>-ext subjectAltName</code> show? (2) Add a firewall rule on <code>door-4</code> that drops port 443 (<a href="index.html#ch15">Chapter 15</a>: <code>sudo ip netns exec door-4 nft add table inet t</code>, and so on) and watch, with <code>tcpdump</code> on both sides, the SYN that is never answered; then compare with nothing listening, which answers with a reset. (3) Trust the lab CA system-wide in <code>door-2</code>'s view by copying <code>ca.pem</code> into <code>/usr/local/share/ca-certificates/stagedoor-lab.crt</code> and running <code>sudo update-ca-certificates</code>; curl no longer needs <code>--cacert</code>. Undo it afterwards.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: 17:59, a year after the last renewal</p>
+  <p>Name, port, then <code>openssl s_client</code>: <code>notAfter=Sep 13 16:59:00 2026 GMT</code>, 17:59 in Lisbon. The certificate for <code>scan.stagedoor.example</code> was bought from a commercial CA when Marco built the scanning API in 2024, and renewed by hand by Leonor in September 2025. The CA's reminder emails went to the account's contact address: Marco's, which has bounced since November 2024. The main site's certificate, renewed by a different person on a different date, was fine.</p>
+  <p>At 19:05 Rafaela has a new certificate from Let's Encrypt in place on both web servers, and nginx reloaded. The queues clear by 19:20. The next week: <code>certbot</code> manages every public name, with its renewal timer and a hook that reloads nginx and copies certificates to the other web server; a daily check from outside Stagedoor's network alerts 21 days before any public certificate expires; and every supplier account's contact becomes a shared <code>ops@</code> address instead of a person. Rafaela adds one more item to the list from <a href="04-permissions.html">Chapter 4</a>: if Marco's address was still on the CA account, where else is he still? <a href="index.html#ch16">Chapter 16</a> finds out.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s14-8"><span class="n">14.8</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Starting with the error at the top layer</td><td>Hours on TLS when the name pointed at the wrong server.</td><td>Name, route, port, TLS, application, in order.</td></tr>
+      <tr><td>Testing from your laptop only</td><td>Different resolver, routes and firewalls; misleading success.</td><td>Test from the machine that fails.</td></tr>
+      <tr><td><code>curl -k</code> in scripts and health checks</td><td>Broken or forged certificates are accepted.</td><td><code>--cacert</code> for private CAs; fix the certificate.</td></tr>
+      <tr><td><code>s_client</code> without <code>-servername</code></td><td>The default certificate, not the one clients get.</td><td>Always send SNI.</td></tr>
+      <tr><td>Serving the certificate without its intermediate</td><td>Works in some browsers (which fetch it), fails in curl, apps and phones.</td><td><code>fullchain.pem</code> in nginx's <code>ssl_certificate</code>.</td></tr>
+      <tr><td>Renewal by a person, reminders to a person</td><td>Expires when they're away, or gone.</td><td>ACME or managed certificates, plus independent expiry monitoring.</td></tr>
+      <tr><td>Treating a failed ping as “the host is down”</td><td>ICMP is often blocked while TCP works.</td><td><code>nc -zv</code> to the real port.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum14">
+  <h2 class="sec" id="sum14"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Debug a connection bottom-up: <strong>name</strong> (<code>getent</code>, <code>dig</code>), <strong>route</strong> (<code>ip route get</code>), <strong>port</strong> (<code>nc -zv</code>), <strong>TLS</strong> (<code>openssl s_client</code>), <strong>application</strong> (<code>curl -v</code>). Stop at the first failure.</li>
+    <li><code>curl -v</code> narrates every layer; its exit code names the layer that failed; <code>--resolve</code> tests one server under its real name.</li>
+    <li>Certificates fail on dates, names and chains. <code>openssl s_client -servername</code> and <code>openssl x509 -dates</code> show which.</li>
+    <li>Renew certificates automatically (ACME, managed certificates) and monitor expiry separately.</li>
+    <li><code>tcpdump -nn</code> shows the packets: unanswered SYNs mean drops, SYN then RST means refused.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>SNI</dt><dd>Server Name Indication: the host name a TLS client sends in its first message, so a server can choose the right certificate.</dd>
+    <dt>Certificate chain</dt><dd>The server certificate plus the intermediate certificates that link it to a trusted root CA.</dd>
+    <dt>Trust store</dt><dd>The set of root CA certificates a system or program trusts.</dd>
+    <dt>ACME</dt><dd>The protocol for obtaining and renewing certificates automatically, used by Let's Encrypt and others.</dd>
+    <dt>tcpdump</dt><dd>A command-line packet capture tool that prints or saves packets matching a filter.</dd>
+    <dt>TCP flags</dt><dd>Bits in a TCP segment that mark its role: SYN (open), ACK, PSH (data), FIN (close), RST (reset).</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>curl fails with exit code 6. Which layer failed, and what's the first command you'd run? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Name resolution (“couldn't resolve host”). Run <code>getent hosts NAME</code> on the same machine, then <code>dig NAME</code> and <code>resolvectl status</code> to see which resolver it uses and what it answers.</p></details>
+    </li>
+    <li>
+      <p>You've built a replacement web server, <code>10.40.0.15</code>, not yet in DNS. Write the curl command that requests <code>https://tickets.stagedoor.example/health</code> from it, with full certificate checking. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>curl -v --resolve tickets.stagedoor.example:443:10.40.0.15 https://tickets.stagedoor.example/health</code>. The connection goes to the new server, while SNI, certificate checks and the Host header use the real name.</p></details>
+    </li>
+    <li>
+      <p>Explain why a site can work in a desktop browser and fail in curl and in a phone app with “unable to get local issuer certificate”. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The server is sending its certificate without the intermediate. Some desktop browsers have the intermediate cached, or fetch it themselves from the certificate's AIA field, so they can complete the chain; curl and most apps don't, so they can't link the certificate to a trusted root. Configure nginx with the full chain.</p></details>
+    </li>
+    <li>
+      <p><code>tcpdump</code> on a client shows <code>[S]</code> to the server's port 443 repeated after 1, 3 and 7 seconds, with no reply. On the server, the same capture shows nothing. Where's the problem? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p>Between the two: the SYN leaves the client and never reaches the server's interface. Check the path: the client's route, cloud security groups and network ACLs, any firewall or load balancer in between. If the server <em>had</em> seen the SYN and not answered, the server's own firewall would be the suspect (<a href="index.html#ch15">Chapter 15</a>).</p></details>
+    </li>
+    <li>
+      <p>Design certificate management for Stagedoor's public names after 13 September. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Every public name gets an ACME certificate (certbot or a managed certificate on a load balancer), renewed automatically about 30 days before expiry with a hook that reloads nginx and distributes the certificate to every server that needs it. An external daily check of every endpoint alerts 21 days ahead and on any verification error. CA and registrar accounts use a shared operations address. A list of all names and where their certificates live is kept in the wiki.</p></details>
+    </li>
+    <li>
+      <p>Compare <code>curl -v</code> and <code>openssl s_client</code> for debugging a TLS problem. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p><code>curl -v</code> shows the whole request as a client would make it, including HTTP, and reports the verification result in one line. <code>openssl s_client</code> shows the TLS layer in detail: every certificate in the chain the server sent, each verification step with its error number, the negotiated protocol and cipher, and lets you extract the certificate for <code>openssl x509</code>. Start with curl; use s_client when the problem is the certificate or the handshake.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li><code>man curl</code> (the “EXIT CODES” section), <code>man openssl-s_client</code>, <code>man openssl-x509</code>, <code>man tcpdump</code>, <code>man pcap-filter</code>.</li>
+    <li>Julia Evans, <a href="https://wizardzines.com/zines/bite-size-networking/">Bite Size Networking</a>, and her <a href="https://jvns.ca/blog/2016/03/16/tcpdump-is-amazing/">tcpdump is amazing</a>.</li>
+    <li><a href="https://letsencrypt.org/docs/">Let's Encrypt documentation</a> and <a href="https://certbot.eff.org/">Certbot</a>.</li>
+    <li>Handbook 1: Chapters 3 (TCP), 6 (HTTP, TLS and certificates) and 22 (observing and troubleshooting a cloud network).</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="index.html#ch15">15 · Host firewalls</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 3 · Linux for Cloud Engineers</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>
