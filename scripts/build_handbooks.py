@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PUBLIC = ROOT / "public"
 CONTENT = ROOT / "content" / "handbooks"
 AUTHOR = "Jefrey Romel Tagunicar"
-BOOKS = ["cloud-networking", "cloud-identity"]
+BOOKS = ["cloud-networking", "cloud-identity", "linux"]
 FONTS = ("https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&"
          "family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap")
 

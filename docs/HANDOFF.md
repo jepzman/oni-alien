@@ -9,7 +9,8 @@ Read in this order:
 2. `docs/larder-casebook.md`: the story's facts (source of truth for every Series 2 note).
 3. The plan for the book you're writing (Series 3, the handbooks: `docs/HANDOFF-handbooks.md`):
    - Handbook 2 (Identity and Access in the Cloud; complete: 25 chapters + appendices A–E): `docs/HANDOFF-handbook-2-identity.md`
-   - Next handbooks (3 Linux, 4 Kubernetes, 5 Terraform, 6 PostgreSQL, then 7–8; new story Stagedoor proposed; no chapters yet): `docs/HANDOFF-handbooks-next.md`
+   - Next handbooks (3 Linux, 4 Kubernetes, 5 Terraform, 6 PostgreSQL, then 7–8; story Stagedoor, `docs/stagedoor-casebook.md`): `docs/HANDOFF-handbooks-next.md`
+   - Handbook 3 · Linux for Cloud Engineers (in progress: Part I written): `docs/HANDOFF-handbook-3-linux.md`
    - Book 1 (Ana, architect): `docs/HANDOFF-solution-architect.md`
    - Book 2 (Grace, product owner): `docs/HANDOFF-product-owner.md`
    - **Book 3 (Sanne, project manager): `docs/HANDOFF-project-manager.md`** ← the book in progress; start at its section 16

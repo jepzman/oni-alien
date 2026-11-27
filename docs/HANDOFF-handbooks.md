@@ -186,3 +186,6 @@ facts above. 5. Sample chapter: **9** (policies). 6. On the Series 3 shelf now, 
 Owner, 2026-11-27: Linux first, then Kubernetes, Terraform (main tool) and PostgreSQL; a new fictional story instead
 of Larder (Stagedoor, a Lisbon ticketing platform, proposed); no sample chapters yet. Outlines for Handbooks 3–6,
 sketches for 7–8, and the mechanics of starting a book: **`docs/HANDOFF-handbooks-next.md`**.
+
+Update, 2026-11-27: Stagedoor approved; **Handbook 3 · Linux for Cloud Engineers** started (21 chapters, Ubuntu,
+Part I written): **`docs/HANDOFF-handbook-3-linux.md`**.

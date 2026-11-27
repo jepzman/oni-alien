@@ -1,8 +1,8 @@
 # Handoff: Series 3, the next handbooks (3–8). Draft for owner review
 
-Status as of **2026-11-27**: **outlines proposed; owner decisions so far below. No chapters, not even samples, are to be
-written yet** (owner, 2026-11-27). Handbooks 1 (*Networking in the Cloud*) and 2 (*Identity and Access in the Cloud*)
-are complete.
+Status as of **2026-11-27**: **Handbook 3 (Linux) approved and started: Part I (chapters 1–4) written.** Progress and
+briefs: **`docs/HANDOFF-handbook-3-linux.md`**. Handbooks 4–8 are still outlines. Handbooks 1 (*Networking in the
+Cloud*) and 2 (*Identity and Access in the Cloud*) are complete.
 
 ### Owner decisions (2026-11-27)
 
@@ -10,7 +10,9 @@ are complete.
 2. **A new fictional story**, not Larder, for the new handbooks (Larder stays with Handbooks 1–2 and the notebooks).
    Proposed in §2: **Stagedoor**, to approve or replace.
 3. **Terraform is the main tool** in the IaC book, with OpenTofu differences noted where they matter.
-4. **No sample chapters yet**: outlines, decisions and placeholders first.
+4. ~~No sample chapters yet~~. Later the same day: **Stagedoor approved** (now `docs/stagedoor-casebook.md`);
+   Handbook 3 has **21 chapters**, **Ubuntu** as the main distribution, **cloud-init as sections** of ch. 1 and 18;
+   writing approved, starting with Part I.
 
 | No. | Working title | Key (folder) | Outline |
 | --- | --- | --- | --- |

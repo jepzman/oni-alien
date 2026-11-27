@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>The shell, properly · Linux for Cloud Engineers</title>
+<meta name="description" content="Commands, pipes and redirection, quoting and expansion, exit codes and getting help. The tools you&#x27;ll use for every other chapter.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 3</a> · <a href="index.html">Linux for Cloud Engineers</a></span><span>Part I · Chapter 2</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part I · Finding your way</p>
+  <p class="chno">2</p>
+  <h1>The shell, properly</h1>
+  <p class="promise">You can type commands; this chapter shows what happens to them before they run. Once you know how the shell splits, expands and connects what you type, pipelines stop being magic spells copied from the internet and become sentences you can read, write and trust with a real question.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Describe what the shell does with a line before any program runs.</li>
+      <li>Redirect standard output and standard error, and connect commands with pipes.</li>
+      <li>Answer a question from a log file with a pipeline of small tools, and check the answer.</li>
+      <li>Quote correctly, and predict what <code>*</code>, <code>$var</code> and <code>$( … )</code> turn into.</li>
+      <li>Use exit codes to tell success from failure, including inside a pipeline.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>A terminal on any Linux (<a href="index.html#appC">Appendix C</a>). <a href="01-what-a-server-is.html">Chapter 1</a> helps but isn't required.</li>
+      <li>Python 3, only to generate the lab's sample log.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, any Linux terminal, free</dd>
+      <dt>Shell</dt><dd>bash, the default on Ubuntu, Debian, RHEL and Amazon Linux</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>Tiago Neves starts at Stagedoor on Monday 2 February 2026, his first job after university. On Wednesday, Joana Matos, the CEO, stops by his desk. Sala Ribeira, a venue in Porto, says some fans got an error at checkout when Os Lumes went on sale last Friday at 10:00. How many?</p>
+  <p>Tiago has seen this done in a chat thread. He logs in to <code>door-2</code>, finds nginx's access log for that morning and types:</p>
+<pre><code>grep 500 access.log | wc -l</code></pre>
+  <p>It prints <code>381</code>. Joana goes pale: that's a lot of fans to apologise to. Rafaela, reading over his shoulder, asks one question: “What did <code>500</code> match?” Section 2.9 answers it.</p>
+</aside>
+
+<!-- ======================================================== 2.1 -->
+<h2 class="sec" id="s2-1"><span class="n">2.1</span>What the shell does with a line</h2>
+
+<p class="lead">The <span class="term">shell</span> is an ordinary program (on servers, usually <strong>bash</strong>) whose job is to read a line of text, turn it into one or more programs with arguments, run them, and wait. Most surprises come from not knowing that the shell rewrites the line before anything runs.</p>
+
+<figure class="wide" id="fig2-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 230" role="img" aria-labelledby="fig2-1-t fig2-1-d">
+      <title id="fig2-1-t">What the shell does with one line</title>
+      <desc id="fig2-1-d">Five steps from left to right. Read: the shell reads the line grep "POST /api/checkout" $LOG pipe wc -l. Split: it splits the line into words and operators, respecting quotes. Expand: it replaces variables, command substitutions and wildcards, so $LOG becomes access.log. Find: it finds each program, as a builtin or a file in a directory on PATH, for example /usr/bin/grep. Run and wait: it starts the programs, connects the pipe, waits, and records the exit status in $?. Below, the result: grep receives exactly two arguments, POST /api/checkout and access.log; wc receives one, -l.</desc>
+      <defs><marker id="c2ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="priv" x="10" y="12" width="740" height="36" rx="5"/>
+      <text class="t-mono" x="24" y="35">grep "POST /api/checkout" $LOG | wc -l</text>
+      <text class="t-small" x="560" y="35">← what you type</text>
+      <rect class="node" x="10" y="68" width="132" height="76" rx="5"/>
+      <text class="t-title" x="76" y="94" text-anchor="middle">1 Read</text>
+      <text class="t-small" x="76" y="116" text-anchor="middle">one line, up to</text>
+      <text class="t-small" x="76" y="132" text-anchor="middle">Enter</text>
+      <rect class="node" x="162" y="68" width="132" height="76" rx="5"/>
+      <text class="t-title" x="228" y="94" text-anchor="middle">2 Split</text>
+      <text class="t-small" x="228" y="116" text-anchor="middle">into words and |,</text>
+      <text class="t-small" x="228" y="132" text-anchor="middle">respecting quotes</text>
+      <rect class="node-accent" x="314" y="68" width="132" height="76" rx="5"/>
+      <text class="t-title on-accent" x="380" y="94" text-anchor="middle">3 Expand</text>
+      <text class="t-small on-accent" x="380" y="116" text-anchor="middle">$LOG → access.log</text>
+      <text class="t-small on-accent" x="380" y="132" text-anchor="middle">*, $( ), ~</text>
+      <rect class="node" x="466" y="68" width="132" height="76" rx="5"/>
+      <text class="t-title" x="532" y="94" text-anchor="middle">4 Find</text>
+      <text class="t-small" x="532" y="116" text-anchor="middle">builtin, or a file</text>
+      <text class="t-small" x="532" y="132" text-anchor="middle">on PATH</text>
+      <rect class="node" x="618" y="68" width="132" height="76" rx="5"/>
+      <text class="t-title" x="684" y="94" text-anchor="middle">5 Run, wait</text>
+      <text class="t-small" x="684" y="116" text-anchor="middle">connect the pipe;</text>
+      <text class="t-small" x="684" y="132" text-anchor="middle">exit status → $?</text>
+      <path class="wire" d="M142 106 H158" marker-end="url(#c2ah)"/>
+      <path class="wire" d="M294 106 H310" marker-end="url(#c2ah)"/>
+      <path class="wire" d="M446 106 H462" marker-end="url(#c2ah)"/>
+      <path class="wire" d="M598 106 H614" marker-end="url(#c2ah)"/>
+      <rect class="pub" x="10" y="164" width="740" height="54" rx="5"/>
+      <text class="t-small" x="24" y="186">/usr/bin/grep receives 2 arguments:</text>
+      <text class="t-mono" x="260" y="186">[POST /api/checkout] [access.log]</text>
+      <text class="t-small" x="24" y="206">/usr/bin/wc receives 1 argument:</text>
+      <text class="t-mono" x="260" y="206">[-l]</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 2.1</b> The programs never see your quotes, your <code>$LOG</code> or your <code>|</code>. They see only the final list of arguments, and the shell has already decided what it is.</figcaption>
+</figure>
+
+<p>Two consequences follow. First, a program can't tell whether you typed <code>*.log</code> or the list of names the shell turned it into. Second, when a command does something odd, the question is usually “what arguments did it actually get?”, and <code>echo</code> is the quickest way to find out: put <code>echo</code> in front of the command, and the shell prints the expanded line instead of running it.</p>
+
+<aside class="side"><b>bash, sh, dash</b>Your login shell on a server is usually <code>bash</code>. <code>/bin/sh</code> is a simpler shell for scripts: on Ubuntu and Debian it's <code>dash</code>, which lacks some bash features. A script that starts with <code>#!/bin/sh</code> but uses bash syntax works on one distribution and fails on another.</aside>
+
+<!-- ======================================================== 2.2 -->
+<h2 class="sec" id="s2-2"><span class="n">2.2</span>Commands, options and arguments</h2>
+
+<p>After splitting, the first word is the command and the rest are its <strong>arguments</strong>. By convention, arguments starting with <code>-</code> are <strong>options</strong>: short ones are a single letter and can be combined (<code>ls -l -a</code> is <code>ls -la</code>); long ones start with <code>--</code> (<code>ls --all</code>). Some options take a value: <code>head -n 5</code>, <code>sort --key=2</code>. A lone <code>--</code> means “no more options”, which matters when a file name starts with a dash: <code>rm -- -oops.txt</code>.</p>
+
+<p>The command itself is one of three things, and <code>type</code> tells you which:</p>
+<ul>
+  <li>A <strong>builtin</strong>, part of the shell itself: <code>cd</code>, <code>echo</code>, <code>export</code>, <code>type</code>. It has to be: <code>cd</code> changes the shell's own current directory, which a separate program couldn't do.</li>
+  <li>An <strong>alias</strong> or <strong>function</strong> defined in your shell's startup files, such as Ubuntu's <code>ll</code> for <code>ls -alF</code>.</li>
+  <li>A <strong>program</strong>: a file somewhere on disk. The shell looks for it in each directory listed in the <span class="term">PATH</span> variable, in order, and runs the first match.</li>
+</ul>
+
+<pre><code>type cd ll grep         <span class="c"># cd is a shell builtin · ll is aliased to `ls -alF' · grep is /usr/bin/grep</span>
+echo "$PATH"            <span class="c"># /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin…</span></code></pre>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: PATH is not the same everywhere</p>
+  <p>Your interactive shell's <code>PATH</code> is set by its startup files. Programs started by <code>cron</code> or as services get a much shorter one. A command that works when you type it can fail with “command not found” at 03:00. Stagedoor meets exactly this in <a href="index.html#ch6">Chapter 6</a>; the fix is to use full paths, or set <code>PATH</code> explicitly, in anything that runs unattended.</p>
+</div>
+
+<!-- ======================================================== 2.3 -->
+<h2 class="sec" id="s2-3"><span class="n">2.3</span>Standard streams and redirection</h2>
+
+<p>Every program starts with three open channels, called <span class="term">standard streams</span>, each identified by a small number, its <span class="term">file descriptor</span>:</p>
+<ul>
+  <li><strong>0, standard input</strong> (stdin): where it reads input from. By default, your keyboard.</li>
+  <li><strong>1, standard output</strong> (stdout): where it writes its results. By default, your terminal.</li>
+  <li><strong>2, standard error</strong> (stderr): where it writes errors and progress messages. Also your terminal, which is why the two look the same until you separate them.</li>
+</ul>
+
+<p>The split between 1 and 2 is what makes pipelines work: results flow on to the next program, while errors still reach you. <span class="term">Redirection</span> tells the shell to connect a stream to a file instead:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 2.1 · Redirection, the forms you'll use every day</caption>
+    <thead><tr><th>You write</th><th>It means</th></tr></thead>
+    <tbody>
+      <tr><td><code>cmd &gt; out.txt</code></td><td>stdout to <code>out.txt</code>, replacing the file if it exists</td></tr>
+      <tr><td><code>cmd &gt;&gt; out.txt</code></td><td>stdout appended to <code>out.txt</code></td></tr>
+      <tr><td><code>cmd 2&gt; err.txt</code></td><td>stderr to <code>err.txt</code>; stdout still to the terminal</td></tr>
+      <tr><td><code>cmd &gt; all.txt 2&gt;&amp;1</code></td><td>stdout to <code>all.txt</code>, then stderr to wherever stdout now goes. Order matters: <code>2&gt;&amp;1 &gt; all.txt</code> sends stderr to the terminal</td></tr>
+      <tr><td><code>cmd 2&gt; /dev/null</code></td><td>throw stderr away. <code>/dev/null</code> is a device that discards whatever is written to it</td></tr>
+      <tr><td><code>cmd &lt; in.txt</code></td><td>stdin from <code>in.txt</code></td></tr>
+      <tr><td><code>cmd1 | cmd2</code></td><td>stdout of <code>cmd1</code> becomes stdin of <code>cmd2</code></td></tr>
+      <tr><td><code>cmd | tee out.txt</code></td><td>show the output <em>and</em> save a copy</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>One more form is common in documentation: <code>sudo cmd &gt; /etc/file</code> fails with “Permission denied” even though <code>cmd</code> runs as root. The redirection is done by <em>your</em> shell, as you, before <code>sudo</code> even starts. Write <code>cmd | sudo tee /etc/file &gt; /dev/null</code> instead.</p>
+
+<!-- ======================================================== 2.4 -->
+<h2 class="sec" id="s2-4"><span class="n">2.4</span>Pipes and the small tools</h2>
+
+<p>A <span class="term">pipe</span> connects one program's standard output to the next one's standard input. All the programs in a pipeline run at the same time; each reads what the previous one writes, as it's written. That's why <code>grep error huge.log | head -5</code> returns at once: when <code>head</code> has its five lines it exits, and <code>grep</code> is stopped the next time it writes.</p>
+
+<figure class="wide" id="fig2-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 196" role="img" aria-labelledby="fig2-2-t fig2-2-d">
+      <title id="fig2-2-t">A pipeline and its streams</title>
+      <desc id="fig2-2-d">Three programs side by side: awk, sort and uniq -c. access.log is awk's input. awk's standard output, file descriptor 1, is connected by a pipe to sort's standard input, file descriptor 0. sort's standard output is piped to uniq's standard input. uniq's standard output goes to the terminal. Each program's standard error, file descriptor 2, goes straight to the terminal, bypassing the pipes.</desc>
+      <defs><marker id="c2ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c2ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="ext" x="10" y="40" width="96" height="44" rx="4"/>
+      <text class="t-mono" x="58" y="67" text-anchor="middle">access.log</text>
+      <rect class="node" x="140" y="34" width="130" height="56" rx="5"/>
+      <text class="t-title" x="205" y="60" text-anchor="middle">awk</text>
+      <text class="t-small" x="205" y="78" text-anchor="middle">print field 9</text>
+      <rect class="node" x="330" y="34" width="130" height="56" rx="5"/>
+      <text class="t-title" x="395" y="60" text-anchor="middle">sort</text>
+      <text class="t-small" x="395" y="78" text-anchor="middle">group equal lines</text>
+      <rect class="node" x="520" y="34" width="130" height="56" rx="5"/>
+      <text class="t-title" x="585" y="60" text-anchor="middle">uniq -c</text>
+      <text class="t-small" x="585" y="78" text-anchor="middle">count each group</text>
+      <path class="wire" d="M106 62 H136" marker-end="url(#c2ah2)"/>
+      <path class="wire-accent" d="M270 62 H326" marker-end="url(#c2ah3)"/>
+      <text class="t-small t-accent" x="298" y="28" text-anchor="middle">1 → pipe → 0</text>
+      <path class="wire-accent" d="M460 62 H516" marker-end="url(#c2ah3)"/>
+      <text class="t-small t-accent" x="488" y="28" text-anchor="middle">1 → pipe → 0</text>
+      <path class="wire" d="M650 62 H700 V150" marker-end="url(#c2ah2)"/>
+      <text class="t-small" x="706" y="100">1</text>
+      <rect class="priv" x="140" y="150" width="610" height="34" rx="5"/>
+      <text class="t-label" x="160" y="172">terminal</text>
+      <path class="wire-dash" d="M205 90 V146" marker-end="url(#c2ah2)"/><path class="wire-dash" d="M395 90 V146" marker-end="url(#c2ah2)"/><path class="wire-dash" d="M585 90 V146" marker-end="url(#c2ah2)"/>
+      <text class="t-small" x="212" y="124">2 (errors)</text>
+      <text class="t-small" x="402" y="124">2</text>
+      <text class="t-small" x="592" y="124">2</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 2.2</b> Pipes carry standard output (1) into standard input (0). Standard error (2) skips the pipes and reaches you directly, so a failing step still tells you why.</figcaption>
+</figure>
+
+<p>The Unix habit is to combine small programs that each do one thing. A handful cover most questions you'll ask of a server:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 2.2 · Small tools for text</caption>
+    <thead><tr><th>Tool</th><th>Does</th><th>Typical use</th></tr></thead>
+    <tbody>
+      <tr><td><code>grep</code></td><td>keeps lines matching a pattern</td><td><code>grep -i error app.log</code>, <code>grep -v healthcheck</code> (lines <em>not</em> matching), <code>grep -c</code> (count)</td></tr>
+      <tr><td><code>awk</code></td><td>splits each line into fields <code>$1</code>, <code>$2</code>…, filters and prints</td><td><code>awk '$9 &gt;= 500 {print $7}'</code></td></tr>
+      <tr><td><code>sort</code></td><td>sorts lines</td><td><code>sort -n</code> (numbers), <code>-r</code> (reverse), <code>-u</code> (unique)</td></tr>
+      <tr><td><code>uniq -c</code></td><td>counts runs of identical lines; needs sorted input</td><td><code>sort | uniq -c | sort -rn</code>: a frequency table</td></tr>
+      <tr><td><code>wc -l</code></td><td>counts lines</td><td>how many matched?</td></tr>
+      <tr><td><code>head</code>, <code>tail</code></td><td>first or last lines</td><td><code>tail -f app.log</code> follows a growing file</td></tr>
+      <tr><td><code>cut</code></td><td>picks fields by delimiter</td><td><code>cut -d: -f1 /etc/passwd</code></td></tr>
+      <tr><td><code>less</code></td><td>pages through text</td><td><code>/</code> to search, <code>q</code> to quit</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Build pipelines one step at a time, and look at the output after each step (add <code>| head</code> while you work). A pipeline you built and checked step by step is one you can trust; a pipeline you pasted is a guess with a confident number at the end.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Before you trust a count, look at what you counted. Replace <code>| wc -l</code> with <code>| head</code> and read the lines.</p>
+</div>
+
+<!-- ======================================================== 2.5 -->
+<h2 class="sec" id="s2-5"><span class="n">2.5</span>Expansion and quoting</h2>
+
+<p>Step 3 of Figure 2.1 is where most shell bugs live. Before running anything, bash performs several <span class="term">expansions</span> on each word:</p>
+<ul>
+  <li><strong>Tilde:</strong> <code>~</code> becomes your home directory.</li>
+  <li><strong>Variables:</strong> <code>$name</code> or <code>${name}</code> becomes the variable's value. <code>$?</code> (last exit status), <code>$$</code> (the shell's process ID) and <code>$1</code> (a script's first argument) are special variables.</li>
+  <li><strong>Command substitution:</strong> <code>$(cmd)</code> becomes <code>cmd</code>'s output, as in Lab 1's server card.</li>
+  <li><strong>Arithmetic:</strong> <code>$((2 * 60))</code> becomes <code>120</code>.</li>
+  <li><strong>Word splitting:</strong> the result of an <em>unquoted</em> expansion is split again at spaces, tabs and newlines.</li>
+  <li><strong>Globbing</strong> (pathname expansion): an unquoted word containing <code>*</code>, <code>?</code> or <code>[…]</code> becomes the list of matching file names. If nothing matches, bash leaves the word as it is.</li>
+</ul>
+
+<p><span class="term">Quoting</span> switches expansions off:</p>
+<ul>
+  <li><strong>Single quotes</strong> <code>'…'</code> switch off everything. What you write is what the program gets.</li>
+  <li><strong>Double quotes</strong> <code>"…"</code> allow variables, <code>$( )</code> and arithmetic, but switch off word splitting and globbing. The result stays one argument, spaces and all.</li>
+  <li>A <strong>backslash</strong> switches off the special meaning of the next character.</li>
+</ul>
+
+<p>In a directory containing only <code>access.log</code>, with <code>event=os-lumes</code>:</p>
+<pre><code>echo *.log; echo "*.log"; echo $event "$event" '$event'</code></pre>
+<pre><code>access.log
+*.log
+os-lumes os-lumes $event</code></pre>
+
+<p>The dangerous case is a variable holding a space. Unquoted, it becomes two arguments:</p>
+<pre><code>f="on-sale report.txt"; touch "$f"; ls $f; ls "$f"</code></pre>
+<pre><code>ls: cannot access 'on-sale': No such file or directory
+ls: cannot access 'report.txt': No such file or directory
+on-sale report.txt</code></pre>
+
+<p>The unquoted <code>ls $f</code> looked for two files, <code>on-sale</code> and <code>report.txt</code>. With <code>ls</code> that's an error message. With <code>rm</code> it deletes the wrong files, and with <code>rm -rf $dir/</code> and an empty <code>$dir</code>, it's the classic way to delete far more than intended.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Put double quotes around every variable and every <code>$( )</code>, unless you can say why not. Use single quotes for text that must reach the program untouched, such as <code>awk</code> and <code>grep</code> patterns.</p>
+</div>
+
+<!-- ======================================================== 2.6 -->
+<h2 class="sec" id="s2-6"><span class="n">2.6</span>Exit codes</h2>
+
+<p>Every program finishes with an <span class="term">exit status</span>, a number from 0 to 255. <strong>0 means success</strong>; anything else means some kind of failure, and the program's manual page says which. The shell keeps the last one in <code>$?</code>. <code>grep</code> is a good example, because it distinguishes “no match” from “something went wrong”:</p>
+
+<pre><code>grep -q '" 504 ' access.log; echo $?     <span class="c"># a line with status 504 exists</span>
+grep -q '" 503 ' access.log; echo $?     <span class="c"># none with 503</span>
+grep -q 504 nosuch.log; echo $?          <span class="c"># the file doesn't exist</span></code></pre>
+<pre><code>0
+1
+grep: nosuch.log: No such file or directory
+2</code></pre>
+
+<p>A few codes are set by the shell itself: <code>126</code> means the file exists but can't be executed (Lab 1), <code>127</code> means command not found, and <code>128 + n</code> means the program was killed by signal <em>n</em> (so <code>137</code> is 128 + 9, <code>SIGKILL</code>, which you'll meet in <a href="index.html#ch5">Chapter 5</a> and <a href="index.html#ch10">Chapter 10</a>).</p>
+
+<p>Exit codes drive the shell's logic. <code>a &amp;&amp; b</code> runs <code>b</code> only if <code>a</code> succeeded; <code>a || b</code> runs <code>b</code> only if <code>a</code> failed; <code>a; b</code> runs both regardless. <code>if</code> tests an exit status, not a true/false value: <code>if grep -q ERROR app.log; then …</code>.</p>
+
+<p>A pipeline's exit status is, by default, the status of its <strong>last</strong> command. That hides failures:</p>
+<pre><code>grep 500 nosuch.log | wc -l; echo "status: $?"
+set -o pipefail
+grep 500 nosuch.log | wc -l; echo "status: $?"</code></pre>
+<pre><code>grep: nosuch.log: No such file or directory
+0
+status: 0
+grep: nosuch.log: No such file or directory
+0
+status: 2</code></pre>
+
+<p>Without <code>pipefail</code>, the pipeline “succeeded” and printed a count of 0, because <code>wc</code> happily counted nothing. In a script, that zero would be reported as a fact. With <code>set -o pipefail</code>, the pipeline fails if any part fails. <a href="index.html#ch17">Chapter 17</a> makes this and two other settings the start of every script.</p>
+
+<!-- ======================================================== 2.7 -->
+<h2 class="sec" id="s2-7"><span class="n">2.7</span>Getting help and moving fast</h2>
+
+<p>Nobody remembers every option. What you need is to know where the answers are:</p>
+<ul>
+  <li><strong><code>man grep</code></strong> opens the manual page. Pages are grouped in numbered <strong>sections</strong>: 1 for commands, 5 for file formats (<code>man 5 crontab</code>), 8 for administration commands. Search inside with <code>/</code>; quit with <code>q</code>. <code>man -k word</code> searches page titles.</li>
+  <li><strong><code>grep --help</code></strong> prints a shorter summary for most programs; <strong><code>help cd</code></strong> does the same for bash builtins.</li>
+  <li><strong>Examples</strong> are often the fastest help: the EXAMPLES section near the end of many man pages, or a community tool such as <code>tldr</code>.</li>
+</ul>
+
+<aside class="side"><b>Minimal images</b>Cloud and container images often leave out manual pages to save space. On Ubuntu, <code>sudo unminimize</code> puts them back; or read them on your own machine, or at <code>manpages.ubuntu.com</code>.</aside>
+
+<p>And a few keys save hours: <kbd>Tab</kbd> completes commands and file names (press it twice to see choices); <kbd>Ctrl</kbd>+<kbd>R</kbd> searches your command history; <kbd>Ctrl</kbd>+<kbd>C</kbd> interrupts the running program; <kbd>Ctrl</kbd>+<kbd>D</kbd> ends input (and logs you out of an empty prompt); <kbd>Ctrl</kbd>+<kbd>A</kbd> and <kbd>Ctrl</kbd>+<kbd>E</kbd> jump to the start and end of the line. <code>history</code> lists what you typed, which, on a shared server, is also a way to learn what the last person did.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: secrets in your history</p>
+  <p>Anything you type is saved to <code>~/.bash_history</code> when the shell exits, including a password passed as an argument (<code>mysql -p'secret'</code>, <code>curl -u user:secret</code>). Prefer tools that prompt for secrets or read them from a file or environment variable. Arguments are also visible to other users in <code>ps</code> while the program runs.</p>
+</div>
+
+<!-- ======================================================== 2.8 -->
+<h2 class="sec" id="s2-8"><span class="n">2.8</span>Across distributions</h2>
+
+<p>bash and the core tools behave the same on every distribution in this book: Ubuntu, Debian, the RHEL family and Amazon Linux all ship GNU bash, GNU coreutils, GNU grep and an <code>awk</code>. The differences you'll notice are small:</p>
+
+<div class="box box-provider">
+  <p class="label">On the RHEL family and Amazon Linux</p>
+  <p><code>/bin/sh</code> is bash itself (running in a compatibility mode), not dash. Scripts that start with <code>#!/bin/sh</code> but use bash features work there and break on Ubuntu and Debian, so write <code>#!/usr/bin/env bash</code> when you use bash features. <code>awk</code> is GNU awk (<code>gawk</code>) here, while Ubuntu and Debian install the smaller <code>mawk</code> by default; both handle everything in this chapter.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On your Mac</p>
+  <p>macOS uses zsh as the default shell and BSD versions of the core tools, whose options sometimes differ (<code>sed -i</code>, <code>date</code>, <code>base64 -D</code>). When a command from this book behaves strangely on a Mac, run it on the server or in a Linux container instead.</p>
+</div>
+
+<!-- ======================================================== 2.9 -->
+<h2 class="sec" id="s2-9"><span class="n">2.9</span>Lab: how many fans got an error?</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 2 · Answer Joana's question, and check the answer</p>
+  <p><strong>You'll</strong> generate a sample of the access log from Stagedoor's on-sale, reproduce Tiago's wrong count, find out why it's wrong, and build the right answer one pipe at a time. <strong>You need</strong> a Linux terminal and Python 3. <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> delete the lab directory.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Make the log.</strong> Create a directory, save this script in it as <code>makelog.py</code>, and run it. It writes 2,000 lines in nginx's default (“combined”) format; its random choices are seeded, so you get exactly the same file as everyone else.
+<p class="code-title"><span>makelog.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># makelog.py · a sample nginx access log for the 10:00 on-sale on Friday 30 January 2026</span>
+<span class="k">import</span> random
+
+rng = random.Random(2026)
+NETS = [<span class="s">"198.51.100"</span>, <span class="s">"203.0.113"</span>, <span class="s">"192.0.2"</span>]
+PAGES = [(<span class="s">"GET"</span>, <span class="s">"/events/os-lumes-porto"</span>), (<span class="s">"GET"</span>, <span class="s">"/static/app.js"</span>),
+         (<span class="s">"GET"</span>, <span class="s">"/api/seats?event=4500"</span>), (<span class="s">"POST"</span>, <span class="s">"/api/hold"</span>), (<span class="s">"POST"</span>, <span class="s">"/api/checkout"</span>)]
+
+<span class="k">for</span> i <span class="k">in</span> range(2000):
+    t = 9 * 3600 + 58 * 60 + int(i * 0.36)          <span class="c"># 09:58:00 onwards, about 3 requests a second</span>
+    stamp = f<span class="s">"30/Jan/2026:{t // 3600:02d}:{t // 60 % 60:02d}:{t % 60:02d} +0000"</span>
+    ip = f<span class="s">"{rng.choice(NETS)}.{rng.randint(1, 254)}"</span>
+    method, path = rng.choices(PAGES, weights=[30, 25, 20, 15, 10])[0]
+    status = 200
+    <span class="k">if</span> path == <span class="s">"/static/app.js"</span> <span class="k">and</span> rng.random() &lt; 0.5:
+        status = 304
+    <span class="k">elif</span> path == <span class="s">"/api/hold"</span> <span class="k">and</span> rng.random() &lt; 0.2:
+        status = 409                                   <span class="c"># someone else got the seat first</span>
+    <span class="k">elif</span> path == <span class="s">"/api/checkout"</span> <span class="k">and</span> <span class="s">"10:01"</span> &lt;= stamp[12:17] &lt;= <span class="s">"10:04"</span> <span class="k">and</span> rng.random() &lt; 0.3:
+        status = rng.choice([500, 502, 504])
+    size = 0 <span class="k">if</span> status == 304 <span class="k">else</span> rng.randint(150, 9000)
+    agent = rng.choice([<span class="s">"Mozilla/5.0 (iPhone)"</span>, <span class="s">"Mozilla/5.0 (Android)"</span>, <span class="s">"Mozilla/5.0 (Windows NT 10.0)"</span>])
+    print(f<span class="s">'{ip} - - [{stamp}] "{method} {path} HTTP/1.1" {status} {size} "-" "{agent}"'</span>)</code></pre>
+<pre><code>mkdir -p ~/lab2 &amp;&amp; cd ~/lab2       <span class="c"># save makelog.py here first</span>
+python3 makelog.py &gt; access.log
+wc -l access.log
+head -3 access.log</code></pre>
+<pre><code>2000 access.log
+198.51.100.82 - - [30/Jan/2026:09:58:00 +0000] "GET /static/app.js HTTP/1.1" 200 1831 "-" "Mozilla/5.0 (iPhone)"
+192.0.2.160 - - [30/Jan/2026:09:58:00 +0000] "GET /api/seats?event=4500 HTTP/1.1" 200 8192 "-" "Mozilla/5.0 (Windows NT 10.0)"
+203.0.113.62 - - [30/Jan/2026:09:58:00 +0000] "GET /events/os-lumes-porto HTTP/1.1" 200 1472 "-" "Mozilla/5.0 (iPhone)"</code></pre>
+  Read one line field by field, as <code>awk</code> will see it (fields are separated by spaces): <code>$1</code> is the client's address, <code>$4</code> the time (with a leading <code>[</code>), <code>$6</code> the method (with a leading <code>"</code>), <code>$7</code> the path, <code>$9</code> the <strong>status code</strong>, <code>$10</code> the response size in bytes.</li>
+  <li><strong>Reproduce Tiago's count</strong>, then look at what it counted:
+<pre><code>grep 500 access.log | wc -l
+grep 500 access.log | head -4</code></pre>
+<pre><code>381
+192.0.2.160 - - [30/Jan/2026:09:58:00 +0000] "GET /api/seats?event=4500 HTTP/1.1" 200 8192 "-" "Mozilla/5.0 (Windows NT 10.0)"
+203.0.113.23 - - [30/Jan/2026:09:58:02 +0000] "GET /api/seats?event=4500 HTTP/1.1" 200 4936 "-" "Mozilla/5.0 (Android)"
+192.0.2.117 - - [30/Jan/2026:09:58:05 +0000] "GET /api/seats?event=4500 HTTP/1.1" 200 4262 "-" "Mozilla/5.0 (Windows NT 10.0)"
+192.0.2.150 - - [30/Jan/2026:09:58:10 +0000] "GET /api/seats?event=4500 HTTP/1.1" 200 8210 "-" "Mozilla/5.0 (Windows NT 10.0)"</code></pre>
+  <code>grep 500</code> matches <em>any</em> line containing those three characters. Every request for the seat map has <code>event=4500</code> in its path, and two responses happen to be 8,500 and 5,009 bytes long. None of the first four matches is an error.</li>
+  <li><strong>Count the status field instead.</strong> A frequency table of field 9:
+<pre><code>awk '{print $9}' access.log | sort | uniq -c | sort -rn</code></pre>
+<pre><code>   1662 200
+    253 304
+     58 409
+     11 502
+      9 500
+      7 504</code></pre>
+  Now the picture is clear: 27 server errors in total (500, 502, 504). The 409s are fans who lost a race for a seat; the app answered correctly, so they aren't errors for this question.</li>
+  <li><strong>Narrow it to checkout</strong>, and to people rather than requests. A fan who retried counts once:
+<pre><code>awk '$7 == "/api/checkout" &amp;&amp; $9 &gt;= 500' access.log | wc -l
+awk '$7 == "/api/checkout" &amp;&amp; $9 &gt;= 500 {print $1}' access.log | sort -u | wc -l</code></pre>
+<pre><code>27
+26</code></pre>
+  Twenty-seven failed checkouts, from 26 addresses. Check the difference rather than trusting it:
+<pre><code>awk '$7 == "/api/checkout" &amp;&amp; $9 &gt;= 500 {print $1}' access.log | sort | uniq -c | sort -rn | head -3</code></pre>
+<pre><code>      2 198.51.100.138
+      1 203.0.113.59
+      1 203.0.113.48</code></pre>
+  One address failed twice. (An address isn't quite a person: several fans behind one mobile network can share one, and one fan can switch from Wi-Fi to 4G. For an apology email, Stagedoor would use the order attempts in its database instead. The log gives the right order of magnitude, quickly.)</li>
+  <li><strong>When did it happen?</strong> Characters 14–18 of field 4 are the hour and minute:
+<pre><code>awk '$9 &gt;= 500 {print substr($4, 14, 5)}' access.log | sort | uniq -c</code></pre>
+<pre><code>      4 10:01
+     11 10:02
+      7 10:03
+      5 10:04</code></pre>
+  All errors fell between 10:01 and 10:04, the first minutes of the on-sale.</li>
+  <li><strong>Break it on purpose: quoting.</strong> Count checkout requests, first without quotes:
+<pre><code>grep POST /api/checkout access.log | head -2
+grep "POST /api/checkout" access.log | wc -l</code></pre>
+<pre><code>grep: /api/checkout: No such file or directory
+access.log:203.0.113.37 - - [30/Jan/2026:09:58:02 +0000] "POST /api/hold HTTP/1.1" 200 5212 "-" "Mozilla/5.0 (iPhone)"
+204</code></pre>
+  Unquoted, the shell split the pattern into two words: <code>grep</code> searched for <code>POST</code> in two files, <code>/api/checkout</code> (which doesn't exist, hence the error on stderr) and <code>access.log</code> (and, with two files, prefixed each line with its file name). Piped into <code>wc -l</code>, the error would scroll past and you'd get 497, every POST, holds included. Quoted, it's one argument and the right answer: 204 checkout requests.</li>
+  <li><strong>Break it on purpose: exit codes.</strong> Run the <code>pipefail</code> example from 2.6 in your lab directory and confirm the two different statuses.</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Print the top five paths by number of requests. (2) Count 409s per minute: does losing a seat race peak at the same time as the server errors? (3) Use <code>awk</code> to sum field 10 and report how many megabytes the server sent in these twelve minutes.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: the real answer</p>
+  <p>The 381 lines were mostly fans looking at the seat map for event 4500. Tiago rebuilds the answer the way the lab does, one pipe at a time, and checks each step with <code>head</code>. On <code>door-2</code>: 27 failed checkout requests, from 26 fans, all between 10:01 and 10:04; <code>door-3</code>'s log shows much the same. Joana sends Sala Ribeira the numbers within the hour, and Sasha's team asks for the four minutes of app logs to find out why checkout failed.</p>
+  <p>Rafaela adds one line to the team wiki, under “Answering questions from logs”: <em>before you send a number, show the lines you counted</em>. Tiago pins it.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s2-10"><span class="n">2.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td><code>grep</code> for a number anywhere on the line</td><td>Matches sizes, paths and times; the count is meaningless.</td><td>Match the field: <code>awk '$9 == 500'</code>.</td></tr>
+      <tr><td>Counting without looking</td><td>A confident wrong number.</td><td>Swap <code>| wc -l</code> for <code>| head</code> and read the lines first.</td></tr>
+      <tr><td>Unquoted variables</td><td>Values with spaces become several arguments; empty ones vanish.</td><td><code>"$var"</code>, always.</td></tr>
+      <tr><td>Double quotes around an <code>awk</code> program</td><td>The shell expands <code>$9</code> (usually to nothing) before <code>awk</code> sees it.</td><td>Single quotes around <code>awk</code> and <code>grep</code> patterns.</td></tr>
+      <tr><td><code>uniq -c</code> on unsorted input</td><td>Equal lines that aren't adjacent are counted separately.</td><td><code>sort | uniq -c</code>.</td></tr>
+      <tr><td>Trusting a pipeline's exit status</td><td>A failed first step is hidden by a successful last one.</td><td><code>set -o pipefail</code> in scripts (<a href="index.html#ch17">Chapter 17</a>).</td></tr>
+      <tr><td><code>sudo cmd &gt; /etc/file</code></td><td>“Permission denied”: the redirection runs as you.</td><td><code>cmd | sudo tee /etc/file</code>.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum2">
+  <h2 class="sec" id="sum2"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>The shell reads a line, splits it, <strong>expands</strong> it, finds each program and runs it. Programs see only the final arguments.</li>
+    <li>Programs have three <strong>standard streams</strong>: input (0), output (1) and error (2). Redirection connects them to files; <strong>pipes</strong> connect one program's output to the next one's input.</li>
+    <li>Small tools (<code>grep</code>, <code>awk</code>, <code>sort</code>, <code>uniq</code>, <code>wc</code>, <code>head</code>) answer most questions about a server, built one step at a time.</li>
+    <li><strong>Quote</strong> every variable with double quotes; use single quotes for patterns and programs.</li>
+    <li>Exit status 0 means success. A pipeline returns its last command's status unless <code>pipefail</code> is set.</li>
+    <li>Look at what you counted before you trust the count.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Shell</dt><dd>The program that reads commands, expands them and runs programs; usually bash on servers.</dd>
+    <dt>PATH</dt><dd>The list of directories the shell searches, in order, to find a program by name.</dd>
+    <dt>Standard streams</dt><dd>The three channels every program starts with: standard input (0), standard output (1) and standard error (2).</dd>
+    <dt>File descriptor</dt><dd>A small number a process uses to refer to an open file, pipe or socket.</dd>
+    <dt>Redirection</dt><dd>Connecting a program's standard stream to a file instead of the terminal, with <code>&gt;</code>, <code>&gt;&gt;</code>, <code>2&gt;</code> or <code>&lt;</code>.</dd>
+    <dt>Pipe</dt><dd>A connection from one program's standard output to another's standard input, written <code>|</code>.</dd>
+    <dt>Expansion</dt><dd>The shell's rewriting of a word before running a command: variables, command substitution, arithmetic, word splitting and globbing.</dd>
+    <dt>Globbing</dt><dd>Turning a word containing <code>*</code>, <code>?</code> or <code>[…]</code> into the list of matching file names.</dd>
+    <dt>Quoting</dt><dd>Switching off expansions: single quotes switch off all of them, double quotes all but variables and command substitution.</dd>
+    <dt>Exit status</dt><dd>The number a program returns when it finishes; 0 means success.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Which file descriptor does a program write error messages to, and why does it matter for pipelines? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Standard error, file descriptor 2. Pipes only carry standard output (1), so error messages reach the terminal instead of being mixed into the data the next program processes.</p></details>
+    </li>
+    <li>
+      <p>Write a pipeline that lists the five client addresses with the most requests in <code>access.log</code>, most first. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>awk '{print $1}' access.log | sort | uniq -c | sort -rn | head -5</code>. The first <code>sort</code> groups equal addresses so <code>uniq -c</code> can count them; the second sorts by count, numerically and in reverse.</p></details>
+    </li>
+    <li>
+      <p><code>dir=</code> is accidentally empty. What does <code>rm -rf $dir/*</code> do, and how would quoting and a check have helped? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The shell expands it to <code>rm -rf /*</code>: every top-level directory on the machine. Quoting alone (<code>"$dir"/*</code>) gives the same result with an empty variable; what helps is refusing to run with an empty value: <code>rm -rf "${dir:?}"/*</code> stops with an error if <code>dir</code> is empty or unset, and <code>set -u</code> (<a href="index.html#ch17">Chapter 17</a>) catches unset variables in scripts.</p></details>
+    </li>
+    <li>
+      <p>A script runs <code>grep ERROR /var/log/app.log | wc -l</code> and reports 0 errors every night. The log file was renamed a month ago. Why didn't anyone notice, and what's the fix? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p><code>grep</code> failed (exit 2, “No such file or directory” on stderr, which nobody reads in a cron job), but the pipeline's status was <code>wc</code>'s, which succeeded and counted zero lines. Fix: <code>set -o pipefail</code> (or check that the file exists) so the failure is reported, and send the script's stderr somewhere someone reads.</p></details>
+    </li>
+    <li>
+      <p>Joana now asks for the number of fans who lost a seat race (status 409) and later completed a checkout. Sketch how you'd answer it from the log, and say what the log can't tell you. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Collect the addresses with a 409 on <code>/api/hold</code> (<code>awk '$9 == 409 {print $1}' | sort -u &gt; lost.txt</code>), the addresses with a 200 on <code>/api/checkout</code> (<code>… | sort -u &gt; bought.txt</code>), and count the lines in both (<code>comm -12 lost.txt bought.txt | wc -l</code>). The log can't tell you about people: addresses are shared and change, and it doesn't know which order belongs to whom. The order database can.</p></details>
+    </li>
+    <li>
+      <p>Compare single and double quotes: what does each switch off, and when do you use each? <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Single quotes switch off every expansion; use them for text that must reach a program unchanged, such as <code>awk</code> programs and <code>grep</code> patterns containing <code>$</code>. Double quotes keep variable and command substitution but switch off word splitting and globbing; use them around variables and <code>$( )</code> so the value stays one argument.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>The <a href="https://www.gnu.org/software/bash/manual/">GNU Bash Reference Manual</a>, especially “Shell Expansions” and “Redirections”.</li>
+    <li><a href="https://mywiki.wooledge.org/BashGuide">Greg's Bash Guide</a> and its list of <a href="https://mywiki.wooledge.org/BashPitfalls">Bash pitfalls</a>.</li>
+    <li>The <a href="https://www.gnu.org/software/gawk/manual/">GNU Awk User's Guide</a>; the first chapter is enough for most log work.</li>
+    <li><code>man bash</code>, <code>man grep</code>, <code>man 7 pipe</code>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="03-files.html">3 · Files and the filesystem layout</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 3 · Linux for Cloud Engineers</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

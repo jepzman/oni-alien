@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Files and the filesystem layout · Linux for Cloud Engineers</title>
+<meta name="description" content="Where everything lives and why: /etc, /var, /usr, /proc and the rest, inodes, hard and symbolic links, and finding things.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 3</a> · <a href="index.html">Linux for Cloud Engineers</a></span><span>Part I · Chapter 3</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part I · Finding your way</p>
+  <p class="chno">3</p>
+  <h1>Files and the filesystem layout</h1>
+  <p class="promise">On a Linux server, nearly everything you'll configure, read or fix is a file in one big tree, and the tree has conventions: configuration here, data there, logs somewhere else. This chapter teaches the map, what a file really is underneath its name, and how links let you switch a whole application to a new version in one step.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Say where configuration, programs, data, logs and temporary files belong, and why.</li>
+      <li>Read every column of <code>ls -l</code>, and explain what an inode is.</li>
+      <li>Choose between a hard link and a symbolic link, and switch a release atomically with a symlink.</li>
+      <li>Find files by name, type, size and age with <code>find</code>.</li>
+      <li>Design a filesystem layout for your own application.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li><a href="02-the-shell.html">Chapter 2</a>: commands, quoting, pipes.</li>
+      <li>A Linux terminal as a normal (non-root) user (<a href="index.html#appC">Appendix C</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, any Linux terminal, free</dd>
+      <dt>Main distribution</dt><dd>Ubuntu, with other distributions in 3.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>In the week of 9 February 2026, Rafaela and Tiago set out to answer a simple question about <code>door-2</code>: where does the app live? nginx's configuration points at <code>/srv/app</code>. That turns out to be a link to <code>/root/stagedoor</code>, a Git checkout in the root user's home directory. In it: the code, a <code>.env</code> file with the database password, a <code>venv</code> directory, and <code>nohup.out</code>, 6.1 GB of everything the app has printed since it was last started. Deploying means logging in as root, running <code>git pull</code> in that directory, and restarting the app by hand.</p>
+  <p>Tiago asks the obvious question: what happens to a request that arrives while <code>git pull</code> is halfway through replacing files? Nobody knows. Section 3.7 is the answer they agree on.</p>
+</aside>
+
+<!-- ======================================================== 3.1 -->
+<h2 class="sec" id="s3-1"><span class="n">3.1</span>One tree</h2>
+
+<p class="lead">Linux has no drive letters. Every file on the machine sits somewhere in one tree that starts at <code>/</code>, the <span class="term">root directory</span>. Other disks, network shares and special filesystems are attached to the tree at a directory, called a <strong>mount point</strong> (<a href="index.html#ch11">Chapter 11</a>), and from then on look like ordinary directories.</p>
+
+<p>Where things go in that tree isn't arbitrary. The <span class="term">Filesystem Hierarchy Standard</span> (FHS) describes the layout every mainstream distribution follows, and once you know it you can find your way around any server, including one somebody else built.</p>
+
+<figure class="wide" id="fig3-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 330" role="img" aria-labelledby="fig3-1-t fig3-1-d">
+      <title id="fig3-1-t">The Linux filesystem tree, by what changes and who owns it</title>
+      <desc id="fig3-1-d">The root directory at the top, with directories grouped into four boxes. Programs, installed by packages and read-only in normal use: /usr (with /usr/bin, /usr/lib, /usr/share) and /opt for self-contained software. Configuration, edited by administrators: /etc. Data that changes while the system runs: /var, with /var/lib for application state, /var/log for logs, /var/cache and /var/spool; /srv for data a server publishes; /home and /root for users' files; /tmp for temporary files. Made by the kernel or at boot, not stored on disk: /proc, /sys, /dev and /run.</desc>
+      <rect class="ext" x="330" y="10" width="100" height="34" rx="5"/>
+      <text class="t-mono" x="380" y="32" text-anchor="middle">/</text>
+      <path class="wire" d="M380 44 V62 M100 62 H660 M100 62 V76 M290 62 V76 M470 62 V76 M660 62 V76"/>
+      <rect class="node" x="10" y="76" width="180" height="146" rx="5"/>
+      <text class="t-title" x="24" y="100">Programs</text>
+      <text class="t-small" x="24" y="118">from packages; read-only</text>
+      <text class="t-mono" x="24" y="144">/usr/bin  /usr/sbin</text>
+      <text class="t-mono" x="24" y="164">/usr/lib  /usr/share</text>
+      <text class="t-mono" x="24" y="184">/usr/local</text>
+      <text class="t-mono" x="24" y="204">/opt</text>
+      <rect class="node-accent" x="200" y="76" width="180" height="146" rx="5"/>
+      <text class="t-title on-accent" x="214" y="100">Configuration</text>
+      <text class="t-small on-accent" x="214" y="118">edited by people</text>
+      <text class="t-mono on-accent" x="214" y="144">/etc</text>
+      <text class="t-small on-accent" x="214" y="168">small text files;</text>
+      <text class="t-small on-accent" x="214" y="186">back these up and</text>
+      <text class="t-small on-accent" x="214" y="204">keep them in Git</text>
+      <rect class="node" x="390" y="76" width="180" height="146" rx="5"/>
+      <text class="t-title" x="404" y="100">Changing data</text>
+      <text class="t-small" x="404" y="118">grows while running</text>
+      <text class="t-mono" x="404" y="144">/var/lib  /var/log</text>
+      <text class="t-mono" x="404" y="164">/var/cache /var/spool</text>
+      <text class="t-mono" x="404" y="184">/srv  /home  /root</text>
+      <text class="t-mono" x="404" y="204">/tmp</text>
+      <rect class="priv" x="580" y="76" width="170" height="146" rx="5"/>
+      <text class="t-title" x="594" y="100">Not on disk</text>
+      <text class="t-small" x="594" y="118">made by the kernel</text>
+      <text class="t-mono" x="594" y="144">/proc  /sys</text>
+      <text class="t-mono" x="594" y="164">/dev</text>
+      <text class="t-mono" x="594" y="184">/run</text>
+      <text class="t-small" x="594" y="204">gone at shutdown</text>
+      <rect class="pub" x="10" y="242" width="740" height="74" rx="6"/>
+      <text class="t-small" x="26" y="266"><tspan font-weight="700">Rule of thumb:</tspan> if you could reinstall it from a package, it's under /usr. If a person chose it, it's in /etc.</text>
+      <text class="t-small" x="26" y="286">If the program wrote it while running, it's under /var. Back up /etc and /var/lib; rebuild the rest.</text>
+      <text class="t-small" x="26" y="306">/boot holds the kernel and initramfs (Chapter 1); on many distributions /bin, /sbin and /lib now point into /usr.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 3.1</b> The tree grouped by what changes and who changes it. That grouping, more than any single directory name, is what lets you back up, rebuild and secure a server sensibly.</figcaption>
+</figure>
+
+<!-- ======================================================== 3.2 -->
+<h2 class="sec" id="s3-2"><span class="n">3.2</span>What goes where</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 3.1 · The directories you'll use, and what they hold on a server</caption>
+    <thead><tr><th>Directory</th><th>Holds</th><th>On a server like Stagedoor's</th></tr></thead>
+    <tbody>
+      <tr><td><code>/etc</code></td><td>system-wide configuration, as text</td><td><code>/etc/nginx/</code>, <code>/etc/ssh/sshd_config</code>, <code>/etc/passwd</code></td></tr>
+      <tr><td><code>/usr</code></td><td>programs and libraries from packages</td><td><code>/usr/sbin/nginx</code>, <code>/usr/bin/python3</code></td></tr>
+      <tr><td><code>/usr/local</code></td><td>software installed by hand, outside the package manager</td><td>a tool compiled from source</td></tr>
+      <tr><td><code>/opt</code></td><td>self-contained application bundles</td><td>a vendor's agent; your own app's releases</td></tr>
+      <tr><td><code>/var/lib</code></td><td>state that programs keep</td><td><code>/var/lib/postgresql/</code> (the database's files)</td></tr>
+      <tr><td><code>/var/log</code></td><td>logs</td><td><code>/var/log/nginx/access.log</code> (<a href="index.html#ch7">Chapter 7</a>)</td></tr>
+      <tr><td><code>/var/cache</code></td><td>data that can be regenerated</td><td>downloaded packages</td></tr>
+      <tr><td><code>/srv</code></td><td>data the server publishes</td><td>a static website; often unused</td></tr>
+      <tr><td><code>/home</code>, <code>/root</code></td><td>users' own files; <code>/root</code> is the root user's home</td><td>personal notes and keys, <strong>not</strong> running services</td></tr>
+      <tr><td><code>/tmp</code></td><td>temporary files, for anyone</td><td>often emptied at boot; never for anything you need</td></tr>
+      <tr><td><code>/run</code></td><td>runtime state since boot: PID files, sockets</td><td><code>/run/nginx.pid</code></td></tr>
+      <tr><td><code>/proc</code>, <code>/sys</code></td><td>the kernel's view of processes and devices</td><td><code>/proc/meminfo</code>, <code>/proc/&lt;pid&gt;/</code></td></tr>
+      <tr><td><code>/dev</code></td><td>devices as files</td><td><code>/dev/vda</code> (a disk), <code>/dev/null</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>The reason this matters is practical. A layout that follows the convention tells everyone, including tools, what each file is: backups include <code>/etc</code> and <code>/var/lib</code>; log rotation looks in <code>/var/log</code>; a security scanner expects <code>/usr</code> to change only when packages do. An app living in <code>/root</code>, with its secrets, data and logs in one directory, defeats all of them at once.</p>
+
+<aside class="side"><b>The /usr merge</b>Ubuntu, Debian 12+, Fedora, RHEL and Amazon Linux have merged <code>/bin</code>, <code>/sbin</code> and <code>/lib</code> into <code>/usr</code>: the old names are symbolic links (3.5) to <code>/usr/bin</code> and so on. Both paths work.</aside>
+
+<!-- ======================================================== 3.3 -->
+<h2 class="sec" id="s3-3"><span class="n">3.3</span>Everything is a file</h2>
+
+<p>“Everything is a file” is the oldest Unix slogan, and it's nearly true: the kernel presents many different things through the same interface of names in the tree that you can open, read and write. The first character of <code>ls -l</code> says which kind you're looking at:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 3.2 · File types</caption>
+    <thead><tr><th><code>ls -l</code></th><th>Type</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td><code>-</code></td><td>regular file: bytes on a disk</td><td><code>/etc/hostname</code>, a program, a log</td></tr>
+      <tr><td><code>d</code></td><td>directory: a list of names</td><td><code>/etc</code></td></tr>
+      <tr><td><code>l</code></td><td>symbolic link: a name pointing to another path</td><td><code>/bin → usr/bin</code></td></tr>
+      <tr><td><code>c</code>, <code>b</code></td><td>character and block devices: hardware, or kernel features, as files</td><td><code>/dev/null</code>, <code>/dev/vda</code></td></tr>
+      <tr><td><code>s</code></td><td>socket: a connection point between programs</td><td><code>/run/postgresql/.s.PGSQL.5432</code></td></tr>
+      <tr><td><code>p</code></td><td>named pipe: a pipe (<a href="02-the-shell.html">Chapter 2</a>) with a name</td><td>rare on servers</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>The files under <code>/proc</code> and <code>/sys</code> are a special case: they're regular files whose contents the kernel generates at the moment you read them. That's why <code>ls -l /proc/loadavg</code> shows a size of 0, and <code>file</code> calls it “empty”, while <code>cat /proc/loadavg</code> prints the current load. They're the kernel's dashboard, and many tools you'll meet (<code>ps</code>, <code>free</code>, <code>top</code>) are mostly readers of <code>/proc</code>.</p>
+
+<!-- ======================================================== 3.4 -->
+<h2 class="sec" id="s3-4"><span class="n">3.4</span>Inodes, names and <code>ls -l</code></h2>
+
+<p>A file's name is not the file. On Linux filesystems, a file is an <span class="term">inode</span>: a numbered record that holds everything about the file (its type, owner, permissions, size, timestamps and where its data blocks are on the disk) <em>except its name</em>. A directory is just a table that maps names to inode numbers. <code>ls -i</code> shows the inode number next to each name.</p>
+
+<figure class="wide" id="fig3-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 270" role="img" aria-labelledby="fig3-2-t fig3-2-d">
+      <title id="fig3-2-t">Directory entries, inodes and data, with a hard link and a symbolic link</title>
+      <desc id="fig3-2-d">On the left, a directory table with three entries: notes.txt maps to inode 599380; copy.txt also maps to inode 599380, which makes it a hard link; latest maps to inode 599391. In the middle, inode 599380 records a regular file owned by tiago, mode rw-r--r--, size 30 bytes, link count 2, and points to its data blocks on the right, which hold the text door-2 notes, app runs as root. Inode 599391 records a symbolic link whose data is the path notes.txt; following it leads back to the directory entry notes.txt.</desc>
+      <defs><marker id="c3ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c3ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <text class="t-label" x="20" y="24">directory ~/lab3</text>
+      <rect class="node" x="20" y="34" width="200" height="132" rx="5"/>
+      <text class="t-small" x="34" y="56">name</text><text class="t-small" x="150" y="56">inode</text>
+      <path class="wire-dash" d="M28 64 H212"/>
+      <text class="t-mono" x="34" y="88">notes.txt</text><text class="t-mono" x="150" y="88">599380</text>
+      <text class="t-mono" x="34" y="118">copy.txt</text><text class="t-mono" x="150" y="118">599380</text>
+      <text class="t-mono" x="34" y="148">latest</text><text class="t-mono" x="150" y="148">599391</text>
+      <text class="t-label" x="290" y="24">inodes</text>
+      <rect class="node-accent" x="290" y="34" width="230" height="104" rx="5"/>
+      <text class="t-mono on-accent" x="304" y="58">#599380 regular file</text>
+      <text class="t-small on-accent" x="304" y="80">owner tiago · rw-r--r--</text>
+      <text class="t-small on-accent" x="304" y="98">size 30 · links 2</text>
+      <text class="t-small on-accent" x="304" y="116">times · data → blocks</text>
+      <rect class="node" x="290" y="160" width="230" height="64" rx="5"/>
+      <text class="t-mono" x="304" y="184">#599391 symbolic link</text>
+      <text class="t-small" x="304" y="206">data: the path "notes.txt"</text>
+      <text class="t-label" x="590" y="24">data blocks</text>
+      <rect class="ext" x="590" y="34" width="160" height="70" rx="5"/>
+      <text class="t-mono" x="604" y="62">door-2 notes</text>
+      <text class="t-mono" x="604" y="84">app runs as root</text>
+      <path class="wire" d="M210 84 H286" marker-end="url(#c3ah)"/>
+      <path class="wire" d="M210 114 H250 V90 H286" marker-end="url(#c3ah)"/>
+      <path class="wire" d="M210 144 H250 V190 H286" marker-end="url(#c3ah)"/>
+      <path class="wire" d="M520 70 H586" marker-end="url(#c3ah)"/>
+      <path class="wire-accent" d="M405 224 V250 H120 V170" marker-end="url(#c3ah2)"/>
+      <text class="t-small t-accent" x="160" y="244">following the link looks the name up again</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 3.2</b> Two names for one inode (a hard link), and a symbolic link, which is a separate small file containing a path. The inode keeps a count of names; its data is freed only when the count reaches zero and no process has it open.</figcaption>
+</figure>
+
+<p>With that picture, every column of <code>ls -l</code> makes sense:</p>
+<pre><code>599380 -rw-r--r-- 2 tiago tiago 13 Nov 27 08:02 a.txt
+│      │          │ │     │     │  │            └ the name, from the directory
+│      │          │ │     │     │  └ modification time
+│      │          │ │     │     └ size in bytes
+│      │          │ │     └ group
+│      │          │ └ owner
+│      │          └ link count: how many names this inode has
+│      └ type, then permissions (Chapter 4)
+└ inode number (shown with ls -i)</code></pre>
+
+<p><code>stat</code> shows the rest of the inode, including three timestamps: <strong>modify</strong> (the contents changed), <strong>change</strong> (the inode changed: permissions, owner, link count) and <strong>access</strong> (last read, often updated lazily to save writes). Note what's missing: there's no “creation time” you can rely on across filesystems, and none of the timestamps records who made the change. Accountability comes from logs (<a href="index.html#ch7">Chapter 7</a>, <a href="index.html#ch18">Chapter 18</a>), not from the filesystem.</p>
+
+<!-- ======================================================== 3.5 -->
+<h2 class="sec" id="s3-5"><span class="n">3.5</span>Hard links and symbolic links</h2>
+
+<p>Because names and inodes are separate, one file can have several names. There are two ways to do it, and they behave very differently:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 3.3 · Hard links and symbolic links compared</caption>
+    <thead><tr><th></th><th>Hard link (<code>ln target name</code>)</th><th>Symbolic link (<code>ln -s target name</code>)</th></tr></thead>
+    <tbody>
+      <tr><td>What it is</td><td>another directory entry for the <em>same inode</em></td><td>a separate tiny file whose contents are a path</td></tr>
+      <tr><td>Delete the original name</td><td>the file lives on under the other name</td><td>the link now points nowhere (“dangling”)</td></tr>
+      <tr><td>Across filesystems</td><td>no: inode numbers are per filesystem</td><td>yes: it's only a path</td></tr>
+      <tr><td>To a directory</td><td>not allowed</td><td>allowed, and common</td></tr>
+      <tr><td>You can tell it's a link</td><td>only from the link count</td><td><code>ls -l</code> shows <code>name -&gt; target</code></td></tr>
+      <tr><td>Typical use</td><td>backup tools, package managers, saving space</td><td>“current version”, compatibility names, config enabled from a library of files</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Symbolic links (symlinks) are the ones you'll create on purpose. A relative target (<code>releases/2026.02.1</code>) is resolved from the directory the link is in, not from where you are; an absolute one (<code>/opt/stagedoor/releases/2026.02.1</code>) from <code>/</code>. Prefer relative targets inside one application's directory, so the whole tree can be moved or copied.</p>
+
+<h3>Switching versions with one rename</h3>
+
+<p>Symlinks make a clean deployment pattern possible. Install each version of an application into its own directory, never touching it again, and point a symlink called <code>current</code> at the live one. Everything else (the service, nginx, cron jobs) refers only to <code>…/current</code>. Deploying is: unpack the new version next to the old one, then point <code>current</code> at it. Rolling back is pointing it back.</p>
+
+<p>The switch must be <span class="term">atomic</span>: at every instant, <code>current</code> must point to one complete version, never to nothing and never to half of each. The kernel guarantees exactly that for one operation: <strong>renaming</strong> a name over an existing one, within one filesystem, replaces it in a single step. So the safe way is to create the new link under a temporary name and rename it over the old one:</p>
+
+<pre><code>ln -s releases/2026.02.2 current.new
+mv -T current.new current            <span class="c"># -T: treat "current" as the name to replace, not a directory to move into</span></code></pre>
+
+<p>You'll often see <code>ln -sfn releases/2026.02.2 current</code> instead. Whether that's atomic depends on the version: the one on Ubuntu 24.04 creates a temporary link and renames it, as the lab shows with <code>strace</code>, while older versions removed the old link first and created the new one after, leaving a moment with no <code>current</code> at all. <code>mv -T</code> is atomic everywhere, so deploy scripts should use it.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Never change a running application's files in place. Put the new version beside the old one, and switch with a single rename.</p>
+</div>
+
+<p>Running programs that already loaded the old code keep using it until they restart; that's a feature, and <a href="index.html#ch5">Chapter 5</a> shows how to restart them without dropping requests.</p>
+
+<!-- ======================================================== 3.6 -->
+<h2 class="sec" id="s3-6"><span class="n">3.6</span>Finding things</h2>
+
+<p><code>find</code> walks a tree and tests every entry. Its arguments read as a sentence: <em>where</em> to start, then <em>tests</em>, then optionally an <em>action</em> (the default is to print the path).</p>
+
+<pre><code>find /etc -name '*.conf'                    <span class="c"># by name; quote the pattern so the shell doesn't expand it</span>
+find /var/log -type f -size +100M           <span class="c"># regular files over 100 MB</span>
+find /var/log -type f -mtime +30            <span class="c"># modified more than 30 days ago</span>
+find . -newer deploy.marker                 <span class="c"># changed since a reference file was touched</span>
+find / -xdev -type d -perm -0002            <span class="c"># world-writable directories on the root filesystem (Chapter 4)</span>
+find /tmp -user tiago -type f -delete       <span class="c"># an action: delete what matched. Run without -delete first!</span></code></pre>
+
+<p>Searching from <code>/</code> touches <code>/proc</code> and network mounts unless you add <code>-xdev</code> (stay on one filesystem), and prints “Permission denied” for directories you can't read unless you add <code>2&gt;/dev/null</code> or use <code>sudo</code>. For the other common questions: <code>type cmd</code> or <code>command -v cmd</code> finds a program on <code>PATH</code>; <code>grep -rl 'pattern' /etc/nginx</code> finds files containing a text; <code>dpkg -S /usr/sbin/nginx</code> says which package installed a file (<a href="index.html#ch8">Chapter 8</a>); and <code>readlink -f path</code> follows every symlink to the real file.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: deleted is not freed</p>
+  <p>Deleting a file removes a <em>name</em>. If a running program still has the file open, the inode and its data stay on the disk until the program closes it or exits, even though no name points to it any more. Deleting a huge log that nginx or your app is still writing frees nothing, and the disk stays full. The lab shows how to see such files; <a href="index.html#ch7">Chapter 7</a> and <a href="index.html#ch11">Chapter 11</a> show how to free the space.</p>
+</div>
+
+<!-- ======================================================== 3.7 -->
+<h2 class="sec" id="s3-7"><span class="n">3.7</span>A layout for your own application</h2>
+
+<p>Put the convention to work. For an application you deploy yourself (not from a distribution package), a layout that follows the FHS looks like this:</p>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 3.4 · Stagedoor's app layout, agreed in February 2026</caption>
+    <thead><tr><th>What</th><th>Where</th><th>Why there</th></tr></thead>
+    <tbody>
+      <tr><td>Each release's code and its Python environment</td><td><code>/opt/stagedoor/releases/2026.02.1/</code></td><td>self-contained, never modified after it's unpacked</td></tr>
+      <tr><td>The live release</td><td><code>/opt/stagedoor/current</code> → <code>releases/…</code></td><td>one atomic rename to deploy or roll back</td></tr>
+      <tr><td>Configuration and secrets</td><td><code>/etc/stagedoor/stagedoor.env</code></td><td>outside the code, so a release can't overwrite it; readable only by the app (<a href="04-permissions.html">Chapter 4</a>)</td></tr>
+      <tr><td>Data the app keeps</td><td><code>/var/lib/stagedoor/</code> (uploads in <code>…/uploads</code>)</td><td>survives every deploy; included in backups</td></tr>
+      <tr><td>Logs</td><td><code>/var/log/stagedoor/</code></td><td>where log rotation and log shipping look (<a href="index.html#ch7">Chapter 7</a>)</td></tr>
+      <tr><td>Runtime files</td><td><code>/run/stagedoor/</code></td><td>sockets and PID files; cleared at boot</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Notice what this buys. A deploy can't destroy uploads or overwrite configuration, because they aren't in the release directory. Old releases stay on disk for instant rollback (keep the last few; delete older ones). Backups need only <code>/etc/stagedoor</code> and <code>/var/lib/stagedoor</code>. And nothing lives in a person's home directory, so nobody's account is load-bearing.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, the plan">
+  <p class="label">At Stagedoor: the new layout</p>
+  <p>Rafaela and Tiago write Table 3.4 into the wiki and try it on a copy of <code>door-2</code>'s app first. The <code>git pull</code> question answers itself: a request arriving mid-deploy is served entirely by the old release or entirely by the new one, never by a mixture. Leonor likes the rollback most: “so going back is one command, not a <code>git revert</code> at 10:02 on a Friday?”</p>
+  <p>Two things have to happen before the app can move out of <code>/root</code>: it needs its own user, so the files can belong to something other than root (<a href="04-permissions.html">Chapter 4</a>), and it needs to be a service, so something other than a person's terminal starts it (<a href="index.html#ch6">Chapter 6</a>). The 6.1 GB <code>nohup.out</code> stays for now, with a note: <em>still open by the app; deleting it frees nothing</em>.</p>
+</aside>
+
+<!-- ======================================================== 3.8 -->
+<h2 class="sec" id="s3-8"><span class="n">3.8</span>Across distributions</h2>
+
+<p>The FHS is shared, so the big directories are the same everywhere. The differences are in where particular programs put their files:</p>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 3.5 · Same idea, different paths</caption>
+    <thead><tr><th></th><th>Ubuntu, Debian</th><th>RHEL family, Amazon Linux</th></tr></thead>
+    <tbody>
+      <tr><td>Defaults for a service's options</td><td><code>/etc/default/&lt;name&gt;</code></td><td><code>/etc/sysconfig/&lt;name&gt;</code></td></tr>
+      <tr><td>nginx sites</td><td><code>/etc/nginx/sites-available/</code>, enabled by a symlink in <code>sites-enabled/</code></td><td><code>/etc/nginx/conf.d/*.conf</code></td></tr>
+      <tr><td>nginx's default web root</td><td><code>/var/www/html</code></td><td><code>/usr/share/nginx/html</code></td></tr>
+      <tr><td>PostgreSQL's data</td><td><code>/var/lib/postgresql/&lt;version&gt;/main</code></td><td><code>/var/lib/pgsql/data</code></td></tr>
+      <tr><td>System log file</td><td><code>/var/log/syslog</code></td><td><code>/var/log/messages</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On the RHEL family</p>
+  <p>SELinux labels every file with a security context, and a file in an unexpected place can be refused even when its permissions are right. Moving an app to <code>/opt</code> or <code>/srv</code> on RHEL may need <code>semanage fcontext</code> and <code>restorecon</code> so nginx may read it; <code>ls -Z</code> shows the labels. <a href="index.html#ch18">Chapter 18</a> explains why this extra layer is worth having.</p>
+</div>
+
+<!-- ======================================================== 3.9 -->
+<h2 class="sec" id="s3-9"><span class="n">3.9</span>Lab: names, inodes and a release switch</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 3 · Take a file apart, then deploy with a symlink</p>
+  <p><strong>You'll</strong> look at real system files, watch a hard link outlive its original name and a symlink dangle, build Table 3.4's release layout in your home directory and switch it atomically, and catch a deleted file that still uses disk space. <strong>You need</strong> a Linux terminal as a normal user, Python 3, and optionally <code>strace</code> (<code>sudo apt install strace</code>). <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> <code>rm -r ~/lab3</code>. The outputs below came from a user called <code>tiago</code>; yours will show your name, other inode numbers and times.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Look around, read-only.</strong>
+<pre><code>mkdir -p ~/lab3 &amp;&amp; cd ~/lab3
+ls -ld /etc /var/log /tmp /proc
+file /usr/bin/ls /etc/hostname /dev/null /proc/loadavg</code></pre>
+<pre><code>drwxr-xr-x 82 root root 4096 Nov 27 08:01 /etc
+dr-xr-xr-x 94 root root    0 Nov 25 01:08 /proc
+drwxrwxrwt  6 root root 4096 Nov 27 08:01 /tmp
+drwxr-xr-x  7 root root 4096 Nov 21 05:14 /var/log
+/usr/bin/ls:   ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=44900829b39271d878615772bb2a6ffa422f0891, for GNU/Linux 3.2.0, stripped
+/etc/hostname: ASCII text
+/dev/null:     character special (1/3)
+/proc/loadavg: empty</code></pre>
+  <code>/proc</code> has size 0 and an odd link count because nothing in it is on a disk; <code>/proc/loadavg</code> is “empty” until you read it (try <code>cat /proc/loadavg</code>). <code>/tmp</code> ends in <code>t</code>, which <a href="04-permissions.html">Chapter 4</a> explains. <code>/dev/null</code> is a character device with device numbers 1 and 3.</li>
+  <li><strong>A hard link.</strong> Make a file, give it a second name, and compare:
+<pre><code>echo "door-2 notes" &gt; a.txt
+ln a.txt b.txt
+ls -li a.txt b.txt</code></pre>
+<pre><code>599380 -rw-r--r-- 2 tiago tiago 13 Nov 27 08:02 a.txt
+599380 -rw-r--r-- 2 tiago tiago 13 Nov 27 08:02 b.txt</code></pre>
+  Same inode number, link count 2: one file, two names. Write through one name, read through the other, then delete the original name:
+<pre><code>echo "app runs as root" &gt;&gt; b.txt
+cat a.txt
+rm a.txt
+ls -li b.txt</code></pre>
+<pre><code>door-2 notes
+app runs as root
+599380 -rw-r--r-- 1 tiago tiago 30 Nov 27 08:02 b.txt</code></pre>
+  The text written through <code>b.txt</code> was there in <code>a.txt</code>, and removing <code>a.txt</code> only dropped the link count to 1. The data is untouched.</li>
+  <li><strong>A symbolic link, and how it breaks.</strong>
+<pre><code>ln -s b.txt c.txt
+ls -l c.txt
+cat c.txt
+mv b.txt notes.txt
+cat c.txt; echo "exit status: $?"</code></pre>
+<pre><code>lrwxrwxrwx 1 tiago tiago 5 Nov 27 08:02 c.txt -&gt; b.txt
+door-2 notes
+app runs as root
+cat: c.txt: No such file or directory
+exit status: 1</code></pre>
+  The symlink stores the <em>name</em> <code>b.txt</code>. Renaming the target left it pointing at nothing. (A hard link would have followed, because it refers to the inode, not the name.)</li>
+  <li><strong>Build the release layout.</strong> Two releases and a <code>current</code> link, as in Table 3.4:
+<pre><code>mkdir -p opt/stagedoor/releases/2026.02.1 opt/stagedoor/releases/2026.02.2
+echo 2026.02.1 &gt; opt/stagedoor/releases/2026.02.1/VERSION
+echo 2026.02.2 &gt; opt/stagedoor/releases/2026.02.2/VERSION
+ln -s releases/2026.02.1 opt/stagedoor/current
+ls -l opt/stagedoor
+cat opt/stagedoor/current/VERSION</code></pre>
+<pre><code>total 4
+lrwxrwxrwx 1 tiago tiago   18 Nov 27 08:02 current -&gt; releases/2026.02.1
+drwxr-xr-x 4 tiago tiago 4096 Nov 27 08:02 releases
+2026.02.1</code></pre></li>
+  <li><strong>Deploy atomically</strong>: create the new link under another name, then rename it over the old one.
+<pre><code>cd opt/stagedoor
+ln -s releases/2026.02.2 current.new
+mv -T current.new current
+readlink current
+cat current/VERSION</code></pre>
+<pre><code>releases/2026.02.2
+2026.02.2</code></pre>
+  Rolling back is the same two commands with the old version.</li>
+  <li><strong>Optional: watch what <code>ln -sfn</code> does.</strong> <code>strace</code> prints the system calls a program makes (<a href="01-what-a-server-is.html">Chapter 1</a>). Roll back with <code>ln -sfn</code> and watch:
+<pre><code>strace -e trace=symlinkat,unlinkat,renameat,renameat2 ln -sfn releases/2026.02.1 current
+readlink current</code></pre>
+<pre><code>symlinkat("releases/2026.02.1", AT_FDCWD, "current") = -1 EEXIST (File exists)
+symlinkat("releases/2026.02.1", AT_FDCWD, "Cuojojq4") = 0
+renameat(AT_FDCWD, "Cuojojq4", AT_FDCWD, "current") = 0
++++ exited with 0 +++
+releases/2026.02.1</code></pre>
+  This version tried to create <code>current</code>, found it existed, made the link under a random temporary name, and renamed it over <code>current</code>: atomic. On an older system (Ubuntu 22.04, for example) run the same command and look for an <code>unlinkat</code> of <code>current</code> before the <code>symlinkat</code>: that gap is the moment with no link.</li>
+  <li><strong>Find things.</strong> Every symlink under the lab, and every <code>VERSION</code> file newer than <code>notes.txt</code>:
+<pre><code>cd ~/lab3
+find . -type l
+find . -name VERSION -newer notes.txt</code></pre>
+<pre><code>./opt/stagedoor/current
+./c.txt
+./opt/stagedoor/releases/2026.02.1/VERSION
+./opt/stagedoor/releases/2026.02.2/VERSION</code></pre>
+  The broken <code>c.txt</code> still shows up: it's a symlink, whether or not its target exists. <code>find . -xtype l</code> lists only broken ones.</li>
+  <li><strong>Break it on purpose: delete a file that's still open.</strong> Start a small program that writes 10 MB to <code>app.log</code> and keeps the file open, the way an app keeps its log open. Then delete the file and look at the program's open files in <code>/proc</code>:
+<pre><code>python3 -c 'import time; f = open("app.log", "a"); f.write("x" * 10_000_000); f.flush(); time.sleep(600)' &amp;
+sleep 1
+ls -l app.log
+rm app.log
+ls -l /proc/$!/fd | grep deleted
+kill $!</code></pre>
+<pre><code>-rw-r--r-- 1 tiago tiago 10000000 Nov 27 08:02 app.log
+l-wx------ 1 tiago tiago 64 Nov 27 08:02 3 -&gt; /home/tiago/lab3/app.log (deleted)</code></pre>
+  <code>$!</code> is the process ID of the last program started in the background. Its file descriptor 3 (<a href="02-the-shell.html">Chapter 2</a>) still points at the file, marked <code>(deleted)</code>: the 10 MB are still on the disk, and stay there until the <code>kill</code> ends the program. That's Stagedoor's <code>nohup.out</code>, in miniature.</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Run <code>stat notes.txt</code>, then <code>chmod o-r notes.txt</code> and <code>stat</code> again: which timestamp changed, and why not the other? (2) Write a three-line script <code>deploy.sh VERSION</code> that switches <code>current</code> atomically and refuses to run if <code>releases/VERSION</code> doesn't exist. (3) Find the five largest files in your home directory: <code>find ~ -type f -printf '%s %p\n' | sort -rn | head -5</code>.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s3-10"><span class="n">3.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Running an app from a home directory</td><td>The app depends on a person's account; secrets, code and data mix.</td><td><code>/opt</code> for code, <code>/etc</code> for config, <code>/var/lib</code> and <code>/var/log</code> for data and logs.</td></tr>
+      <tr><td>Deploying with <code>git pull</code> or <code>cp</code> into the live directory</td><td>Requests during the deploy see half-old, half-new code.</td><td>Unpack beside the old release; switch a symlink with <code>mv -T</code>.</td></tr>
+      <tr><td>Keeping anything important in <code>/tmp</code></td><td>Cleaned at boot or by a timer; readable by others if careless.</td><td><code>/var/lib/&lt;app&gt;</code>; for scratch files, <code>mktemp</code> (<a href="index.html#ch17">Chapter 17</a>).</td></tr>
+      <tr><td>Deleting a big log to free space</td><td>The app keeps it open; the space isn't freed.</td><td>Truncate it (<code>: &gt; file</code>) or rotate and signal the app (<a href="index.html#ch7">Chapter 7</a>).</td></tr>
+      <tr><td>Absolute symlinks inside an app's tree</td><td>Copying or moving the tree leaves links pointing at the old place.</td><td>Relative targets within the app's directory.</td></tr>
+      <tr><td><code>find … -delete</code> or <code>-exec rm</code> without a dry run</td><td>Deletes more than you meant; there's no undo.</td><td>Run the same <code>find</code> without the action first and read the list.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum3">
+  <h2 class="sec" id="sum3"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Everything is in one tree from <code>/</code>. Programs live in <code>/usr</code>, configuration in <code>/etc</code>, changing data in <code>/var</code>; <code>/proc</code>, <code>/sys</code>, <code>/dev</code> and <code>/run</code> are made by the kernel.</li>
+    <li>Follow the convention for your own app: code in <code>/opt</code>, config in <code>/etc</code>, data in <code>/var/lib</code>, logs in <code>/var/log</code>.</li>
+    <li>A file is an <strong>inode</strong>; names are directory entries pointing at it. <code>ls -l</code> shows the inode's type, permissions, link count, owner, size and time.</li>
+    <li>A <strong>hard link</strong> is another name for the same inode; a <strong>symbolic link</strong> is a small file holding a path, and can dangle.</li>
+    <li>Switch releases atomically: new symlink under a temporary name, then <code>mv -T</code> over the old one.</li>
+    <li>Deleting a file that a program has open frees nothing until the program closes it.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Root directory</dt><dd>The top of the single filesystem tree, written <code>/</code>.</dd>
+    <dt>FHS</dt><dd>The Filesystem Hierarchy Standard: the conventional layout of directories on Linux.</dd>
+    <dt>Mount point</dt><dd>The directory where another filesystem is attached to the tree.</dd>
+    <dt>Inode</dt><dd>The record of a file's type, owner, permissions, size, times and data location; everything except its name.</dd>
+    <dt>Hard link</dt><dd>An additional directory entry pointing to the same inode.</dd>
+    <dt>Symbolic link</dt><dd>A small file containing a path to another file or directory; also called a symlink.</dd>
+    <dt>Atomic operation</dt><dd>A change that happens completely or not at all, with no in-between state visible to others; renaming within a filesystem is atomic.</dd>
+    <dt><code>/proc</code></dt><dd>A filesystem generated by the kernel that shows processes and kernel state as files.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Where would you expect to find: nginx's configuration, PostgreSQL's data files, the <code>python3</code> program, and a process's list of open files? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p><code>/etc/nginx/</code>; <code>/var/lib/postgresql/…</code> (on Ubuntu and Debian); <code>/usr/bin/python3</code>; <code>/proc/&lt;pid&gt;/fd/</code>.</p></details>
+    </li>
+    <li>
+      <p><code>ls -l</code> shows <code>-rw-r----- 3 postgres postgres 8192 Feb 9 10:02 0001</code>. What does the 3 tell you, and what doesn't <code>ls</code> tell you about it? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>The inode has three names (hard links), somewhere on the same filesystem. <code>ls</code> doesn't say where the other two names are; <code>ls -i</code> gives the inode number, and <code>find / -xdev -inum &lt;number&gt;</code> finds them.</p></details>
+    </li>
+    <li>
+      <p>Explain why <code>mv -T current.new current</code> is safe during a deploy, and why <code>rm current; ln -s releases/new current</code> isn't. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>A rename within one filesystem replaces the old name in a single step, so any lookup of <code>current</code> finds either the old link or the new one. With <code>rm</code> then <code>ln</code>, there's a moment when <code>current</code> doesn't exist, and a request or a service restart in that moment fails.</p></details>
+    </li>
+    <li>
+      <p>The disk on a server is full. You delete a 6 GB log file, but <code>df</code> still says 100%. Why, and how do you confirm it? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p>A running process still has the file open, so its inode and data aren't freed. Confirm with <code>ls -l /proc/*/fd 2&gt;/dev/null | grep deleted</code> or <code>lsof +L1</code>, which list open files with no names left. The space comes back when that process closes the file or is restarted; next time, truncate or rotate instead of deleting (<a href="index.html#ch7">Chapter 7</a>).</p></details>
+    </li>
+    <li>
+      <p>Design the layout for a small Go service called <code>scanner</code> that keeps a local cache of ticket barcodes and writes a log. Say where each part goes. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Binary per release in <code>/opt/scanner/releases/&lt;version&gt;/</code> with a <code>current</code> symlink; configuration in <code>/etc/scanner/</code>; the barcode cache in <code>/var/cache/scanner/</code> if it can be rebuilt from the server, otherwise <code>/var/lib/scanner/</code>; logs in <code>/var/log/scanner/</code> (or the journal, <a href="index.html#ch7">Chapter 7</a>); a socket or PID file in <code>/run/scanner/</code>.</p></details>
+    </li>
+    <li>
+      <p>Compare a hard link and a symbolic link for keeping a “latest backup” name that always points to the newest backup file. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>A symlink suits it: it's visibly a pointer, can be switched atomically, and works across filesystems. A hard link would work only on the same filesystem, wouldn't show which backup it is without comparing inode numbers, and would keep an old backup's data alive after the backup itself was “deleted”.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>The <a href="https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html">Filesystem Hierarchy Standard 3.0</a>, and <code>man 7 hier</code> on your machine.</li>
+    <li><code>man 7 inode</code>, <code>man 7 symlink</code>, <code>man 2 rename</code> (the atomicity guarantee).</li>
+    <li><code>man find</code>, especially the EXAMPLES section.</li>
+    <li>The <code>systemd</code> view of the same layout: <code>man 7 file-hierarchy</code>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="04-permissions.html">4 · Users, groups and permissions</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 3 · Linux for Cloud Engineers</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>
