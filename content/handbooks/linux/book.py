@@ -11,7 +11,7 @@ BOOK = dict(
     no=3,
     title="Linux for Cloud Engineers",
     subtitle="The server under everything, explained",
-    next=7,
+    next=9,
     shelf_blurb="The shell, files and permissions, processes and systemd, logs, memory and disks, networking from the host, SSH, safe scripts, hardening and what containers are made of, on Ubuntu with Debian, RHEL and Amazon Linux compared.",
     audience=("Developers and new operations people who can ssh into a server and cd "
               "around, but freeze when it misbehaves. You've used a terminal; by the end you can run, secure, "

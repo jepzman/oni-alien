@@ -1,0 +1,468 @@
+<!-- Handbook 3 · Linux for Cloud Engineers · Chapter 7. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part II · Processes and services</p>
+  <p class="chno">7</p>
+  <h1>Logs</h1>
+  <p class="promise">Logs are how a server tells you what happened while you weren't looking. This chapter shows where Linux keeps them, how to find the five lines that matter among five million, and how to keep logs from doing the one thing they must never do: fill the disk on the busiest night of the year.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Say where a given program's logs go: the journal, a syslog file or its own file.</li>
+      <li>Filter the journal by unit, priority, time and boot.</li>
+      <li>Free space taken by a deleted log that's still open, without restarting anything.</li>
+      <li>Configure logrotate, and choose between <code>create</code>, <code>copytruncate</code> and a signal.</li>
+      <li>Set limits so logs can't fill a disk, and decide what to ship off the machine.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li><a href="#ch6">Chapter 6</a>: services and the journal. <a href="#ch3">Chapter 3</a>: deleted-but-open files.</li>
+      <li>A VM where PID 1 is systemd, with <code>sudo</code> (<a href="#appC">Appendix C</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, a VM with systemd and <code>sudo</code>, free</dd>
+      <dt>Main distribution</dt><dd>Ubuntu 24.04, with others in 7.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>Friday 20 March 2026, 10:00: a popular indie band's spring tour goes on sale. At 10:04, checkout starts failing on <code>door-2</code>. The app can't write the temporary file it uses to build each fan's PDF ticket: <code>No space left on device</code>. <code>df -h</code> says the root filesystem is 100% full. <code>door-3</code> is at 97%.</p>
+  <p>The culprit takes Tiago thirty seconds to find: <code>/var/log/stagedoor/stagedoor.log</code>, 131 GB. Sasha's team switched the app's log level to DEBUG in February while investigating Chapter 2's checkout errors, and nobody switched it back. Every request writes dozens of lines, and nothing ever rotates or deletes the file. Rafaela deletes it. <code>df</code> still says 100%. Tiago says what they're both thinking: “It's still open.”</p>
+</aside>
+
+<!-- ======================================================== 7.1 -->
+<h2 class="sec" id="s7-1"><span class="n">7.1</span>Where logs go</h2>
+
+<p class="lead">A Linux server has three kinds of log, and a given program uses one or more of them. The first question about any log is which one you're looking at.</p>
+
+<figure class="wide" id="fig7-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 270" role="img" aria-labelledby="fig7-1-t fig7-1-d">
+      <title id="fig7-1-t">Where logs go on an Ubuntu server</title>
+      <desc id="fig7-1-d">Three sources on the left. A service's standard output and standard error go to journald, which stores them in the journal, in /var/log/journal, read with journalctl. Programs that use syslog, such as sshd, sudo and cron, also reach journald through /dev/log; journald forwards everything to rsyslog, which writes text files such as /var/log/syslog and /var/log/auth.log. Programs that open their own files, such as nginx and some apps, write directly to /var/log/nginx/access.log or /var/log/stagedoor/stagedoor.log, which only logrotate keeps in check. On the right, an optional shipper sends copies of all three to a central log service.</desc>
+      <defs><marker id="c7ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="10" y="20" width="180" height="50" rx="5"/><text class="t-label" x="22" y="42">a service's stdout/stderr</text><text class="t-small" x="22" y="60">stagedoor.service</text>
+      <rect class="node" x="10" y="96" width="180" height="50" rx="5"/><text class="t-label" x="22" y="118">syslog API (/dev/log)</text><text class="t-small" x="22" y="136">sshd, sudo, cron, logger</text>
+      <rect class="node" x="10" y="190" width="180" height="50" rx="5"/><text class="t-label" x="22" y="212">its own files</text><text class="t-small" x="22" y="230">nginx, some apps</text>
+      <rect class="node-accent" x="240" y="44" width="170" height="70" rx="5"/><text class="t-title on-accent" x="325" y="72" text-anchor="middle">journald</text><text class="t-small on-accent" x="325" y="94" text-anchor="middle">/var/log/journal</text>
+      <rect class="node" x="460" y="20" width="150" height="40" rx="5"/><text class="t-mono" x="535" y="45" text-anchor="middle">journalctl</text>
+      <rect class="node" x="460" y="96" width="150" height="56" rx="5"/><text class="t-label" x="535" y="118" text-anchor="middle">rsyslog → files</text><text class="t-mono" x="535" y="138" text-anchor="middle">/var/log/syslog</text>
+      <rect class="node" x="460" y="190" width="150" height="56" rx="5"/><text class="t-mono" x="535" y="212" text-anchor="middle">/var/log/nginx/</text><text class="t-small" x="535" y="232" text-anchor="middle">kept in check by logrotate</text>
+      <rect class="ext" x="640" y="80" width="110" height="80" rx="5"/><text class="t-label" x="695" y="108" text-anchor="middle">shipper</text><text class="t-small" x="695" y="128" text-anchor="middle">to a central</text><text class="t-small" x="695" y="144" text-anchor="middle">log service</text>
+      <path class="wire" d="M190 45 H236" marker-end="url(#c7ah)"/>
+      <path class="wire" d="M190 121 H215 V95 H236" marker-end="url(#c7ah)"/>
+      <path class="wire" d="M410 70 H435 V40 H456" marker-end="url(#c7ah)"/>
+      <path class="wire" d="M410 90 H435 V124 H456" marker-end="url(#c7ah)"/>
+      <path class="wire" d="M190 215 H456" marker-end="url(#c7ah)"/>
+      <path class="wire-dash" d="M610 124 H636" marker-end="url(#c7ah)"/>
+      <path class="wire-dash" d="M610 218 H660 V164" marker-end="url(#c7ah)"/>
+    </svg>
+  </div>
+  <figcaption><b>Figure 7.1</b> On Ubuntu, almost everything passes through journald. Files that programs open themselves bypass it, and they're the ones that fill disks.</figcaption>
+</figure>
+
+<ul>
+  <li><strong>The journal.</strong> systemd's logging service, <span class="term">journald</span>, collects the standard output and error of every service, messages sent through the old syslog interface, and the kernel's messages. It stores them in a structured, indexed format in <code>/var/log/journal/</code>, with limits on its own size. You read it with <code>journalctl</code>.</li>
+  <li><strong>Syslog files.</strong> <span class="term">Syslog</span> is the traditional Unix logging interface. On Ubuntu, rsyslog receives a copy of everything from journald and writes the familiar text files: <code>/var/log/syslog</code> (everything), <code>/var/log/auth.log</code> (logins, <code>sudo</code>), <code>/var/log/kern.log</code>. Handy for <code>grep</code> and for old tools.</li>
+  <li><strong>Programs' own files.</strong> nginx writes <code>/var/log/nginx/access.log</code> and <code>error.log</code> itself; PostgreSQL, some apps and many vendor agents do the same. Nothing limits these files except log rotation (7.4), if somebody set it up.</li>
+</ul>
+
+<p>Every log line carries a <span class="term">priority</span> (also called severity or level), from 0 to 7: <code>emerg</code>, <code>alert</code>, <code>crit</code>, <code>err</code>, <code>warning</code>, <code>notice</code>, <code>info</code>, <code>debug</code>. Application frameworks use the same idea (Python's <code>DEBUG</code>, <code>INFO</code>, <code>WARNING</code>, <code>ERROR</code>). The level is the cheapest volume control you have: <code>DEBUG</code> can easily produce a hundred times what <code>INFO</code> does.</p>
+
+<!-- ======================================================== 7.2 -->
+<h2 class="sec" id="s7-2"><span class="n">7.2</span>Reading the journal</h2>
+
+<p><code>journalctl</code> with no arguments shows everything, oldest first, which is rarely what you want. Filters combine, and a handful cover nearly every question:</p>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 7.1 · journalctl filters</caption>
+    <thead><tr><th>You want</th><th>Command</th></tr></thead>
+    <tbody>
+      <tr><td>one service</td><td><code>journalctl -u stagedoor</code> (several <code>-u</code> are allowed)</td></tr>
+      <tr><td>follow live</td><td><code>journalctl -u stagedoor -f</code></td></tr>
+      <tr><td>the last lines, newest last</td><td><code>journalctl -u stagedoor -n 50</code>; <code>-r</code> for newest first</td></tr>
+      <tr><td>a time window</td><td><code>--since "2026-03-20 09:55" --until "10:10"</code>, or <code>--since "-15min"</code></td></tr>
+      <tr><td>warnings and worse</td><td><code>-p warning</code>; a range: <code>-p err..crit</code></td></tr>
+      <tr><td>this boot, the previous one</td><td><code>-b</code>, <code>-b -1</code>; <code>--list-boots</code></td></tr>
+      <tr><td>the kernel (out-of-memory kills, disk errors)</td><td><code>journalctl -k</code>, like <code>dmesg</code></td></tr>
+      <tr><td>a program by name or PID</td><td><code>-t stagedoor-lab</code>, <code>_PID=2187</code>, <code>_UID=1001</code></td></tr>
+      <tr><td>just the messages, or every field</td><td><code>-o cat</code>, <code>-o json-pretty</code>, <code>-o verbose</code></td></tr>
+      <tr><td>how much space it uses</td><td><code>journalctl --disk-usage</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Each journal entry is a set of fields, not just a line of text: who wrote it (<code>_UID</code>, <code>_PID</code>, <code>_SYSTEMD_UNIT</code>), when, on which boot, at which priority. Fields starting with <code>_</code> are added by journald itself and can't be faked by the program, which makes them trustworthy for questions like “which user ran this?”. Reading other users' and system entries needs <code>sudo</code>, or membership of the <code>adm</code> or <code>systemd-journal</code> group.</p>
+
+<aside class="side"><b>Is the journal kept?</b>On Ubuntu, the journal is stored on disk in <code>/var/log/journal</code> and survives reboots. On some minimal images it's kept only in memory, in <code>/run/log/journal</code>, and lost at every reboot. If <code>journalctl --list-boots</code> shows only one boot, check <code>Storage=</code> in <code>journald.conf</code>.</aside>
+
+<!-- ======================================================== 7.3 -->
+<h2 class="sec" id="s7-3"><span class="n">7.3</span>When logs fill the disk</h2>
+
+<p>A full filesystem breaks things that seem to have nothing to do with logs: uploads, temporary files, database writes, package installs, even logins on some systems. When it happens, the order of work matters:</p>
+
+<ol class="steps">
+  <li><strong>Find what's big.</strong> <code>df -h</code> shows which filesystem is full; <code>sudo du -xh /var --max-depth=2 | sort -h | tail</code> walks down to the culprit (<a href="#ch11">Chapter 11</a> does this properly).</li>
+  <li><strong>Free space without losing what you need.</strong> If a running program has the file open, deleting the name frees nothing (<a href="#ch3">Chapter 3</a>). <strong>Truncate</strong> it instead: <code>: &gt; /var/log/stagedoor/stagedoor.log</code> (or <code>truncate -s 0</code>) sets its length to zero, and the space comes back at once. If you need the contents, copy the last part somewhere else first.</li>
+  <li><strong>If you already deleted it</strong>, find the open file through <code>/proc</code> (<code>ls -l /proc/*/fd 2&gt;/dev/null | grep deleted</code>, or <code>sudo lsof +L1</code>) and truncate it through its descriptor: <code>: &gt; /proc/&lt;pid&gt;/fd/&lt;n&gt;</code>. Or restart the program, which closes it.</li>
+  <li><strong>Then stop it happening again</strong>: rotation, limits, a sensible log level and an alert on disk usage.</li>
+</ol>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: don't free space by deleting the wrong thing</p>
+  <p>Under pressure, it's tempting to delete whatever is big. Never delete files under <code>/var/lib</code> (database files, package state) or a database's write-ahead log to make room: that's data, not logs, and the damage outlasts the incident. Logs, caches (<code>/var/cache</code>, <code>apt clean</code>) and old releases are the safe candidates.</p>
+</div>
+
+<!-- ======================================================== 7.4 -->
+<h2 class="sec" id="s7-4"><span class="n">7.4</span>Rotation with logrotate</h2>
+
+<p><span class="term">Log rotation</span> means: every so often (or when a file gets too big), move the current log aside, start a new one, compress the older ones, and delete the oldest. On Ubuntu, <strong>logrotate</strong> does this once a day, started by <code>logrotate.timer</code>, for every file listed in <code>/etc/logrotate.d/</code>. Packages such as nginx install their own entry; for your app's files, you write one.</p>
+
+<p class="code-title"><span>/etc/logrotate.d/stagedoor</span><span>logrotate</span></p>
+<pre><code>/var/log/stagedoor/*.log {
+    daily
+    rotate 7
+    maxsize 100M
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root adm
+}</code></pre>
+
+<p>Read it as: for each <code>.log</code> file in that directory, rotate daily or as soon as it passes 100 MB at a daily check; keep seven old files; compress them, except the most recent (so it can still be read easily, and so a program that is still writing to it isn't compressed underneath); don't complain if there's no file; skip empty files; and create the new file as <code>root:adm</code>, mode 640.</p>
+
+<p>The hard part of rotation isn't the schedule. It's the program that has the file open. Renaming a file doesn't change the program's file descriptor (<a href="#ch3">Chapter 3</a>): after <code>stagedoor.log</code> becomes <code>stagedoor.log.1</code>, the program carries on writing to <code>.1</code>, and the new <code>stagedoor.log</code> stays empty for ever. There are three ways out:</p>
+
+<figure class="wide" id="fig7-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 236" role="img" aria-labelledby="fig7-2-t fig7-2-d">
+      <title id="fig7-2-t">Three ways to rotate a log that a program keeps open</title>
+      <desc id="fig7-2-d">Three columns. Create and signal: logrotate renames stagedoor.log to stagedoor.log.1 and creates a new empty file; the program's descriptor still points at the renamed file, so logrotate's postrotate script must signal the program to reopen its log, as nginx does with USR1; without the signal, the program writes to .1 for ever. Copytruncate: logrotate copies the file to .1 and truncates the original to zero; the program keeps its descriptor and continues writing to the same file; simple, works with any program, but lines written between the copy and the truncate are lost, and the copy needs disk space. No file: the program writes to standard output, journald stores it and enforces size limits itself; nothing to rotate.</desc>
+      <rect class="node" x="10" y="14" width="236" height="210" rx="6"/>
+      <text class="t-title" x="24" y="40">create + signal</text>
+      <text class="t-small" x="24" y="64">rename .log → .log.1</text>
+      <text class="t-small" x="24" y="82">create an empty .log</text>
+      <text class="t-small" x="24" y="100">then tell the program to</text>
+      <text class="t-small" x="24" y="118">reopen its files (postrotate)</text>
+      <text class="t-small" x="24" y="150"><tspan font-weight="700">+</tspan> nothing lost, no copy</text>
+      <text class="t-small" x="24" y="168"><tspan font-weight="700">−</tspan> the program must support it</text>
+      <text class="t-small t-warn" x="24" y="198">without the signal: it writes</text>
+      <text class="t-small t-warn" x="24" y="214">to .1 for ever</text>
+      <rect class="node" x="262" y="14" width="236" height="210" rx="6"/>
+      <text class="t-title" x="276" y="40">copytruncate</text>
+      <text class="t-small" x="276" y="64">copy .log → .log.1</text>
+      <text class="t-small" x="276" y="82">truncate .log to zero</text>
+      <text class="t-small" x="276" y="100">the program keeps writing</text>
+      <text class="t-small" x="276" y="118">to the same file</text>
+      <text class="t-small" x="276" y="150"><tspan font-weight="700">+</tspan> works with any program</text>
+      <text class="t-small" x="276" y="168"><tspan font-weight="700">−</tspan> may lose a few lines;</text>
+      <text class="t-small" x="276" y="186">needs space for the copy</text>
+      <rect class="node-accent" x="514" y="14" width="236" height="210" rx="6"/>
+      <text class="t-title on-accent" x="528" y="40">no file: the journal</text>
+      <text class="t-small on-accent" x="528" y="64">the program writes to stdout</text>
+      <text class="t-small on-accent" x="528" y="82">journald stores it, indexed,</text>
+      <text class="t-small on-accent" x="528" y="100">and enforces its own limits</text>
+      <text class="t-small on-accent" x="528" y="150">+ nothing to rotate</text>
+      <text class="t-small on-accent" x="528" y="168">+ priority, unit, time for free</text>
+      <text class="t-small on-accent" x="528" y="186">− journald's limits apply</text>
+      <text class="t-small on-accent" x="528" y="204">to everything together</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 7.2</b> The rename is easy; the open file descriptor is the problem. Pick the method the program supports, or let it write to standard output and skip the problem entirely.</figcaption>
+</figure>
+
+<p>nginx's packaged entry, <code>/etc/logrotate.d/nginx</code>, is a good example of the first method:</p>
+<pre><code>/var/log/nginx/*.log {
+	daily
+	missingok
+	rotate 14
+	compress
+	delaycompress
+	notifempty
+	create 0640 www-data adm
+	sharedscripts
+	prerotate
+		if [ -d /etc/logrotate.d/httpd-prerotate ]; then \
+			run-parts /etc/logrotate.d/httpd-prerotate; \
+		fi \
+	endscript
+	postrotate
+		invoke-rc.d nginx rotate &gt;/dev/null 2&gt;&amp;1
+	endscript
+}</code></pre>
+<p><code>invoke-rc.d nginx rotate</code> sends nginx <code>SIGUSR1</code>, which makes it reopen its log files (<a href="#ch5">Chapter 5</a>). <code>sharedscripts</code> runs that once for all the files, rather than once per file.</p>
+
+<p>Test a new entry before you trust it: <code>sudo logrotate --debug /etc/logrotate.d/stagedoor</code> shows what it would do without doing it, and <code>sudo logrotate --force /etc/logrotate.d/stagedoor</code> rotates now. logrotate refuses to work in a directory that others may write to, and says so.</p>
+
+<!-- ======================================================== 7.5 -->
+<h2 class="sec" id="s7-5"><span class="n">7.5</span>Limits, levels and shipping</h2>
+
+<p>Rotation keeps files from growing for ever; three more habits keep logs useful and safe:</p>
+<ul>
+  <li><strong>Cap the journal.</strong> By default journald uses at most 10% of the filesystem (and never more than 4 GB) and leaves 15% free. To set your own numbers, add a drop-in such as <code>/etc/systemd/journald.conf.d/size.conf</code> with <code>[Journal]</code>, <code>SystemMaxUse=2G</code> and <code>SystemKeepFree=10G</code>, then <code>sudo systemctl restart systemd-journald</code>. <code>sudo journalctl --vacuum-size=1G</code> trims it now.</li>
+  <li><strong>Log at <code>INFO</code> in production</strong>, and make the level something you can change at runtime or with a config reload, with a reminder to change it back. Debug logging is a tool for an investigation, not a setting.</li>
+  <li><strong>Ship logs off the machine.</strong> A log on the server that crashed, or that an attacker controls, is the log you can't read when you need it. A shipper (Vector, Fluent Bit, the CloudWatch agent, Promtail) sends copies to a central service where they're kept, searchable and alertable. Ship what you'd search; don't ship secrets: check that passwords, tokens and card numbers never reach a log in the first place.</li>
+</ul>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Every log needs an owner, a level, a size limit and a destination. A log with none of these is a disk-full incident with a date not yet set.</p>
+</div>
+
+<!-- ======================================================== 7.6 -->
+<h2 class="sec" id="s7-6"><span class="n">7.6</span>Writing logs worth reading</h2>
+
+<p>When you control the program, make its logs easy for the next person, who may be you at 10:04 on a Friday:</p>
+<ul>
+  <li><strong>One event per line</strong>, with a level and the things you'll search by: order ID, event ID, request ID. <code>checkout failed order=88213 event=4500 reason=payment_timeout</code> beats a paragraph.</li>
+  <li><strong>Structured</strong> where you can: key-value pairs or JSON lines make shippers and <code>jq</code> work without regular expressions.</li>
+  <li><strong>Timestamps with a time zone</strong>, ideally UTC, so lines from three servers can be merged. journald adds its own; files need the program to.</li>
+  <li><strong>Errors with context, once.</strong> Log an error where it's handled, not at every level it passes through, or one failure becomes six lines.</li>
+</ul>
+
+<!-- ======================================================== 7.7 -->
+<h2 class="sec" id="s7-7"><span class="n">7.7</span>Across distributions</h2>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 7.2 · Logs by distribution</caption>
+    <thead><tr><th></th><th>Ubuntu, Debian</th><th>RHEL family</th><th>Amazon Linux 2023</th></tr></thead>
+    <tbody>
+      <tr><td>journald on disk</td><td>yes (Debian 12+ and Ubuntu)</td><td>yes</td><td>yes</td></tr>
+      <tr><td>rsyslog text files</td><td>Ubuntu: yes, <code>/var/log/syslog</code>, <code>auth.log</code>; Debian 12+: not installed by default</td><td>yes: <code>/var/log/messages</code>, <code>secure</code></td><td>not installed by default: use <code>journalctl</code></td></tr>
+      <tr><td>logrotate</td><td>yes, <code>logrotate.timer</code></td><td>yes</td><td>yes</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On the cloud</p>
+  <p>Each provider has a log service and an agent to feed it: CloudWatch Logs with the CloudWatch agent on AWS, Azure Monitor Logs with the Azure Monitor agent, Cloud Logging with the Ops Agent on Google Cloud. They read the journal and files, ship them, and keep them for as long as you pay for. Handbook 7 covers logs, metrics and traces together; for now, know that “ship it off the box” is one agent and a config file away.</p>
+</div>
+
+<!-- ======================================================== 7.8 -->
+<h2 class="sec" id="s7-8"><span class="n">7.8</span>Lab: fill a disk, free it, rotate it</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 7 · Stagedoor's 20 March, in eight megabytes</p>
+  <p><strong>You'll</strong> write to the journal and filter it, fill a tiny filesystem with a chatty app's log, fail to free it by deleting, free it through <code>/proc</code>, then rotate the log twice: once the way that silently fails, once the way that works. <strong>You need</strong> an Ubuntu VM with systemd and <code>sudo</code>, Python 3. <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> the last step. Outputs come from the same test system as Lab 6 (user <code>tiago</code>, host <code>lab</code>); times, sizes and PIDs will differ slightly.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Write to the journal, then filter.</strong> <code>logger</code> sends a message through the syslog interface, with a priority and a tag:
+<pre><code>logger -p user.warning -t stagedoor-lab "seat map slow: 2.4 s for event 4500"
+logger -p user.err -t stagedoor-lab "payment provider timeout after 10 s"
+logger -p user.info -t stagedoor-lab "checkout completed for order 88213"
+sudo journalctl -t stagedoor-lab --no-pager -o short</code></pre>
+<pre><code>Nov 27 08:35:41 lab stagedoor-lab[915]: seat map slow: 2.4 s for event 4500
+Nov 27 08:35:41 lab stagedoor-lab[916]: payment provider timeout after 10 s
+Nov 27 08:35:41 lab stagedoor-lab[917]: checkout completed for order 88213</code></pre>
+  Only warnings and worse:
+<pre><code>sudo journalctl -t stagedoor-lab -p warning --no-pager -o short</code></pre>
+<pre><code>Nov 27 08:35:41 lab stagedoor-lab[915]: seat map slow: 2.4 s for event 4500
+Nov 27 08:35:41 lab stagedoor-lab[916]: payment provider timeout after 10 s</code></pre>
+  And the fields behind one entry:
+<pre><code>sudo journalctl -t stagedoor-lab -p err -n 1 -o json-pretty --output-fields=PRIORITY,SYSLOG_IDENTIFIER,MESSAGE,_UID,_HOSTNAME --no-pager</code></pre>
+<pre><code>{
+	"__REALTIME_TIMESTAMP" : "1795768541581881",
+	"_HOSTNAME" : "lab",
+	"MESSAGE" : "payment provider timeout after 10 s",
+	"SYSLOG_IDENTIFIER" : "stagedoor-lab",
+	"__SEQNUM" : "1462",
+	"_BOOT_ID" : "3d62d2a080e14ef8bd22f5f52d74f296",
+	"_UID" : "1001",
+	"__CURSOR" : "s=ba20e08fdc0a4e1f8156e751eccaf79f;i=5b6;b=3d62d2a080e14ef8bd22f5f52d74f296;m=a912d3ec;t=6613df2051239;x=d611942abb387575",
+	"__SEQNUM_ID" : "ba20e08fdc0a4e1f8156e751eccaf79f",
+	"PRIORITY" : "3",
+	"__MONOTONIC_TIMESTAMP" : "2836583404"
+}</code></pre>
+  Priority 3 is <code>err</code>. <code>_UID</code> (1001 here) was added by journald: the program couldn't have claimed to be someone else. The entries starting with <code>__</code> are journald's bookkeeping. Check the journal's size and its limits:
+<pre><code>sudo journalctl --disk-usage
+grep -E "^#?(SystemMaxUse|SystemKeepFree|MaxRetentionSec)=" /etc/systemd/journald.conf</code></pre>
+<pre><code>Archived and active journals take up 16.0M in the file system.
+#SystemMaxUse=
+#SystemKeepFree=
+#MaxRetentionSec=</code></pre>
+  Commented out means “the default” (7.5).</li>
+  <li><strong>A small disk for the experiment.</strong> Mount an 8 MB in-memory filesystem (<code>tmpfs</code>) over the app's log directory, so you can fill it in seconds without endangering anything:
+<pre><code>sudo mkdir -p /var/log/stagedoor
+sudo mount -t tmpfs -o size=8M,mode=755 tmpfs /var/log/stagedoor
+sudo chown "$USER": /var/log/stagedoor
+df -h /var/log/stagedoor</code></pre>
+<pre><code>Filesystem      Size  Used Avail Use% Mounted on
+tmpfs           8.0M     0  8.0M   0% /var/log/stagedoor</code></pre></li>
+  <li><strong>Start the chatty app.</strong> Save it as <code>chatty.py</code> in your home directory; it writes a 1 KB debug line every couple of milliseconds and keeps the file open, like Stagedoor's app:
+<p class="code-title"><span>chatty.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># chatty.py · an app that writes a debug line to its log file about every 2 ms, and keeps the file open</span>
+<span class="k">import</span> sys, time
+
+log = open(sys.argv[1], <span class="s">"a"</span>, buffering=1)          <span class="c"># line-buffered: each line goes to the file at once</span>
+n = 0
+<span class="k">while</span> <span class="k">True</span>:
+    n += 1
+    <span class="k">try</span>:
+        log.write(f<span class="s">"{time.strftime('%H:%M:%S')} DEBUG checkout step {n}: "</span> + <span class="s">"x"</span> * 960 + <span class="s">"\n"</span>)
+    <span class="k">except</span> OSError <span class="k">as</span> e:
+        print(f<span class="s">"line {n}: write failed: {e}"</span>, file=sys.stderr, flush=<span class="k">True</span>)
+        time.sleep(1)
+    time.sleep(0.002)</code></pre>
+  Run it in the background, wait half a minute, and look:
+<pre><code>python3 chatty.py /var/log/stagedoor/stagedoor.log 2&gt; chatty.err &amp;
+sleep 30
+df -h /var/log/stagedoor; ls -l /var/log/stagedoor; tail -2 chatty.err</code></pre>
+<pre><code>Filesystem      Size  Used Avail Use% Mounted on
+tmpfs           8.0M  8.0M     0 100% /var/log/stagedoor
+total 8192
+-rw-r--r-- 1 tiago tiago 8388608 Nov 27 08:37 stagedoor.log
+line 8441: write failed: [Errno 28] No space left on device
+line 8442: write failed: [Errno 28] No space left on device</code></pre>
+  Errno 28 is <code>ENOSPC</code>, “No space left on device”: the same error Stagedoor's checkout hit.</li>
+  <li><strong>Delete it, as Rafaela did.</strong>
+<pre><code>rm /var/log/stagedoor/stagedoor.log
+df -h /var/log/stagedoor</code></pre>
+<pre><code>Filesystem      Size  Used Avail Use% Mounted on
+tmpfs           8.0M  8.0M     0 100% /var/log/stagedoor</code></pre>
+  Still full. The name is gone; the file isn't:
+<pre><code>pid=$(pgrep -f "^python3 chatty.py"); ls -l /proc/$pid/fd | grep deleted</code></pre>
+<pre><code>l-wx------ 1 tiago tiago 64 Nov 27 08:37 3 -&gt; /var/log/stagedoor/stagedoor.log (deleted)</code></pre></li>
+  <li><strong>Free it without stopping the app</strong>, by truncating the file through the app's own descriptor:
+<pre><code>: &gt; /proc/$pid/fd/3
+df -h /var/log/stagedoor</code></pre>
+<pre><code>Filesystem      Size  Used Avail Use% Mounted on
+tmpfs           8.0M     0  8.0M   0% /var/log/stagedoor</code></pre>
+  All 8 MB back at once, and the app carries on (a couple of seconds later the filesystem is filling again: the cause is still there). Stop it with <code>kill $pid</code> and remove any leftover <code>stagedoor.log*</code> files.</li>
+  <li><strong>Rotate it, the way that fails.</strong> Save the logrotate entry from 7.4 as <code>stagedoor-logrotate</code>, start the app again, and force a rotation:
+<pre><code>python3 chatty.py /var/log/stagedoor/stagedoor.log 2&gt; chatty.err &amp;
+sleep 3
+sudo install -m 644 stagedoor-logrotate /etc/logrotate.d/stagedoor
+sudo logrotate --force /etc/logrotate.d/stagedoor
+ls -l /var/log/stagedoor; sleep 2; ls -l /var/log/stagedoor</code></pre>
+<pre><code>total 1392
+-rw-r----- 1 root  adm         0 Nov 27 08:37 stagedoor.log
+-rw-r--r-- 1 tiago tiago 1423173 Nov 27 08:37 stagedoor.log.1
+total 2300
+-rw-r----- 1 root  adm         0 Nov 27 08:37 stagedoor.log
+-rw-r--r-- 1 tiago tiago 2353437 Nov 27 08:37 stagedoor.log.1</code></pre>
+  The new <code>stagedoor.log</code> stays at zero; <code>stagedoor.log.1</code> keeps growing. The app is still writing through its old descriptor, and this app has no way to be told to reopen. With <code>daily</code> and <code>rotate 7</code>, in a week the growing file would be compressed and eventually deleted while still open: the disk would fill all the same, invisibly. (The new file is also <code>root:adm</code>, so this app couldn't have opened it anyway.)</li>
+  <li><strong>Rotate it with <code>copytruncate</code>.</strong> Stop the app, remove the files, start it again, switch the entry to <code>copytruncate</code>, and rotate:
+<pre><code>kill %1; rm /var/log/stagedoor/stagedoor.log*
+python3 chatty.py /var/log/stagedoor/stagedoor.log 2&gt; chatty.err &amp;
+sleep 3
+sudo sed -i "s/^    create 0640 root adm/    copytruncate/" /etc/logrotate.d/stagedoor
+grep -n copytruncate /etc/logrotate.d/stagedoor
+sudo logrotate --force /etc/logrotate.d/stagedoor
+ls -l /var/log/stagedoor; sleep 2; ls -l /var/log/stagedoor</code></pre>
+<pre><code>9:    copytruncate
+total 1400
+-rw-r--r-- 1 tiago tiago    1992 Nov 27 08:37 stagedoor.log
+-rw-r--r-- 1 tiago tiago 1427157 Nov 27 08:37 stagedoor.log.1
+total 2308
+-rw-r--r-- 1 tiago tiago  932256 Nov 27 08:37 stagedoor.log
+-rw-r--r-- 1 tiago tiago 1427157 Nov 27 08:37 stagedoor.log.1</code></pre>
+  Now <code>.log.1</code> is a fixed snapshot and <code>stagedoor.log</code> grows from zero: rotation works for a program that knows nothing about it.</li>
+  <li><strong>Clean up.</strong>
+<pre><code>kill %1
+sudo umount /var/log/stagedoor
+sudo rm /etc/logrotate.d/stagedoor
+rm chatty.py chatty.err stagedoor-logrotate</code></pre></li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Run <code>chatty.py</code> as a transient service instead, <code>sudo systemd-run --unit=chatty -p User=$USER python3 -u -c 'import time; [print("debug", i, flush=True) or time.sleep(0.01) for i in range(10**9)]'</code>, and watch <code>journalctl -u chatty -f</code>: no file, nothing to rotate. Stop it with <code>sudo systemctl stop chatty</code>. (2) Use <code>logrotate --debug</code> on <code>/etc/logrotate.d/nginx</code> and read what it would do. (3) Write a drop-in that limits the journal to 200 MB, restart journald, and check <code>journalctl --disk-usage</code> after <code>--vacuum-size</code>.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: 10:04 to 10:11</p>
+  <p>Tiago finds the deleted file in <code>/proc</code> while Rafaela watches checkout; one truncation through the app's file descriptor and <code>door-2</code> has 131 GB free. Checkout recovers at 10:11. They do the same on <code>door-3</code> before it fills. Seven minutes of failed checkouts, on a tour that sold out in forty.</p>
+  <p>The fixes, the following week: the app's log level goes back to <code>INFO</code>, and Sasha's team adds a runtime switch for <code>DEBUG</code> that turns itself off after an hour. The app stops writing its own file and logs to standard output, so its lines go to the journal with the unit's name, priority and time; a drop-in caps the journal at 4 GB with 20 GB always kept free. nginx's logs were already rotated by the package. A disk-usage alert at 80% goes to the operations channel. And a new line joins the wiki page of rules: <em>every log has an owner, a level, a size limit and a destination</em>.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s7-9"><span class="n">7.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>An app writing its own file with no rotation</td><td>It grows until the disk is full.</td><td>Log to stdout and the journal, or add a logrotate entry the day the file appears.</td></tr>
+      <tr><td>Deleting a big open log</td><td>No space is freed; the file is now hard to find.</td><td>Truncate it; or truncate through <code>/proc/&lt;pid&gt;/fd</code>.</td></tr>
+      <tr><td>Rotating with <code>create</code> for a program that can't reopen</td><td>The program writes to the renamed file for ever.</td><td><code>copytruncate</code>, or a <code>postrotate</code> signal the program supports.</td></tr>
+      <tr><td><code>DEBUG</code> in production, “for now”</td><td>Volume multiplies; secrets and personal data leak into logs.</td><td><code>INFO</code> by default; time-limited debug switches.</td></tr>
+      <tr><td>Logs only on the server</td><td>Lost with the server, or altered by whoever broke in.</td><td>Ship them to a central service.</td></tr>
+      <tr><td>Reading the journal without <code>sudo</code></td><td>You see only your own entries and think the rest is missing.</td><td><code>sudo journalctl</code>, or the <code>adm</code> group.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum7">
+  <h2 class="sec" id="sum7"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Logs go to the <strong>journal</strong> (services' output, syslog, the kernel), to <strong>syslog files</strong> written by rsyslog, or to programs' <strong>own files</strong>.</li>
+    <li><code>journalctl</code> filters by unit (<code>-u</code>), priority (<code>-p</code>), time (<code>--since</code>), boot (<code>-b</code>) and field; fields starting with <code>_</code> are added by journald and trustworthy.</li>
+    <li>When a disk fills with logs: find it, <strong>truncate</strong> rather than delete, and if it's already deleted, truncate through <code>/proc/&lt;pid&gt;/fd</code>.</li>
+    <li><strong>logrotate</strong> rotates files listed in <code>/etc/logrotate.d/</code>. A program holding the file open needs a signal to reopen it, or <code>copytruncate</code>.</li>
+    <li>Cap the journal, log at <code>INFO</code>, alert on disk usage, and ship logs off the machine.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>journald</dt><dd>systemd's logging service, which collects services' output, syslog messages and kernel messages into the journal.</dd>
+    <dt>Journal</dt><dd>journald's indexed, structured store of log entries, read with <code>journalctl</code>.</dd>
+    <dt>Syslog</dt><dd>The traditional Unix logging interface and protocol; on Ubuntu, rsyslog writes it to text files in <code>/var/log</code>.</dd>
+    <dt>Priority</dt><dd>A log entry's severity, from 0 (<code>emerg</code>) to 7 (<code>debug</code>).</dd>
+    <dt>Log rotation</dt><dd>Periodically moving a log aside, starting a new one, compressing and eventually deleting old ones.</dd>
+    <dt>copytruncate</dt><dd>A logrotate method that copies a log and truncates the original, so a program can keep writing to the same open file.</dd>
+    <dt>Log shipping</dt><dd>Sending copies of logs from a server to a central service where they are stored and searched.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Where would you look first for: why <code>sudo</code> was denied, what nginx served at 10:02, and why <code>stagedoor.service</code> restarted? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p><code>sudo</code>: <code>/var/log/auth.log</code> or <code>journalctl -t sudo</code>. nginx's requests: its own file, <code>/var/log/nginx/access.log</code>. The restart: <code>journalctl -u stagedoor</code>, which has both the app's output and systemd's messages about it.</p></details>
+    </li>
+    <li>
+      <p>Write a <code>journalctl</code> command for errors or worse from <code>stagedoor.service</code> between 09:55 and 10:15 on 20 March 2026, newest first. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>sudo journalctl -u stagedoor -p err --since "2026-03-20 09:55" --until "2026-03-20 10:15" -r</code>.</p></details>
+    </li>
+    <li>
+      <p>Explain why, after a <code>create</code>-style rotation, a program can still be writing to <code>app.log.1</code>, and why this eventually fills the disk anyway. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Renaming changes the directory entry, not the open file: the program's descriptor still refers to the same inode, now named <code>app.log.1</code>. Each later rotation renames and compresses it, and finally deletes it, but the program keeps it open, so its space is never freed and keeps growing until the program reopens or restarts.</p></details>
+    </li>
+    <li>
+      <p><code>df</code> says <code>/</code> is 100% full, but <code>du -xsh /</code> adds up to 40 GB on a 160 GB disk. What's the likely cause, and how do you confirm and fix it without a reboot? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p>Deleted files still held open: <code>du</code> only counts files with names, <code>df</code> counts all used blocks. Confirm with <code>sudo lsof +L1</code> or <code>ls -l /proc/*/fd | grep deleted</code>. Fix by truncating through <code>/proc/&lt;pid&gt;/fd/&lt;n&gt;</code>, or by restarting the program holding them, then stop the cause (rotation that the program supports).</p></details>
+    </li>
+    <li>
+      <p>Design the logging for a new service on Stagedoor's servers so it can never fill a disk and its logs survive the server. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Log to standard output at <code>INFO</code>, one structured line per event, with order and event IDs; run as a systemd service so the journal stores it; cap the journal (<code>SystemMaxUse</code>, <code>SystemKeepFree</code>); ship the journal to a central log service with retention; alert on disk usage above 80%; and make <code>DEBUG</code> a time-limited runtime switch.</p></details>
+    </li>
+    <li>
+      <p>Compare <code>copytruncate</code> with a <code>postrotate</code> signal. When would you choose each? <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>A signal (or <code>systemctl reload</code>) loses nothing and needs no extra disk space, but works only if the program can reopen its log files; use it for nginx, PostgreSQL and other daemons that support it. <code>copytruncate</code> works with any program, but needs space for the copy and can lose lines written between the copy and the truncate; use it for programs you can't change.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li><code>man journalctl</code>, <code>man journald.conf</code>, <code>man systemd.journal-fields</code>.</li>
+    <li><code>man logrotate</code>, especially <code>copytruncate</code>, <code>postrotate</code> and <code>sharedscripts</code>.</li>
+    <li>nginx: <a href="https://nginx.org/en/docs/control.html">Controlling nginx</a> (rotating log files with <code>USR1</code>).</li>
+    <li>Python: the <a href="https://docs.python.org/3/howto/logging.html">Logging HOWTO</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="#ch8">8 · Packages and updates</a></div>
+</nav>

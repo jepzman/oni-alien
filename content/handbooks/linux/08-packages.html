@@ -1,0 +1,384 @@
+<!-- Handbook 3 · Linux for Cloud Engineers · Chapter 8. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part II · Processes and services</p>
+  <p class="chno">8</p>
+  <h1>Packages and updates</h1>
+  <p class="promise">Almost every program on a server arrived as a package, and almost every security problem on a server is fixed by a newer one. This chapter explains how packages get from a signed repository onto your disk, how to answer “what is this file, and where did it come from?”, and how to keep servers patched without letting updates restart things at the worst possible moment.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain what a package, a repository and a signing key are, and how <code>apt</code> and <code>dpkg</code> divide the work.</li>
+      <li>Find which package owns a file, what a package installed, and which version would be installed and from where.</li>
+      <li>Hold a package at its version, and add a third-party repository safely.</li>
+      <li>Configure automatic security updates, and know when an update needs a service restart or a reboot.</li>
+      <li>Plan for a release's end of support.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li><a href="#ch1">Chapter 1</a>: distributions and releases. <a href="#ch6">Chapter 6</a>: services and timers.</li>
+      <li>An Ubuntu machine with <code>sudo</code> and internet access (<a href="#appC">Appendix C</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, Ubuntu with <code>sudo</code>, free; nothing is upgraded</dd>
+      <dt>Main distribution</dt><dd>Ubuntu 24.04, with RHEL-family <code>dnf</code> in 8.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>On Tuesday 7 April 2026, Rafaela counts pending updates. <code>door-2</code> and <code>door-3</code> have about 140 each, dozens of them security fixes, some from the summer of 2025. Ubuntu installs security updates automatically by default, so somebody switched that off. Leonor remembers: in June 2025, an automatic update of a library restarted the app's Python processes in the middle of an on-sale, and she disabled it that evening. Nobody turned it back on.</p>
+  <p><code>door-1</code> is worse in a different way. It's been running for 500 days without a reboot, so the kernel fixes installed since November 2024 have never been loaded. And its release, Debian 11, stops receiving security updates on 31 August 2026, in less than five months. Rafaela needs a way to patch three servers that a ticketing company can live with, and a plan for the fourth date on the calendar.</p>
+</aside>
+
+<!-- ======================================================== 8.1 -->
+<h2 class="sec" id="s8-1"><span class="n">8.1</span>Packages, repositories and keys</h2>
+
+<p class="lead">A <span class="term">package</span> is an archive of files (programs, libraries, configuration, documentation) plus metadata: its name and version, what it depends on, and scripts to run when it's installed or removed. On Ubuntu and Debian packages are <code>.deb</code> files; on the RHEL family, <code>.rpm</code>.</p>
+
+<p>Packages come from a <span class="term">repository</span>: a web server holding thousands of packages and an index that lists them. Ubuntu's repositories are split into <strong>pockets</strong> per release, and the names show up everywhere in <code>apt</code>'s output:</p>
+<ul>
+  <li><code>noble</code>: the release as it shipped (24.04 is “noble”), never changed afterwards;</li>
+  <li><code>noble-security</code>: security fixes only;</li>
+  <li><code>noble-updates</code>: security fixes plus other bug fixes (security fixes appear in both);</li>
+  <li><code>noble-backports</code>: newer versions of a few programs, off unless you ask for them.</li>
+</ul>
+
+<p>Every repository index is signed. Your machine holds the distribution's public <span class="term">signing key</span> (in <code>/usr/share/keyrings/</code>), and <code>apt</code> refuses an index whose signature doesn't verify. That's what makes it safe to download packages over plain HTTP from a mirror you don't control: the index lists every package's checksum, and the index is signed by Ubuntu. Trusting a repository means trusting whoever holds its key, so add third-party repositories rarely and carefully (8.4).</p>
+
+<figure class="wide" id="fig8-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig8-1-t fig8-1-d">
+      <title id="fig8-1-t">From a repository to running code</title>
+      <desc id="fig8-1-d">Five steps from left to right. The repository publishes a signed index and packages. apt update downloads the indexes and verifies their signatures with the keys in /usr/share/keyrings. apt upgrade or install works out versions and dependencies, downloads packages and checks their checksums against the index. dpkg unpacks the files onto disk and runs the package's scripts. Below, two warnings: a running service keeps using the old code it loaded until it restarts; a new kernel is used only after a reboot.</desc>
+      <defs><marker id="c8ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="ext" x="10" y="20" width="132" height="92" rx="5"/><text class="t-title" x="76" y="46" text-anchor="middle">Repository</text><text class="t-small" x="76" y="68" text-anchor="middle">signed index</text><text class="t-small" x="76" y="86" text-anchor="middle">+ packages</text>
+      <rect class="node" x="162" y="20" width="132" height="92" rx="5"/><text class="t-mono" x="228" y="46" text-anchor="middle">apt update</text><text class="t-small" x="228" y="68" text-anchor="middle">fetch indexes,</text><text class="t-small" x="228" y="86" text-anchor="middle">verify signatures</text>
+      <rect class="node-accent" x="314" y="20" width="132" height="92" rx="5"/><text class="t-mono on-accent" x="380" y="46" text-anchor="middle">apt upgrade</text><text class="t-small on-accent" x="380" y="68" text-anchor="middle">versions, deps,</text><text class="t-small on-accent" x="380" y="86" text-anchor="middle">download, checksums</text>
+      <rect class="node" x="466" y="20" width="132" height="92" rx="5"/><text class="t-mono" x="532" y="46" text-anchor="middle">dpkg</text><text class="t-small" x="532" y="68" text-anchor="middle">unpack files,</text><text class="t-small" x="532" y="86" text-anchor="middle">run scripts</text>
+      <rect class="node" x="618" y="20" width="132" height="92" rx="5"/><text class="t-title" x="684" y="46" text-anchor="middle">On disk</text><text class="t-small" x="684" y="68" text-anchor="middle">new files in</text><text class="t-small" x="684" y="86" text-anchor="middle">/usr, /etc, /boot</text>
+      <path class="wire" d="M142 66 H158" marker-end="url(#c8ah)"/><path class="wire" d="M294 66 H310" marker-end="url(#c8ah)"/><path class="wire" d="M446 66 H462" marker-end="url(#c8ah)"/><path class="wire" d="M598 66 H614" marker-end="url(#c8ah)"/>
+      <rect class="priv" x="10" y="140" width="740" height="96" rx="6"/>
+      <text class="t-small" x="26" y="164"><tspan font-weight="700">On disk is not running.</tspan> A service that loaded the old OpenSSL keeps using it in memory until the service</text>
+      <text class="t-small" x="26" y="184">restarts (needrestart lists them). A new kernel in /boot is used only after a reboot (/var/run/reboot-required).</text>
+      <text class="t-small" x="26" y="214">An update is finished when the new code is <tspan font-weight="700">running</tspan>, not when apt says “done”.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 8.1</b> Signatures protect the path from the repository to your disk. The last step, from disk into running processes, is yours: restarts and reboots.</figcaption>
+</figure>
+
+<p>Two programs share the work. <strong><code>dpkg</code></strong> is the low-level tool: it installs a single <code>.deb</code> file, removes packages and keeps the database of what's installed (<code>/var/lib/dpkg/</code>), but knows nothing about repositories or dependencies it would need to fetch. <strong><code>apt</code></strong> sits on top: it reads repositories, resolves dependencies, downloads, and calls <code>dpkg</code>. Use <code>apt</code> to install and upgrade, <code>dpkg</code> to ask questions.</p>
+
+<!-- ======================================================== 8.2 -->
+<h2 class="sec" id="s8-2"><span class="n">8.2</span>Everyday apt</h2>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 8.1 · apt and dpkg, by question</caption>
+    <thead><tr><th>You want to</th><th>Command</th></tr></thead>
+    <tbody>
+      <tr><td>refresh the indexes (do this first)</td><td><code>sudo apt update</code></td></tr>
+      <tr><td>see what would be upgraded</td><td><code>apt list --upgradable</code></td></tr>
+      <tr><td>upgrade, without removing anything</td><td><code>sudo apt upgrade</code></td></tr>
+      <tr><td>upgrade, allowing new and removed dependencies</td><td><code>sudo apt full-upgrade</code></td></tr>
+      <tr><td>try any of these without doing it</td><td><code>apt-get -s upgrade</code> (<code>-s</code>: simulate)</td></tr>
+      <tr><td>install, remove, remove with config</td><td><code>sudo apt install nginx</code>, <code>remove</code>, <code>purge</code></td></tr>
+      <tr><td>search, describe</td><td><code>apt search logrotate</code>, <code>apt show nginx</code></td></tr>
+      <tr><td>which version, from where</td><td><code>apt-cache policy nginx</code></td></tr>
+      <tr><td>which package owns a file</td><td><code>dpkg -S /bin/ss</code></td></tr>
+      <tr><td>which files a package installed</td><td><code>dpkg -L iproute2</code></td></tr>
+      <tr><td>is it installed, which version</td><td><code>dpkg -l 'nginx*'</code></td></tr>
+      <tr><td>remove dependencies nobody needs any more</td><td><code>sudo apt autoremove</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Use <code>apt</code> at the keyboard; in scripts, use <code>apt-get</code> and <code>apt-cache</code>, whose output and options are promised to stay stable (<code>apt</code> warns about this if you pipe it). Install non-interactively with <code>DEBIAN_FRONTEND=noninteractive apt-get install -y …</code>, so a package that wants to ask a question doesn't hang your script.</p>
+
+<aside class="side"><b>Configuration files survive</b>When an upgrade brings a new version of a configuration file you've edited, <code>dpkg</code> asks what to do, or keeps yours and saves theirs as <code>.dpkg-dist</code>. <code>remove</code> leaves configuration in <code>/etc</code>; <code>purge</code> deletes it.</aside>
+
+<!-- ======================================================== 8.3 -->
+<h2 class="sec" id="s8-3"><span class="n">8.3</span>Versions and holds</h2>
+
+<p><code>apt-cache policy</code> answers the most useful question about any package: what's installed, what would be installed, and from where. Each source has a <strong>priority</strong> (500 for normal repositories, 100 for “what's already installed”), and <code>apt</code> picks the highest version among the highest-priority sources. A version string like <code>2.42-4ubuntu2.11</code> is the upstream version (<code>2.42</code>), then the distribution's revision: Ubuntu fixes security problems by patching the version it shipped, not by jumping to a newer upstream release, so a server's versions look old and are still patched.</p>
+
+<p>Sometimes you need a package to stay exactly where it is for a while: a database whose upgrade you want to schedule, or a library a vendor tested against. <span class="term">Holding</span> it stops <code>apt upgrade</code> from touching it: <code>sudo apt-mark hold postgresql-16</code>, <code>apt-mark showhold</code>, <code>sudo apt-mark unhold</code>. A hold is a promise to come back: write down why and until when, or it becomes a vulnerability nobody remembers choosing.</p>
+
+<!-- ======================================================== 8.4 -->
+<h2 class="sec" id="s8-4"><span class="n">8.4</span>Third-party repositories</h2>
+
+<p>Vendors such as Docker, PostgreSQL (the PGDG repository), nginx and Grafana publish their own repositories with newer versions than the distribution. Adding one is three things: download the vendor's signing key into <code>/etc/apt/keyrings/</code>, add a source file under <code>/etc/apt/sources.list.d/</code> that names that key with <code>Signed-By:</code>, and <code>apt update</code>. The modern source format (“deb822”) looks like Ubuntu's own:</p>
+
+<pre><code>Types: deb
+URIs: https://apt.postgresql.org/pub/repos/apt
+Suites: noble-pgdg
+Components: main
+Signed-By: /etc/apt/keyrings/postgresql.asc</code></pre>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: a repository is root on your server</p>
+  <p>Packages run their install scripts as root. Whoever controls a repository you've added can run anything on your machines at the next upgrade. Add only vendors you'd trust with root, tie each key to its own repository with <code>Signed-By:</code> (never add keys to a global keyring, as old instructions with <code>apt-key</code> did), use HTTPS, and remove repositories you no longer need. The same thinking applies to <code>curl … | sudo bash</code> install scripts, which skip the signatures entirely.</p>
+</div>
+
+<!-- ======================================================== 8.5 -->
+<h2 class="sec" id="s8-5"><span class="n">8.5</span>Staying patched</h2>
+
+<p>Ubuntu ships <span class="term">unattended-upgrades</span>, which installs updates by itself every day. Two systemd timers drive it (<a href="#ch6">Chapter 6</a>): <code>apt-daily.timer</code> refreshes the indexes and <code>apt-daily-upgrade.timer</code> installs. Two files configure it. <code>/etc/apt/apt.conf.d/20auto-upgrades</code> switches it on or off:</p>
+<pre><code>APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";</code></pre>
+<p>and <code>/etc/apt/apt.conf.d/50unattended-upgrades</code> says what it may install. By default, only the release and its security pocket, not <code>-updates</code>:</p>
+<pre><code>Unattended-Upgrade::Allowed-Origins {
+	"${distro_id}:${distro_codename}";
+	"${distro_id}:${distro_codename}-security";
+	// Extended Security Maintenance; doesn't necessarily exist for
+	// every release and this system may not have it installed, but if
+	// available, the policy for updates is such that unattended-upgrades
+	// should also install from here by default.
+	"${distro_id}ESMApps:${distro_codename}-apps-security";
+	"${distro_id}ESM:${distro_codename}-infra-security";
+//Unattended-Upgrade::Remove-Unused-Dependencies "false";
+//Unattended-Upgrade::Automatic-Reboot "false";
+// when Unattended-Upgrade::Automatic-Reboot is set to true
+//Unattended-Upgrade::Automatic-Reboot-WithUsers "true";
+//Unattended-Upgrade::Automatic-Reboot-Time "02:00";</code></pre>
+<p>(<code>//</code> starts a comment.) Leaving <code>-updates</code> out keeps automatic changes to security fixes, which are small and carefully tested; the larger bug-fix updates are applied in your maintenance window, where you can watch them. Change settings in a file of your own, such as <code>/etc/apt/apt.conf.d/52stagedoor</code>, which wins over 50 because it's read later; package upgrades then leave your choices alone.</p>
+
+<p>Installing a fix is half the job (Figure 8.1). After an update:</p>
+<ul>
+  <li><strong>Services</strong> still run the old code until they restart. <strong>needrestart</strong>, installed on Ubuntu servers, checks after each upgrade which processes use replaced libraries and either lists, asks about or restarts them, depending on <code>$nrconf{restart}</code> (<code>'l'</code> list, <code>'i'</code> interactive, <code>'a'</code> automatic) in <code>/etc/needrestart/conf.d/</code>. <code>sudo needrestart -r l</code> lists them on demand.</li>
+  <li><strong>The kernel</strong> (and a few core libraries) needs a <strong>reboot</strong>. Ubuntu creates <code>/var/run/reboot-required</code> and lists the packages in <code>/var/run/reboot-required.pkgs</code>. unattended-upgrades can reboot by itself (<code>Unattended-Upgrade::Automatic-Reboot</code> and <code>…-Time</code>), which suits a fleet of identical servers behind a load balancer and is risky for a single database server.</li>
+</ul>
+
+<figure class="wide" id="fig8-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 210" role="img" aria-labelledby="fig8-2-t fig8-2-d">
+      <title id="fig8-2-t">An update policy in three rhythms</title>
+      <desc id="fig8-2-d">Three rows. Daily, automatic: unattended-upgrades installs security updates; needrestart lists services to restart; nothing restarts or reboots by itself. Weekly, in a maintenance window, one server at a time: apply all updates including -updates, restart the services needrestart lists, reboot if /var/run/reboot-required exists, check health, move to the next server; skipped on days with a big on-sale. Every two years, before end of support: move to the next LTS release, preferably by building a new server and moving to it rather than upgrading in place.</desc>
+      <rect class="node-accent" x="10" y="12" width="150" height="54" rx="5"/><text class="t-title on-accent" x="85" y="36" text-anchor="middle">Daily</text><text class="t-small on-accent" x="85" y="54" text-anchor="middle">automatic</text>
+      <rect class="priv" x="176" y="12" width="574" height="54" rx="5"/><text class="t-small" x="190" y="34">unattended-upgrades installs security updates; needrestart lists what</text><text class="t-small" x="190" y="54">needs restarting; nothing restarts or reboots by itself</text>
+      <rect class="node" x="10" y="78" width="150" height="54" rx="5"/><text class="t-title" x="85" y="102" text-anchor="middle">Weekly</text><text class="t-small" x="85" y="120" text-anchor="middle">maintenance window</text>
+      <rect class="priv" x="176" y="78" width="574" height="54" rx="5"/><text class="t-small" x="190" y="100">one server at a time: all updates → restart services → reboot if required</text><text class="t-small" x="190" y="120">→ check health → next server. Skipped on days with a big on-sale.</text>
+      <rect class="node" x="10" y="144" width="150" height="54" rx="5"/><text class="t-title" x="85" y="168" text-anchor="middle">Every 2 years</text><text class="t-small" x="85" y="186" text-anchor="middle">before end of support</text>
+      <rect class="priv" x="176" y="144" width="574" height="54" rx="5"/><text class="t-small" x="190" y="166">move to the next LTS release, preferably by building a new server and</text><text class="t-small" x="190" y="186">moving to it, months before the old release's end-of-support date</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 8.2</b> Security fixes land daily without anyone acting; anything that interrupts service happens in a window you choose; releases are replaced before their support ends.</figcaption>
+</figure>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Don't solve “an update restarted something at a bad time” by switching updates off. Separate installing from restarting, and put restarts in a window you control.</p>
+</div>
+
+<!-- ======================================================== 8.6 -->
+<h2 class="sec" id="s8-6"><span class="n">8.6</span>Release upgrades and end of support</h2>
+
+<p>Within a release, updates are small and safe by design. Moving to the next release (Ubuntu 22.04 to 24.04, Debian 11 to 12) changes major versions of everything at once: Python, OpenSSL, PostgreSQL, configuration formats. You can upgrade in place (<code>do-release-upgrade</code> on Ubuntu), but on a server there's a better way: build a new server on the new release from your notes or scripts, test it, move the work to it, and keep the old one until you're sure. It's slower the first time and much safer, and it's the cattle approach of <a href="#ch1">Chapter 1</a> in practice. It also tests the thing you most need to know: whether you could rebuild this server at all.</p>
+
+<p>Whichever way, start long before the date. A release past its end of support (<a href="#ch1">Chapter 1</a>, Table 1.1) gets no fixes, and Ubuntu Pro or a paid extended support offer only buys time.</p>
+
+<!-- ======================================================== 8.7 -->
+<h2 class="sec" id="s8-7"><span class="n">8.7</span>Across distributions</h2>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 8.2 · apt and dnf side by side</caption>
+    <thead><tr><th>Task</th><th>Ubuntu, Debian</th><th>RHEL family, Amazon Linux 2023</th></tr></thead>
+    <tbody>
+      <tr><td>refresh, upgrade</td><td><code>apt update</code>, <code>apt upgrade</code></td><td><code>dnf check-update</code>, <code>dnf upgrade</code> (refreshes by itself)</td></tr>
+      <tr><td>security fixes only</td><td>the <code>-security</code> pocket</td><td><code>dnf upgrade --security</code></td></tr>
+      <tr><td>owner of a file</td><td><code>dpkg -S</code></td><td><code>rpm -qf</code></td></tr>
+      <tr><td>files in a package</td><td><code>dpkg -L</code></td><td><code>rpm -ql</code></td></tr>
+      <tr><td>hold a version</td><td><code>apt-mark hold</code></td><td><code>dnf versionlock add</code> (a plugin)</td></tr>
+      <tr><td>automatic updates</td><td>unattended-upgrades</td><td><code>dnf-automatic</code> and its timer</td></tr>
+      <tr><td>reboot needed?</td><td><code>/var/run/reboot-required</code></td><td><code>dnf needs-restarting -r</code></td></tr>
+      <tr><td>repository files</td><td><code>/etc/apt/sources.list.d/</code></td><td><code>/etc/yum.repos.d/</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Amazon Linux 2023</p>
+  <p>Amazon Linux 2023 locks each instance to a dated snapshot of its repository, so two instances launched a month apart may have different package versions, and <code>dnf upgrade</code> alone never moves to a newer snapshot. You move deliberately, with <code>dnf upgrade --releasever=&lt;version&gt;</code>, or by launching from a newer image. It's the update-in-place release model from <a href="#ch1">Chapter 1</a>.</p>
+</div>
+
+<!-- ======================================================== 8.8 -->
+<h2 class="sec" id="s8-8"><span class="n">8.8</span>Lab: ask apt questions, change nothing</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 8 · Read a server's package state</p>
+  <p><strong>You'll</strong> read the repository configuration, list pending updates, trace a package's versions and a file's owner, hold a package and see the consequence, and inspect the automatic-update setup, all without upgrading anything. <strong>You need</strong> an Ubuntu 24.04 machine with <code>sudo</code> and internet access. <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> step 6 undoes the hold. Your package names and versions will differ: these outputs were captured on the test machine on 27 November 2026.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Where do packages come from?</strong>
+<pre><code>grep -v '^#' /etc/apt/sources.list.d/ubuntu.sources | grep -v '^$'</code></pre>
+<pre><code>Types: deb
+URIs: http://archive.ubuntu.com/ubuntu/
+Suites: noble noble-updates noble-backports
+Components: main universe restricted multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+Types: deb
+URIs: http://security.ubuntu.com/ubuntu/
+Suites: noble-security
+Components: main universe restricted multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg</code></pre>
+  Two sources: the main archive with three pockets, and the security archive. Both are signed by the same Ubuntu key. (Older systems have <code>/etc/apt/sources.list</code> with one <code>deb …</code> line per pocket instead; same meaning.)</li>
+  <li><strong>What's waiting?</strong>
+<pre><code>sudo apt update
+apt list --upgradable 2&gt;/dev/null | head -4</code></pre>
+<pre><code>Listing...
+binutils-common/noble-updates,noble-security 2.42-4ubuntu2.11 amd64 [upgradable from: 2.42-4ubuntu2.10]
+binutils-x86-64-linux-gnu/noble-updates,noble-security 2.42-4ubuntu2.11 amd64 [upgradable from: 2.42-4ubuntu2.10]
+binutils/noble-updates,noble-security 2.42-4ubuntu2.11 amd64 [upgradable from: 2.42-4ubuntu2.10]</code></pre>
+  <code>noble-updates,noble-security</code>: these are security fixes. How many in total, and what would <code>upgrade</code> do?
+<pre><code>apt-get -s upgrade | grep -E '^[0-9]+ upgraded'
+apt-get -s upgrade | grep '^Inst' | head -3</code></pre>
+<pre><code>46 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+Inst systemd-sysv [255.4-1ubuntu8.18] (255.4-1ubuntu8.19 Ubuntu:24.04/noble-updates [amd64]) []
+Inst systemd-dev [255.4-1ubuntu8.18] (255.4-1ubuntu8.19 Ubuntu:24.04/noble-updates [all]) []
+Inst libpam-systemd [255.4-1ubuntu8.18] (255.4-1ubuntu8.19 Ubuntu:24.04/noble-updates [amd64]) []</code></pre>
+  <code>-s</code> only simulates: nothing was installed. Brackets show the installed version, parentheses the new one and its pocket.</li>
+  <li><strong>One package's versions.</strong>
+<pre><code>apt-cache policy binutils</code></pre>
+<pre><code>binutils:
+  Installed: 2.42-4ubuntu2.10
+  Candidate: 2.42-4ubuntu2.11
+  Version table:
+     2.42-4ubuntu2.11 500
+        500 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages
+        500 http://security.ubuntu.com/ubuntu noble-security/main amd64 Packages
+ *** 2.42-4ubuntu2.10 100
+        100 /var/lib/dpkg/status
+     2.42-4ubuntu2 500
+        500 http://archive.ubuntu.com/ubuntu noble/main amd64 Packages</code></pre>
+  <code>***</code> marks the installed version (priority 100: it comes only from the local status file). The candidate is newer and comes from both <code>-updates</code> and <code>-security</code> at priority 500. The bottom line is the release as shipped.</li>
+  <li><strong>Who owns this file?</strong> Ask about <code>ss</code>, the socket tool from <a href="#ch1">Chapter 1</a>:
+<pre><code>dpkg -S /usr/bin/ss; dpkg -S /bin/ss</code></pre>
+<pre><code>dpkg-query: no path found matching pattern /usr/bin/ss
+iproute2: /bin/ss</code></pre>
+  A surprise worth remembering. Since the /usr merge (<a href="#ch3">Chapter 3</a>), <code>/bin</code> is a symlink to <code>/usr/bin</code>, so both paths reach the same file, but <code>iproute2</code> still registers it under <code>/bin/ss</code>, and <code>dpkg -S</code> matches the registered path literally. If one path finds nothing, try the other. And what else did <code>iproute2</code> install?
+<pre><code>dpkg -L iproute2 | grep -E 'bin/' | head -4</code></pre>
+<pre><code>/bin/ip
+/bin/ss
+/sbin/bridge
+/sbin/dcb</code></pre></li>
+  <li><strong>Hold a package, and see what that costs.</strong>
+<pre><code>sudo apt-mark hold binutils
+apt-mark showhold
+apt-get -s upgrade | grep -A1 'kept back'</code></pre>
+<pre><code>binutils set on hold.
+binutils
+The following packages have been kept back:
+  binutils binutils-common binutils-x86-64-linux-gnu libbinutils libctf0</code></pre>
+  Holding one package kept back four more that must stay at matching versions: holds spread through dependencies, and so does the security debt.</li>
+  <li><strong>Undo the hold:</strong>
+<pre><code>sudo apt-mark unhold binutils</code></pre>
+<pre><code>Canceled hold on binutils.</code></pre></li>
+  <li><strong>How is this machine kept up to date?</strong>
+<pre><code>cat /etc/apt/apt.conf.d/20auto-upgrades
+systemctl list-timers 'apt-daily*' --no-pager | head -3</code></pre>
+<pre><code>APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+NEXT                        LEFT LAST PASSED UNIT                    ACTIVATES
+Sat 2026-11-28 02:56:03 UTC  18h -         - apt-daily.timer         apt-daily.service
+Sat 2026-11-28 06:11:00 UTC  21h -         - apt-daily-upgrade.timer apt-daily-upgrade.service</code></pre>
+  Switched on, with the two timers from 8.5 (these come from the systemd test system of Lab 6). Then: <code>ls /var/run/reboot-required*</code> (is a reboot pending, and why?) and <code>sudo needrestart -r l</code> (which services run old code?).</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) <code>apt show nginx</code>: find its dependencies and its size. (2) <code>zcat /usr/share/doc/openssl/changelog.Debian.gz | head -20</code>: read what the latest security update fixed (the CVE numbers are there). (3) <code>sudo unattended-upgrade --dry-run --debug 2&gt;&amp;1 | tail -20</code>: see what tonight's run would install.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: a patching policy</p>
+  <p>Rafaela writes Figure 8.2 into the wiki and sets it up the same week. On <code>door-2</code> and <code>door-3</code>, unattended-upgrades is switched back on, for security updates only, with <code>$nrconf{restart} = 'l'</code> so nothing restarts by itself and no automatic reboots. Every Tuesday at 05:00 Lisbon time, unless an on-sale is booked that day, a maintenance script takes one web server out of the load balancer, applies all updates, restarts what needrestart lists, reboots if <code>/var/run/reboot-required</code> exists, waits for the health check, and moves to the next. The first run, on 14 April, installs about 140 updates per server and reboots both.</p>
+  <p>The same morning, with a maintenance notice sent to venues the week before, <code>door-1</code> is rebooted for the first time in 500 days. PostgreSQL stops cleanly and is back in under a minute, on a kernel with seventeen months of fixes. For Debian 11's end of support, Leonor and Rafaela decide against an in-place upgrade: a new database server on Ubuntu 24.04 will be built from scratch by the end of August, and the data moved to it. (Handbook 6 tells the database side of that move.) It's the first server Stagedoor will build from a written checklist rather than from memory.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s8-9"><span class="n">8.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Switching automatic updates off after one bad restart</td><td>Months of unpatched vulnerabilities, unnoticed.</td><td>Keep security installs automatic; control restarts and reboots.</td></tr>
+      <tr><td>Installing updates and never restarting or rebooting</td><td>The fixes are on disk, not in memory.</td><td>needrestart and <code>reboot-required</code> in a regular window.</td></tr>
+      <tr><td>Holds without an end date</td><td>A package, and its dependencies, frozen for years.</td><td>Note why and until when; review holds monthly.</td></tr>
+      <tr><td>Third-party keys in a global keyring</td><td>Any added key can sign packages for any repository.</td><td>One key per repository, via <code>Signed-By:</code>.</td></tr>
+      <tr><td><code>curl … | sudo bash</code> installers</td><td>Unsigned code runs as root; nothing tracks what it installed.</td><td>The vendor's signed repository, or a package you can inspect.</td></tr>
+      <tr><td>In-place release upgrades of a pet server, at the last minute</td><td>Many major changes at once, no way back.</td><td>Build a new server on the new release, months ahead.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum8">
+  <h2 class="sec" id="sum8"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>A <strong>package</strong> is files plus metadata and scripts; a <strong>repository</strong> serves packages and a <strong>signed index</strong>. Trusting a repository means trusting its key holder with root.</li>
+    <li><code>apt</code> fetches, resolves and upgrades; <code>dpkg</code> installs single packages and answers questions (<code>-S</code>, <code>-L</code>, <code>-l</code>).</li>
+    <li>Ubuntu splits each release into pockets: the release, <code>-security</code>, <code>-updates</code>, <code>-backports</code>. Fixes are backported, so versions look old and are patched.</li>
+    <li><strong>unattended-upgrades</strong> installs security fixes daily. Installed isn't running: restart services (needrestart) and reboot for kernels, in a window you choose.</li>
+    <li>Replace a release before its end of support, preferably by building a new server.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Package</dt><dd>An archive of files with metadata (name, version, dependencies) and install scripts, such as a <code>.deb</code> or <code>.rpm</code>.</dd>
+    <dt>Repository</dt><dd>A server that publishes packages and a signed index of them for one or more releases.</dd>
+    <dt>Pocket</dt><dd>One part of an Ubuntu release's repository: the release itself, <code>-security</code>, <code>-updates</code> or <code>-backports</code>.</dd>
+    <dt>Signing key</dt><dd>The public key a package manager uses to verify that a repository's index was published by its owner.</dd>
+    <dt>Hold</dt><dd>A mark that stops the package manager upgrading a package.</dd>
+    <dt>unattended-upgrades</dt><dd>Ubuntu and Debian's service that installs updates automatically, by default security updates only.</dd>
+    <dt>needrestart</dt><dd>A tool that finds processes still using replaced libraries after an upgrade, and lists or restarts them.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>What does <code>apt update</code> change on the machine, and what does it not? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>It downloads and verifies the repositories' indexes, so <code>apt</code> knows which versions exist. It doesn't install or upgrade any package; <code>apt upgrade</code> does that.</p></details>
+    </li>
+    <li>
+      <p>A server's <code>openssl</code> is version <code>3.0.13-0ubuntu3.16</code> and a scanner says “OpenSSL 3.0.13 is vulnerable to CVE-…, upgrade to 3.0.15”. How do you check whether you're actually affected? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Ubuntu backports fixes into the version it shipped, so the upstream number alone says little. Check the package changelog (<code>zcat /usr/share/doc/openssl/changelog.Debian.gz | grep CVE-…</code>) or Ubuntu's security notice and CVE tracker for that CVE and release. If the fix is listed for your package revision or an earlier one, you're patched; if not, <code>apt-cache policy openssl</code> shows whether a fixed candidate is waiting.</p></details>
+    </li>
+    <li>
+      <p>Explain why a server can be fully upgraded and still vulnerable to a bug in a library fixed last week. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Processes that started before the upgrade still have the old library loaded in memory. Until they restart (or, for the kernel, until the machine reboots), the old code is what runs. needrestart and <code>/var/run/reboot-required</code> tell you what's still outstanding.</p></details>
+    </li>
+    <li>
+      <p><code>apt upgrade</code> says “The following packages have been kept back: postgresql-16 postgresql-client-16”. Give two possible reasons and how to tell them apart. <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p>Either a package is held (<code>apt-mark showhold</code> lists it), or the upgrade needs new packages installed or old ones removed, which <code>apt upgrade</code> won't do (<code>apt-get -s full-upgrade</code> shows the extra changes). Phased updates on Ubuntu can also keep packages back for a few days while they roll out gradually.</p></details>
+    </li>
+    <li>
+      <p>Design an update policy for two identical web servers behind a load balancer and one database server. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Security updates installed daily on all three, with no automatic restarts or reboots. Web servers: in a weekly window, one at a time, out of the balancer, full updates, restarts, reboot if required, health check, back in; they could even reboot automatically, staggered. Database: a separate, announced monthly window (or a replica switchover once one exists), because restarting it is visible to everyone. A calendar of busy days when nothing is changed. A plan to replace each release months before its end of support.</p></details>
+    </li>
+    <li>
+      <p>Compare upgrading a server to a new release in place with building a new server on the new release. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>In place is quicker and keeps everything, including the unknown hand changes, and is hard to roll back if it fails halfway. Building new takes longer the first time, but tests that you can rebuild the server, lets you compare old and new side by side, and leaves the old server as the rollback. For pets, building new is safer; for servers built from scripts, it's the normal way.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>Ubuntu Server documentation: <a href="https://documentation.ubuntu.com/server/">package management and automatic updates</a>.</li>
+    <li><a href="https://ubuntu.com/security/notices">Ubuntu Security Notices</a> and the <a href="https://ubuntu.com/security/cves">Ubuntu CVE tracker</a>.</li>
+    <li><code>man apt</code>, <code>man apt-get</code>, <code>man sources.list</code>, <code>man apt_preferences</code> (pinning), <code>man dpkg</code>.</li>
+    <li>Debian: <a href="https://wiki.debian.org/DebianRepository/UseThirdParty">Instructions to connect to a third-party repository</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="#ch9">9 · CPU, load and scheduling</a></div>
+</nav>
