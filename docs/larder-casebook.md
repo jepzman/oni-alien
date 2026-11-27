@@ -1176,3 +1176,200 @@ Network facts used by Handbook 1 (details and chapter references in `docs/HANDOF
   Paris (ADR 0026): hub `10.32.0.0/16`, prod `10.36.0.0/16`, TGW peered with Frankfurt, DB replica; NAT, firewall,
   endpoints, load balancers and store VPNs built on failover from code and pre-generated configs; idle network
   under €200/month of the €1,200 (ch. 25).
+
+## Series 3 · Identity and Access in the Cloud (handbook facts)
+
+Identity facts used by Handbook 2 (approved 2026-11-26; plan in `docs/HANDOFF-handbook-2-identity.md`). They extend,
+and must not contradict, ADR 0021 (staff tools SSO/SCIM, May 2027) and the 11 Oct 2027 security review (Ana, Vol. 5; later chapters move forward in time to tell it).
+
+- **Account audit (Nov 2026, led by Eli, platform tech lead):** the original AWS account Jasper opened in 2024 still
+  has a root access key from 2024, and root MFA is on a phone nobody can find; 11 IAM users with console passwords,
+  3 of them for people who have left; engineers share an `ops` IAM user for production fixes (ch. 7–8).
+- **Dispatch task role (ch. 9):** role `dispatch-task`; since the April 2026 move to the managed container service
+  (ADR 0010) its only policy was `s3:*` on `*`, copied from a blog post, so it could read the nightly order exports
+  (`orders/` and other buckets). It needs only: list and read `config/` (zone and depot settings) and write `routes/`
+  in bucket `larder-dispatch-prod` (Engine A's van route plans, ADR 0015; no delete; bucket versioning on), and read
+  secret `dispatch/prod/maps-api-key` (default AWS managed key). Eli wrote the four-statement replacement with Ben's
+  team; staging first, then attached alongside the old policy in prod for a day, then `s3:*` detached. The audit
+  had 40 more findings. Roles carry a `team` tag (e.g. `team=dispatch`) used for ABAC; only the platform team may set it.
+  Example account ID in the book: `111122223333` (prod, AWS documentation range).
+- **Root recovery (ch. 7):** audit started Mon 23 Nov 2026. Root access key created 11 Mar 2024 minutes after the
+  account, last used 4 Mar 2025 by S3 (a nightly export script on an old VM, retired that month); deleted. Root email
+  was `jasper@larder.example` (switched off Aug 2025); on 24 Nov IT restored it as an alias of the new group
+  `aws-root@larder.example` (Eli, Femke, Marco); MFA recovered with alternative factors: the account's primary phone
+  was Femke's mobile. Now: two FIDO2 keys (office safe; Femke), company phone number, alternate contacts = platform
+  team, password in the company vault. Root not used since.
+- **IAM users and `prod-operator` (ch. 8):** 11 IAM users with console passwords: 8 current engineers (read-only, a key
+  or two each) and 3 leavers (Jasper, two 2024 contractors). First week of Dec 2026: leavers' keys deactivated,
+  passwords removed, users deleted a week later. Role `prod-operator`: `ops`'s powers minus IAM changes, 1-hour max
+  session, trust = the six on-call engineers' IAM users, MFA required, `sts:SourceIdentity` must equal
+  `${aws:username}`. Each of the six: security key (console) + authenticator app (CLI). `ops`: password removed and
+  policies detached; deleted in ch. 12.
+- **Backup guardrail (ch. 10):** policy `protect-orders-db`: deny modifying/deleting `orders-prod` except roles
+  `db-change` (the two database owners, MFA) and `break-glass-*`; deny deleting any DB snapshot or automated backup.
+  Attached to the engineers' group and `prod-operator`; `deploy-bot` was missed, then added. New roles by anyone but
+  the platform team must carry permissions boundary `team-boundary` (contains the same denies; no EC2 at first).
+  Moves into an SCP in ch. 20. Dee works in staging through role `team-tool`.
+- **Staging KMS denial (ch. 11):** Tue 8 Dec 2026, Dispatch's new policy's trial evening in staging: Engine A's
+  uploads to `larder-dispatch-staging/routes/` denied on `kms:GenerateDataKey` (invoked by S3): the staging bucket
+  had defaulted to a customer managed KMS key since a 2025 experiment; production uses S3-managed keys; `config/`
+  files are uploaded by the pipeline with S3-managed encryption explicitly. Fixed by matching staging to production;
+  follow-ups: compare staging/production bucket settings automatically; decide on customer managed keys (ch. 18).
+  Larder records S3 data events for its production buckets (ch. 23).
+- **Example partner account:** StockPilot's role `stock-sync` in `999988887777` reads `larder-stock-exports` through
+  a bucket policy (ch. 10's lab; ch. 21 tells it properly).
+- **Single sign-on (ch. 12):** before: 8 of Larder's 18 engineers had IAM users (prod, most also staging); the other 10
+  had no AWS access. 5 Jan 2027: new account `larder-management` `777788889999` (root secured per ch. 7) creates the
+  AWS Organization; prod and dev+staging invited and joined the same day; no SCPs yet. IAM Identity Center in
+  Frankfurt with its own directory, MFA at every sign-in, FIDO2 only. Permission sets: `ViewOnly` (ViewOnlyAccess,
+  8 h, all engineers in prod), `Developer` (PowerUserAccess + `team-boundary`, 8 h, dev-staging), `ProdOperator` (1 h,
+  on-call), `DbChange` (1 h, db owners Ben and Eli), `PlatformAdmin` (AdministratorAccess, 1 h, platform: Eli),
+  `Billing` (finance: Marco, management account). Pre-launch check found Dee's direct `PlatformAdmin` in staging and
+  standing `PlatformAdmin` in prod (both to ch. 14). Guardrail exceptions rewritten to
+  `role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_DbChange_*`. Move-over week of 11 Jan; IAM users disabled
+  18 Jan, deleted 1 Feb with `ops`, the `prod-operator` role and its authenticator-app MFA devices. Only IAM user
+  left: `deploy-bot` (ch. 17).
+- **Leavers (ch. 13, ADR 0021):** Pim, a support agent, left 30 Apr 2027 and still had helpdesk and billing-tool
+  (refunds) accounts on 21 May (Lena's review); closed that afternoon, unused per the billing tool's log. Noor joined
+  support 17 May; Yara moved support → operations 3 May. ADR 0021 (24 May 2027): the company directory (until then
+  mostly email) becomes the IdP for every staff tool, fed by HR; 11 of 14 tools on SAML/OIDC + SCIM; the other 3 get
+  an automatic same-day leaver ticket for the tool's owner. 7 Jun 2027: Identity Center's identity source switched to
+  the IdP with SCIM (usernames matched); SCIM token expiry in the platform calendar. Quarterly reviews of requested
+  and privileged access; monthly for production admin. Business customers federated; personal picker badges by July.
+- **Privileged access (ch. 14):** 18 Dec 2026 failover near miss: Cho on call (phone at 4 %); both db-change owners
+  unreachable (Ben on a plane, Eli at the office Christmas dinner); `break-glass-*` roles didn't exist; review
+  21 Dec. Feb 2027: TEAM (AWS's open-source temporary elevated access tool) in a small tooling account; no standing
+  `ProdOperator`, `DbChange` or prod `PlatformAdmin`; rules: ProdOperator 1 h, on-call self-approves in incidents
+  (reviewed next morning); DbChange 1 h, approved by a db owner or the incident lead; prod PlatformAdmin 2 h, approved
+  by platform; dev-staging PlatformAdmin 4 h, approved by a tech lead. Break-glass: IAM users `break-glass-1/2` in
+  `larder-management` (console only, hardware keys), role `break-glass-admin` in every account, envelopes in the
+  office safe, keys in a locked drawer in Marco's office, alarm pages every tech lead. 18 Feb 2027 INC-412 (payments,
+  18:07): Cho self-approved ProdOperator; Eli approved his DbChange at 18:15. 26 Feb: first break-glass test,
+  19 minutes; the runbook was in the IdP-protected wiki, so a printed copy now lives in the safe.
+- **SSRF and IMDS (ch. 15):** Mon 15 Mar 2027, a researcher emailed `security@larder.example`: Larder Core's image
+  endpoint `/img?url=…` fetched any URL and returned the instance role name `larder-core` from IMDSv1. Role had
+  `AmazonS3FullAccess` + full email-sending access. Same day: proxy limited to Larder's image hosts, private and
+  link-local addresses refused; IMDSv2 required (hop limit 1) on the 3 VMs; IMDSv2 default for new instances in both
+  accounts; CloudTrail: no use of the role's credentials from outside Larder's network in 90 days; a vulnerability
+  disclosure page started. Next week: `larder-core` narrowed (two buckets, one sending identity, one queue); the SSH
+  key shared since 2024 and the office port-22 rule removed; shells via Session Manager. Dispatch's execution role:
+  `dispatch-task-execution`.
+- **EKS experiment (ch. 16):** Mar–Apr 2027, Eli and Dee, staging account, namespace `dispatch-poc` running Engine A.
+  Dee's debug pod could read route plans (S3 read had been added to the node role; pods could reach IMDS) and every
+  secret (a `cluster-admin` ClusterRoleBinding to `system:serviceaccounts:dispatch-poc` from the Helm chart's docs).
+  Fixed in a morning (Pod Identity, minimal node role, IMDS blocked, a Role for two config maps, access entries).
+  30 Apr 2027: recommendation to stay on ECS; identity rules written down; cluster deleted. Larder does not run
+  Kubernetes (Handbook 1's pod range is a reservation).
+- **CI/CD (ch. 17):** Sun 21 Mar 2027, a popular third-party GitHub Action's tags pointed at malicious code for 19 hours
+  (printed secrets into logs); `larder/larder-core`'s deploy workflow ran 3 times; `deploy-bot`'s key rotated within
+  2 hours; no use of the old key from outside GitHub's runners. Next two weeks: GitHub OIDC provider in staging and
+  prod; roles `github-deploy-staging` (pushes to `main` of `larder/larder-core`) and `github-deploy-prod` (only the
+  `production` environment, one tech lead's approval); deploy-only policies (ECR push, task definitions, one ECS
+  service, PassRole for the service's two roles); `team-boundary` on both; actions pinned to SHAs; explicit
+  `permissions:`. 9 Apr 2027: `deploy-bot` deleted. Larder stores no AWS secret anywhere. GitHub org `larder`.
+- **Secrets and keys (ch. 18):** Thu 6 May 2027, secret scanning found `.env.production` (committed by Jasper in June
+  2024, deleted a day later) with the orders DB application user's password, never changed and also in
+  `/etc/larder/env` on the 3 VMs. Rotated within the hour; no logins from elsewhere. Now: Secrets Manager, rotation
+  every 30 days with two alternating DB users; Larder Core fetches via the SDK (5-minute cache, refetch on auth
+  failure); push protection on every repository. 14 May key decision (Eli): S3-managed keys by default; customer
+  managed keys for the order exports bucket (key policy: PlatformAdmin manages but can't use; roles
+  `order-export-job` and `finance-reports` decrypt only via S3) and for DB snapshots copied to a separate backup
+  account (ch. 20); staging's 2025 key unused since Dec 2026, scheduled for deletion with a 30-day window.
+- **Security review details (ch. 19, canon in Ana Vol. 5):** Business API `/business/v1`; reissued keys: 90-day
+  expiry, two active per client, created and shown only in the portal by the client's admin, hashed, prefix
+  `lb_live_` registered with GitHub secret scanning; new integrations steered to OAuth. The order-detail call that
+  skipped the office check was added in summer 2027; fix: one load-order-for-principal function used by every portal
+  and API endpoint, plus a per-endpoint test. Billing webhooks: header `Billing-Signature`, secret in Secrets
+  Manager, unsigned rejected, `invoice.paid` confirmed with the provider's API.
+- **Organisation structure (ch. 20):** May 2027, Marco found €1,900 for a load test left 3 weeks in `us-east-1`
+  (dev-staging). June 2027: OUs Security (`security`: delegated admin for GuardDuty, Security Hub, Access Analyzer
+  and the org trail's home; `backup`), Infrastructure (`tooling`), Workloads → Prod (`prod`) and NonProd
+  (`dev-staging`), Sandbox (`sandbox-<name>` per engineer, €100/month budget alarm, allow-list SCP). Baseline SCP on
+  the root after a week on Sandbox: stay in the organisation; keep the audit trail (except `break-glass-admin`);
+  IMDSv2 only; only `eu-central-1` (global services exempt). `protect-orders-db` moved to an SCP on the Prod OU
+  (exceptions: Identity Center `DbChange`, `break-glass-admin`); Eli to Marco: “Impossible.” Centralised root access
+  on; prod and dev-staging root credentials deleted. Organisation ID in examples: `o-a1b2c3d4e5`.
+- **Cross-account (ch. 21):** WMS B nightly file (ADR 0018): role `wmsb-nightly-file` trusts WMS B's delivery role
+  (example `arn:aws:iam::999911112222:role/wmsb-file-delivery`) with WMS B's generated external ID (its guide called
+  it optional), `s3:PutObject` on `larder-wmsb-inbound/nightly/*` only; first file 05:12 on 20 Apr 2027. Backups:
+  since June 2027, AWS Backup copies prod DB snapshots nightly to a vault in `backup` (org-only access policy,
+  vault lock; the snapshot CMK allows the backup account). StockPilot: its bucket-policy access removed 15 Sep 2027
+  (last read 14 Sep), Access Analyzer finding closed citing ADR 0016.
+- **Data perimeter (ch. 22):** after the 25 Oct 2027 data classes, restricted buckets: `larder-order-exports`,
+  `larder-settlements`. Lena's question early Nov; Eli's November work: 30 days of S3 data events reviewed; finance's
+  reconciliation script moved from laptops to a scheduled task in the prod VPC as `finance-reports`; Athena covered
+  by `aws:ViaAWSService`; AWS package repositories a named exception. Enforced staging then prod: identity-perimeter
+  RCP on the root (only exception: tag `perimeter-exception=vendor-role` on `wmsb-nightly-file`), resource-perimeter
+  SCP on Workloads, network rule on the two restricted buckets; `break-glass-admin` excepted.
+- **Watch list (ch. 23):** live 30 Nov 2027 (closes the Oct review's “no alert on new federation trust” finding, Eli):
+  Larder's login service writes `federation.connection.created` events, shipped with CloudTrail to `security`. Pages
+  (on-call phone): root sign-in, break-glass, trust/resource policy opened to `*` or outsiders, high GuardDuty.
+  Tickets (platform queue, read each morning): new SAML/OIDC provider or client federation, Identity Center assignment
+  not made by TEAM's role, KMS key policy change, StopLogging/DeleteTrail attempts, new IAM user or key. Thu 2 Dec
+  2027, 7 alerts, no incidents: Eli fixed a TEAM bug by hand (10:02); Mo connected new office client Brightwater's IdP
+  (11:20); Eli added the backup account to a key policy (13:31); Dee opened staging role `team-tool`'s trust to `*`
+  while debugging, reverted 4 min after the page (14:47); Cho's StopLogging denied by SCP, from an old load-test
+  runbook, deleted (16:05); Marco and Femke used root at 18:12 to update the payment card, unannounced; break-glass-2
+  quarterly test (19:30). TEAM's account in examples: `222233334444`.
+- **Identity as code (ch. 24):** Dec 2027 Lena (ISO 27001 prep) asked for every 2027 change to production access and
+  its approver; took Eli two days. Repository `larder/larder-identity` (Terraform; folders `organization/`,
+  `identity-center/`, `accounts/<name>/`, `modules/`, `policies/`) opened 10 Jan 2028; imports SCPs/RCPs → permission
+  sets → OIDC/CI roles → cross-account roles → workload roles; clean plan 18 Feb 2028. Apply role `identity-apply`
+  (trusts only `main` in GitHub environment `identity`); CODEOWNERS platform, plus Lena for `organization/` and
+  `new-access` PRs; two approvals; nightly drift plan. SCP denies changing permission sets, SCPs and roles except
+  `identity-apply`, TEAM (assignments only) and `break-glass-admin`. Reporting team's first PR (`reporting-sync`:
+  `s3:*`, `iam:Create*`, PassRole `*`) failed the linter; merged version reads `larder-stock-exports/daily/` only.
+  Policy generation trimmed `larder-core` from 11 services to 5.
+- **Capstone (ch. 25):** after ADR 0026 (24 Jan 2028, Paris `eu-west-3` pilot light), design review 15 Feb and
+  tabletop 22 Feb 2028 (Eli, Lena, Dee, Cho, Marco; stolen-cookie laptop scenario). Tickets: device-bound sessions
+  (IdP requires managed devices for AWS and GitHub), new-country sign-in alert, one “contain a person” runbook,
+  GitHub fine-grained tokens only (30-day expiry); Paris added to the Prod OU and backup region SCP, multi-Region
+  replica of the snapshot key, GuardDuty/Access Analyzer/watch-list rules in Paris, recovery VPC endpoints in the
+  perimeter; break-glass test with Frankfurt treated as down: 26 minutes. 31 unused-access findings open in Feb 2028.
+- **Deploy key (ch. 17):** CI deployed with a long-lived access key for IAM user `deploy-bot` with
+  `AdministratorAccess`, stored as a repository secret; replaced by GitHub OIDC with one role per environment.
+- **Accounts today (ch. 7):** two standalone accounts in Nov 2026: Jasper's original `111122223333` (production, plus the
+  network hub) and `444455556666` (development and staging, opened by Eli in 2025). No organisation yet.
+- **Accounts (ch. 12, 20–21):** Jan 2027 (ch. 12): a new, empty management account `777788889999`
+  (`larder-management`) creates the organisation; prod `111122223333` and dev+staging `444455556666` join as members.
+  Ch. 20 adds OUs, SCPs and more accounts (hub, dev, staging, prod split per Handbook 1 ch. 10).
+- **People (ch. 12–14):** IAM Identity Center with the company IdP; permission sets `ReadOnly`, `Developer`,
+  `ProdOperator` (just in time, approved by a tech lead); two break-glass users whose credentials are kept in a safe.
+- **Partners (ch. 19, 21):** StockPilot and the payment provider use cross-account roles with external IDs or signed
+  requests; Korenwolf's business API keys expire after 90 days (a fix from the Oct 2027 review).
+- **Backups and the `ops` user (ch. 1):** Thu 12 Nov 2026, 22:14, someone using the shared IAM user `ops` set the orders
+  database's automated backup retention from 14 days to 1 day. Found Mon 16 Nov, when a migration from Ben's team
+  damaged three days of substitution records and a point-in-time restore to Friday was impossible; rebuilt from the
+  order events in two days. Six people knew the `ops` password, including Jasper. Eli stops looking for who; the
+  password is changed that afternoon; plan: SSO (ch. 12), just-in-time admin (ch. 14), deny on shortening backups
+  (ch. 10, 20); `ops` deleted in ch. 12.
+- **Credential stuffing (ch. 2):** Sat 21 Nov 2026 night: ~40,000 sign-in attempts in 4 hours from ~2,000 addresses;
+  310 accounts taken over (reused passwords; Larder's hashes, bcrypt since Jasper, were never stolen); 41 orders sent
+  to other addresses with saved cards; refunded; Lena reported to the Dutch DPA within 72 hours. Within two weeks
+  (Dee's team + Eli): per-account and per-address limits with failure-rate alerts; breached-password checks at
+  sign-up, login and change; step-up (email code) before a saved card pays for a new address; passkeys on app and web
+  (18 % of active customers within a month). Eli ordered two hardware security keys each for the nine people with
+  production access.
+- **Stolen phone (ch. 3):** Tue 24 Nov 2026; customer changed her password on the web that evening; two orders from
+  the stolen phone next morning. App tokens were: access 24 h, refresh 1 year, untouched by password change. Live
+  10 Dec: access 10 min; refresh rotation with reuse detection, 30-day idle expiry; password change, “sign out
+  everywhere” (Account → Devices) and account lock revoke all refresh tokens; saved-card payments check a per-customer
+  “sessions valid after” time. Issuer `https://login.larder.example`; API audience `larder-api`.
+- **Spendwise (ch. 4):** Tue 1 Dec 2026 Korenwolf finance asked Mo to give their SaaS expense tool, Spendwise
+  (fictional), an office manager's password. Instead (second week of Dec): Spendwise registered as a confidential
+  OAuth client, one exact redirect URI, new scope `invoices:read` checked by the invoices API; “Connect Larder” with
+  consent; disconnect per user. Larder's own app had used the deprecated password grant since 2024; moved to the
+  system browser with code + PKCE in the same release (which made passkeys work in the app).
+- **Korenwolf SSO (ch. 5):** Korenwolf IT requires SAML 2.0 from its Entra ID. Metadata exchanged 7 Dec 2026; group
+  “Larder office managers” (nine people, three offices, e.g. J. de Vries, Rotterdam; M. Bakker, Amsterdam); persistent
+  NameID + email, office, groups; connection bound to Korenwolf's business account and `korenwolf.example`; accounts
+  keyed on issuer + NameID; JIT accounts, 8-hour sessions; SCIM planned with the spring portal. First test failed
+  (audience with a trailing slash); live 18 Dec 2026. Korenwolf's signing certificate expires Dec 2029 (on Larder's
+  on-call calendar for Nov 2029).
+- **Stock tool roles (ch. 6):** Dec 2026, before Utrecht staff were added: 19 roles (picker, stock clerk, store manager,
+  operations × Noord, Zuid, Rotterdam, plus 7 others), assigned from a spreadsheet. Tomás covered Zuid for two weeks in
+  July 2026 and kept store-manager@zuid until December. Rewritten (Eli + Joost): four jobs; job and home store from
+  the HR system; covering another store is a temporary assignment with an end date, approved by that store's manager;
+  the 7 other roles became 3. The business portal (spring 2027) is designed to check orders by relationship (office
+  manager → own office; customer admin such as Hanna → all offices); one order-detail call skipped it until the
+  11 Oct 2027 review (ch. 19, Ana Vol. 5). Aylin: a picker at Zuid.

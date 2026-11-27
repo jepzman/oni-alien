@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Joiners, movers and leavers · Identity and Access in the Cloud</title>
+<meta name="description" content="Automating access from HR to cloud with groups and SCIM, and access reviews that people actually do.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 2</a> · <a href="index.html">Identity and Access in the Cloud</a></span><span>Part III · Chapter 13</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part III · Access for people</p>
+  <p class="chno">13</p>
+  <h1>Joiners, movers and leavers</h1>
+  <p class="promise">Access is easy to grant and easy to forget. People join and need the right tools on day one; they change teams and quietly keep their old access; they leave and, in too many companies, stay in a few systems for weeks. This chapter connects the HR system, the identity provider and every app so that access follows the person automatically, and sets up the reviews that catch whatever automation misses.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Describe the joiner–mover–leaver lifecycle, with HR as the source of truth.</li>
+      <li>Design birthright access from department and role, and requests for everything else.</li>
+      <li>Explain SCIM provisioning and connect an identity provider to IAM Identity Center.</li>
+      <li>Run a leaver process that ends sessions, not just accounts.</li>
+      <li>Run access reviews that people actually complete.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Single sign-on with Identity Center (<a href="12-sso.html">Chapter 12</a>); SAML and just-in-time accounts (<a href="05-saml-federation.html">Chapter 5</a>).</li>
+      <li>Sessions and revocation (<a href="03-tokens-sessions.html">Chapter 3</a>); privilege creep (<a href="06-access-models.html">Chapter 6</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, Python 3, no cloud account</dd>
+      <dt>Main provider</dt><dd>provider-neutral and AWS, with Azure and Google Cloud in 13.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>In May 2027, Lena, Larder's data protection officer, reviews who can see customer data. Most of the answers are reassuring. One isn't: Pim, a customer support agent who left on 30 April, could still sign in to the helpdesk and to the billing tool, where support agents issue refunds, on 21 May. Three weeks, with access to customers' order histories and the power to send money.</p>
+  <p>AWS wasn't the problem: since January, Larder's engineers sign in through Identity Center (<a href="12-sso.html">Chapter 12</a>), and Eli removes leavers the same day. But Larder has 14 staff tools, and each has its own accounts, created and deleted by whoever remembers. Pim's manager had told IT. IT had closed the email account. Nobody owned the other twelve. Section 13.9 shows what Larder changed.</p>
+</aside>
+
+<!-- ======================================================== 13.1 -->
+<h2 class="sec" id="s13-1"><span class="n">13.1</span>The lifecycle</h2>
+
+<p class="lead">Every person's access goes through three kinds of event: they <strong>join</strong>, they <strong>move</strong> (change team, role, location or manager), and they <strong>leave</strong>. The aim of lifecycle management is that each event changes access everywhere, automatically, from one place. That place should be where the event is first recorded: the <strong>HR system</strong>, which knows about a new hire before IT does, and about a resignation before anyone touches an account.</p>
+
+<figure class="wide" id="fig13-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 240" role="img" aria-labelledby="fig13-1-t fig13-1-d">
+      <title id="fig13-1-t">Access flowing from HR to every app</title>
+      <desc id="fig13-1-d">The HR system records a joiner, a mover or a leaver, with department, role, manager and dates. It feeds the identity provider, which creates, changes or disables the person's account and group memberships. The identity provider pushes those changes with SCIM to apps that support it: IAM Identity Center, the helpdesk, the billing tool, the stock tool. People sign in to all of them through the identity provider, with SAML or OpenID Connect. Apps without SCIM get a ticket for a person to act on. Access reviews check the result regularly.</desc>
+      <defs><marker id="c13ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c13ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="12" y="72" width="150" height="84" rx="5"/>
+      <text class="t-label" x="87" y="98" text-anchor="middle">HR system</text>
+      <text class="t-small" x="87" y="118" text-anchor="middle">joiner · mover · leaver</text>
+      <text class="t-small" x="87" y="136" text-anchor="middle">dept, role, dates</text>
+      <rect class="node-accent" x="214" y="72" width="170" height="84" rx="5"/>
+      <text class="t-label on-accent" x="299" y="98" text-anchor="middle">identity provider</text>
+      <text class="t-small on-accent" x="299" y="118" text-anchor="middle">accounts and groups</text>
+      <text class="t-small on-accent" x="299" y="136" text-anchor="middle">sign-in (SAML / OIDC)</text>
+      <path class="wire" d="M164 114 H210" marker-end="url(#c13ah)"/>
+      <rect class="pub" x="456" y="14" width="292" height="150" rx="6"/>
+      <text class="t-small" x="468" y="32">apps with SCIM: changed in minutes</text>
+      <rect class="node" x="468" y="42" width="130" height="32" rx="4"/><text class="t-small" x="533" y="63" text-anchor="middle">Identity Center</text>
+      <rect class="node" x="606" y="42" width="130" height="32" rx="4"/><text class="t-small" x="671" y="63" text-anchor="middle">helpdesk</text>
+      <rect class="node" x="468" y="82" width="130" height="32" rx="4"/><text class="t-small" x="533" y="103" text-anchor="middle">billing tool</text>
+      <rect class="node" x="606" y="82" width="130" height="32" rx="4"/><text class="t-small" x="671" y="103" text-anchor="middle">stock tool</text>
+      <text class="t-small" x="602" y="148" text-anchor="middle">… 11 of Larder's 14 tools</text>
+      <rect class="ext" x="456" y="180" width="292" height="44" rx="6"/>
+      <text class="t-small" x="602" y="200" text-anchor="middle">apps without SCIM: a ticket for a person,</text>
+      <text class="t-small" x="602" y="215" text-anchor="middle">due the same day</text>
+      <path class="wire-accent" d="M386 100 H452" marker-end="url(#c13ah2)"/>
+      <text class="t-small t-accent" x="419" y="92" text-anchor="middle">SCIM</text>
+      <path class="wire-dash" d="M386 130 L452 196" marker-end="url(#c13ah)"/>
+      <text class="t-small" x="299" y="190" text-anchor="middle">access reviews check</text>
+      <text class="t-small" x="299" y="206" text-anchor="middle">the result every quarter</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 13.1</b> One record in HR drives every account. Sign-in goes through the identity provider; provisioning goes out from it.</figcaption>
+</figure>
+
+<p>Two different protocols are involved, and both are needed. <strong>SAML or OpenID Connect</strong> handles <em>sign-in</em>: the app trusts the IdP to say who's there (<a href="04-oauth-oidc.html">Chapter 4</a>, <a href="05-saml-federation.html">Chapter 5</a>). <strong>SCIM</strong> handles <em>provisioning</em>: the IdP tells the app who exists, which groups they're in, and when they're gone (13.5). Sign-in alone stops a leaver logging in again; it doesn't remove their account, their group memberships or their existing sessions.</p>
+
+<!-- ======================================================== 13.2 -->
+<h2 class="sec" id="s13-2"><span class="n">13.2</span>Joiners: birthright access, and requests for the rest</h2>
+
+<p>Split access into two kinds:</p>
+<ul>
+  <li><strong>Birthright access</strong>: what everyone in a department or role needs from day one, derived automatically from HR attributes. Every support agent gets the helpdesk and the billing tool's refund role; every engineer gets <code>ViewOnly</code> in production and <code>Developer</code> in staging (<a href="12-sso.html">Chapter 12</a>). Rules, not decisions.</li>
+  <li><strong>Requested access</strong>: anything beyond that, asked for by the person, approved by an owner, and ideally time-limited (<a href="14-privileged-access.html">Chapter 14</a>).</li>
+</ul>
+<p>Keep birthright access small. Every item on it is given to everyone, forever, without anyone deciding. Day-one readiness then comes from HR entering the start date early: the account exists, with the right groups, before the person arrives.</p>
+
+<!-- ======================================================== 13.3 -->
+<h2 class="sec" id="s13-3"><span class="n">13.3</span>Movers: the forgotten event</h2>
+
+<p>Joiners get attention because they can't work without access. Leavers get attention because auditors ask. Movers get neither, so they're where <strong>privilege creep</strong> comes from (<a href="06-access-models.html">Chapter 6</a>): someone moves from support to operations, gains the stock tool, and keeps the refund role. Nobody complains, because extra access never stops anyone working.</p>
+
+<p>With birthright access derived from attributes, a move is just an attribute change: the old department's groups go, the new one's arrive. Allow a short, deliberate overlap if handovers need it (a week, with an end date), never an open one. Requested access should be re-confirmed on a move, by the new manager.</p>
+
+<!-- ======================================================== 13.4 -->
+<h2 class="sec" id="s13-4"><span class="n">13.4</span>Leavers: ending sessions, not just accounts</h2>
+
+<p>Disabling someone at the identity provider stops new sign-ins everywhere it's used. It does <em>not</em> immediately stop everything they already have:</p>
+<ul>
+  <li><strong>Sessions already open</strong> in each app last until they expire: a browser session, a refresh token on a phone (<a href="03-tokens-sessions.html">Chapter 3</a>), an Identity Center role session of up to its permission set's duration.</li>
+  <li><strong>Accounts in apps without SCIM</strong> stay active. Pim's helpdesk and billing accounts were exactly this.</li>
+  <li><strong>Secrets the person knew or made</strong>: shared passwords, API keys they created, keys on their laptop.</li>
+  <li><strong>Things they owned</strong>: scheduled jobs, resources, the only copy of a runbook.</li>
+</ul>
+
+<ol class="steps">
+  <li><strong>HR records the leave date</strong>; the IdP disables the account at the end of the last day, automatically.</li>
+  <li><strong>SCIM deactivates</strong> the person in every connected app within minutes.</li>
+  <li><strong>Revoke active sessions</strong> where it matters: in the IdP, in apps that support it, and in Identity Center, whose console lists a user's sessions and can end them. That stops the access portal from issuing new credentials; role credentials it already issued still work until they expire. For an urgent case, AWS's documented method is a deny-everything statement in your permission sets (or an SCP) with a condition on the person's <code>identitystore:UserId</code>, which takes effect for sessions already running.</li>
+  <li><strong>Tickets for the rest</strong>: each app without SCIM gets a task, owned by that app's owner, due the same day.</li>
+  <li><strong>Rotate what they knew</strong>, transfer what they owned, recover devices.</li>
+  <li><strong>Verify the next day</strong>: a report of the person's status in every app. Anything still active is an incident.</li>
+</ol>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: a hostile departure</p>
+  <p>When someone leaves on bad terms, the order flips: disable and revoke sessions <em>first</em>, at the moment they're told, then do the rest. Short session durations for powerful access (<a href="12-sso.html">Chapter 12</a>) are what make this fast.</p>
+</div>
+
+<!-- ======================================================== 13.5 -->
+<h2 class="sec" id="s13-5"><span class="n">13.5</span>SCIM</h2>
+
+<p><span class="term">SCIM</span> (System for Cross-domain Identity Management, RFC 7643 and 7644) is a small REST API that apps expose so an identity provider can manage their users and groups. The IdP calls it whenever something changes:</p>
+<ul>
+  <li><code>POST /Users</code> creates a user; <code>POST /Groups</code> a group.</li>
+  <li><code>PATCH /Users/{id}</code> changes attributes, including deactivation; <code>PATCH /Groups/{id}</code> adds or removes members.</li>
+  <li><code>DELETE</code> removes a user or group entirely; many IdPs deactivate first and delete later.</li>
+</ul>
+
+<p class="code-title"><span>deactivating a leaver</span><span>SCIM 2.0 request</span></p>
+<pre><code>PATCH /scim/v2/Users/9067729b3d-94f1e0b3-c394-48d5-8ab1-2c122a167074
+Authorization: Bearer &lt;SCIM access token&gt;
+Content-Type: application/scim+json
+
+{ <span class="k">"schemas"</span>: [<span class="s">"urn:ietf:params:scim:api:messages:2.0:PatchOp"</span>],
+  <span class="k">"Operations"</span>: [ { <span class="k">"op"</span>: <span class="s">"replace"</span>, <span class="k">"path"</span>: <span class="s">"active"</span>, <span class="k">"value"</span>: false } ] }</code></pre>
+
+<p>To connect an IdP to IAM Identity Center, you change Identity Center's identity source to <em>external identity provider</em>, exchange SAML metadata (<a href="05-saml-federation.html">Chapter 5</a>), and turn on automatic provisioning. Identity Center then gives you a SCIM endpoint and an access token for the IdP to use. Three things to know:</p>
+<ul>
+  <li><strong>The SCIM token expires after a year.</strong> When it does, provisioning stops silently: new joiners get nothing and, worse, leavers aren't removed. Put the date in a calendar and rotate it early.</li>
+  <li><strong>Provision groups, not just users</strong>, and keep assignments group-based (<a href="12-sso.html">Chapter 12</a>): then HR changes flow all the way through to AWS accounts.</li>
+  <li><strong>Usernames must match</strong> when switching from Identity Center's own directory, so existing users are taken over rather than duplicated.</li>
+</ul>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 13.1 · Getting accounts into an app</caption>
+    <thead><tr><th></th><th>Manual</th><th>Just-in-time (<a href="05-saml-federation.html">Chapter 5</a>)</th><th>SCIM</th></tr></thead>
+    <tbody>
+      <tr><td>Account created</td><td>when someone remembers</td><td>at first sign-in</td><td>when HR says so, before day one</td></tr>
+      <tr><td>Groups kept current</td><td>rarely</td><td>at each sign-in</td><td>continuously</td></tr>
+      <tr><td>Leaver removed</td><td>when someone remembers</td><td>never: they just stop signing in</td><td>within minutes</td></tr>
+      <tr><td>Use for</td><td>nothing important</td><td>low-risk apps, partners' users</td><td>everything that supports it</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 13.6 -->
+<h2 class="sec" id="s13-6"><span class="n">13.6</span>Access reviews</h2>
+
+<p>Automation handles the rules. Reviews catch what the rules don't: requested access that outlived its reason, an assignment made by hand, a group that grew. An <span class="term">access review</span> asks the person who knows, usually the manager or the resource owner, to confirm or remove each item, and records the answer.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Automate what follows from HR; review what doesn't. A review that lists everyone's birthright access teaches people to click “approve all”.</p>
+</div>
+
+<p>Reviews people actually complete are short and pointed:</p>
+<ul>
+  <li><strong>Review exceptions, not rules.</strong> Show requested and hand-made access, not what every support agent has.</li>
+  <li><strong>Privileged access more often</strong>: monthly for production admin, quarterly for the rest.</li>
+  <li><strong>Show usage.</strong> “Last used 140 days ago” makes the decision for the reviewer. IAM Access Analyzer's unused access findings and Identity Center's sign-in records give this for AWS (<a href="23-audit-detect.html">Chapter 23</a>).</li>
+  <li><strong>Default to removal</strong> when a reviewer doesn't answer, after a reminder. Unanswered reviews that keep access teach everyone that reviews don't matter.</li>
+</ul>
+
+<aside class="side"><b>Machines leave too</b>Service accounts, API keys and roles have human owners. When an owner leaves or moves, ownership must move with the team, or the identity becomes an orphan nobody dares delete. Tag every workload identity with an owning team, not a person.</aside>
+
+<!-- ======================================================== 13.7 -->
+<h2 class="sec" id="s13-7"><span class="n">13.7</span>Partners' people</h2>
+
+<p>The same lifecycle applies to people from customers and suppliers who use your systems. You can't see their HR system, so let their identity provider drive: federation for sign-in (<a href="05-saml-federation.html">Chapter 5</a>) and, where they support it, SCIM from their IdP into yours, so their leavers disappear from your app when they leave their company. Where they don't, keep their sessions short and run an access review with the partner's own contact.</p>
+
+<!-- ======================================================== 13.8 -->
+<h2 class="sec" id="s13-8"><span class="n">13.8</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 13.2 · Lifecycle tooling at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>HR-driven accounts</td><td>none built in: from your IdP</td><td>Entra ID inbound provisioning from HR systems; lifecycle workflows for joiner, mover, leaver tasks</td><td>from your IdP or directory sync (Google Cloud Directory Sync)</td></tr>
+      <tr><td>Provisioning into AWS / the cloud</td><td>Identity Center as a SCIM target</td><td>native (Entra ID is the directory)</td><td>native (Cloud Identity) or SCIM from your IdP</td></tr>
+      <tr><td>Provisioning out to SaaS apps</td><td>Identity Center isn't a SCIM source; use your IdP</td><td>Entra ID app provisioning (SCIM)</td><td>Workspace / Cloud Identity auto-provisioning for SAML apps</td></tr>
+      <tr><td>Access reviews</td><td>IAM Access Analyzer unused access; reviews in your IdP</td><td>Entra ID Governance access reviews</td><td>IAM Recommender and Policy Intelligence; reviews in your IdP</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>Entra ID can take hires and leavers straight from HR systems (inbound provisioning), run <strong>lifecycle workflows</strong> (send a welcome, add to groups before day one, remove access on the last day) and schedule <strong>access reviews</strong> of groups, apps and privileged roles, with automatic removal when reviewers don't respond. These features are part of Entra ID Governance licensing.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>If your source of truth is elsewhere (Entra ID, Okta, an LDAP directory), users and groups reach Cloud Identity by SCIM from the IdP or by <strong>Google Cloud Directory Sync</strong>; suspended users lose access to the console and APIs. The IAM <strong>role recommender</strong> suggests removing permissions a principal hasn't used in 90 days, which is good evidence for reviews.</p>
+</div>
+
+<!-- ======================================================== 13.9 -->
+<h2 class="sec" id="s13-9"><span class="n">13.9</span>At Larder: one identity per person</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Lena's finding became ADR 0021, accepted on 24 May 2027: <em>one identity per person</em>. Larder's company directory, which until then had mostly run email, became its identity provider for every staff tool, fed by the HR system. Departments and roles in HR now decide birthright groups. Eleven of the 14 tools support SAML or OpenID Connect plus SCIM, and are connected; the other three get an automatic leaver ticket, owned by each tool's owner, due the same day. Pim's two accounts were closed the afternoon Lena found them, and the billing tool's log showed they hadn't been used.</p>
+  <p>On 7 June, Eli switched Identity Center's identity source from its own directory to the IdP, with SCIM; usernames matched, so nobody noticed except the new joiners, who had AWS access on their first morning. The SCIM token's expiry is in the platform team's calendar. Managers now review requested and privileged access every quarter, and production admin monthly. Two more changes followed from the same decision: business customers' staff are federated from their own IdPs (as Korenwolf's office managers have been since December, <a href="05-saml-federation.html">Chapter 5</a>), and pickers get personal badges by July instead of shared logins on store tablets.</p>
+</aside>
+
+<!-- ======================================================== 13.10 -->
+<h2 class="sec" id="s13-10"><span class="n">13.10</span>Lab: reconcile apps with HR</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 13 · What SCIM provisioning would do</p>
+  <p><strong>You'll</strong> compare what HR says with what four apps contain, and produce the SCIM requests that would fix every difference: a joiner, a leaver, a mover and a group granted by hand. <strong>You need</strong> Python 3. <strong>Cost:</strong> nothing.</p>
+</div>
+
+<p class="code-title"><span>jml.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># jml.py · joiners, movers and leavers: reconcile apps with HR, the way SCIM provisioning does</span>
+<span class="k">from</span> datetime <span class="k">import</span> date
+
+TODAY = date(2027, 5, 21)
+
+HR = {   <span class="c"># the source of truth: who works here, in which department, until when</span>
+    <span class="s">"ben"</span>:   {<span class="s">"dept"</span>: <span class="s">"engineering"</span>, <span class="s">"left"</span>: None},
+    <span class="s">"noor"</span>:  {<span class="s">"dept"</span>: <span class="s">"support"</span>,     <span class="s">"left"</span>: None},                 <span class="c"># joined 17 May</span>
+    <span class="s">"pim"</span>:   {<span class="s">"dept"</span>: <span class="s">"support"</span>,     <span class="s">"left"</span>: date(2027, 4, 30)},    <span class="c"># left</span>
+    <span class="s">"tomas"</span>: {<span class="s">"dept"</span>: <span class="s">"operations"</span>,  <span class="s">"left"</span>: None},
+    <span class="s">"yara"</span>:  {<span class="s">"dept"</span>: <span class="s">"operations"</span>,  <span class="s">"left"</span>: None},                 <span class="c"># moved from support on 3 May</span>
+}
+
+RULES = {  <span class="c"># department → the groups each app should give them</span>
+    <span class="s">"engineering"</span>: {<span class="s">"aws"</span>: {<span class="s">"engineers"</span>}},
+    <span class="s">"support"</span>:     {<span class="s">"helpdesk"</span>: {<span class="s">"agents"</span>}, <span class="s">"billing"</span>: {<span class="s">"refunds"</span>}},
+    <span class="s">"operations"</span>:  {<span class="s">"stock-tool"</span>: {<span class="s">"store-staff"</span>}},
+}
+
+APPS = {   <span class="c"># what each app has today: user → groups</span>
+    <span class="s">"aws"</span>:        {<span class="s">"ben"</span>: {<span class="s">"engineers"</span>}},
+    <span class="s">"helpdesk"</span>:   {<span class="s">"pim"</span>: {<span class="s">"agents"</span>}, <span class="s">"yara"</span>: {<span class="s">"agents"</span>}},
+    <span class="s">"billing"</span>:    {<span class="s">"pim"</span>: {<span class="s">"refunds"</span>}, <span class="s">"yara"</span>: {<span class="s">"refunds"</span>}},
+    <span class="s">"stock-tool"</span>: {<span class="s">"tomas"</span>: {<span class="s">"store-staff"</span>, <span class="s">"rota-admin"</span>}},     <span class="c"># rota-admin: granted by hand in March</span>
+}
+
+<span class="k">def</span> desired(app):
+    want = {}
+    <span class="k">for</span> user, rec <span class="k">in</span> HR.items():
+        <span class="k">if</span> rec[<span class="s">"left"</span>] <span class="k">is</span> None <span class="k">or</span> rec[<span class="s">"left"</span>] &gt; TODAY:
+            groups = RULES.get(rec[<span class="s">"dept"</span>], {}).get(app)
+            <span class="k">if</span> groups:
+                want[user] = groups
+    <span class="k">return</span> want
+
+<span class="k">def</span> reconcile(app):
+    have, want = APPS[app], desired(app)
+    <span class="k">for</span> user <span class="k">in</span> sorted(want.keys() - have.keys()):
+        <span class="k">yield</span> f<span class="s">"POST   /Users                  {app}: create {user}@larder.example, groups {sorted(want[user])}"</span>
+    <span class="k">for</span> user <span class="k">in</span> sorted(have.keys() - want.keys()):
+        rec = HR.get(user)
+        why = (f<span class="s">"left {rec['left']}, {(TODAY - rec['left']).days} days ago"</span> <span class="k">if</span> rec <span class="k">and</span> rec[<span class="s">"left"</span>]
+               <span class="k">else</span> <span class="s">"moved"</span> <span class="k">if</span> rec <span class="k">else</span> <span class="s">"not in HR"</span>)
+        <span class="k">yield</span> f<span class="s">"PATCH  /Users/{user:&lt;17} {app}: active=false  ({why})"</span>
+    <span class="k">for</span> user <span class="k">in</span> sorted(want.keys() &amp; have.keys()):
+        <span class="k">for</span> g <span class="k">in</span> sorted(want[user] - have[user]):
+            <span class="k">yield</span> f<span class="s">"PATCH  /Groups/{g:&lt;16} {app}: add {user}"</span>
+        <span class="k">for</span> g <span class="k">in</span> sorted(have[user] - want[user]):
+            <span class="k">yield</span> f<span class="s">"PATCH  /Groups/{g:&lt;16} {app}: remove {user}"</span>
+
+<span class="k">for</span> app <span class="k">in</span> APPS:
+    <span class="k">for</span> action <span class="k">in</span> reconcile(app):
+        print(action)</code></pre>
+
+<ol class="steps">
+  <li><strong>Predict, then run</strong> <code>python3 jml.py</code>:
+<pre><code>POST   /Users                  helpdesk: create noor@larder.example, groups ['agents']
+PATCH  /Users/pim               helpdesk: active=false  (left 2027-04-30, 21 days ago)
+PATCH  /Users/yara              helpdesk: active=false  (moved)
+POST   /Users                  billing: create noor@larder.example, groups ['refunds']
+PATCH  /Users/pim               billing: active=false  (left 2027-04-30, 21 days ago)
+PATCH  /Users/yara              billing: active=false  (moved)
+POST   /Users                  stock-tool: create yara@larder.example, groups ['store-staff']
+PATCH  /Groups/rota-admin       stock-tool: remove tomas</code></pre>
+  Noor is a joiner who has nothing yet; Pim is Lena's finding; Yara moved to operations but still holds the refund role; Tomás has a group the rules don't explain.</li>
+  <li><strong>Decide about the last line.</strong> If Tomás really needs <code>rota-admin</code>, it isn't creep: it's a rule nobody wrote. Add <code>"rota-admin"</code> for operations store managers (you'll need a <code>role</code> attribute in <code>HR</code> and a rule that uses it) and run again until only real changes remain.</li>
+  <li><strong>Break it on purpose.</strong> Set <code>TODAY</code> to <code>date(2027, 4, 29)</code>: Pim is still employed, so the script wants to keep his access. Now imagine the HR system lags a week behind resignations: what would that mean for leavers? (This is why HR's leave date, entered when notice is given, is the trigger, not someone's last-day email.)</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Make the mover overlap explicit: give <code>HR</code> a <code>moved</code> date and keep the old department's groups for seven days after it. (2) Turn each output line into the real SCIM JSON body, as in 13.5.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s13-11"><span class="n">13.11</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>IT, not HR, as the trigger</td><td>Joiners wait; leavers are missed when nobody tells IT.</td><td>HR records drive the IdP.</td></tr>
+      <tr><td>Sign-in federation without provisioning</td><td>Leavers' accounts and groups stay in apps.</td><td>SCIM wherever supported; tickets elsewhere.</td></tr>
+      <tr><td>Ignoring movers</td><td>Privilege creep.</td><td>Attribute-driven groups; old access removed on a move.</td></tr>
+      <tr><td>Disabling the account but not the sessions</td><td>Leavers keep working until sessions expire.</td><td>Revoke sessions; short session lengths for powerful access.</td></tr>
+      <tr><td>Forgetting the SCIM token's expiry</td><td>Provisioning silently stops; leavers stay.</td><td>Calendar it; monitor provisioning errors.</td></tr>
+      <tr><td>Reviews of everything, every quarter</td><td>Rubber-stamping.</td><td>Review exceptions and privileged access, with usage data.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum13">
+  <h2 class="sec" id="sum13"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Access changes at three events: <strong>join, move, leave</strong>. HR, where they're first recorded, should drive them.</li>
+    <li><strong>Birthright</strong> access follows from department and role; everything else is <strong>requested</strong>, approved and time-limited.</li>
+    <li>Movers are where privilege creep comes from; derive groups from attributes so a move removes old access.</li>
+    <li>A leaver process must end <strong>sessions</strong> and handle apps without SCIM, secrets and ownership, then verify.</li>
+    <li><strong>SCIM</strong> lets the IdP create, change and deactivate users and groups in apps, including IAM Identity Center; its token expires.</li>
+    <li><strong>Access reviews</strong> catch what rules don't; keep them short, show usage, default to removal.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Joiner, mover, leaver</dt><dd>The three lifecycle events that change a person's access.</dd>
+    <dt>Source of truth</dt><dd>The system whose record decides; for people, usually HR.</dd>
+    <dt>Birthright access</dt><dd>Access granted automatically from attributes such as department.</dd>
+    <dt>Provisioning</dt><dd>Creating, updating and removing accounts and group memberships in apps.</dd>
+    <dt>SCIM</dt><dd>A standard REST API for provisioning users and groups.</dd>
+    <dt>Deprovisioning</dt><dd>Deactivating or deleting a person's accounts and access.</dd>
+    <dt>Access review</dt><dd>A periodic confirmation of who has access, by someone who knows.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>What's the difference between what SAML does and what SCIM does for an app? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>SAML (or OIDC) signs people in: the app trusts the IdP to say who's there. SCIM provisions: the IdP creates, updates and deactivates the person's account and group memberships in the app.</p></details>
+    </li>
+    <li>
+      <p>An engineer is disabled in the IdP at 17:00. They have an Identity Center <code>PlatformAdmin</code> session from 16:45, with a one-hour duration. When does their AWS access end, and how could you end it sooner? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>The role session's credentials work until about 17:45. Sooner: end the user's sessions in Identity Center (so no new credentials are issued), and add a deny statement conditioned on their <code>identitystore:UserId</code> to the permission sets or an SCP, which blocks the credentials already issued. The <code>AWSReservedSSO_</code> role itself can't be edited.</p></details>
+    </li>
+    <li>
+      <p>Why are movers more dangerous than joiners for least privilege? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Joiners complain when access is missing; movers never complain about access they no longer need. Without automatic removal on a move, old access accumulates silently.</p></details>
+    </li>
+    <li>
+      <p>Your access review shows 400 items per manager and everyone clicks “approve all”. Redesign it. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Remove birthright access from the review (it's governed by rules); show only requested, hand-made and privileged access; add last-used dates; review privileged access monthly and the rest quarterly; remove access that isn't confirmed after a reminder.</p></details>
+    </li>
+    <li>
+      <p>Identity Center provisioning stopped a month ago and nobody noticed. What probably happened, and what would have caught it? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>The SCIM access token expired after a year. A calendar reminder before expiry, alerts on provisioning errors in the IdP, and a daily comparison of HR leavers with Identity Center's active users.</p></details>
+    </li>
+    <li>
+      <p>Compare how a leaver loses access to Azure and to AWS when the company's IdP is Entra ID. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Azure: disabling the Entra ID account stops sign-in to the portal and every subscription at once; refresh tokens can be revoked, and Continuous Access Evaluation cuts many sessions quickly. AWS: Entra ID's SCIM deactivates the user in Identity Center, which stops new sign-ins; existing role sessions run until they expire unless revoked.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li><a href="https://datatracker.ietf.org/doc/html/rfc7644">RFC 7644, SCIM Protocol</a> and <a href="https://datatracker.ietf.org/doc/html/rfc7643">RFC 7643, SCIM Core Schema</a>.</li>
+    <li>AWS: <a href="https://docs.aws.amazon.com/singlesignon/latest/userguide/provision-automatically.html">Automatic provisioning in IAM Identity Center</a> and <a href="https://docs.aws.amazon.com/singlesignon/latest/userguide/authconcept.html">sessions in Identity Center</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/entra/id-governance/what-are-lifecycle-workflows">Lifecycle workflows</a> and <a href="https://learn.microsoft.com/entra/id-governance/access-reviews-overview">access reviews</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="12-sso.html">12 · Single sign-on with IAM Identity Center</a></div>
+  <div><span>Next</span><a href="14-privileged-access.html">14 · Privileged access and break-glass</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 2 · Identity and Access in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

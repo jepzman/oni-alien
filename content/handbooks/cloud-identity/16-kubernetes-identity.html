@@ -1,0 +1,386 @@
+<!-- Handbook 2 · Identity and Access in the Cloud · Chapter 16. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part IV · Access for software</p>
+  <p class="chno">16</p>
+  <h1>Kubernetes and workload identity</h1>
+  <p class="promise">A Kubernetes cluster on a cloud has two permission systems stacked on top of each other: Kubernetes' own RBAC, which decides who may do what to the cluster, and the cloud's IAM, which decides what pods may do to everything else. Each has its own traps, and the gap between them, where a pod quietly borrows its node's cloud role, is the biggest trap of all. This chapter covers both, and how to join them safely on EKS, AKS and GKE.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain the two permission systems in a managed cluster, and which one each request goes through.</li>
+      <li>Read and write Kubernetes Roles, ClusterRoles and bindings, and spot the dangerous ones.</li>
+      <li>Give people cluster access from your identity provider, without shared kubeconfigs.</li>
+      <li>Give each pod its own AWS role with EKS Pod Identity or IRSA, and keep pods away from the node's role.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Workload identity and the metadata service (<a href="#ch15">Chapter 15</a>); OIDC tokens and audiences (<a href="#ch3">Chapter 3</a>, <a href="#ch4">Chapter 4</a>).</li>
+      <li>Roles, attributes and relationships (<a href="#ch6">Chapter 6</a>). Basic Kubernetes words: pod, namespace, deployment.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, Python 3; optional local cluster with kind, free</dd>
+      <dt>Main provider</dt><dd>AWS (EKS), with Azure and Google Cloud in 16.6</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Larder runs its containers on ECS (<a href="#ch15">Chapter 15</a>), and in March 2027 the question came up that every growing team asks: should we move to Kubernetes? Eli and Dee built a proof of concept in the staging account: an EKS cluster running Engine A, the route planner, in a namespace called <code>dispatch-poc</code>.</p>
+  <p>Two weeks in, Dee ran a throwaway debugging pod in that namespace and found she could read Engine A's route plans in S3 from it, and list every secret in the cluster. Neither was intended, and neither was a bug in Kubernetes. Section 16.7 explains both, and what Larder decided.</p>
+</aside>
+
+<!-- ======================================================== 16.1 -->
+<h2 class="sec" id="s16-1"><span class="n">16.1</span>Two permission systems</h2>
+
+<p class="lead">In a managed Kubernetes cluster, every action goes through one of two doors:</p>
+<ul>
+  <li>Requests <strong>to the cluster</strong> (create a deployment, read a secret, exec into a pod) go to the Kubernetes API server and are decided by <span class="term">Kubernetes RBAC</span>.</li>
+  <li>Requests <strong>to the cloud</strong> (read a bucket, publish to a queue) go to the cloud's APIs and are decided by <strong>IAM</strong>, using whatever cloud credentials the pod has.</li>
+</ul>
+<p>People need an identity in both (to deploy, and sometimes to look at cloud resources); pods need one in both too (a Kubernetes service account for the API, a cloud role for everything else). The cloud provider glues them together, and the glue is where the security decisions are.</p>
+
+<figure class="wide" id="fig16-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 240" role="img" aria-labelledby="fig16-1-t fig16-1-d">
+      <title id="fig16-1-t">The two permission systems in an EKS cluster</title>
+      <desc id="fig16-1-d">A person signs in through Identity Center; an EKS access entry maps their IAM role to Kubernetes permissions, and Kubernetes RBAC decides what they may do to the cluster. A pod runs as a Kubernetes service account; Kubernetes RBAC decides what it may do to the cluster API. Through EKS Pod Identity, the same service account is associated with an IAM role, and IAM decides what the pod may do to AWS services such as S3.</desc>
+      <defs><marker id="c16ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c16ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="12" y="20" width="170" height="60" rx="5"/><text class="t-label" x="97" y="46" text-anchor="middle">person</text><text class="t-small" x="97" y="66" text-anchor="middle">Identity Center session</text>
+      <rect class="node" x="12" y="150" width="170" height="60" rx="5"/><text class="t-label" x="97" y="176" text-anchor="middle">pod</text><text class="t-small" x="97" y="196" text-anchor="middle">runs as service account</text>
+      <rect class="node-accent" x="300" y="80" width="190" height="70" rx="5"/><text class="t-label on-accent" x="395" y="108" text-anchor="middle">Kubernetes API</text><text class="t-small on-accent" x="395" y="128" text-anchor="middle">decided by Kubernetes RBAC</text>
+      <rect class="pub" x="580" y="150" width="168" height="60" rx="5"/><text class="t-label" x="664" y="176" text-anchor="middle">AWS APIs (S3 …)</text><text class="t-small" x="664" y="196" text-anchor="middle">decided by IAM</text>
+      <path class="wire" d="M184 50 L296 100" marker-end="url(#c16ah)"/><text class="t-small" x="236" y="58">access entry</text>
+      <path class="wire" d="M184 172 L296 134" marker-end="url(#c16ah)"/><text class="t-small" x="236" y="180">SA token</text>
+      <path class="wire-accent" d="M184 196 H576" marker-end="url(#c16ah2)"/><text class="t-small t-accent" x="380" y="190" text-anchor="middle">Pod Identity: SA → IAM role</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 16.1</b> Two doors, two rulebooks. A pod's service account is its identity for the cluster, and, through Pod Identity or IRSA, the key to its own IAM role.</figcaption>
+</figure>
+
+<!-- ======================================================== 16.2 -->
+<h2 class="sec" id="s16-2"><span class="n">16.2</span>Kubernetes RBAC</h2>
+
+<p>Kubernetes RBAC (<a href="#ch6">Chapter 6</a>, in its role-based form) has four objects:</p>
+<ul>
+  <li>A <strong>Role</strong> lists rules (API groups, resources, verbs) inside one namespace. A <strong>ClusterRole</strong> does the same cluster-wide, or as a reusable template.</li>
+  <li>A <strong>RoleBinding</strong> grants a Role, or a ClusterRole, to subjects <em>within one namespace</em>. A <strong>ClusterRoleBinding</strong> grants a ClusterRole <em>everywhere</em>.</li>
+  <li><strong>Subjects</strong> are users, groups and service accounts. Kubernetes has no user database: users and groups are whatever the authenticator says (on EKS, mapped from IAM; 16.4).</li>
+</ul>
+<p>Everything is allow-only and default deny, like AWS security groups (Handbook 1, Chapter 9). Some permissions are far more powerful than they look, because they let you become someone else:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 16.1 · Kubernetes permissions that are really admin</caption>
+    <thead><tr><th>Permission</th><th>Why it's dangerous</th></tr></thead>
+    <tbody>
+      <tr><td><code>get</code> / <code>list</code> on <code>secrets</code></td><td>reads every secret in the namespace, including other service accounts' credentials</td></tr>
+      <tr><td><code>create</code> on <code>pods</code> (or deployments, jobs)</td><td>runs a pod as <em>any</em> service account in the namespace, with its permissions and its cloud role</td></tr>
+      <tr><td><code>create</code> on <code>pods/exec</code></td><td>a shell inside someone else's running pod</td></tr>
+      <tr><td><code>bind</code>, <code>escalate</code>, <code>impersonate</code></td><td>grant yourself roles, or act as another user or group</td></tr>
+      <tr><td>anything on <code>nodes/proxy</code>, or privileged pods</td><td>reaches the node, and from there everything on it</td></tr>
+      <tr><td><code>cluster-admin</code>, or <code>*</code> on <code>*</code></td><td>everything, everywhere</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: bindings to groups you didn't think about</p>
+  <p>Every service account belongs to the groups <code>system:serviceaccounts</code> and <code>system:serviceaccounts:<i>namespace</i></code>, and every authenticated identity to <code>system:authenticated</code>. Binding a role to one of these, often copied from an installation guide “to make the chart work”, grants it to every pod in the namespace, or the cluster, including ones created later.</p>
+</div>
+
+<!-- ======================================================== 16.3 -->
+<h2 class="sec" id="s16-3"><span class="n">16.3</span>Service accounts and their tokens</h2>
+
+<p>Every pod runs as a <span class="term">Kubernetes service account</span>, the namespace's <code>default</code> one unless you choose another. Kubernetes mounts a token for it into the pod, which the pod uses to call the API server. Modern clusters issue <strong>projected tokens</strong>: JWTs (<a href="#ch3">Chapter 3</a>) bound to the pod, with an audience and an expiry of about an hour, refreshed by the kubelet. Three habits:</p>
+<ul>
+  <li><strong>One service account per workload</strong>, never <code>default</code>, so permissions and cloud roles attach to exactly one thing.</li>
+  <li><strong>No API token unless needed</strong>: most application pods never call the Kubernetes API. Set <code>automountServiceAccountToken: false</code> on them.</li>
+  <li><strong>Bind narrowly</strong>: a Role and RoleBinding in the workload's namespace, for the few resources it needs.</li>
+</ul>
+
+<!-- ======================================================== 16.4 -->
+<h2 class="sec" id="s16-4"><span class="n">16.4</span>People into the cluster</h2>
+
+<p>On EKS, people authenticate with their AWS identity: <code>aws eks get-token</code> (run for you by <code>kubectl</code>) produces a short-lived token from their current role session, and the API server checks it with IAM. <strong>Access entries</strong> then map IAM principals to Kubernetes permissions, either through AWS-managed <em>access policies</em> (cluster admin, admin, edit, view; cluster-wide or per namespace) or through Kubernetes groups that your own RoleBindings use.</p>
+
+<p>Combine that with Identity Center (<a href="#ch12">Chapter 12</a>) and cluster access follows the same groups as everything else: an access entry for the <code>AWSReservedSSO_Developer_…</code> role with <em>view</em> on all namespaces and <em>edit</em> on the team's own, and one for the elevated <code>PlatformAdmin</code> role with cluster admin, which itself is only granted just in time (<a href="#ch14">Chapter 14</a>). No kubeconfig contains a long-lived credential. Turn off the default that makes the cluster's creator a permanent admin, once access entries exist.</p>
+
+<aside class="side"><b>aws-auth</b>Older EKS clusters map IAM to Kubernetes users through a ConfigMap called <code>aws-auth</code> in <code>kube-system</code>. Anyone who can edit it can make themselves admin, and a typo can lock everyone out. Access entries replace it and are managed through the EKS API, with CloudTrail recording every change.</aside>
+
+<!-- ======================================================== 16.5 -->
+<h2 class="sec" id="s16-5"><span class="n">16.5</span>Pods into AWS</h2>
+
+<p>Every EKS worker node is an EC2 instance with an instance profile: the <strong>node role</strong>, which the node needs to join the cluster, pull images and manage pod networking. Here's the trap: unless you stop it, any pod on the node can reach the node's metadata service (<a href="#ch15">Chapter 15</a>) and get the node role's credentials. Add an application permission to the node role, “just so Engine A can read its config”, and every pod on every node has it.</p>
+
+<figure class="wide" id="fig16-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 230" role="img" aria-labelledby="fig16-2-t fig16-2-d">
+      <title id="fig16-2-t">Pods borrowing the node role, compared with pods having their own roles</title>
+      <desc id="fig16-2-d">Left: three pods on a node, Engine A, a debugging pod and some other app, all reach the node's metadata service and get the node role, which has S3 access added for Engine A; all three can read the bucket. Right: with EKS Pod Identity, each pod's service account is associated with its own IAM role; only Engine A's role can read the bucket, the debugging pod has no AWS role, and the metadata service is blocked from pods.</desc>
+      <defs><marker id="c16ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="vpc" x="12" y="14" width="350" height="200" rx="8"/>
+      <text class="t-label t-warn" x="28" y="38">the trap: everyone borrows the node role</text>
+      <rect class="node" x="28" y="54" width="96" height="40" rx="4"/><text class="t-small" x="76" y="78" text-anchor="middle">Engine A</text>
+      <rect class="node" x="134" y="54" width="96" height="40" rx="4"/><text class="t-small" x="182" y="78" text-anchor="middle">debug pod</text>
+      <rect class="node" x="240" y="54" width="106" height="40" rx="4"/><text class="t-small" x="293" y="78" text-anchor="middle">other app</text>
+      <rect class="node-accent" x="60" y="140" width="254" height="52" rx="5"/><text class="t-label on-accent" x="187" y="162" text-anchor="middle">node role (via IMDS)</text><text class="t-small on-accent" x="187" y="180" text-anchor="middle">+ s3:GetObject on route plans</text>
+      <path class="wire" d="M76 96 L150 136" marker-end="url(#c16ah3)"/><path class="wire" d="M182 96 V136" marker-end="url(#c16ah3)"/><path class="wire" d="M293 96 L230 136" marker-end="url(#c16ah3)"/>
+      <rect class="vpc" x="398" y="14" width="350" height="200" rx="8"/>
+      <text class="t-label" x="414" y="38">the fix: one role per service account</text>
+      <rect class="node" x="414" y="54" width="96" height="40" rx="4"/><text class="t-small" x="462" y="78" text-anchor="middle">Engine A</text>
+      <rect class="node" x="520" y="54" width="96" height="40" rx="4"/><text class="t-small" x="568" y="78" text-anchor="middle">debug pod</text>
+      <rect class="node" x="626" y="54" width="106" height="40" rx="4"/><text class="t-small" x="679" y="78" text-anchor="middle">other app</text>
+      <rect class="pub" x="414" y="140" width="96" height="52" rx="5"/><text class="t-small" x="462" y="162" text-anchor="middle">engine-a role</text><text class="t-small" x="462" y="180" text-anchor="middle">route plans</text>
+      <text class="t-small" x="568" y="168" text-anchor="middle">no AWS role</text>
+      <rect class="pub" x="626" y="140" width="106" height="52" rx="5"/><text class="t-small" x="679" y="162" text-anchor="middle">its own role</text><text class="t-small" x="679" y="180" text-anchor="middle">its own data</text>
+      <path class="wire" d="M462 96 V136" marker-end="url(#c16ah3)"/><path class="wire" d="M679 96 V136" marker-end="url(#c16ah3)"/>
+      <text class="t-small" x="573" y="206" text-anchor="middle">metadata service blocked for pods</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 16.2</b> The node role is for the node. Pods get their own roles through their service accounts, and can't reach the node's.</figcaption>
+</figure>
+
+<p>EKS offers two ways to give a pod its own role, both based on its service account:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 16.2 · EKS Pod Identity and IRSA</caption>
+    <thead><tr><th></th><th>EKS Pod Identity</th><th>IRSA (IAM roles for service accounts)</th></tr></thead>
+    <tbody>
+      <tr><td>How it works</td><td>an agent on each node exchanges the pod's identity for the role's credentials</td><td>the pod's projected service account token (an OIDC JWT) is exchanged with <code>AssumeRoleWithWebIdentity</code></td></tr>
+      <tr><td>Configured</td><td>an <em>association</em> (cluster, namespace, service account → role) in the EKS API</td><td>an IAM OIDC provider per cluster, and an annotation on the service account</td></tr>
+      <tr><td>Trust policy</td><td>trusts the service <code>pods.eks.amazonaws.com</code>, the same for every cluster</td><td>trusts the cluster's OIDC provider, with conditions on <code>sub</code> and <code>aud</code></td></tr>
+      <tr><td>Extras</td><td>session tags (cluster, namespace, service account) for ABAC</td><td>works outside EKS too, with any OIDC-issuing cluster</td></tr>
+      <tr><td>Choose it for</td><td>new EKS clusters</td><td>existing setups, or clusters that aren't EKS</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p class="code-title"><span>engine-a-pod-role trust policy</span><span>EKS Pod Identity</span></p>
+<pre><code>{ <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [{ <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+                  <span class="k">"Principal"</span>: { <span class="k">"Service"</span>: <span class="s">"pods.eks.amazonaws.com"</span> },
+                  <span class="k">"Action"</span>: [<span class="s">"sts:AssumeRole"</span>, <span class="s">"sts:TagSession"</span>] }] }</code></pre>
+<pre><code>aws eks create-pod-identity-association --cluster-name larder-poc \
+  --namespace dispatch-poc --service-account engine-a \
+  --role-arn arn:aws:iam::444455556666:role/engine-a-pod-role</code></pre>
+
+<p>Then close the trap: keep the node role to the AWS-managed node policies and nothing else, and stop pods reaching the node's metadata service (IMDSv2 with a hop limit of 1 on the nodes, or a network policy that blocks <code>169.254.169.254</code>). A pod without an association then has no AWS access at all, which is the right default.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">In a cluster, the service account is the workload's identity in both worlds. Give each workload its own, bind it narrowly in Kubernetes, and associate it with its own role in the cloud.</p>
+</div>
+
+<!-- ======================================================== 16.6 -->
+<h2 class="sec" id="s16-6"><span class="n">16.6</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 16.3 · Managed Kubernetes identity at the big three</caption>
+    <thead><tr><th></th><th>EKS (AWS)</th><th>AKS (Azure)</th><th>GKE (Google Cloud)</th></tr></thead>
+    <tbody>
+      <tr><td>People into the cluster</td><td>IAM + access entries</td><td>Entra ID integration; Kubernetes RBAC or Azure RBAC for Kubernetes</td><td>Google identities and Google Groups for RBAC</td></tr>
+      <tr><td>Pods into the cloud</td><td>Pod Identity or IRSA</td><td>Microsoft Entra Workload ID: a federated credential maps a service account to a managed identity or app</td><td>Workload Identity Federation for GKE: grant roles to the Kubernetes service account's principal</td></tr>
+      <tr><td>The node's identity</td><td>node role; block IMDS from pods</td><td>kubelet managed identity; restrict pod access to IMDS</td><td>node service account; the GKE metadata server hides node credentials from pods</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p><strong>Microsoft Entra Workload ID</strong> uses the cluster's OIDC issuer: you add a <em>federated identity credential</em> to a user-assigned managed identity saying “trust tokens for service account <code>engine-a</code> in namespace <code>dispatch-poc</code> from this cluster”. The pod exchanges its projected token for an Entra token, much like IRSA. For people, Entra ID groups can be used directly in Kubernetes RoleBindings, or Azure RBAC can govern Kubernetes objects too.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>With <strong>Workload Identity Federation for GKE</strong>, you grant IAM roles directly to a Kubernetes service account's principal identifier, and the GKE metadata server on each node gives pods tokens for it while hiding the node's own service account. It's on by default in Autopilot clusters, which removes the node-role trap entirely.</p>
+</div>
+
+<!-- ======================================================== 16.7 -->
+<h2 class="sec" id="s16-7"><span class="n">16.7</span>At Larder: the experiment, and the decision</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Dee's two findings had two causes. The route plans: to get Engine A working on the first day, someone had added read access to the route-plan bucket to the <em>node role</em>, and the nodes allowed pods to reach the metadata service, so every pod, debugging pods included, could read them. The secrets: Engine A's Helm chart documentation suggested a ClusterRoleBinding of <code>cluster-admin</code> to the namespace's service accounts group, “to make installation simple”, and that binding was still there, so every pod in <code>dispatch-poc</code> was cluster admin.</p>
+  <p>Fixing both took a morning: an Engine A service account with a Pod Identity association to its own role, the S3 permission removed from the node role, IMDS blocked for pods, the binding replaced by a Role for the two config maps Engine A reads, and access entries for the Identity Center roles. But the exercise answered the bigger question too. On 30 April 2027, Eli and Dee recommended staying on ECS: a team of Larder's size gets per-task roles there by default, with one permission system instead of two. They wrote down the identity rules above for the day the question comes back, and deleted the cluster that afternoon.</p>
+</aside>
+
+<!-- ======================================================== 16.8 -->
+<h2 class="sec" id="s16-8"><span class="n">16.8</span>Lab: ask “can I?”</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 16 · Kubernetes RBAC, by hand and for real</p>
+  <p><strong>You'll</strong> answer <code>kubectl auth can-i</code> questions from the experiment's Roles and bindings with a small evaluator, find the dangerous binding, fix it, then (optionally) repeat it in a real local cluster. <strong>You need</strong> Python 3; for the optional part, Docker, <a href="https://kind.sigs.k8s.io/">kind</a> and <code>kubectl</code>. <strong>Cost:</strong> nothing; kind runs on your machine.</p>
+</div>
+
+<p class="code-title"><span>kube_rbac.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># kube_rbac.py · answer "kubectl auth can-i" from Roles, ClusterRoles and their bindings</span>
+CLUSTER_ROLES = {
+    <span class="s">"cluster-admin"</span>: [{<span class="s">"resources"</span>: [<span class="s">"*"</span>], <span class="s">"verbs"</span>: [<span class="s">"*"</span>]}],
+    <span class="s">"view"</span>:          [{<span class="s">"resources"</span>: [<span class="s">"pods"</span>, <span class="s">"configmaps"</span>, <span class="s">"deployments"</span>, <span class="s">"services"</span>],   <span class="c"># no secrets</span>
+                       <span class="s">"verbs"</span>: [<span class="s">"get"</span>, <span class="s">"list"</span>, <span class="s">"watch"</span>]}],
+}
+ROLES = {   <span class="c"># (namespace, name) → rules</span>
+    (<span class="s">"dispatch-poc"</span>, <span class="s">"engine-a-config"</span>): [{<span class="s">"resources"</span>: [<span class="s">"configmaps"</span>], <span class="s">"verbs"</span>: [<span class="s">"get"</span>]}],
+}
+BINDINGS = [   <span class="c"># (kind, namespace or None, role kind, role name, subjects)</span>
+    (<span class="s">"ClusterRoleBinding"</span>, None, <span class="s">"ClusterRole"</span>, <span class="s">"view"</span>, [<span class="s">"Group:larder:engineers"</span>]),
+    (<span class="s">"RoleBinding"</span>, <span class="s">"dispatch-poc"</span>, <span class="s">"Role"</span>, <span class="s">"engine-a-config"</span>,
+     [<span class="s">"ServiceAccount:dispatch-poc:engine-a"</span>]),
+    (<span class="s">"ClusterRoleBinding"</span>, None, <span class="s">"ClusterRole"</span>, <span class="s">"cluster-admin"</span>,            <span class="c"># "to make the chart install"</span>
+     [<span class="s">"Group:system:serviceaccounts:dispatch-poc"</span>]),
+]
+
+<span class="k">def</span> identity(subject):
+    <span class="s">"""A subject string → (name, groups), as the API server sees it."""</span>
+    kind, rest = subject.split(<span class="s">":"</span>, 1)
+    <span class="k">if</span> kind == <span class="s">"ServiceAccount"</span>:
+        ns, name = rest.split(<span class="s">":"</span>)
+        <span class="k">return</span> f<span class="s">"system:serviceaccount:{ns}:{name}"</span>, {<span class="s">"system:serviceaccounts"</span>,
+                                                      f<span class="s">"system:serviceaccounts:{ns}"</span>, <span class="s">"system:authenticated"</span>}
+    name, groups = rest.split(<span class="s">"|"</span>)
+    <span class="k">return</span> name, set(groups.split(<span class="s">","</span>)) | {<span class="s">"system:authenticated"</span>}
+
+<span class="k">def</span> matches(binding_subject, name, groups):
+    kind, value = binding_subject.split(<span class="s">":"</span>, 1)
+    <span class="k">if</span> kind == <span class="s">"ServiceAccount"</span>:
+        ns, sa = value.split(<span class="s">":"</span>)
+        <span class="k">return</span> name == f<span class="s">"system:serviceaccount:{ns}:{sa}"</span>
+    <span class="k">return</span> value <span class="k">in</span> groups <span class="k">if</span> kind == <span class="s">"Group"</span> <span class="k">else</span> value == name
+
+<span class="k">def</span> can_i(subject, verb, resource, namespace=None):
+    name, groups = identity(subject)
+    <span class="k">for</span> kind, ns, role_kind, role, subjects <span class="k">in</span> BINDINGS:
+        <span class="k">if not</span> any(matches(s, name, groups) <span class="k">for</span> s <span class="k">in</span> subjects):
+            <span class="k">continue</span>
+        <span class="k">if</span> kind == <span class="s">"RoleBinding"</span> <span class="k">and</span> ns != namespace:       <span class="c"># a RoleBinding only works in its namespace</span>
+            <span class="k">continue</span>
+        rules = CLUSTER_ROLES[role] <span class="k">if</span> role_kind == <span class="s">"ClusterRole"</span> <span class="k">else</span> ROLES[(ns, role)]
+        <span class="k">for</span> r <span class="k">in</span> rules:
+            <span class="k">if</span> (<span class="s">"*"</span> <span class="k">in</span> r[<span class="s">"resources"</span>] <span class="k">or</span> resource <span class="k">in</span> r[<span class="s">"resources"</span>]) <span class="k">and</span> (<span class="s">"*"</span> <span class="k">in</span> r[<span class="s">"verbs"</span>] <span class="k">or</span> verb <span class="k">in</span> r[<span class="s">"verbs"</span>]):
+                <span class="k">return</span> f<span class="s">"yes  ({kind} → {role})"</span>
+    <span class="k">return</span> <span class="s">"no"</span>
+
+<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:
+    DEE = <span class="s">"User:dee@larder.example|larder:engineers"</span>
+    ENGINE = <span class="s">"ServiceAccount:dispatch-poc:engine-a"</span>
+    DEBUG = <span class="s">"ServiceAccount:dispatch-poc:default"</span>
+    <span class="k">for</span> who, verb, res, ns <span class="k">in</span> [(DEE, <span class="s">"list"</span>, <span class="s">"pods"</span>, <span class="s">"dispatch-poc"</span>), (DEE, <span class="s">"get"</span>, <span class="s">"secrets"</span>, <span class="s">"dispatch-poc"</span>),
+                               (ENGINE, <span class="s">"get"</span>, <span class="s">"configmaps"</span>, <span class="s">"dispatch-poc"</span>), (ENGINE, <span class="s">"get"</span>, <span class="s">"secrets"</span>, <span class="s">"kube-system"</span>),
+                               (DEBUG, <span class="s">"delete"</span>, <span class="s">"nodes"</span>, None), (<span class="s">"ServiceAccount:other:default"</span>, <span class="s">"get"</span>, <span class="s">"secrets"</span>, <span class="s">"other"</span>)]:
+        print(f<span class="s">"{who.split('|')[0].split(':', 1)[1]:&lt;28} {verb:&lt;6} {res:&lt;10} {ns or '(cluster)':&lt;13} {can_i(who, verb, res, ns)}"</span>)</code></pre>
+
+<ol class="steps">
+  <li><strong>Run it</strong> with <code>python3 kube_rbac.py</code>:
+<pre><code>dee@larder.example           list   pods       dispatch-poc  yes  (ClusterRoleBinding → view)
+dee@larder.example           get    secrets    dispatch-poc  no
+dispatch-poc:engine-a        get    configmaps dispatch-poc  yes  (RoleBinding → engine-a-config)
+dispatch-poc:engine-a        get    secrets    kube-system   yes  (ClusterRoleBinding → cluster-admin)
+dispatch-poc:default         delete nodes      (cluster)     yes  (ClusterRoleBinding → cluster-admin)
+other:default                get    secrets    other         no</code></pre>
+  Dee's answers are right: engineers can view, not read secrets. The next three lines are Dee's discovery: the chart's convenience binding makes every service account in <code>dispatch-poc</code>, including <code>default</code>, cluster admin.</li>
+  <li><strong>Fix it.</strong> Delete the <code>cluster-admin</code> binding and run again. Engine A keeps exactly what it needs; the debugging pod's <code>default</code> account can do nothing.</li>
+  <li><strong>Break it differently.</strong> Add a RoleBinding in <code>dispatch-poc</code> that grants the <code>view</code> ClusterRole to the group <code>system:authenticated</code>. Who can now list pods in <code>dispatch-poc</code>? (Every identity the cluster accepts, including every service account in every namespace.)</li>
+  <li><strong>Optional: in a real cluster.</strong>
+<pre><code>kind create cluster --name rbac-lab
+kubectl create namespace dispatch-poc
+kubectl create serviceaccount engine-a -n dispatch-poc
+kubectl create clusterrolebinding chart-convenience --clusterrole=cluster-admin \
+  --group=system:serviceaccounts:dispatch-poc
+kubectl auth can-i delete nodes --as=system:serviceaccount:dispatch-poc:default        <span class="c"># yes</span>
+kubectl delete clusterrolebinding chart-convenience
+kubectl auth can-i delete nodes --as=system:serviceaccount:dispatch-poc:default        <span class="c"># no</span>
+kubectl auth can-i --list --as=system:serviceaccount:dispatch-poc:engine-a -n dispatch-poc
+kind delete cluster --name rbac-lab</code></pre></li>
+</ol>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s16-9"><span class="n">16.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Application permissions on the node role</td><td>Every pod gets them through the metadata service.</td><td>Pod Identity or IRSA per service account; node role minimal.</td></tr>
+      <tr><td>Pods can reach the node's IMDS</td><td>Any pod can become the node.</td><td>Hop limit 1, or block <code>169.254.169.254</code> for pods.</td></tr>
+      <tr><td>Convenience bindings to built-in groups</td><td>Whole namespaces or clusters become admin.</td><td>Narrow Roles bound to specific service accounts.</td></tr>
+      <tr><td>Everything running as <code>default</code></td><td>Permissions and cloud roles can't be told apart.</td><td>One service account per workload.</td></tr>
+      <tr><td>Long-lived kubeconfigs and <code>aws-auth</code> edits</td><td>Shared admin credentials; lock-outs.</td><td>Access entries mapped from SSO roles.</td></tr>
+      <tr><td>Treating <code>create pods</code> or <code>secrets</code> as harmless</td><td>Escalation to any service account in the namespace.</td><td>Review Table 16.1 permissions like admin.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum16">
+  <h2 class="sec" id="sum16"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>A managed cluster has <strong>two permission systems</strong>: Kubernetes RBAC for the cluster API, IAM for the cloud.</li>
+    <li>RBAC: Roles and ClusterRoles, bound per namespace or cluster-wide to users, groups and service accounts. Some permissions (secrets, create pods, exec, bind, impersonate) are admin in disguise.</li>
+    <li>Each workload gets its own <strong>service account</strong> with projected, short-lived tokens, mounted only if needed.</li>
+    <li>People come in through their cloud identity: <strong>access entries</strong> on EKS, mapped from SSO roles.</li>
+    <li>Pods get their own AWS roles with <strong>Pod Identity</strong> or <strong>IRSA</strong>; keep the node role minimal and block pods from IMDS.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Kubernetes RBAC</dt><dd>Kubernetes' allow-only, role-based authorisation for its API.</dd>
+    <dt>Role / ClusterRole</dt><dd>Rules within a namespace / cluster-wide (or reusable).</dd>
+    <dt>RoleBinding / ClusterRoleBinding</dt><dd>Grants of a role to subjects in a namespace / everywhere.</dd>
+    <dt>Service account</dt><dd>A pod's identity for the Kubernetes API, and the anchor for its cloud role.</dd>
+    <dt>Projected token</dt><dd>A short-lived, audience-bound service account JWT mounted into a pod.</dd>
+    <dt>Access entry</dt><dd>An EKS mapping from an IAM principal to Kubernetes permissions.</dd>
+    <dt>Node role</dt><dd>The IAM role of an EKS worker node.</dd>
+    <dt>EKS Pod Identity / IRSA</dt><dd>Two ways to give a service account its own IAM role.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>A pod reads an S3 bucket and lists pods in its namespace. Which permission system decides each? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Reading S3 is decided by IAM, using the pod's AWS credentials. Listing pods is decided by Kubernetes RBAC, using its service account.</p></details>
+    </li>
+    <li>
+      <p>Why is <code>create</code> on <code>pods</code> in a namespace roughly as powerful as everything any service account there can do? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Whoever can create a pod chooses which service account it runs as, so the pod gets that account's RBAC permissions and its associated cloud role.</p></details>
+    </li>
+    <li>
+      <p>Every pod in a cluster can read a bucket that only one application should. Name the two likely causes. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>The bucket permission is on the node role, and pods can reach the node's metadata service. Or a shared service account (such as <code>default</code>) is associated with a role that has the permission.</p></details>
+    </li>
+    <li>
+      <p>Write the conditions an IRSA trust policy needs, and say what goes wrong without the <code>sub</code> condition. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>StringEquals</code> on <code>…:sub</code> = <code>system:serviceaccount:<i>namespace</i>:<i>name</i></code> and <code>…:aud</code> = <code>sts.amazonaws.com</code>. Without <code>sub</code>, any service account in the cluster can assume the role.</p></details>
+    </li>
+    <li>
+      <p>Design people's access to a new EKS cluster for a company already using Identity Center with just-in-time admin. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Access entries: <code>ViewOnly</code>'s role gets view on all namespaces; each team's <code>Developer</code> role gets edit on its namespace; the just-in-time <code>PlatformAdmin</code> role gets cluster admin. Remove the creator's bootstrap admin, and record changes in CloudTrail.</p></details>
+    </li>
+    <li>
+      <p>Compare how GKE and EKS stop pods using the node's cloud identity. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>GKE's metadata server, with Workload Identity Federation, hides the node's service account from pods and serves only the pod's own identity. On EKS you must do it yourself: hop limit 1 or a network policy blocking IMDS, and a minimal node role.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>Kubernetes: <a href="https://kubernetes.io/docs/reference/access-authn-authz/rbac/">Using RBAC authorization</a> and <a href="https://kubernetes.io/docs/concepts/security/rbac-good-practices/">RBAC good practices</a>.</li>
+    <li>AWS: <a href="https://docs.aws.amazon.com/eks/latest/userguide/pod-identities.html">EKS Pod Identity</a>, <a href="https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html">IRSA</a>, <a href="https://docs.aws.amazon.com/eks/latest/userguide/access-entries.html">access entries</a>, <a href="https://docs.aws.amazon.com/eks/latest/best-practices/identity-and-access-management.html">EKS best practices: IAM</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/aks/workload-identity-overview">Workload ID on AKS</a>. Google Cloud: <a href="https://cloud.google.com/kubernetes-engine/docs/concepts/workload-identity">Workload Identity Federation for GKE</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="#ch15">15 · Identities for workloads</a></div>
+  <div><span>Next</span><a href="#ch17">17 · CI/CD without long-lived keys</a></div>
+</nav>

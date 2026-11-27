@@ -1,0 +1,394 @@
+<!-- Handbook 2 · Identity and Access in the Cloud · Chapter 7. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part II · IAM on AWS</p>
+  <p class="chno">7</p>
+  <h1>The AWS account and its root user</h1>
+  <p class="promise">Everything in AWS lives inside an account, and every account starts with one identity that can do anything in it, including closing it: the root user. This chapter explains what an account is as a security boundary, what the root user can do that nobody else can, and how to lock it away so well that you never use it, while still being able to get it back on the day you need it.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain what an AWS account isolates, and why it's the strongest boundary AWS offers.</li>
+      <li>List the tasks only the root user can do.</li>
+      <li>Secure a root user: no keys, strong MFA, a company-owned email and phone, monitored sign-ins.</li>
+      <li>Recover root access when the email, password or MFA device is lost.</li>
+      <li>Read a credential report and find the risky credentials in an account.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Principals and credentials (<a href="#ch1">Chapter 1</a>); MFA and security keys (<a href="#ch2">Chapter 2</a>).</li>
+      <li>ARNs (<a href="#ch9">Chapter 9</a>, 9.4) help; this chapter recaps what it needs.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 35 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, AWS CLI and Python 3, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 7.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>On Monday 23 November 2026, a week after the backup incident (<a href="#ch1">Chapter 1</a>), Eli starts his audit with the account itself: the one Jasper opened in March 2024, which still runs everything in production. The credential report has bad news on its first line. The root user has an active access key, created minutes after the account itself, last used in March 2025.</p>
+  <p>Then it gets worse. The root user's email address is <code>jasper@larder.example</code>, a mailbox that was switched off when Jasper left in August 2025. Its MFA device was an app on Jasper's phone, now wiped. Nobody knows the password. Larder's most powerful identity has a working key that nobody controls, and no working way in for anyone who should. Section 7.8 shows how Eli got it back.</p>
+</aside>
+
+<!-- ======================================================== 7.1 -->
+<h2 class="sec" id="s7-1"><span class="n">7.1</span>What an account is</h2>
+
+<p class="lead">An <span class="term">AWS account</span> is a container for resources, identities and a bill. Each has a 12-digit <strong>account ID</strong> (<code>111122223333</code> in this book's examples) and is isolated from every other account by default:</p>
+<ul>
+  <li><strong>Resources:</strong> a bucket, database or VPC belongs to exactly one account.</li>
+  <li><strong>Identities:</strong> IAM users and roles exist inside one account, and by default can only touch that account's resources.</li>
+  <li><strong>Permissions:</strong> nothing crosses an account boundary unless <em>both</em> sides allow it (<a href="#ch10">Chapter 10</a>, <a href="#ch21">Chapter 21</a>).</li>
+  <li><strong>Quotas and billing:</strong> limits (such as the number of VPCs) and costs are per account.</li>
+</ul>
+
+<p>That makes the account AWS's strongest security boundary, which is why companies use many of them: one per environment, per team, per workload (<a href="#ch20">Chapter 20</a>). A mistake or a breach in the development account then can't reach production. Larder has two: Jasper's original account, which runs production (and still holds the network hub from Handbook 1), and a second account for development and staging that Eli opened in 2025. They aren't part of an organisation yet.</p>
+
+<figure class="wide" id="fig7-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig7-1-t fig7-1-d">
+      <title id="fig7-1-t">What lives inside an AWS account</title>
+      <desc id="fig7-1-d">Two accounts side by side. Larder's production account, 111122223333, contains the root user at the top, then IAM users and roles, then resources such as buckets, databases and VPCs, and its own bill and quotas. A second account, 444455556666, contains the same layers separately. Between them is the account boundary: nothing crosses it unless both sides allow it.</desc>
+      <rect class="vpc" x="12" y="14" width="330" height="222" rx="8"/>
+      <text class="t-label" x="28" y="38">account 111122223333 · production</text>
+      <rect class="node-accent" x="28" y="52" width="298" height="38" rx="4"/><text class="t-label on-accent" x="177" y="76" text-anchor="middle">root user (email + password)</text>
+      <rect class="node" x="28" y="100" width="298" height="38" rx="4"/><text class="t-label" x="177" y="124" text-anchor="middle">IAM users and roles</text>
+      <rect class="pub" x="28" y="148" width="298" height="38" rx="4"/><text class="t-label" x="177" y="172" text-anchor="middle">resources: buckets, databases, VPCs …</text>
+      <rect class="priv" x="28" y="196" width="298" height="28" rx="4"/><text class="t-small" x="177" y="215" text-anchor="middle">its own bill and quotas</text>
+      <rect class="vpc" x="418" y="14" width="330" height="222" rx="8"/>
+      <text class="t-label" x="434" y="38">account 444455556666 · staging</text>
+      <rect class="node-accent" x="434" y="52" width="298" height="38" rx="4"/><text class="t-label on-accent" x="583" y="76" text-anchor="middle">its own root user</text>
+      <rect class="node" x="434" y="100" width="298" height="38" rx="4"/><text class="t-label" x="583" y="124" text-anchor="middle">its own IAM users and roles</text>
+      <rect class="pub" x="434" y="148" width="298" height="38" rx="4"/><text class="t-label" x="583" y="172" text-anchor="middle">its own resources</text>
+      <rect class="priv" x="434" y="196" width="298" height="28" rx="4"/><text class="t-small" x="583" y="215" text-anchor="middle">its own bill and quotas</text>
+      <path class="wire-dash" d="M380 14 V236"/>
+      <text class="t-small halo-priv" x="380" y="126" text-anchor="middle" transform="rotate(-90 380 126)">nothing crosses unless both allow</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 7.1</b> An account is a box around resources, identities and a bill. Its root user sits above everything inside it.</figcaption>
+</figure>
+
+<aside class="side"><b>Is an account ID secret?</b>No: it appears in every ARN, and AWS doesn't treat it as a secret. But it tells an attacker which account to target, so don't publish it needlessly. Never rely on its secrecy.</aside>
+
+<!-- ======================================================== 7.2 -->
+<h2 class="sec" id="s7-2"><span class="n">7.2</span>The root user</h2>
+
+<p>When you create an account, you give an email address and a password. That pair is the <span class="term">root user</span>: an identity with complete, unrestricted access to everything in the account. Three properties make it special:</p>
+<ul>
+  <li><strong>IAM policies can't limit it.</strong> There's no policy you can attach to root. The only thing that restricts a root user is an organisation-level guardrail (an SCP) when the account is a member of an AWS Organization (<a href="#ch20">Chapter 20</a>).</li>
+  <li><strong>It can do a few things no one else can</strong> (Table 7.1).</li>
+  <li><strong>It's tied to an email address</strong>, and whoever controls that mailbox can reset the password.</li>
+</ul>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 7.1 · Tasks that need the root user (at the time of writing)</caption>
+    <thead><tr><th>Task</th><th>When you'd need it</th></tr></thead>
+    <tbody>
+      <tr><td>Change the root email address or password</td><td>handing over or recovering the account</td></tr>
+      <tr><td>Create or delete root access keys</td><td>only ever to delete them</td></tr>
+      <tr><td>Close the account</td><td>end of life</td></tr>
+      <tr><td>Restore IAM permissions</td><td>when the only IAM administrator has locked themselves out</td></tr>
+      <tr><td>Remove an S3 bucket policy or SQS queue policy that denies everyone</td><td>after a policy mistake locks out all IAM principals</td></tr>
+      <tr><td>Activate IAM access to the Billing console</td><td>once, when setting up an account</td></tr>
+      <tr><td>Configure MFA delete on an S3 bucket</td><td>protecting critical buckets from deletion</td></tr>
+      <tr><td>Register as a seller in the Reserved Instance Marketplace; sign up for GovCloud</td><td>rarely</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>That's the whole list. Everything else, from creating users to deleting databases, can and should be done by IAM principals with the right permissions. The root user is for emergencies and a handful of account-level chores.</p>
+
+<!-- ======================================================== 7.3 -->
+<h2 class="sec" id="s7-3"><span class="n">7.3</span>Locking it away</h2>
+
+<p>Because it can't be limited, the root user must be impossible to use casually and hard to steal. The checklist:</p>
+
+<ol class="steps">
+  <li><strong>No access keys.</strong> Root keys give unlimited programmatic access and can't be restricted. Delete any that exist, after checking when they were last used and by what.</li>
+  <li><strong>Phishing-resistant MFA, more than one device.</strong> Register two or more FIDO2 security keys or passkeys (an account's root user can have up to eight MFA devices), kept in different places. AWS now requires MFA for root users in most accounts.</li>
+  <li><strong>A long, random password</strong> in the company's password vault, ideally readable only by two people together.</li>
+  <li><strong>A company-owned email address that's a group,</strong> such as <code>aws-root@larder.example</code>, delivered to several trusted people. Never a personal address, and never one person's work mailbox, which disappears when they leave.</li>
+  <li><strong>A company-owned phone number</strong> as the account's primary contact, because AWS uses it to verify you during recovery (7.4).</li>
+  <li><strong>Alternate contacts</strong> for billing, operations and security, so AWS's security notices reach a team, not a former employee.</li>
+  <li><strong>Alerts on root sign-in.</strong> Any use of root should page someone (<a href="#ch23">Chapter 23</a>). If root is used, it should be because you planned to.</li>
+</ol>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Treat the root user like the deeds to a building: kept safe, owned by the company, needed rarely, and missed immediately if anyone touches them.</p>
+</div>
+
+<!-- ======================================================== 7.4 -->
+<h2 class="sec" id="s7-4"><span class="n">7.4</span>Getting root back</h2>
+
+<p>Root access is lost more often than it's stolen: the person who set it up leaves, a phone is replaced, a mailbox is closed. AWS's recovery paths all depend on the account's contact details, which is why 7.3 insists they belong to the company:</p>
+<ul>
+  <li><strong>Lost password:</strong> “Forgot password” on the root sign-in page sends a reset link to the root email address.</li>
+  <li><strong>Lost MFA device:</strong> the sign-in page offers to sign in with <em>alternative factors</em>: AWS verifies the root email address, then calls the account's primary contact phone number.</li>
+  <li><strong>Lost email or phone too:</strong> AWS Support can help, but expect identity checks and time.</li>
+</ul>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: root on someone's personal email</p>
+  <p>If the root email is a founder's personal address, or a freelancer's, that person owns your account in every way that matters. They can reset the password, and you can't. Moving root to a company group address is one of the first jobs in any AWS account review.</p>
+</div>
+
+<!-- ======================================================== 7.5 -->
+<h2 class="sec" id="s7-5"><span class="n">7.5</span>Seeing every credential: the credential report</h2>
+
+<p>The <span class="term">credential report</span> is a CSV file listing every IAM user in the account, plus the root user, with the state of each credential: whether a password is set and when it was last used, whether MFA is on, and for each access key when it was created and last used, in which region and for which service. It's generated on request (at most once every four hours) and is the fastest way to see what's lying around in an account. The lab reads one.</p>
+
+<p>Two other quick views help: <code>aws iam get-account-summary</code> reports whether the root user has MFA (<code>AccountMFAEnabled</code>) and access keys (<code>AccountAccessKeysPresent</code>); and the IAM console's dashboard shows the same as security recommendations.</p>
+
+<!-- ======================================================== 7.6 -->
+<h2 class="sec" id="s7-6"><span class="n">7.6</span>Root in an organisation</h2>
+
+<p>When accounts belong to an <strong>AWS Organization</strong> (<a href="#ch20">Chapter 20</a>), root works differently:</p>
+<ul>
+  <li>The <strong>management account</strong>, which pays for and governs the organisation, has a root user that nothing can restrict. Secure it most carefully of all, and run no workloads in that account.</li>
+  <li>The root users of <strong>member accounts</strong> are limited by service control policies, like every other principal there.</li>
+  <li>With <strong>centralised root access</strong>, the organisation can remove root credentials (password, keys, MFA) from member accounts entirely. When a root-only task is needed, such as unlocking a bucket policy that denies everyone, an administrator in the management account performs it through a short-lived, task-scoped root session (<code>sts:AssumeRoot</code>). New member accounts then never have root credentials at all.</li>
+</ul>
+
+<figure class="wide" id="fig7-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 200" role="img" aria-labelledby="fig7-2-t fig7-2-d">
+      <title id="fig7-2-t">Root users in a standalone account and in an organisation</title>
+      <desc id="fig7-2-d">Left: a standalone account whose root user has unrestricted access, with email, password and MFA. Right: an organisation. The management account's root user is unrestricted and must be secured most carefully. Member accounts sit under service control policies; with centralised root access, their root users have no credentials, and root-only tasks are done from the management account through a short task-scoped session.</desc>
+      <defs><marker id="c7ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="vpc" x="12" y="14" width="230" height="172" rx="8"/>
+      <text class="t-label" x="28" y="38">standalone account</text>
+      <rect class="node-accent" x="28" y="54" width="198" height="56" rx="4"/>
+      <text class="t-label on-accent" x="127" y="78" text-anchor="middle">root: unrestricted</text>
+      <text class="t-small on-accent" x="127" y="98" text-anchor="middle">email · password · MFA</text>
+      <text class="t-small" x="127" y="140" text-anchor="middle">only you can protect it</text>
+      <rect class="region" x="282" y="14" width="466" height="172" rx="8"/>
+      <text class="t-label" x="298" y="38">organisation</text>
+      <rect class="node-accent" x="298" y="54" width="190" height="56" rx="4"/>
+      <text class="t-label on-accent" x="393" y="78" text-anchor="middle">management account</text>
+      <text class="t-small on-accent" x="393" y="98" text-anchor="middle">root: unrestricted</text>
+      <rect class="priv" x="540" y="46" width="192" height="126" rx="6"/>
+      <text class="t-small" x="552" y="64">member accounts, under SCPs</text>
+      <rect class="node" x="552" y="74" width="168" height="34" rx="4"/><text class="t-small" x="636" y="95" text-anchor="middle">root: no credentials</text>
+      <rect class="node" x="552" y="118" width="168" height="34" rx="4"/><text class="t-small" x="636" y="139" text-anchor="middle">root: no credentials</text>
+      <path class="wire-accent" d="M490 90 H548" marker-end="url(#c7ah)"/>
+      <text class="t-small" x="393" y="140" text-anchor="middle">task-scoped root session</text>
+      <text class="t-small" x="393" y="156" text-anchor="middle">(sts:AssumeRoot) when needed</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 7.2</b> In an organisation, only the management account keeps a fully powerful root user. Member accounts can have no root credentials at all.</figcaption>
+</figure>
+
+<!-- ======================================================== 7.7 -->
+<h2 class="sec" id="s7-7"><span class="n">7.7</span>Across providers</h2>
+
+<p>Azure and Google Cloud have no single “root user” per subscription or project, but they have the same problem one level up: a few all-powerful administrator identities that must be locked away and never lost.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 7.2 · The all-powerful identities at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Boundary</td><td>account</td><td>tenant (directory); subscriptions inside it</td><td>organisation; projects inside it</td></tr>
+      <tr><td>Most powerful identity</td><td>root user of each account (management account's is unrestricted)</td><td>Global Administrator in Entra ID, who can elevate to manage every subscription</td><td>super administrator in Cloud Identity / Workspace</td></tr>
+      <tr><td>Recommended practice</td><td>no keys, FIDO2 MFA, group email, centralised root access for members</td><td>two cloud-only <strong>emergency access</strong> accounts with FIDO2 keys, monitored; few Global Administrators</td><td>dedicated super admin accounts with security keys, not used day to day; a backup super admin</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>A Global Administrator can turn on <strong>Elevate access</strong> to become User Access Administrator over every subscription in the tenant. Keep Global Administrators to a handful, give them separate admin accounts from their daily ones, and keep two <strong>emergency access</strong> (“break-glass”) accounts that don't depend on federation or a single MFA method, with alerts on every sign-in.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p><strong>Super administrators</strong> of the Cloud Identity or Workspace account can grant themselves any role in the organisation. Google recommends using them only for administration, protecting them with security keys, keeping at least one backup, and granting the day-to-day <em>Organization Administrator</em> role to ordinary accounts instead.</p>
+</div>
+
+<!-- ======================================================== 7.8 -->
+<h2 class="sec" id="s7-8"><span class="n">7.8</span>At Larder: getting root back</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Larder still owns the domain, so the fix started with email: on 24 November, Larder's IT administrator restored <code>jasper@larder.example</code> as an alias delivering to a new group, <code>aws-root@larder.example</code> (Eli, Femke and Marco). A password reset link arrived within a minute. For MFA, Eli used <em>sign in with alternative factors</em>: AWS verified the email address, then called the account's primary contact number, which turned out to be Femke's mobile, from the week the founders opened the account. Femke read out the code.</p>
+  <p>Once signed in, Eli and Femke worked through 7.3 together. The root access key had last been used on 4 March 2025, by S3, which matched a nightly export script on an old virtual machine retired that month; the key was deleted. Two FIDO2 security keys were registered, one for the office safe and one kept by Femke. The root email became <code>aws-root@larder.example</code>, the primary phone a company number, and the alternate contacts the platform team's address. The new password went into the company vault. Root hasn't been used since. When Larder creates an organisation in January (<a href="#ch12">Chapter 12</a>), this account joins it as a member, and its root credentials can then be removed altogether (<a href="#ch20">Chapter 20</a>).</p>
+</aside>
+
+<!-- ======================================================== 7.9 -->
+<h2 class="sec" id="s7-9"><span class="n">7.9</span>Lab: audit an account's credentials</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 7 · Root status and the credential report</p>
+  <p><strong>You'll</strong> check your account's root user from the CLI, download its credential report, and run a script that lists what needs fixing, first on a sample shaped like Larder's account, then on yours. <strong>You need</strong> the AWS CLI v2 with read access to IAM (the <code>IAMReadOnlyAccess</code> policy is enough) and Python 3. <strong>Cost:</strong> free; nothing is created.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Check root from the CLI.</strong>
+<pre><code>aws iam get-account-summary \
+  --query 'SummaryMap.{RootMFA: AccountMFAEnabled, RootKeys: AccountAccessKeysPresent}'</code></pre>
+  You want <code>RootMFA</code> to be <code>1</code> and <code>RootKeys</code> to be <code>0</code>. If either isn't, fix it first, signed in as root, following 7.3.</li>
+  <li><strong>Check the contacts.</strong> <code>aws account get-alternate-contact --alternate-contact-type SECURITY</code> shows who receives AWS's security notices. An error saying none is set means nobody does.</li>
+  <li><strong>Save this script</strong> as <code>credcheck.py</code>:
+<p class="code-title"><span>credcheck.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># credcheck.py · read an IAM credential report and list what needs fixing</span>
+<span class="k">import</span> csv, sys
+<span class="k">from</span> datetime <span class="k">import</span> datetime, timezone
+
+TODAY = datetime(2026, 11, 23, 12, 0, tzinfo=timezone.utc)  <span class="c"># use datetime.now(timezone.utc) for real</span>
+STALE = 90                                                 <span class="c"># days</span>
+
+<span class="k">def</span> age(value):
+    <span class="s">"""Days since a timestamp in the report, or None for N/A, not_supported, no_information."""</span>
+    <span class="k">try</span>:
+        <span class="k">return</span> (TODAY - datetime.fromisoformat(value)).days
+    <span class="k">except</span> ValueError:
+        <span class="k">return</span> None
+
+<span class="k">def</span> findings(row):
+    user, out = row[<span class="s">"user"</span>], []
+    <span class="k">if</span> user == <span class="s">"&lt;root_account&gt;"</span>:
+        <span class="k">if</span> row[<span class="s">"access_key_1_active"</span>] == <span class="s">"true"</span> <span class="k">or</span> row[<span class="s">"access_key_2_active"</span>] == <span class="s">"true"</span>:
+            out.append(<span class="s">"ROOT has an active access key: delete it"</span>)
+        <span class="k">if</span> row[<span class="s">"mfa_active"</span>] != <span class="s">"true"</span>:
+            out.append(<span class="s">"ROOT has no MFA"</span>)
+        used = age(row[<span class="s">"password_last_used"</span>])
+        <span class="k">if</span> used <span class="k">is not</span> None <span class="k">and</span> used &lt; STALE:
+            out.append(f<span class="s">"root signed in {used} days ago: find out why"</span>)
+        <span class="k">return</span> out
+    <span class="k">if</span> row[<span class="s">"password_enabled"</span>] == <span class="s">"true"</span> <span class="k">and</span> row[<span class="s">"mfa_active"</span>] != <span class="s">"true"</span>:
+        out.append(<span class="s">"console password without MFA"</span>)
+    <span class="k">if</span> row[<span class="s">"password_enabled"</span>] == <span class="s">"true"</span> <span class="k">and</span> (age(row[<span class="s">"password_last_used"</span>]) <span class="k">or</span> 0) &gt; STALE:
+        out.append(f<span class="s">"password unused for {age(row['password_last_used'])} days"</span>)
+    <span class="k">for</span> n <span class="k">in</span> (<span class="s">"1"</span>, <span class="s">"2"</span>):
+        <span class="k">if</span> row[f<span class="s">"access_key_{n}_active"</span>] != <span class="s">"true"</span>:
+            <span class="k">continue</span>
+        rotated, used = age(row[f<span class="s">"access_key_{n}_last_rotated"</span>]), age(row[f<span class="s">"access_key_{n}_last_used_date"</span>])
+        out.append(f<span class="s">"access key {n}: {rotated} days old, "</span>
+                   + (f<span class="s">"last used {used} days ago"</span> <span class="k">if</span> used <span class="k">is not</span> None <span class="k">else</span> <span class="s">"never used"</span>))
+    <span class="k">return</span> out
+
+path = sys.argv[1] <span class="k">if</span> len(sys.argv) &gt; 1 <span class="k">else</span> <span class="s">"sample-report.csv"</span>
+<span class="k">for</span> row <span class="k">in</span> csv.DictReader(open(path, newline=<span class="s">""</span>)):
+    <span class="k">for</span> f <span class="k">in</span> findings(row):
+        print(f<span class="s">"{row['user']:&lt;15} {f}"</span>)</code></pre></li>
+  <li><strong>Run it on Larder's sample.</strong> Save the six-line report below as <code>sample-report.csv</code> (real reports have the same 22 columns), then run <code>python3 credcheck.py</code>.
+<pre><code>user,arn,user_creation_time,password_enabled,password_last_used,password_last_changed,password_next_rotation,mfa_active,access_key_1_active,access_key_1_last_rotated,access_key_1_last_used_date,access_key_1_last_used_region,access_key_1_last_used_service,access_key_2_active,access_key_2_last_rotated,access_key_2_last_used_date,access_key_2_last_used_region,access_key_2_last_used_service,cert_1_active,cert_1_last_rotated,cert_2_active,cert_2_last_rotated
+&lt;root_account&gt;,arn:aws:iam::111122223333:root,2024-03-11T09:02:51+00:00,not_supported,2025-07-30T16:40:12+00:00,not_supported,not_supported,true,true,2024-03-11T09:20:05+00:00,2025-03-04T01:00:13+00:00,eu-central-1,s3,false,N/A,N/A,N/A,N/A,false,N/A,false,N/A
+ops,arn:aws:iam::111122223333:user/ops,2024-06-02T10:11:40+00:00,true,2026-11-12T22:13:58+00:00,2024-06-02T10:11:40+00:00,N/A,false,false,N/A,N/A,N/A,N/A,false,N/A,N/A,N/A,N/A,false,N/A,false,N/A
+deploy-bot,arn:aws:iam::111122223333:user/deploy-bot,2024-05-20T08:30:00+00:00,false,N/A,N/A,N/A,false,true,2024-05-20T08:31:12+00:00,2026-11-23T07:02:44+00:00,eu-central-1,ecs,false,N/A,N/A,N/A,N/A,false,N/A,false,N/A
+ben,arn:aws:iam::111122223333:user/ben,2024-09-02T08:00:00+00:00,true,2026-11-20T14:22:10+00:00,2026-02-01T09:00:00+00:00,N/A,true,false,N/A,N/A,N/A,N/A,false,N/A,N/A,N/A,N/A,false,N/A,false,N/A
+eli,arn:aws:iam::111122223333:user/eli,2025-01-13T08:00:00+00:00,true,2026-11-23T08:45:02+00:00,2025-11-03T10:00:00+00:00,N/A,true,true,2026-06-01T09:00:00+00:00,2026-11-22T19:10:00+00:00,eu-central-1,iam,false,N/A,N/A,N/A,N/A,false,N/A,false,N/A
+jasper,arn:aws:iam::111122223333:user/jasper,2024-03-11T09:30:00+00:00,true,2025-08-14T17:55:31+00:00,2024-03-11T09:30:00+00:00,N/A,false,true,2024-03-12T10:00:00+00:00,2025-06-19T23:01:00+00:00,eu-central-1,s3,false,N/A,N/A,N/A,N/A,false,N/A,false,N/A</code></pre>
+  Output:
+<pre><code>&lt;root_account&gt;  ROOT has an active access key: delete it
+ops             console password without MFA
+deploy-bot      access key 1: 917 days old, last used 0 days ago
+eli             access key 1: 175 days old, last used 0 days ago
+jasper          console password without MFA
+jasper          password unused for 465 days
+jasper          access key 1: 986 days old, last used 521 days ago</code></pre>
+  Every line is a decision. The root key goes (7.3). <code>ops</code> and <code>jasper</code> are <a href="#ch8">Chapter 8</a>'s problem. <code>deploy-bot</code>'s two-and-a-half-year-old key is in daily use, so it can't just be deleted; <a href="#ch17">Chapter 17</a> replaces it.</li>
+  <li><strong>Run it on your own account.</strong> Change <code>TODAY</code> to <code>datetime.now(timezone.utc)</code>, then:
+<pre><code>aws iam generate-credential-report             <span class="c"># repeat until "State": "COMPLETE"</span>
+aws iam get-credential-report --query Content --output text | base64 --decode &gt; report.csv
+python3 credcheck.py report.csv</code></pre>
+  On macOS, use <code>base64 -D</code>. The report holds no secrets, only metadata, but it's a map of your account's weak spots: delete it when you're done.</li>
+  <li><strong>Find root's recent activity.</strong> Root actions in the last 90 days appear in CloudTrail under the user name <code>root</code>:
+<pre><code>aws cloudtrail lookup-events --max-results 20 \
+  --lookup-attributes AttributeKey=Username,AttributeValue=root \
+  --query 'Events[].[EventTime, EventName]' --output table</code></pre>
+  In a well-run account this is empty, or shows only what you did on purpose.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Extend <code>findings</code> to flag users whose access key was never used but is older than seven days. Those are usually keys someone created “just in case”.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s7-10"><span class="n">7.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Root access keys</td><td>Unlimited, unrestrictable programmatic access for whoever finds them.</td><td>None, ever.</td></tr>
+      <tr><td>Root email on one person's mailbox</td><td>Access leaves with them, or stays with them.</td><td>A company group address.</td></tr>
+      <tr><td>One MFA device, on one phone</td><td>A lost phone locks you out; recovery depends on old contact details.</td><td>Two or more FIDO2 keys in different places.</td></tr>
+      <tr><td>Using root for daily work</td><td>Every action has unlimited blast radius and no attribution.</td><td>IAM roles through single sign-on; root only for Table 7.1.</td></tr>
+      <tr><td>No alternate contacts</td><td>AWS's security warnings reach nobody.</td><td>Security, operations and billing contacts set to team addresses.</td></tr>
+      <tr><td>Workloads in the management account</td><td>A compromise there controls the whole organisation.</td><td>Keep it for governance only (<a href="#ch20">Chapter 20</a>).</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum7">
+  <h2 class="sec" id="sum7"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>An <strong>account</strong> isolates resources, identities, permissions, quotas and billing. It's AWS's strongest boundary.</li>
+    <li>The <strong>root user</strong> can do everything and can't be limited by IAM policies; only SCPs restrict it, in member accounts.</li>
+    <li>Only a short list of tasks needs root. Do everything else with IAM principals.</li>
+    <li>Lock root away: no keys, two or more FIDO2 keys, a vaulted password, a company group email and phone, alternate contacts, alerts on use.</li>
+    <li>Recovery depends on the root email and the account's phone number. Make sure the company owns both.</li>
+    <li>The <strong>credential report</strong> lists every credential in the account; read it regularly.</li>
+    <li>In an organisation, member accounts can have no root credentials at all.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>AWS account</dt><dd>A container for resources, identities and billing, isolated from other accounts.</dd>
+    <dt>Account ID</dt><dd>The 12-digit number identifying an account, part of every ARN.</dd>
+    <dt>Root user</dt><dd>The account's original email-and-password identity, with unrestricted access.</dd>
+    <dt>Credential report</dt><dd>A CSV of every IAM user and root, with password, MFA and access key status.</dd>
+    <dt>Alternate contacts</dt><dd>Billing, operations and security contacts AWS uses for notices.</dd>
+    <dt>Management account</dt><dd>The account that creates and pays for an AWS Organization.</dd>
+    <dt>Centralised root access</dt><dd>Removing member accounts' root credentials and doing root tasks through scoped sessions.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Why can't you limit the root user of a standalone account with an IAM policy? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>IAM policies attach to users, groups and roles; the root user isn't one of them. Only an organisation's SCPs apply to a member account's root.</p></details>
+    </li>
+    <li>
+      <p>An administrator applied a bucket policy that denies all actions to every principal. Every IAM user now gets “access denied”, including admins. How do you fix it? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Sign in as the root user (or, in an organisation with centralised root access, use a task-scoped root session from the management account) and delete the bucket policy. That's one of the root-only tasks.</p></details>
+    </li>
+    <li>
+      <p>The credential report shows a root access key last used yesterday. What do you do, in order? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Treat it as a possible incident: find out from CloudTrail what it was used for and from where. If it's an unknown use, rotate root's password and MFA, and investigate. Then move whatever legitimately used it to a role, and delete the key.</p></details>
+    </li>
+    <li>
+      <p>Explain why the root email address should be a group, not a person. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Whoever receives that mail can reset the password and helps pass MFA recovery. A personal mailbox disappears or leaves with its owner; a group survives staff changes and can't be used by one person alone without others seeing.</p></details>
+    </li>
+    <li>
+      <p>Design root security for a new company with one AWS account today and an organisation planned next year. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Today: group root email and company phone, two FIDO2 keys in separate places, vaulted password, no keys, alternate contacts, an alert on root sign-in. Next year: make this account the management account with no workloads, create members from it, and turn on centralised root access so members have no root credentials.</p></details>
+    </li>
+    <li>
+      <p>Compare the AWS root user with Azure's Global Administrator. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Root is one per account and can't be restricted there; Global Administrator is a role in an Entra ID tenant that several accounts can hold, and can elevate to manage every subscription. Both should be few, use phishing-resistant MFA, have emergency fallbacks and be monitored.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_root-user.html">AWS account root user</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/root-user-tasks.html">tasks that require root</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_getting-report.html">credential reports</a> and <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_root-enable-root-access.html">centralised root access</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/entra/identity/role-based-access-control/security-emergency-access">Manage emergency access accounts</a>.</li>
+    <li>Google Cloud: <a href="https://cloud.google.com/resource-manager/docs/super-admin-best-practices">Super administrator best practices</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="#ch6">6 · Access models</a></div>
+  <div><span>Next</span><a href="#ch8">8 · Users, groups and roles</a></div>
+</nav>

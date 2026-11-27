@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Users, groups and roles · Identity and Access in the Cloud</title>
+<meta name="description" content="Why IAM users are a legacy pattern, how roles and temporary credentials replace them, and what STS does when you assume a role.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 2</a> · <a href="index.html">Identity and Access in the Cloud</a></span><span>Part II · Chapter 8</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part II · IAM on AWS</p>
+  <p class="chno">8</p>
+  <h1>Users, groups and roles</h1>
+  <p class="promise">AWS IAM gives you three kinds of identity. Users are the oldest and easiest to understand, and the one to avoid. Roles are the one to build everything on: an identity with no password and no permanent key, which people, services and other accounts borrow for an hour at a time. This chapter explains how a role is put together, what happens when you assume one, and how to write the trust policy that decides who can.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain why IAM users are a legacy pattern, and when one is still acceptable.</li>
+      <li>Describe a role as a trust policy plus permission policies.</li>
+      <li>Assume a role and read the temporary credentials and session it produces.</li>
+      <li>Write trust policies for people, AWS services and other accounts, with conditions.</li>
+      <li>Control who can hand a role to a service, with <code>iam:PassRole</code>.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Short-lived credentials (<a href="03-tokens-sessions.html">Chapter 3</a>); the account and root user (<a href="07-account-root.html">Chapter 7</a>).</li>
+      <li>Reading policies (<a href="09-policies.html">Chapter 9</a>). This chapter writes the other half: trust policies.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 50 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, AWS CLI, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 8.10</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>The second page of Eli's credential report (<a href="07-account-root.html">Chapter 7</a>) lists Larder's IAM users: eleven with console passwords. Eight are current engineers, each with read-only access and a personal access key or two. Three belong to people who've left: Jasper, and two contractors from 2024. Jasper's user still has an active access key. Then there's <code>ops</code>, the shared user with <code>AdministratorAccess</code> from <a href="01-who-and-what.html">Chapter 1</a>, which engineers use whenever production needs fixing because their own users can only look.</p>
+  <p>Single sign-on (<a href="12-sso.html">Chapter 12</a>) will replace all of this, but that's weeks away. Eli wants something safe for production work <em>this</em> month, without a shared password. Section 8.11 shows what he built.</p>
+</aside>
+
+<!-- ======================================================== 8.1 -->
+<h2 class="sec" id="s8-1"><span class="n">8.1</span>IAM users</h2>
+
+<p class="lead">An <span class="term">IAM user</span> is a long-lived identity inside one account. It can have a <strong>console password</strong> and up to two <strong>access keys</strong> for the CLI and SDKs. An access key is a pair: an <em>access key ID</em> starting with <code>AKIA</code>, and a secret access key, shown once when it's created. Two keys are allowed so you can rotate: create the new one, switch everything to it, then delete the old.</p>
+
+<p>Users get permissions from policies attached to them directly or, better, to groups they belong to.</p>
+
+<!-- ======================================================== 8.2 -->
+<h2 class="sec" id="s8-2"><span class="n">8.2</span>Groups</h2>
+
+<p>An <span class="term">IAM group</span> is a set of users that share policies: attach a policy to <code>developers</code>, and every user in it gets those permissions. Groups are simple, with three limits worth knowing: a group isn't a principal (you can't name it in a trust or resource policy, or sign in as it); groups can't contain other groups; and they only hold IAM users, not roles or federated people. Groups in your identity provider are a different thing, and much more useful (<a href="12-sso.html">Chapter 12</a>).</p>
+
+<!-- ======================================================== 8.3 -->
+<h2 class="sec" id="s8-3"><span class="n">8.3</span>Why users are a legacy pattern</h2>
+
+<p>IAM users were AWS's original answer to “how do people get in?”, and they still work. But they carry every problem from Part I:</p>
+<ul>
+  <li><strong>Long-lived credentials.</strong> Passwords and access keys last until someone deletes them. Larder's credential report shows the result: a key two and a half years old, and three more belonging to people who've left (<a href="03-tokens-sessions.html">Chapter 3</a>).</li>
+  <li><strong>One account at a time.</strong> A user exists in one account. With ten accounts, a person needs ten users, ten passwords and ten MFA devices, or you build cross-account roles anyway.</li>
+  <li><strong>A separate directory.</strong> Joiners and leavers in your company's directory don't reach IAM. Someone must remember to create and delete users by hand (<a href="13-lifecycle.html">Chapter 13</a>).</li>
+</ul>
+
+<p>The modern answer is: <strong>people</strong> sign in through IAM Identity Center or another identity provider and get temporary role sessions (<a href="12-sso.html">Chapter 12</a>); <strong>workloads</strong> on AWS use roles provided by the platform (<a href="15-workload-identity.html">Chapter 15</a>); <strong>workloads outside AWS</strong> exchange their own platform's tokens for role sessions (<a href="17-ci-cd-oidc.html">Chapter 17</a>). An IAM user is acceptable only where nothing else works: a third-party tool that can only take an access key, or an emergency break-glass account (<a href="14-privileged-access.html">Chapter 14</a>), and then with a narrow policy, monitoring and rotation.</p>
+
+<!-- ======================================================== 8.4 -->
+<h2 class="sec" id="s8-4"><span class="n">8.4</span>Roles</h2>
+
+<p>An <span class="term">IAM role</span> is an identity with permissions but <strong>no credentials of its own</strong>: no password, no access keys. Instead, trusted principals <em>assume</em> it and receive temporary credentials for a session. A role is defined by two kinds of policy, and keeping them apart is most of the battle:</p>
+
+<figure class="wide" id="fig8-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 230" role="img" aria-labelledby="fig8-1-t fig8-1-d">
+      <title id="fig8-1-t">The two halves of a role</title>
+      <desc id="fig8-1-d">A role in the middle. On its left, the trust policy, a resource-based policy on the role itself, answers who may assume it: here, named engineers, signed in with MFA. On its right, permission policies, identity-based policies, answer what a session may do once assumed: here, production operations. Assuming the role through STS produces a session with temporary credentials that expire.</desc>
+      <defs><marker id="c8ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="12" y="40" width="210" height="110" rx="6"/>
+      <text class="t-label" x="117" y="66" text-anchor="middle">trust policy</text>
+      <text class="t-small" x="117" y="88" text-anchor="middle">who may assume it?</text>
+      <text class="t-mono" x="117" y="114" text-anchor="middle">engineers' users,</text>
+      <text class="t-mono" x="117" y="132" text-anchor="middle">only with MFA</text>
+      <rect class="node-accent" x="275" y="56" width="210" height="78" rx="6"/>
+      <text class="t-label on-accent" x="380" y="88" text-anchor="middle">role: prod-operator</text>
+      <text class="t-small on-accent" x="380" y="110" text-anchor="middle">no password, no keys</text>
+      <rect class="node" x="538" y="40" width="210" height="110" rx="6"/>
+      <text class="t-label" x="643" y="66" text-anchor="middle">permission policies</text>
+      <text class="t-small" x="643" y="88" text-anchor="middle">what may a session do?</text>
+      <text class="t-mono" x="643" y="114" text-anchor="middle">operate production,</text>
+      <text class="t-mono" x="643" y="132" text-anchor="middle">but not change IAM</text>
+      <path class="wire" d="M224 95 H271" marker-end="url(#c8ah)"/>
+      <path class="wire" d="M487 95 H534" marker-end="url(#c8ah)"/>
+      <rect class="pub" x="210" y="176" width="340" height="40" rx="5"/>
+      <text class="t-small" x="380" y="194" text-anchor="middle">sts:AssumeRole → a session: temporary key (ASIA…),</text>
+      <text class="t-small" x="380" y="209" text-anchor="middle">secret and session token, expiring in 15 min – 12 h</text>
+      <path class="wire-dash" d="M380 136 V172" marker-end="url(#c8ah)"/>
+    </svg>
+  </div>
+  <figcaption><b>Figure 8.1</b> A role is a trust policy (who can get in) and permission policies (what they can do once in). Mixing the two up is the source of most role mistakes.</figcaption>
+</figure>
+
+<ul>
+  <li>The <span class="term">trust policy</span> is a resource-based policy on the role itself. Its <code>Principal</code> names who may call <code>sts:AssumeRole</code> (or its web identity and SAML variants) on this role, and its conditions say under what circumstances.</li>
+  <li>The <strong>permission policies</strong> are ordinary identity-based policies (<a href="09-policies.html">Chapter 9</a>): what a session of this role may do.</li>
+</ul>
+
+<p>Roles serve every kind of principal from <a href="01-who-and-what.html">Chapter 1</a>: people (through single sign-on or, as at Larder this month, from IAM users), AWS services acting for you (an ECS task, a Lambda function), pipelines outside AWS, and principals in other accounts.</p>
+
+<!-- ======================================================== 8.5 -->
+<h2 class="sec" id="s8-5"><span class="n">8.5</span>Assuming a role</h2>
+
+<p>Assuming a role is an API call to <strong>AWS STS</strong>, the Security Token Service:</p>
+
+<pre><code>aws sts assume-role \
+  --role-arn arn:aws:iam::111122223333:role/prod-operator \
+  --role-session-name eli \
+  --source-identity eli</code></pre>
+
+<p>STS checks the trust policy and the caller's own permissions (<a href="10-evaluation.html">Chapter 10</a>), and returns temporary credentials:</p>
+
+<pre><code>{
+  <span class="k">"Credentials"</span>: {
+    <span class="k">"AccessKeyId"</span>: <span class="s">"ASIAQEXAMPLE7RTHUNA"</span>,
+    <span class="k">"SecretAccessKey"</span>: <span class="s">"…"</span>,
+    <span class="k">"SessionToken"</span>: <span class="s">"IQoJb3JpZ2luX2VjE…"</span>,
+    <span class="k">"Expiration"</span>: <span class="s">"2026-12-07T10:42:13+00:00"</span>
+  },
+  <span class="k">"AssumedRoleUser"</span>: {
+    <span class="k">"Arn"</span>: <span class="s">"arn:aws:sts::111122223333:assumed-role/prod-operator/eli"</span>
+  },
+  <span class="k">"SourceIdentity"</span>: <span class="s">"eli"</span>
+}</code></pre>
+
+<p>Things to notice:</p>
+<ul>
+  <li><strong>Temporary keys start with <code>ASIA</code></strong>, long-lived ones with <code>AKIA</code>. Seeing <code>AKIA</code> in a log or a leak tells you a long-lived key is involved.</li>
+  <li><strong>All three parts are needed</strong>: key ID, secret and session token. Tools pass them as <code>AWS_ACCESS_KEY_ID</code>, <code>AWS_SECRET_ACCESS_KEY</code> and <code>AWS_SESSION_TOKEN</code>.</li>
+  <li><strong>The session expires</strong>: by default after one hour; you can ask for 15 minutes up to the role's <em>maximum session duration</em>, which you set between 1 and 12 hours.</li>
+  <li><strong>The session has its own ARN</strong>: <code>assumed-role/<i>role-name</i>/<i>session-name</i></code>. That's what CloudTrail records, so choose session names that identify the person or job.</li>
+  <li><strong>Source identity</strong> is a value set when the role is first assumed, which can't be changed afterwards and is recorded in CloudTrail for every action in the session, even across further role assumptions. It's how you keep <a href="01-who-and-what.html">Chapter 1</a>'s accountability when people share a role.</li>
+</ul>
+
+<aside class="side"><b>Role chaining</b>Using a role session to assume another role is called <em>role chaining</em>. AWS limits chained sessions to one hour, whatever the maximum session duration says.</aside>
+
+<!-- ======================================================== 8.6 -->
+<h2 class="sec" id="s8-6"><span class="n">8.6</span>Writing trust policies</h2>
+
+<p>A trust policy has the same grammar as any policy (<a href="09-policies.html">Chapter 9</a>), with a <code>Principal</code> and an action from STS. The principal says what kind of thing may assume the role:</p>
+
+<div class="table-wrap">
+  <table class="wrap-code">
+    <caption>Table 8.1 · Who can be trusted to assume a role</caption>
+    <thead><tr><th>Principal</th><th>Example</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>A specific user or role</td><td><code>{"AWS": "arn:aws:iam::111122223333:user/eli"}</code></td><td>exactly that identity</td></tr>
+      <tr><td>An account</td><td><code>{"AWS": "arn:aws:iam::111122223333:root"}</code></td><td>any principal in that account <em>whose own policies allow it</em>; the account's administrators decide who</td></tr>
+      <tr><td>An AWS service</td><td><code>{"Service": "ecs-tasks.amazonaws.com"}</code></td><td>that service, acting for you (8.7)</td></tr>
+      <tr><td>A federated provider</td><td><code>{"Federated": "arn:aws:iam::111122223333:oidc-provider/token.actions.githubusercontent.com"}</code></td><td>people or workloads authenticated by that SAML or OIDC provider (<a href="05-saml-federation.html">Chapter 5</a>, <a href="17-ci-cd-oidc.html">Chapter 17</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Despite the name, <code>arn:aws:iam::111122223333:root</code> in a principal doesn't mean the root user. It means “the account”, handing the decision to that account's IAM policies. Conditions then narrow the trust:</p>
+
+<p class="code-title"><span>prod-operator-trust.json</span><span>trust policy</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [{
+    <span class="k">"Sid"</span>: <span class="s">"EngineersWithMfaAndTheirOwnName"</span>,
+    <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+    <span class="k">"Principal"</span>: { <span class="k">"AWS"</span>: [
+      <span class="s">"arn:aws:iam::111122223333:user/ben"</span>,
+      <span class="s">"arn:aws:iam::111122223333:user/eli"</span>
+    ] },
+    <span class="k">"Action"</span>: [<span class="s">"sts:AssumeRole"</span>, <span class="s">"sts:SetSourceIdentity"</span>],
+    <span class="k">"Condition"</span>: {
+      <span class="k">"Bool"</span>: { <span class="s">"aws:MultiFactorAuthPresent"</span>: <span class="s">"true"</span> },
+      <span class="k">"StringEquals"</span>: { <span class="s">"sts:SourceIdentity"</span>: <span class="s">"${aws:username}"</span> }
+    }
+  }]
+}</code></pre>
+
+<p>Read aloud: “Allow Ben's and Eli's users to assume this role, only if they signed in with MFA, and only if they set the source identity to their own user name.” The last condition stops anyone from recording a colleague's name. Other conditions you'll meet: <code>sts:ExternalId</code> for third parties (<a href="21-cross-account.html">Chapter 21</a>), <code>aws:SourceAccount</code> and <code>aws:SourceArn</code> for services (8.7), and the <code>sub</code> and <code>aud</code> claims of OIDC tokens (<a href="17-ci-cd-oidc.html">Chapter 17</a>).</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: trust that's too wide</p>
+  <p><code>"Principal": {"AWS": "*"}</code> without strong conditions lets <em>any AWS account in the world</em> try to assume your role. Trusting another company's whole account trusts every administrator they have. And trusting a federated provider without conditions on <em>which</em> identities (such as which GitHub repository) lets anyone that provider authenticates in. A role's permissions are only as safe as its trust policy.</p>
+</div>
+
+<!-- ======================================================== 8.7 -->
+<h2 class="sec" id="s8-7"><span class="n">8.7</span>Roles for AWS services, and <code>iam:PassRole</code></h2>
+
+<p>Many services act for you: an ECS task reads from S3, a Lambda function writes to DynamoDB, CloudFormation creates resources. Each does it by assuming a role you give it:</p>
+<ul>
+  <li>A <strong>service role</strong> is an ordinary role whose trust policy names the service (<code>ecs-tasks.amazonaws.com</code>, <code>lambda.amazonaws.com</code>). You write its permissions.</li>
+  <li>An <strong>instance profile</strong> is the wrapper that lets an EC2 instance use a role (<a href="15-workload-identity.html">Chapter 15</a>).</li>
+  <li>A <strong>service-linked role</strong> is created and managed by a service for its own needs, with a fixed policy. You can see it but not edit it.</li>
+</ul>
+
+<p>Handing a role to a service is itself a permission: <code>iam:PassRole</code>. Whoever can launch a task <em>and</em> pass any role can run code with that role's permissions, including an administrator role. That's one of the classic ways to escalate privileges in AWS. Limit it to the roles a person or pipeline actually needs to pass, and to the service that should receive them:</p>
+
+<pre><code>{
+  <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+  <span class="k">"Action"</span>: <span class="s">"iam:PassRole"</span>,
+  <span class="k">"Resource"</span>: <span class="s">"arn:aws:iam::111122223333:role/dispatch-task"</span>,
+  <span class="k">"Condition"</span>: { <span class="k">"StringEquals"</span>: { <span class="s">"iam:PassedToService"</span>: <span class="s">"ecs-tasks.amazonaws.com"</span> } }
+}</code></pre>
+
+<p>Service role trust policies should also say <em>which</em> of your resources may use them, with <code>aws:SourceAccount</code> or <code>aws:SourceArn</code>, so a service acting for someone else can't be tricked into using your role (the “confused deputy” of <a href="21-cross-account.html">Chapter 21</a>).</p>
+
+<!-- ======================================================== 8.8 -->
+<h2 class="sec" id="s8-8"><span class="n">8.8</span>How tools find credentials</h2>
+
+<p>The AWS CLI and SDKs look for credentials in a fixed order, the <span class="term">credential provider chain</span>, and use the first they find. Knowing the order explains most “why is it using <em>those</em> credentials?” puzzles:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 8.2 · Where the CLI and SDKs look, roughly in order</caption>
+    <thead><tr><th>Source</th><th>Example</th><th>Typical use</th></tr></thead>
+    <tbody>
+      <tr><td>Command-line options</td><td><code>--profile prod</code></td><td>choosing a profile per command</td></tr>
+      <tr><td>Environment variables</td><td><code>AWS_ACCESS_KEY_ID</code>, <code>AWS_SESSION_TOKEN</code>, <code>AWS_PROFILE</code></td><td>scripts, CI, temporary sessions</td></tr>
+      <tr><td>Web identity token file</td><td><code>AWS_WEB_IDENTITY_TOKEN_FILE</code> + <code>AWS_ROLE_ARN</code></td><td>Kubernetes pods (<a href="16-kubernetes-identity.html">Chapter 16</a>)</td></tr>
+      <tr><td>Config and credentials files</td><td><code>~/.aws/config</code>: SSO profiles, <code>role_arn</code> + <code>source_profile</code>, <code>credential_process</code></td><td>people on laptops</td></tr>
+      <tr><td>Container credentials</td><td><code>AWS_CONTAINER_CREDENTIALS_RELATIVE_URI</code></td><td>ECS tasks</td></tr>
+      <tr><td>Instance metadata</td><td>IMDSv2 on EC2</td><td>EC2 instances (<a href="15-workload-identity.html">Chapter 15</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>When in doubt, <code>aws sts get-caller-identity</code> tells you who you are right now, and works whatever your permissions.</p>
+
+<!-- ======================================================== 8.9 -->
+<h2 class="sec" id="s8-9"><span class="n">8.9</span>Changing roles from the console</h2>
+
+<p>People with IAM users can also <strong>switch role</strong> in the AWS console: the console assumes the role for them, with MFA if the trust policy requires it, and shows the role's name in the top bar. A CLI profile does the same:</p>
+<pre><code>[profile prod-operator]
+role_arn = arn:aws:iam::111122223333:role/prod-operator
+source_profile = eli
+mfa_serial = arn:aws:iam::111122223333:mfa/eli-phone
+role_session_name = eli
+duration_seconds = 3600</code></pre>
+<p>The CLI then asks for a six-digit code before assuming the role. One limit to know: MFA for API and CLI calls accepts only one-time-code devices (an authenticator app or a hardware TOTP token), not FIDO2 security keys or passkeys, which work for console sign-in only. With single sign-on (<a href="12-sso.html">Chapter 12</a>), this whole step disappears: people sign in once, with whatever factor the identity provider requires, choose an account and a permission set, and get a role session directly.</p>
+
+<!-- ======================================================== 8.10 -->
+<h2 class="sec" id="s8-10"><span class="n">8.10</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 8.3 · People, workloads and borrowed identities at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>People</td><td>Identity Center users or federated people; IAM users (legacy)</td><td>Entra ID users</td><td>Google accounts (Cloud Identity / Workspace) or federated identities</td></tr>
+      <tr><td>Workloads</td><td>roles assumed by services</td><td>managed identities; service principals</td><td>service accounts</td></tr>
+      <tr><td>Borrowing an identity</td><td><code>sts:AssumeRole</code> → temporary credentials</td><td>no assume step: roles are assigned to the identity directly; Privileged Identity Management activates roles for a time</td><td>service account impersonation (<code>roles/iam.serviceAccountTokenCreator</code>) → short-lived tokens</td></tr>
+      <tr><td>Long-lived keys to avoid</td><td>IAM user access keys</td><td>service principal client secrets</td><td>service account keys (JSON)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>Azure has no “assume role”: you assign roles directly to a user, group or managed identity at a scope. Temporary elevation comes from <strong>Privileged Identity Management</strong> (PIM), where an eligible person activates a role for a few hours, with justification and optional approval (<a href="14-privileged-access.html">Chapter 14</a>).</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>The closest thing to assuming a role is <strong>impersonating a service account</strong>: a principal with the Token Creator role on a service account can get short-lived tokens for it, for example with <code>gcloud --impersonate-service-account</code>. Avoid downloading service account keys, which are long-lived like IAM user access keys; organisations can forbid them with an organisation policy.</p>
+</div>
+
+<!-- ======================================================== 8.11 -->
+<h2 class="sec" id="s8-11"><span class="n">8.11</span>At Larder: <code>ops</code> becomes a role</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Eli did it in three steps in the first week of December. First, the leavers: he deactivated the access keys of Jasper's and the two contractors' users, removed their console passwords, waited a week to see whether anything broke (nothing did), and deleted the users. Second, he created a role, <code>prod-operator</code>, with <code>ops</code>'s old powers minus IAM changes, a one-hour maximum session, and the trust policy from 8.6, listing the six engineers on the on-call rota (8.6 shows two of them). Each of them registered two MFA devices on their own IAM user, their new security key for the console and an authenticator app for the CLI, and got a CLI profile like the one in 8.9. Third, he removed <code>ops</code>'s password and detached its policies; the user itself goes in <a href="12-sso.html">Chapter 12</a>, along with every other IAM user.</p>
+  <p>The difference shows in CloudTrail. A production change now reads <code>assumed-role/prod-operator/ben</code>, with <code>sourceIdentity: ben</code>, and Ben had to pass MFA to make it. Had the backup change from <a href="01-who-and-what.html">Chapter 1</a> happened this way, the first line of the investigation would have named a person.</p>
+</aside>
+
+<!-- ======================================================== 8.12 -->
+<h2 class="sec" id="s8-12"><span class="n">8.12</span>Lab: create, assume and inspect a role</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 8 · A role, a session and a source identity</p>
+  <p><strong>You'll</strong> create a read-only role, assume it with a source identity, look at the temporary credentials and the session's ARN, find the limits of what the session can do, and see the assumption in CloudTrail. <strong>You need</strong> the AWS CLI v2, signed in to a sandbox account as an administrator (Appendix C), and a Unix shell. <strong>Cost:</strong> free.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Create the role.</strong> It trusts your account (so your administrator permissions decide whether you may assume it) and allows setting a source identity.
+<pre><code>ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+cat &gt; trust.json &lt;&lt;EOF
+{ "Version": "2012-10-17",
+  "Statement": [{ "Effect": "Allow",
+                  "Principal": { "AWS": "arn:aws:iam::$ACCOUNT:root" },
+                  "Action": ["sts:AssumeRole", "sts:SetSourceIdentity"] }] }
+EOF
+aws iam create-role --role-name iam-lab-reader --assume-role-policy-document file://trust.json
+aws iam attach-role-policy --role-name iam-lab-reader \
+  --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess</code></pre>
+  Wait about ten seconds for IAM to catch up.</li>
+  <li><strong>Assume it for 15 minutes</strong> and load the session into your shell:
+<pre><code>read -r AK SK ST EXP &lt;&lt;&lt; "$(aws sts assume-role \
+  --role-arn arn:aws:iam::$ACCOUNT:role/iam-lab-reader \
+  --role-session-name lab-$USER --source-identity $USER --duration-seconds 900 \
+  --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken,Expiration]' --output text)"
+export AWS_ACCESS_KEY_ID=$AK AWS_SECRET_ACCESS_KEY=$SK AWS_SESSION_TOKEN=$ST
+echo "$AK expires $EXP"
+aws sts get-caller-identity --query Arn --output text</code></pre>
+  The key starts with <code>ASIA</code>, expires in 15 minutes, and you are now <code>arn:aws:sts::…:assumed-role/iam-lab-reader/lab-<i>you</i></code>.</li>
+  <li><strong>Find the session's edges.</strong> Predict each result first:
+<pre><code>aws s3 ls                                                      <span class="c"># a</span>
+aws iam list-users                                             <span class="c"># b</span>
+aws sts assume-role --role-arn arn:aws:iam::$ACCOUNT:role/iam-lab-reader \
+  --role-session-name again                                    <span class="c"># c</span></code></pre>
+  a works (the role reads S3). b is denied: nothing in the role's permission policies allows <code>iam:ListUsers</code>, and the error message says so. c is denied too: the trust policy would allow it, but the <em>session's own</em> permissions don't include <code>sts:AssumeRole</code>. Both sides must agree, which is <a href="10-evaluation.html">Chapter 10</a>'s subject.</li>
+  <li><strong>Return to yourself</strong> with <code>unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN</code>, and check with <code>get-caller-identity</code>.</li>
+  <li><strong>Find it in CloudTrail.</strong> After a few minutes (CloudTrail can take up to about 15 to show events):
+<pre><code>aws cloudtrail lookup-events --max-results 5 \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=AssumeRole \
+  --query 'Events[].CloudTrailEvent' --output text |
+python3 -c 'import sys, json
+for line in sys.stdin:
+    e = json.loads(line); p = e.get("requestParameters") or {}
+    print(e["eventTime"], e["userIdentity"].get("arn"), "→", p.get("roleSessionName"), p.get("sourceIdentity"))'</code></pre>
+  You'll see who assumed the role, the session name and the source identity.</li>
+  <li><strong>Clean up.</strong>
+<pre><code>aws iam detach-role-policy --role-name iam-lab-reader \
+  --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+aws iam delete-role --role-name iam-lab-reader
+rm trust.json</code></pre></li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Add the MFA condition from 8.6 to the trust policy, then try step 2 again: it fails until you pass <code>--serial-number</code> and <code>--token-code</code>. (2) Set the role's maximum session duration to two hours with <code>aws iam update-role --max-session-duration 7200</code> and assume it with <code>--duration-seconds 7200</code>.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s8-13"><span class="n">8.13</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>IAM users for people</td><td>Long-lived passwords and keys; leavers keep access.</td><td>Single sign-on with role sessions.</td></tr>
+      <tr><td>Access keys for workloads on AWS</td><td>Keys in config files, images and Git history.</td><td>Service roles (<a href="15-workload-identity.html">Chapter 15</a>).</td></tr>
+      <tr><td>Wide trust (<code>"AWS": "*"</code>, whole accounts, unconditioned providers)</td><td>Strangers or partners' admins can assume the role.</td><td>Named principals plus conditions.</td></tr>
+      <tr><td><code>iam:PassRole</code> on <code>*</code></td><td>Anyone who can launch a service gets any role's permissions.</td><td>Specific role ARNs and <code>iam:PassedToService</code>.</td></tr>
+      <tr><td>Meaningless session names</td><td>CloudTrail can't tell sessions apart.</td><td>Session names and source identity that name the person or job.</td></tr>
+      <tr><td>Long maximum session durations “for convenience”</td><td>Stolen sessions stay useful for hours.</td><td>One hour for powerful roles; longer only where needed.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum8">
+  <h2 class="sec" id="sum8"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li><strong>IAM users</strong> have long-lived passwords and keys (<code>AKIA…</code>) in one account; they're a legacy pattern. <strong>Groups</strong> bundle users' policies and aren't principals.</li>
+    <li>A <strong>role</strong> has no credentials; trusted principals assume it and get temporary ones (<code>ASIA…</code>) from STS.</li>
+    <li>A role = a <strong>trust policy</strong> (who may assume it, when) + <strong>permission policies</strong> (what a session may do).</li>
+    <li>Sessions last 15 minutes to 12 hours (chained ones, one hour); session names and <strong>source identity</strong> keep accountability.</li>
+    <li>Trust specific principals with conditions; an account principal delegates to that account's policies.</li>
+    <li>Services act through service roles; <code>iam:PassRole</code> decides who may hand them one, so restrict it.</li>
+    <li>The CLI and SDKs use the first credentials in the provider chain; <code>get-caller-identity</code> tells you which.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>IAM user</dt><dd>A long-lived identity with a password and/or access keys in one account.</dd>
+    <dt>IAM group</dt><dd>A set of IAM users sharing policies; not a principal.</dd>
+    <dt>IAM role</dt><dd>An identity without credentials, assumed for temporary sessions.</dd>
+    <dt>Trust policy</dt><dd>The resource-based policy on a role that says who may assume it.</dd>
+    <dt>STS</dt><dd>AWS Security Token Service, which issues temporary credentials.</dd>
+    <dt>Role session</dt><dd>A period of use of a role, with its own ARN and temporary credentials.</dd>
+    <dt>Source identity</dt><dd>An unchangeable value recorded for every action in a session and its chained sessions.</dd>
+    <dt>Service role</dt><dd>A role an AWS service assumes to act for you.</dd>
+    <dt><code>iam:PassRole</code></dt><dd>The permission to give a role to an AWS service.</dd>
+    <dt>Credential provider chain</dt><dd>The order in which tools look for credentials.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>You find <code>AKIAQEXAMPLE…</code> in a public repository. What kind of credential is it, and why does that make it worse than <code>ASIA…</code>? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>A long-lived IAM user (or root) access key. It works until deleted, whereas an <code>ASIA</code> key is part of a temporary session that expires within hours. Deactivate it now, then investigate its use in CloudTrail.</p></details>
+    </li>
+    <li>
+      <p>A trust policy names <code>arn:aws:iam::111122223333:root</code>. Can every user in that account assume the role? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Only those whose own identity policies allow <code>sts:AssumeRole</code> on this role. Naming the account delegates the choice to that account's administrators; it doesn't mean the root user, and it doesn't mean everyone.</p></details>
+    </li>
+    <li>
+      <p>Write a trust policy for a role that ECS tasks in your account use. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p><code>{"Effect": "Allow", "Principal": {"Service": "ecs-tasks.amazonaws.com"}, "Action": "sts:AssumeRole", "Condition": {"StringEquals": {"aws:SourceAccount": "111122223333"}}}</code>, optionally with <code>aws:SourceArn</code> limited to your cluster's tasks.</p></details>
+    </li>
+    <li>
+      <p>A developer may create Lambda functions and has <code>iam:PassRole</code> on <code>*</code>. Explain how they could become an administrator. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>They create a function, pass it an existing administrator role, and invoke it: the function's code runs with administrator permissions and can, for example, attach <code>AdministratorAccess</code> to the developer. Restrict PassRole to specific roles.</p></details>
+    </li>
+    <li>
+      <p>Six engineers share a powerful role. Design it so that CloudTrail still shows which of them did what, and nobody can pretend to be another. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Require <code>sts:SetSourceIdentity</code> with <code>sts:SourceIdentity</code> equal to <code>${aws:username}</code> (or the IdP's user attribute with SSO), require MFA, and keep sessions to an hour. Every event then carries a source identity that the person couldn't choose freely.</p></details>
+    </li>
+    <li>
+      <p>Compare how a person gets temporary admin rights on AWS and on Azure. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>AWS: they assume a role (directly or through an SSO permission set) and get a time-limited session. Azure: they're made <em>eligible</em> for a role in Privileged Identity Management and activate it for a few hours, with justification or approval; there's no separate identity to assume.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html">IAM roles</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_control-access_monitor.html">source identity</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_passrole.html">passing roles to services</a>, and <a href="https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html">the SDKs' credential providers</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview">Managed identities</a>. Google Cloud: <a href="https://cloud.google.com/iam/docs/service-account-impersonation">Service account impersonation</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="07-account-root.html">7 · The AWS account and its root user</a></div>
+  <div><span>Next</span><a href="09-policies.html">9 · Reading and writing IAM policies</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 2 · Identity and Access in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

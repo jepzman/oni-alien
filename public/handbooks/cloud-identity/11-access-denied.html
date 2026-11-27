@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Debugging “access denied” · Identity and Access in the Cloud</title>
+<meta name="description" content="A method for every permissions error: read the message, find the call in CloudTrail, work out which policy said no.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 2</a> · <a href="index.html">Identity and Access in the Cloud</a></span><span>Part II · Chapter 11</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part II · IAM on AWS</p>
+  <p class="chno">11</p>
+  <h1>Debugging “access denied”</h1>
+  <p class="promise">Every engineer who works with AWS meets “access denied” weekly. Most people respond by adding permissions until it goes away, which is how <code>s3:*</code> on <code>*</code> ends up in production. This chapter gives you a method instead: find out exactly who asked for exactly what, read what AWS tells you about why it said no, confirm it in CloudTrail, and fix the one policy that's actually responsible.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Follow a seven-step method from an error message to the policy that caused it.</li>
+      <li>Read the reason in an AWS access-denied message, and decode an encoded one.</li>
+      <li>Find denied calls in CloudTrail, including calls one service made for another.</li>
+      <li>Tell real permission problems from look-alikes: expired tokens, wrong accounts, clock skew.</li>
+      <li>Fix a denial with the smallest correct change.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>The evaluation order (<a href="10-evaluation.html">Chapter 10</a>), roles and sessions (<a href="08-users-roles.html">Chapter 8</a>), reading policies (<a href="09-policies.html">Chapter 9</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, Python 3 and AWS CLI, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 11.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>On Tuesday 8 December 2026, Dispatch's new least-privilege policy from <a href="09-policies.html">Chapter 9</a> went to staging for its trial evening. At 18:00, Engine A started planning tomorrow's van routes, read its settings from <code>config/</code> without trouble, and then failed to write a single route plan to <code>routes/</code>: <code>AccessDenied</code>, for every van.</p>
+  <p>The policy plainly allowed <code>s3:PutObject</code> on <code>routes/*</code>. Ben's first suggestion in the chat was to put <code>s3:*</code> back “just for staging”. Eli asked for twenty minutes instead. Section 11.9 shows what he found, and it wasn't in the policy anyone was looking at.</p>
+</aside>
+
+<!-- ======================================================== 11.1 -->
+<h2 class="sec" id="s11-1"><span class="n">11.1</span>A method</h2>
+
+<p class="lead">“Access denied” is a symptom, and like any symptom it has several possible causes. Guessing (adding permissions until it works) usually fixes it by granting far more than needed, and sometimes doesn't fix it at all, because the cause was never a missing permission. Work through it in order:</p>
+
+<ol class="steps">
+  <li><strong>Who am I?</strong> Confirm the exact principal making the call: which role, which session, which account (11.2).</li>
+  <li><strong>What exactly was asked?</strong> The action, the resource ARN, the region. Not “S3”: <code>s3:PutObject</code> on <code>arn:aws:s3:::larder-dispatch-staging/routes/2026-12-09/van-1.json</code>.</li>
+  <li><strong>Read the error</strong> all the way to the end. It increasingly names the type of policy that said no (11.3).</li>
+  <li><strong>Find it in CloudTrail</strong>, including any calls made <em>on your behalf</em> by another service (11.4).</li>
+  <li><strong>Walk the evaluation order</strong> from <a href="10-evaluation.html">Chapter 10</a> for that request: deny, RCP, SCP, resource policy, identity policy, boundary, session policy.</li>
+  <li><strong>Rule out look-alikes</strong>: expired credentials, the wrong account or region, clock skew, a missing object (11.6).</li>
+  <li><strong>Fix the one responsible policy</strong> with the smallest change, validate it, and test the original request again (11.7).</li>
+</ol>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Find out exactly who asked for exactly what, then let AWS tell you which policy said no. Don't add a permission until you know which one is missing.</p>
+</div>
+
+<!-- ======================================================== 11.2 -->
+<h2 class="sec" id="s11-2"><span class="n">11.2</span>Who am I, really?</h2>
+
+<p>A surprising share of permission problems are identity problems: the call wasn't made by who you think. Leftover environment variables from an earlier session, a default profile pointing at another account, a container that picked up the node's role instead of its own (<a href="08-users-roles.html">Chapter 8</a>, 8.8). Always start with:</p>
+<pre><code>aws sts get-caller-identity
+{
+    "UserId": "AROAEXAMPLEID:engine-a-7f9c",
+    "Account": "444455556666",
+    "Arn": "arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c"
+}</code></pre>
+<p>This call always works, whatever your permissions. For code, log the same thing at start-up: the SDK has the same call. Check the account number as carefully as the role name: production and staging roles often share names.</p>
+
+<!-- ======================================================== 11.3 -->
+<h2 class="sec" id="s11-3"><span class="n">11.3</span>Read the error</h2>
+
+<p>AWS's access-denied messages have become much more helpful. Most services now say who was denied, what they tried, on which resource, and which <em>type</em> of policy is responsible:</p>
+
+<figure class="wide" id="fig11-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 200" role="img" aria-labelledby="fig11-1-t fig11-1-d">
+      <title id="fig11-1-t">The parts of an AWS access-denied message</title>
+      <desc id="fig11-1-d">The message reads: User: arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c is not authorized to perform: kms:GenerateDataKey on resource: arn:aws:kms:eu-central-1:444455556666:key/1234abcd… because no identity-based policy allows the kms:GenerateDataKey action. Its parts are: who was denied, the role session; what action, kms:GenerateDataKey, which is a KMS action, not S3; on which resource, a KMS key; and why, no identity-based policy allows it, which says where to look.</desc>
+      <rect class="priv" x="12" y="14" width="736" height="104" rx="6"/>
+      <text class="t-mono" x="24" y="38">User: <tspan class="t-accent">arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c</tspan></text>
+      <text class="t-mono" x="24" y="60">is not authorized to perform: <tspan class="t-accent">kms:GenerateDataKey</tspan></text>
+      <text class="t-mono" x="24" y="82">on resource: <tspan class="t-accent">arn:aws:kms:eu-central-1:444455556666:key/1234abcd-…</tspan></text>
+      <text class="t-mono" x="24" y="104"><tspan class="t-warn">because no identity-based policy allows</tspan> the kms:GenerateDataKey action</text>
+      <rect class="node" x="12" y="134" width="172" height="52" rx="4"/><text class="t-label" x="98" y="156" text-anchor="middle">who</text><text class="t-small" x="98" y="174" text-anchor="middle">this role, this session</text>
+      <rect class="node" x="200" y="134" width="172" height="52" rx="4"/><text class="t-label" x="286" y="156" text-anchor="middle">what</text><text class="t-small" x="286" y="174" text-anchor="middle">a KMS action, not S3</text>
+      <rect class="node" x="388" y="134" width="172" height="52" rx="4"/><text class="t-label" x="474" y="156" text-anchor="middle">on what</text><text class="t-small" x="474" y="174" text-anchor="middle">a KMS key</text>
+      <rect class="node-accent" x="576" y="134" width="172" height="52" rx="4"/><text class="t-label on-accent" x="662" y="156" text-anchor="middle">why</text><text class="t-small on-accent" x="662" y="174" text-anchor="middle">where to look</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 11.1</b> An access-denied message read in four parts. The last part names the type of policy that said no, which tells you where to look.</figcaption>
+</figure>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 11.1 · What the reason says, and where to look</caption>
+    <thead><tr><th>The message says</th><th>Look at</th></tr></thead>
+    <tbody>
+      <tr><td>because no identity-based policy allows</td><td>the user's or role's own policies (and its groups')</td></tr>
+      <tr><td>with an explicit deny in an identity-based policy</td><td>a <code>Deny</code> statement attached to the identity, such as a guardrail (<a href="10-evaluation.html">Chapter 10</a>)</td></tr>
+      <tr><td>because no resource-based policy allows / with an explicit deny in a resource-based policy</td><td>the bucket, key, queue or trust policy; for cross-account calls, the other account's side</td></tr>
+      <tr><td>because no permissions boundary allows</td><td>the identity's permissions boundary</td></tr>
+      <tr><td>because no session policy allows</td><td>whatever created the session: a broker, a federation setup, an SSO permission set</td></tr>
+      <tr><td>…service control policy / …resource control policy</td><td>the organisation's guardrails; ask the platform team (<a href="20-organizations.html">Chapter 20</a>)</td></tr>
+      <tr><td>…VPC endpoint policy</td><td>the policy on the VPC endpoint the call went through (Handbook 1, Chapter 12)</td></tr>
+      <tr><td>a bare <code>Access Denied</code></td><td>common from S3 data calls: bucket policy, Block Public Access, object ownership, KMS, or a missing object (11.6)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Some services, notably EC2, return an <strong>encoded authorization failure message</strong> instead of the full detail, because it can reveal information about your policies. Someone with <code>sts:DecodeAuthorizationMessage</code> can decode it:</p>
+<pre><code>aws sts decode-authorization-message --encoded-message "$MSG" \
+  --query DecodedMessage --output text | python3 -m json.tool</code></pre>
+<p>The result shows whether the request was allowed, whether an explicit deny matched, any matched statements, and the request's full context: principal, action, resource and condition keys.</p>
+
+<!-- ======================================================== 11.4 -->
+<h2 class="sec" id="s11-4"><span class="n">11.4</span>Find it in CloudTrail</h2>
+
+<p><span class="term">CloudTrail</span> records API calls made in your account: who, what, when, from where, and whether it failed. Denied calls are recorded with an <code>errorCode</code> such as <code>AccessDenied</code> or <code>Client.UnauthorizedOperation</code> and, usually, the same <code>errorMessage</code> the caller saw. What to know before you go looking:</p>
+<ul>
+  <li><strong>Management events</strong> (creating, changing and deleting resources, and many reads) are recorded by default and searchable for 90 days in the console's <em>Event history</em> or with <code>aws cloudtrail lookup-events</code>, per region.</li>
+  <li><strong>Data events</strong> (S3 object reads and writes, Lambda invocations, DynamoDB item calls) are <em>not</em> recorded unless a trail is configured for them, because there are so many. Larder records S3 data events for its production buckets (<a href="23-audit-detect.html">Chapter 23</a>).</li>
+  <li><strong>Global services</strong> such as IAM and STS log in <code>us-east-1</code> (or the region of the STS endpoint used).</li>
+  <li><strong>Events appear after a delay</strong>, typically a few minutes and occasionally up to about 15.</li>
+</ul>
+
+<p>The most useful field for puzzles like Larder's is <code>userIdentity.invokedBy</code>. When S3 needs a KMS key to encrypt an object you upload, S3 calls KMS <em>as you</em>, and CloudTrail records that KMS call with <code>invokedBy: s3.amazonaws.com</code>. If that call is denied, your upload fails with an error from S3, but the cause lives in a different service's event.</p>
+
+<!-- ======================================================== 11.5 -->
+<h2 class="sec" id="s11-5"><span class="n">11.5</span>Tools that walk the flowchart for you</h2>
+
+<ul>
+  <li><strong>IAM policy simulator</strong> (<code>aws iam simulate-principal-policy</code>, or the console): evaluates an existing user's or role's policies for given actions, resources and context keys, and says which statement allowed or denied. It covers identity policies, boundaries and SCPs; resource policies only if you pass them in.</li>
+  <li><strong>IAM Access Analyzer policy validation</strong>: catches impossible policies before you blame AWS: misspelled actions, actions that don't support the resource you named (<a href="09-policies.html">Chapter 9</a>).</li>
+  <li><strong>Last accessed information</strong> (in IAM's <em>Access Advisor</em> tab): shows which services a role has actually used, which helps when narrowing a policy without breaking it.</li>
+</ul>
+
+<!-- ======================================================== 11.6 -->
+<h2 class="sec" id="s11-6"><span class="n">11.6</span>It isn't always a permission</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 11.2 · Errors that look like permission problems</caption>
+    <thead><tr><th>You see</th><th>Usually means</th><th>Check</th></tr></thead>
+    <tbody>
+      <tr><td><code>ExpiredToken</code></td><td>the session ended</td><td>sign in again; for long jobs, refresh credentials (<a href="08-users-roles.html">Chapter 8</a>)</td></tr>
+      <tr><td><code>InvalidClientTokenId</code></td><td>the access key doesn't exist (deleted, mistyped, or from another partition)</td><td><code>get-caller-identity</code>; which credentials the chain found</td></tr>
+      <tr><td><code>SignatureDoesNotMatch</code></td><td>wrong secret key, or the request was altered</td><td>the secret that goes with this key ID; proxies rewriting requests</td></tr>
+      <tr><td><code>RequestTimeTooSkewed</code> or “signature expired”</td><td>the machine's clock is more than about 15 minutes off</td><td>time sync on the host</td></tr>
+      <tr><td>S3 <code>AccessDenied</code> on <code>GetObject</code></td><td>possibly a missing object, if you lack <code>s3:ListBucket</code> (<a href="09-policies.html">Chapter 9</a>, 9.4)</td><td>the exact key; list the prefix with someone who can</td></tr>
+      <tr><td>“not found” for something that exists</td><td>wrong region or wrong account</td><td><code>--region</code>, <code>AWS_REGION</code>, the account in <code>get-caller-identity</code></td></tr>
+      <tr><td><code>AccessDeniedException</code> from KMS</td><td>the key's own policy, not IAM</td><td>the key policy and grants (<a href="18-secrets-keys.html">Chapter 18</a>)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 11.7 -->
+<h2 class="sec" id="s11-7"><span class="n">11.7</span>Fixing it well</h2>
+
+<p>Once you know which policy said no, the fix is usually one statement. Keep it small:</p>
+<ul>
+  <li><strong>Add the exact action on the exact resource</strong>, not a wildcard. If the message says <code>kms:GenerateDataKey</code> on one key, that's what to allow, on that key.</li>
+  <li><strong>Fix it where it belongs.</strong> If a guardrail blocked something legitimate, change the guardrail's exception deliberately, or use the approved path (such as Larder's <code>db-change</code> role), rather than removing the guardrail.</li>
+  <li><strong>Sometimes the fix isn't a permission at all.</strong> A staging setting that doesn't match production, a request to the wrong region, a missing object.</li>
+  <li><strong>Validate, then repeat the original request.</strong> Also try one request that should still fail, so you know you didn't open more than you meant to.</li>
+  <li><strong>Write it down</strong> in the commit message or ticket: which call, which reason, which statement changed. The next person will thank you.</li>
+</ul>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: “just for now” wildcards</p>
+  <p>A wildcard added to make an error go away under pressure is almost never removed: the error is gone, so nobody looks again. Larder's <code>s3:*</code> on <code>*</code> started exactly that way in April. If you must unblock something urgently, add the narrowest statement you can, with a <code>Sid</code> that says it's temporary and a ticket to replace it.</p>
+</div>
+
+<!-- ======================================================== 11.8 -->
+<h2 class="sec" id="s11-8"><span class="n">11.8</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 11.3 · Debugging denied access at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>The error</td><td><code>AccessDenied</code>, with principal, action, resource and policy type</td><td><code>AuthorizationFailed</code>: the client's object ID, the action (<code>Microsoft.Storage/…/read</code>) and the scope</td><td><code>403 PERMISSION_DENIED</code>, naming the missing permission (<code>storage.objects.get</code>)</td></tr>
+      <tr><td>The log</td><td>CloudTrail (data events optional)</td><td>Activity log for management; resource logs for data</td><td>Cloud Audit Logs (Data Access logs must be enabled)</td></tr>
+      <tr><td>Explaining a decision</td><td>policy simulator; decoded authorization messages</td><td><em>Check access</em> in the portal: a principal's role assignments at a scope</td><td>Policy Troubleshooter: why a principal does or doesn't have a permission, including deny policies</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>Role assignments can take several minutes to take effect, and a cached token may not show a new group membership until it's refreshed. When a correct-looking assignment “doesn't work”, sign out and in again (or get a new token) before changing anything. For storage data, remember that management roles such as Contributor don't include data access: you need a data role such as Storage Blob Data Reader.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>Google's errors name the exact permission that was missing, which makes the first step easy. <strong>Policy Troubleshooter</strong> then shows every binding on the resource and its ancestors that could grant it, any deny policy that blocks it, and whether conditions matched. Like AWS, it can only explain what's in IAM; organisation policy constraints and VPC Service Controls produce their own, differently worded errors.</p>
+</div>
+
+<!-- ======================================================== 11.9 -->
+<h2 class="sec" id="s11-9"><span class="n">11.9</span>At Larder: the error was in another service</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Eli's twenty minutes went like this. Engine A's logs showed the identity was right (<code>dispatch-task</code>, in the staging account). The upload's error ended with the reason in Figure 11.1: the denied action was <code>kms:GenerateDataKey</code>, not anything in S3. CloudTrail in the staging account confirmed it: one denied KMS call per van, each <code>invokedBy: s3.amazonaws.com</code>. The staging bucket, it turned out, had been set in 2025 to encrypt new objects by default with a customer managed KMS key, during an experiment nobody remembered. Production's bucket uses S3-managed keys. The <code>config/</code> files read fine because the deploy pipeline uploads them with S3-managed encryption explicitly; Engine A's uploads took the bucket's default.</p>
+  <p>So the policy was right, and staging was wrong. Eli changed the staging bucket's default encryption to match production, the team re-ran the evening's planning, and every route plan was written. Ben's <code>s3:*</code> was never needed. Two follow-ups went on the list: compare staging and production bucket settings automatically, and decide properly whether Larder wants customer managed keys at all (<a href="18-secrets-keys.html">Chapter 18</a>), in which case Dispatch's policy will need <code>kms:GenerateDataKey</code> and <code>kms:Decrypt</code> on that one key.</p>
+</aside>
+
+<!-- ======================================================== 11.10 -->
+<h2 class="sec" id="s11-10"><span class="n">11.10</span>Lab: from error to cause</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 11 · Find, read and decode denials</p>
+  <p><strong>You'll</strong> run a script that finds denied calls in CloudTrail events and says why, first on Larder's staging evening, then on denials you cause yourself; decode an encoded EC2 message; and ask the policy simulator. <strong>You need</strong> Python 3; for steps 3–7, the AWS CLI v2 signed in to a sandbox account as an administrator, and the role from Lab 8. <strong>Cost:</strong> free; no instances are created (the EC2 call is a dry run).</p>
+</div>
+
+<p class="code-title"><span>denied.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># denied.py · find the denied calls in CloudTrail events and say why</span>
+<span class="k">import</span> json, sys
+<span class="k">from</span> collections <span class="k">import</span> Counter
+
+<span class="k">def</span> events(path):
+    text = open(path).read().strip()
+    <span class="k">if</span> text.startswith(<span class="s">"["</span>):                             <span class="c"># aws cloudtrail lookup-events ... --output json</span>
+        <span class="k">return</span> [json.loads(x) <span class="k">if</span> isinstance(x, str) <span class="k">else</span> x <span class="k">for</span> x <span class="k">in</span> json.loads(text)]
+    <span class="k">if</span> <span class="s">'"Records"'</span> <span class="k">in</span> text[:200]:
+        <span class="k">return</span> json.loads(text)[<span class="s">"Records"</span>]               <span class="c"># a CloudTrail log file from S3</span>
+    <span class="k">return</span> [json.loads(line) <span class="k">for</span> line <span class="k">in</span> text.splitlines() <span class="k">if</span> line.strip()]   <span class="c"># one event per line</span>
+
+<span class="k">def</span> who(e):
+    u = e[<span class="s">"userIdentity"</span>]
+    name = u.get(<span class="s">"sessionContext"</span>, {}).get(<span class="s">"sessionIssuer"</span>, {}).get(<span class="s">"arn"</span>) <span class="k">or</span> u.get(<span class="s">"arn"</span>, u.get(<span class="s">"type"</span>))
+    <span class="k">return</span> name + (f<span class="s">" (via {u['invokedBy']})"</span> <span class="k">if</span> <span class="s">"invokedBy"</span> <span class="k">in</span> u <span class="k">else</span> <span class="s">""</span>)
+
+<span class="k">def</span> why(e):
+    msg = e.get(<span class="s">"errorMessage"</span>, <span class="s">""</span>)
+    <span class="k">if</span> <span class="s">" because "</span> <span class="k">in</span> msg:
+        <span class="k">return</span> msg.split(<span class="s">" because "</span>, 1)[1].split(<span class="s">". Encoded"</span>)[0]
+    <span class="k">if</span> <span class="s">" with an explicit deny "</span> <span class="k">in</span> msg:
+        <span class="k">return</span> <span class="s">"explicit deny "</span> + msg.split(<span class="s">" with an explicit deny "</span>, 1)[1]
+    <span class="k">if</span> <span class="s">"Encoded authorization failure message"</span> <span class="k">in</span> msg:
+        <span class="k">return</span> <span class="s">"encoded: run aws sts decode-authorization-message"</span>
+    <span class="k">return</span> msg <span class="k">or</span> <span class="s">"(no message)"</span>
+
+DENIED = (<span class="s">"AccessDenied"</span>, <span class="s">"UnauthorizedOperation"</span>, <span class="s">"Forbidden"</span>)
+counts, first = Counter(), {}
+<span class="k">for</span> e <span class="k">in</span> events(sys.argv[1] <span class="k">if</span> len(sys.argv) &gt; 1 <span class="k">else</span> <span class="s">"sample-events.jsonl"</span>):
+    <span class="k">if not</span> any(d <span class="k">in</span> e.get(<span class="s">"errorCode"</span>, <span class="s">""</span>) <span class="k">for</span> d <span class="k">in</span> DENIED):
+        <span class="k">continue</span>
+    key = (who(e), f<span class="s">"{e['eventSource'].split('.')[0]}:{e['eventName']}"</span>, why(e))
+    counts[key] += 1
+    first.setdefault(key, e[<span class="s">"eventTime"</span>])
+
+<span class="k">for</span> (principal, action, reason), n <span class="k">in</span> sorted(counts.items(), key=<span class="k">lambda</span> kv: first[kv[0]]):
+    print(f<span class="s">"{first[(principal, action, reason)]}  {n}×  {action}\n    who: {principal}\n    why: {reason}"</span>)</code></pre>
+
+<ol class="steps">
+  <li><strong>Save Larder's staging evening</strong> as <code>sample-events.jsonl</code>: five events from the staging account, one per line, trimmed to the fields the script reads.
+<pre><code>{"userIdentity": {"arn": "arn:aws:sts::444455556666:assumed-role/team-tool/dee", "sessionContext": {"sessionIssuer": {"arn": "arn:aws:iam::444455556666:role/team-tool"}}}, "eventTime": "2026-12-08T15:12:40Z", "eventSource": "ec2.amazonaws.com", "eventName": "RunInstances", "errorCode": "Client.UnauthorizedOperation", "errorMessage": "You are not authorized to perform this operation. User: arn:aws:sts::444455556666:assumed-role/team-tool/dee is not authorized to perform: ec2:RunInstances on resource: arn:aws:ec2:eu-central-1:444455556666:instance/* because no permissions boundary allows the ec2:RunInstances action. Encoded authorization failure message: Ws3Lb8EXAMPLE"}
+{"userIdentity": {"arn": "arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c", "sessionContext": {"sessionIssuer": {"arn": "arn:aws:iam::444455556666:role/dispatch-task"}}}, "eventTime": "2026-12-08T18:00:02Z", "eventSource": "s3.amazonaws.com", "eventName": "GetObject"}
+{"userIdentity": {"arn": "arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c", "sessionContext": {"sessionIssuer": {"arn": "arn:aws:iam::444455556666:role/dispatch-task"}}, "invokedBy": "s3.amazonaws.com"}, "eventTime": "2026-12-08T18:00:04Z", "eventSource": "kms.amazonaws.com", "eventName": "GenerateDataKey", "errorCode": "AccessDenied", "errorMessage": "User: arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c is not authorized to perform: kms:GenerateDataKey on resource: arn:aws:kms:eu-central-1:444455556666:key/1234abcd-12ab-34cd-56ef-1234567890ab because no identity-based policy allows the kms:GenerateDataKey action"}
+{"userIdentity": {"arn": "arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c", "sessionContext": {"sessionIssuer": {"arn": "arn:aws:iam::444455556666:role/dispatch-task"}}, "invokedBy": "s3.amazonaws.com"}, "eventTime": "2026-12-08T18:00:05Z", "eventSource": "kms.amazonaws.com", "eventName": "GenerateDataKey", "errorCode": "AccessDenied", "errorMessage": "User: arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c is not authorized to perform: kms:GenerateDataKey on resource: arn:aws:kms:eu-central-1:444455556666:key/1234abcd-12ab-34cd-56ef-1234567890ab because no identity-based policy allows the kms:GenerateDataKey action"}
+{"userIdentity": {"arn": "arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c", "sessionContext": {"sessionIssuer": {"arn": "arn:aws:iam::444455556666:role/dispatch-task"}}, "invokedBy": "s3.amazonaws.com"}, "eventTime": "2026-12-08T18:00:07Z", "eventSource": "kms.amazonaws.com", "eventName": "GenerateDataKey", "errorCode": "AccessDenied", "errorMessage": "User: arn:aws:sts::444455556666:assumed-role/dispatch-task/engine-a-7f9c is not authorized to perform: kms:GenerateDataKey on resource: arn:aws:kms:eu-central-1:444455556666:key/1234abcd-12ab-34cd-56ef-1234567890ab because no identity-based policy allows the kms:GenerateDataKey action"}</code></pre></li>
+  <li><strong>Run it</strong> with <code>python3 denied.py</code>:
+<pre><code>2026-12-08T15:12:40Z  1×  ec2:RunInstances
+    who: arn:aws:iam::444455556666:role/team-tool
+    why: no permissions boundary allows the ec2:RunInstances action
+2026-12-08T18:00:04Z  3×  kms:GenerateDataKey
+    who: arn:aws:iam::444455556666:role/dispatch-task (via s3.amazonaws.com)
+    why: no identity-based policy allows the kms:GenerateDataKey action</code></pre>
+  The successful <code>GetObject</code> is skipped. Three uploads become one line, attributed to Dispatch's role but made <em>via S3</em>: Eli's answer in one glance. The other line is Dee, earlier that afternoon, discovering the <code>team-boundary</code> from <a href="10-evaluation.html">Chapter 10</a> doesn't include EC2.</li>
+  <li><strong>Cause denials of your own.</strong> Recreate Lab 8's <code>iam-lab-reader</code> role (S3 read-only) and assume it, as in Lab 8, steps 1–2. As the role, run:
+<pre><code>aws ec2 describe-vpcs                                  <span class="c"># denied, with a readable reason</span>
+MSG=$(aws ec2 run-instances --dry-run --instance-type t3.micro \
+  --image-id resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
+  2&gt;&amp;1 | sed -n 's/.*Encoded authorization failure message: //p')
+echo "${MSG:0:60}…"</code></pre></li>
+  <li><strong>Decode the message</strong> as yourself (unset the role's variables first, since the role can't decode):
+<pre><code>unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+aws sts decode-authorization-message --encoded-message "$MSG" \
+  --query DecodedMessage --output text | python3 -m json.tool | head -30</code></pre>
+  Find <code>"allowed": false</code>, <code>"explicitDeny": false</code> (an implicit deny: nothing allowed it), and the action and resource in <code>context</code>.</li>
+  <li><strong>Find your denial in CloudTrail</strong>, after a few minutes:
+<pre><code>aws cloudtrail lookup-events --max-results 20 \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=DescribeVpcs \
+  --query 'Events[].CloudTrailEvent' --output json &gt; mine.json
+python3 denied.py mine.json</code></pre></li>
+  <li><strong>Ask the simulator</strong> what the role may do:
+<pre><code>ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+aws iam simulate-principal-policy \
+  --policy-source-arn arn:aws:iam::$ACCOUNT:role/iam-lab-reader \
+  --action-names ec2:DescribeVpcs s3:ListAllMyBuckets \
+  --query 'EvaluationResults[].[EvalActionName, EvalDecision]' --output text</code></pre>
+  Expect <code>implicitDeny</code> for EC2 and <code>allowed</code> for S3.</li>
+  <li><strong>Clean up</strong> the role as in Lab 8, step 6, and delete <code>mine.json</code>.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Extend <code>denied.py</code> to print <code>sourceIPAddress</code> and the session name, then run it over a day of real events from an account you work in (<code>lookup-events</code> with <code>--start-time</code>). Denials you don't recognise are worth a look: they're either a broken workload or someone exploring.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s11-11"><span class="n">11.11</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Adding wildcards until it works</td><td>Over-broad permissions that never get removed.</td><td>Find the exact action, resource and policy type first.</td></tr>
+      <tr><td>Not checking who's calling</td><td>Hours spent fixing the wrong role, or the wrong account.</td><td><code>aws sts get-caller-identity</code>, every time.</td></tr>
+      <tr><td>Stopping at “AccessDenied”</td><td>The reason at the end of the message is missed.</td><td>Read the whole message; decode encoded ones.</td></tr>
+      <tr><td>Looking only at the service you called</td><td>Denials in KMS, STS or another service on your behalf are missed.</td><td>Search CloudTrail for <code>invokedBy</code> and related services.</td></tr>
+      <tr><td>Expecting S3 object calls in Event history</td><td>“It's not in CloudTrail”, when data events were never recorded.</td><td>A trail with data events for important buckets.</td></tr>
+      <tr><td>Staging that differs from production</td><td>Denials (or successes) that don't happen in production.</td><td>Keep environments' settings the same, and compare them automatically.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum11">
+  <h2 class="sec" id="sum11"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Work in order: <strong>who, what, read the error, CloudTrail, the evaluation order, look-alikes, smallest fix</strong>.</li>
+    <li><code>aws sts get-caller-identity</code> settles “who am I?”, whatever your permissions.</li>
+    <li>Access-denied messages name the principal, action, resource and usually the <strong>type of policy</strong> responsible; EC2's encoded messages can be decoded.</li>
+    <li>CloudTrail records denials; data events need a trail; <code>invokedBy</code> reveals calls made for you by other services.</li>
+    <li>Expired tokens, wrong accounts or regions, clock skew and missing objects look like permission problems.</li>
+    <li>Fix the one responsible policy with the narrowest change, and test both what should and shouldn't work.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>CloudTrail</dt><dd>AWS's record of API calls in an account.</dd>
+    <dt>Management event</dt><dd>A control-plane call (create, change, delete, many reads); recorded by default.</dd>
+    <dt>Data event</dt><dd>A data-plane call such as S3 object access; recorded only if a trail asks for it.</dd>
+    <dt><code>invokedBy</code></dt><dd>The service that made a call on a principal's behalf.</dd>
+    <dt>Encoded authorization message</dt><dd>A denial's details in encoded form, decoded with <code>sts:DecodeAuthorizationMessage</code>.</dd>
+    <dt>Policy simulator</dt><dd>AWS's tool for evaluating a principal's policies against chosen requests.</dd>
+    <dt>Last accessed information</dt><dd>Which services and actions an identity has actually used, and when.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>What's the first command to run when a script gets “access denied”, and why? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p><code>aws sts get-caller-identity</code> (or its SDK equivalent from inside the script): it shows which principal, in which account, is really making the calls, and works regardless of permissions.</p></details>
+    </li>
+    <li>
+      <p>An error ends “with an explicit deny in a service control policy”. Will adding the action to the role's policy help? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>No. An explicit deny wins over any allow, and an SCP is set by the organisation. The fix is to use an approved path or ask the platform team for a deliberate exception.</p></details>
+    </li>
+    <li>
+      <p>An upload to S3 fails with “access denied”, and the role clearly has <code>s3:PutObject</code> on the prefix. Name two causes outside the role's S3 permissions. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The bucket encrypts with a customer managed KMS key, and the role lacks <code>kms:GenerateDataKey</code> on it (or the key policy doesn't allow it); a bucket policy, VPC endpoint policy, SCP or RCP denies the request; or the request comes from a different identity or account than expected.</p></details>
+    </li>
+    <li>
+      <p>You can't find a denied S3 <code>GetObject</code> in CloudTrail's Event history. Why might that be? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p><code>GetObject</code> is a data event, which isn't in Event history and is recorded only by a trail configured for S3 data events on that bucket. It might also simply not have arrived yet, or be in another region's history.</p></details>
+    </li>
+    <li>
+      <p>Design a weekly report that would have caught Larder's staging problem before the trial evening. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Run a denial summary like <code>denied.py</code> over each account's CloudTrail events daily and post new principal/action/reason combinations to the team channel; and compare key settings (bucket encryption, public access, versioning) between staging and production buckets, flagging differences.</p></details>
+    </li>
+    <li>
+      <p>Compare what you'd look at first for a denied call on AWS and on Google Cloud. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>AWS: the error's reason (which policy type) and the CloudTrail event, then the simulator. Google Cloud: the missing permission named in the error, then Policy Troubleshooter for that principal, permission and resource, which shows bindings and deny policies.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_access-denied.html">Troubleshoot access denied error messages</a>, <a href="https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-event-reference-user-identity.html">CloudTrail userIdentity element</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_testing-policies.html">IAM policy simulator</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/role-based-access-control/troubleshooting">Troubleshoot Azure RBAC</a>. Google Cloud: <a href="https://cloud.google.com/policy-intelligence/docs/troubleshoot-access">Policy Troubleshooter</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="10-evaluation.html">10 · How AWS decides</a></div>
+  <div><span>Next</span><a href="12-sso.html">12 · Single sign-on with IAM Identity Center</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 2 · Identity and Access in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

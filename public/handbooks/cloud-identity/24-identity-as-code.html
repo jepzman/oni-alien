@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Identity as code and least privilege at scale · Identity and Access in the Cloud</title>
+<meta name="description" content="Managing roles, permission sets and SCPs in Terraform, generating policies from real activity, and testing them in CI.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 2</a> · <a href="index.html">Identity and Access in the Cloud</a></span><span>Part VI · Chapter 24</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part VI · Running it</p>
+  <p class="chno">24</p>
+  <h1>Identity as code and least privilege at scale</h1>
+  <p class="promise">By now you've written trust policies, permission sets, SCPs and perimeters. Changing any of them in a console works fine until there are a hundred of them. Then nobody can say what changed, who approved it, or whether the console still matches what was agreed. This chapter puts identity in a repository: Terraform for every role and guardrail, checks that fail a pull request before a bad policy ships, and ways to keep shrinking permissions to what is actually used.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Manage permission sets, assignments, roles and SCPs in Terraform.</li>
+      <li>Build a pipeline that lints, validates and checks every policy change.</li>
+      <li>Use IAM Access Analyzer's custom checks to stop new access you didn't intend.</li>
+      <li>Narrow existing policies using generated policies and unused-access findings.</li>
+      <li>Set up review rules so that changing who can get in needs two people.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Policies and evaluation (<a href="09-policies.html">Chapters 9</a> and <a href="10-evaluation.html">10</a>); permission sets (<a href="12-sso.html">Chapter 12</a>).</li>
+      <li>CI/CD with OIDC (<a href="17-ci-cd-oidc.html">Chapter 17</a>); SCPs (<a href="20-organizations.html">Chapter 20</a>).</li>
+      <li>Some Terraform helps; the snippets are short.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, Python 3; optional AWS step, a few cents</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 24.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>In December 2027 Lena, preparing for the ISO 27001 audit, asked Eli a simple question: <em>list every change in 2027 to who could reach production, and who approved each one.</em> It took him two days. Permission sets had been made in the console in January; SCPs had been pasted into the console in June; roles were spread across service repositories' CloudFormation, the Terraform for Handbook 1's network, and hand-made fixes. CloudTrail recorded <em>what</em> changed, but approvals lived in chat threads and tickets, when they existed.</p>
+  <p>The first watch list day (<a href="23-audit-detect.html">Chapter 23</a>) had made the same point from the other side: Eli's own assignment outside TEAM was a well-meant fix that nobody had reviewed. And the reporting team had just asked for a role to sync exports to their warehouse, with a policy they'd written themselves. Who would check it, and how?</p>
+</aside>
+
+<!-- ======================================================== 24.1 -->
+<h2 class="sec" id="s24-1"><span class="n">24.1</span>Why identity belongs in a repository</h2>
+
+<p class="lead">Infrastructure as code is old news for servers and networks. For identity it matters more, because identity changes are small, frequent and powerful: one line in a trust policy can let a whole other account in. A repository gives you:</p>
+<ul>
+  <li><strong>One source of truth.</strong> What's in <code>main</code> is what should exist. Anything else is drift.</li>
+  <li><strong>Review before change.</strong> Every change is a pull request, with a named author, named approvers and a reason.</li>
+  <li><strong>History you can answer audits from.</strong> Lena's question becomes <code>git log</code> on a few folders.</li>
+  <li><strong>Checks that run every time.</strong> A pipeline catches what reviewers miss at five on a Friday.</li>
+  <li><strong>Reuse.</strong> A module for “a role that GitHub deploys with” encodes <a href="17-ci-cd-oidc.html">Chapter 17</a>'s conditions once.</li>
+</ul>
+<p>Terraform, CloudFormation, the CDK, Pulumi: the choice matters less than having one. Larder already used Terraform for its network (Handbook 1), so identity went there too.</p>
+
+<!-- ======================================================== 24.2 -->
+<h2 class="sec" id="s24-2"><span class="n">24.2</span>What goes in, and how it's laid out</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 24.1 · The <code>larder-identity</code> repository</caption>
+    <thead><tr><th>Folder</th><th>Contains</th><th>Applied by</th></tr></thead>
+    <tbody>
+      <tr><td><code>organization/</code></td><td>OUs, SCPs, RCPs, delegated administrators</td><td>role in the management account</td></tr>
+      <tr><td><code>identity-center/</code></td><td>permission sets and group assignments (not users: those come from the IdP by SCIM)</td><td>role in the management account</td></tr>
+      <tr><td><code>accounts/&lt;name&gt;/</code></td><td>workload roles, OIDC providers and CI roles, cross-account roles, the account baseline</td><td>role in each account</td></tr>
+      <tr><td><code>modules/</code></td><td>reusable shapes: <code>github-deploy-role</code>, <code>task-role</code>, <code>vendor-role</code></td><td>(used by the others)</td></tr>
+      <tr><td><code>policies/</code></td><td>never-grant list and lint rules used by CI</td><td>(read by CI)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>What stays out: people (the IdP owns them, <a href="13-lifecycle.html">Chapter 13</a>); temporary elevation (TEAM grants and removes assignments by design, <a href="14-privileged-access.html">Chapter 14</a>); and application roles' policies that live with their service, if you prefer. Then the service repository owns the policy and the identity repository owns the module and the checks. Either works if one place is clearly in charge of each resource.</p>
+
+<p>A permission set and its assignment to a group, as Terraform:</p>
+
+<p class="code-title"><span>identity-center/prod-operator.tf</span><span>Terraform</span></p>
+<pre><code><span class="k">resource</span> <span class="s">"aws_ssoadmin_permission_set"</span> <span class="s">"prod_operator"</span> {
+  name             = <span class="s">"ProdOperator"</span>
+  instance_arn     = local.sso_instance_arn
+  session_duration = <span class="s">"PT1H"</span>
+}
+
+<span class="k">resource</span> <span class="s">"aws_ssoadmin_permission_set_inline_policy"</span> <span class="s">"prod_operator"</span> {
+  instance_arn       = local.sso_instance_arn
+  permission_set_arn = aws_ssoadmin_permission_set.prod_operator.arn
+  inline_policy      = file(<span class="s">"${path.module}/policies/prod-operator.json"</span>)
+}
+
+<span class="c"># Who may request it: TEAM creates and removes the actual assignments (Chapter 14).</span>
+<span class="c"># Standing assignments are only for groups, never for one person.</span>
+<span class="k">resource</span> <span class="s">"aws_ssoadmin_account_assignment"</span> <span class="s">"viewonly_prod"</span> {
+  instance_arn       = local.sso_instance_arn
+  permission_set_arn = aws_ssoadmin_permission_set.view_only.arn
+  principal_type     = <span class="s">"GROUP"</span>
+  principal_id       = local.groups[<span class="s">"engineering"</span>]
+  target_type        = <span class="s">"AWS_ACCOUNT"</span>
+  target_id          = local.accounts[<span class="s">"prod"</span>]
+}</code></pre>
+
+<p>A workload role from a module, so that every task role looks the same and carries its <code>team</code> tag (<a href="09-policies.html">Chapter 9</a>) and boundary:</p>
+
+<p class="code-title"><span>accounts/prod/dispatch.tf</span><span>Terraform</span></p>
+<pre><code><span class="k">module</span> <span class="s">"dispatch_task"</span> {
+  source = <span class="s">"../../modules/task-role"</span>
+  name   = <span class="s">"dispatch-task"</span>
+  team   = <span class="s">"dispatch"</span>
+  policy = file(<span class="s">"policies/dispatch-task.json"</span>)    <span class="c"># Chapter 9's four statements</span>
+}</code></pre>
+
+<p>The snippets show the shape; they haven't been applied as printed, so check argument names against the provider version you use. Keeping policy JSON in its own files rather than in Terraform's <code>jsonencode</code> or <code>aws_iam_policy_document</code> has one big advantage: the checks in 24.4 can read the same files without running Terraform.</p>
+
+<!-- ======================================================== 24.3 -->
+<h2 class="sec" id="s24-3"><span class="n">24.3</span>Moving existing resources in</h2>
+
+<p>You rarely start from nothing. Bring existing resources under code with Terraform's <code>import</code> blocks, one folder at a time, until <code>terraform plan</code> shows no changes: then the code describes reality exactly. Start with the most powerful things (SCPs, permission sets, trust policies of cross-account roles) and leave the long tail of small roles for later. When a folder is imported, make the code the only way in: take away the console permissions to change those resources from everyone but the apply role and break-glass, with an SCP or a permission boundary.</p>
+<p>Then run <code>terraform plan</code> every night. Any difference is <span class="term">drift</span>: a console change, TEAM misbehaving, or another tool fighting yours. Each drift report opens a ticket; the fix is either to revert or to put the change into code.</p>
+
+<!-- ======================================================== 24.4 -->
+<h2 class="sec" id="s24-4"><span class="n">24.4</span>The pipeline: checks before review</h2>
+
+<figure class="wide" id="fig24-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 230" role="img" aria-labelledby="fig24-1-t fig24-1-d">
+      <title id="fig24-1-t">How an identity change reaches AWS</title>
+      <desc id="fig24-1-d">A pull request to the larder-identity repository runs terraform plan and the policy checks: the linter and IAM Access Analyzer's validation, no-new-access and access-not-granted checks. If a check fails, the author fixes and pushes again. Passing changes go to review by the code owners, with two approvals. Merging runs terraform apply with the apply role, which changes the organisation, Identity Center and roles in AWS. Every night a plan compares AWS with the code, and any drift opens a ticket.</desc>
+      <defs><marker id="c24ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c24ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="12" y="70" width="128" height="80" rx="5"/><text class="t-label" x="76" y="100" text-anchor="middle">pull request</text><text class="t-small" x="76" y="120" text-anchor="middle">larder-identity</text>
+      <rect class="node-accent" x="168" y="70" width="150" height="80" rx="5"/><text class="t-label on-accent" x="243" y="96" text-anchor="middle">plan + checks</text><text class="t-small on-accent" x="243" y="116" text-anchor="middle">lint.py</text><text class="t-small on-accent" x="243" y="134" text-anchor="middle">Access Analyzer</text>
+      <rect class="node" x="346" y="70" width="128" height="80" rx="5"/><text class="t-label" x="410" y="96" text-anchor="middle">review</text><text class="t-small" x="410" y="116" text-anchor="middle">code owners</text><text class="t-small" x="410" y="134" text-anchor="middle">two approvals</text>
+      <rect class="node" x="502" y="70" width="110" height="80" rx="5"/><text class="t-label" x="557" y="96" text-anchor="middle">apply</text><text class="t-small" x="557" y="116" text-anchor="middle">on merge</text><text class="t-mono" x="557" y="134" text-anchor="middle">identity-apply</text>
+      <rect class="pub" x="640" y="70" width="108" height="80" rx="5"/><text class="t-label" x="694" y="96" text-anchor="middle">AWS</text><text class="t-small" x="694" y="116" text-anchor="middle">organisation,</text><text class="t-small" x="694" y="134" text-anchor="middle">IAM, SSO</text>
+      <path class="wire" d="M142 110 H164" marker-end="url(#c24ah)"/>
+      <path class="wire" d="M320 110 H342" marker-end="url(#c24ah)"/>
+      <path class="wire" d="M476 110 H498" marker-end="url(#c24ah)"/>
+      <path class="wire-accent" d="M614 110 H636" marker-end="url(#c24ah2)"/>
+      <path class="wire-dash" d="M243 68 V36 H76 V66" marker-end="url(#c24ah)"/><text class="t-small" x="160" y="28" text-anchor="middle">a check fails: fix and push again</text>
+      <path class="wire-dash" d="M694 152 V190 H76 V154" marker-end="url(#c24ah)"/><text class="t-small" x="385" y="210" text-anchor="middle">every night: plan against AWS, drift opens a ticket</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 24.1</b> Machines check every policy before people review it; only the pipeline applies changes, and a nightly plan catches anything changed by hand.</figcaption>
+</figure>
+
+<p>Checks run on every pull request, cheapest first:</p>
+<ol class="steps">
+  <li><strong>Format and plan.</strong> <code>terraform fmt -check</code> and <code>terraform plan</code>, with a read-only plan role assumed through OIDC (<a href="17-ci-cd-oidc.html">Chapter 17</a>). The plan is posted on the pull request, so reviewers see what will change, not just what the code says.</li>
+  <li><strong>Your own lint rules</strong>, like the lab's <code>lint.py</code>: no whole services on <code>*</code>, no <code>iam:PassRole</code> on every role, nothing on the never-grant list, every role tagged with its team.</li>
+  <li><strong>Access Analyzer validation</strong> (<code>validate-policy</code>, <a href="09-policies.html">Chapter 9</a>): grammar errors, security warnings and suggestions, free.</li>
+  <li><strong>Access Analyzer custom checks</strong>, which use automated reasoning to <em>prove</em> things about a policy, whatever wildcards it uses (paid, a fraction of a cent per check):
+    <ul>
+      <li><code>check-access-not-granted</code>: “this policy doesn't allow any of these actions (or these resources)”. Larder runs it with its never-grant list on every identity policy.</li>
+      <li><code>check-no-new-access</code>: “the new version allows nothing the old one didn't”. Run on every trust policy and resource policy: if it fails, the change opens a new way in, and the pull request gets a <code>new-access</code> label that requires the security reviewer.</li>
+    </ul>
+  </li>
+</ol>
+
+<pre><code>aws accessanalyzer check-access-not-granted --policy-type IDENTITY_POLICY \
+  --policy-document file://policies/reporting-sync.json \
+  --access '[{"actions": ["iam:CreateUser", "iam:CreateAccessKey", "s3:PutBucketPolicy"]}]'
+aws accessanalyzer check-no-new-access --policy-type RESOURCE_POLICY \
+  --existing-policy-document file://old/trust.json --new-policy-document file://new/trust.json</code></pre>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Let machines answer “is this allowed?” and “is this new?”, so reviewers can spend their attention on “should it be?”.</p>
+</div>
+
+<!-- ======================================================== 24.5 -->
+<h2 class="sec" id="s24-5"><span class="n">24.5</span>Review and who may apply</h2>
+
+<p>The pipeline holds the most powerful credentials in the company: its apply role in the management account can change every SCP. Protect it like break-glass:</p>
+<ul>
+  <li>The apply role trusts only the <code>main</code> branch of <code>larder/larder-identity</code> in a GitHub environment <code>identity</code> (<a href="17-ci-cd-oidc.html">Chapter 17</a>'s <code>sub</code> condition), and that environment requires approval.</li>
+  <li><strong>Branch protection</strong>: no direct pushes to <code>main</code>; two approvals; a <code>CODEOWNERS</code> file names the platform team for everything and adds security for <code>organization/</code> and for any pull request labelled <code>new-access</code>. The author's own approval doesn't count.</li>
+  <li><strong>Pull requests from forks</strong> never get credentials, not even for <code>plan</code>.</li>
+  <li>Changes to the pipeline itself (workflow files, <code>CODEOWNERS</code>) need the same two approvals.</li>
+  <li>Break-glass (<a href="14-privileged-access.html">Chapter 14</a>) stays outside the pipeline: when CI or GitHub is down, you still have a way in, with its alarm.</li>
+</ul>
+
+<aside class="side">
+  <p class="label">Separation of duties, again</p>
+  <p>Two approvals is <a href="06-access-models.html">Chapter 6</a>'s separation of duties put into practice: no single person can grant themselves access. It also protects people: when an auditor asks who approved a change, the answer is in the pull request.</p>
+</aside>
+
+<!-- ======================================================== 24.6 -->
+<h2 class="sec" id="s24-6"><span class="n">24.6</span>Least privilege at scale</h2>
+
+<p>Checks stop new bad policies. Existing policies still tend to be wider than needed, because people write them before they know exactly what the code calls. Three tools narrow them over time:</p>
+<ul>
+  <li><strong>Policy generation.</strong> Access Analyzer can read up to 90 days of a role's CloudTrail history and generate a policy with the services and actions it actually used (resource ARNs for some services, placeholders for others). Treat it as a draft: it can only see what happened in that window, so the monthly job or the yearly report won't be there.</li>
+  <li><strong>Unused access findings</strong> (<a href="23-audit-detect.html">Chapter 23</a>): roles not used for 90 days, and unused services and actions in policies that are used. Each finding becomes a pull request that removes something, or a note saying why it stays.</li>
+  <li><strong>Last accessed information</strong> in IAM shows, per service and for some services per action, when a role last used it. It's free and good for quick checks.</li>
+</ul>
+<p>Scale also comes from writing fewer policies. ABAC (<a href="06-access-models.html">Chapter 6</a>) with a <code>team</code> tag lets one statement cover every team's resources; a permission boundary (<a href="10-evaluation.html">Chapter 10</a>) lets teams create their own roles in their accounts without being able to escalate. Modules encode the patterns once. Larder's rule of thumb: if two policies differ only in a name, they should be one module.</p>
+
+<!-- ======================================================== 24.7 -->
+<h2 class="sec" id="s24-7"><span class="n">24.7</span>Testing policies</h2>
+
+<p>A check proves a property; a test checks behaviour. For important policies, write both. Write expected results as a table of requests: <em>dispatch-task may PutObject routes/x; may not GetObject orders/x</em>. Run them against the policy, with the policy simulator in an account (<a href="11-access-denied.html">Chapter 11</a>), or with a local evaluator like <a href="10-evaluation.html">Chapter 10</a>'s lab for simple cases. Perimeter policies (<a href="22-data-perimeter.html">Chapter 22</a>) deserve real tests in staging: the requests that must still work, and the ones that must fail, run after every change.</p>
+
+<!-- ======================================================== 24.8 -->
+<h2 class="sec" id="s24-8"><span class="n">24.8</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 24.2 · Identity as code at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Terraform provider for identity</td><td><code>aws</code> (IAM, Identity Center, Organizations)</td><td><code>azurerm</code> for Azure RBAC; <code>azuread</code> for Entra ID</td><td><code>google</code> (IAM, organisation policies)</td></tr>
+      <tr><td>Policy validation</td><td>Access Analyzer validate-policy</td><td>Azure Policy and what-if deployments</td><td>Policy Troubleshooter; <code>gcloud</code> policy linting</td></tr>
+      <tr><td>Prove a change is safe</td><td>check-no-new-access, check-access-not-granted</td><td>(no direct equivalent)</td><td>Policy Simulator for IAM changes</td></tr>
+      <tr><td>Right-size from use</td><td>policy generation, unused access</td><td>Entra access reviews; Defender for Cloud recommendations</td><td>IAM recommender (role recommendations)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>Azure splits identity code in two: <strong>azurerm</strong> manages role assignments and custom roles on subscriptions and resources; <strong>azuread</strong> manages Entra ID groups, app registrations and service principals. Use group-based role assignments and PIM-eligible assignments, so the code grants eligibility, not standing access.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>Terraform's <code>google_project_iam_member</code> adds one binding; <code>google_project_iam_policy</code> replaces a project's whole policy, and can lock you out if you forget a binding. Prefer members or bindings, and let the <strong>IAM recommender</strong>'s suggestions arrive as pull requests.</p>
+</div>
+
+<!-- ======================================================== 24.9 -->
+<h2 class="sec" id="s24-9"><span class="n">24.9</span>At Larder: <code>larder-identity</code></h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Eli opened the <code>larder/larder-identity</code> repository on 10 January 2028 and imported, in order: SCPs and RCPs, permission sets and group assignments, OIDC providers and CI roles, cross-account roles (WMS B, backups), then the workload roles, which moved out of service repositories into modules. The last folder had a clean plan on 18 February. Applies run as <code>identity-apply</code> in each account, trusted only from <code>main</code> in the <code>identity</code> environment; <code>CODEOWNERS</code> names the platform team, plus Lena for <code>organization/</code> and anything labelled <code>new-access</code>. An SCP now denies changes to permission sets, SCPs and IAM roles except by <code>identity-apply</code>, TEAM's role (assignments only) and <code>break-glass-admin</code>.</p>
+  <p>The reporting team's pull request was the first real test, and it is the lab's <code>reporting-sync.json</code>: <code>s3:*</code> on everything, <code>iam:Create*</code> “so the sync can set up its own user”, and <code>iam:PassRole</code> on every role. The linter failed it in seconds, with five errors. The reviewed version reads the daily files in <code>larder-stock-exports</code> and nothing else: no users, no PassRole. (Order exports were never on offer: they're restricted data, kept inside the perimeter, <a href="22-data-perimeter.html">Chapter 22</a>.) Policy generation then trimmed <code>larder-core</code> from eleven services to five. Lena's audit question for 2028 will be one command: <code>git log --since=2028-01-01 -- organization identity-center accounts/prod</code>, with every approver in the pull requests.</p>
+</aside>
+
+<!-- ======================================================== 24.10 -->
+<h2 class="sec" id="s24-10"><span class="n">24.10</span>Lab: a policy linter for CI</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 24 · Fail a pull request on a bad policy</p>
+  <p><strong>You'll</strong> run a linter over a folder of policies, see it fail the reporting team's first attempt, fix the policy until the build passes, and optionally run Access Analyzer's checks on the same files. <strong>You need</strong> Python 3; for the optional part, the AWS CLI. <strong>Cost:</strong> free; the optional custom checks cost a fraction of a cent each.</p>
+</div>
+
+<p class="code-title"><span>lint.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># lint.py · checks workload and team policies before they can be merged; exit code 1 fails the build</span>
+<span class="k">import</span> fnmatch, glob, json, sys
+
+NEVER_GRANT = [<span class="s">"iam:CreateUser"</span>, <span class="s">"iam:CreateAccessKey"</span>,          <span class="c"># Larder has no IAM users (Chapter 17)</span>
+               <span class="s">"organizations:LeaveOrganization"</span>, <span class="s">"cloudtrail:StopLogging"</span>,
+               <span class="s">"kms:ScheduleKeyDeletion"</span>, <span class="s">"s3:PutBucketPolicy"</span>]
+
+<span class="k">def</span> as_list(x):
+    <span class="k">return</span> x <span class="k">if</span> isinstance(x, list) <span class="k">else</span> [x]
+
+<span class="k">def</span> check(doc):
+    problems = []
+    <span class="k">for</span> i, st <span class="k">in</span> enumerate(as_list(doc[<span class="s">"Statement"</span>]), 1):
+        <span class="k">if</span> st[<span class="s">"Effect"</span>] != <span class="s">"Allow"</span>:
+            <span class="k">continue</span>
+        where = st.get(<span class="s">"Sid"</span>, f<span class="s">"statement {i}"</span>)
+        actions = [a.lower() <span class="k">for</span> a <span class="k">in</span> as_list(st.get(<span class="s">"Action"</span>, []))]
+        resources = as_list(st.get(<span class="s">"Resource"</span>, []))
+        <span class="k">if</span> <span class="s">"NotAction"</span> <span class="k">in</span> st:
+            problems.append((<span class="s">"error"</span>, where, <span class="s">"Allow with NotAction grants everything else"</span>))
+        <span class="k">if</span> <span class="s">"*"</span> <span class="k">in</span> resources <span class="k">and</span> any(a == <span class="s">"*"</span> <span class="k">or</span> a.endswith(<span class="s">":*"</span>) <span class="k">for</span> a <span class="k">in</span> actions):
+            problems.append((<span class="s">"error"</span>, where, <span class="s">"a whole service on every resource"</span>))
+        <span class="k">if</span> <span class="s">"iam:passrole"</span> <span class="k">in</span> actions <span class="k">and</span> <span class="s">"*"</span> <span class="k">in</span> resources:
+            problems.append((<span class="s">"error"</span>, where, <span class="s">"iam:PassRole on every role"</span>))
+        <span class="k">for</span> bad <span class="k">in</span> NEVER_GRANT:
+            <span class="k">if</span> any(fnmatch.fnmatchcase(bad.lower(), a) <span class="k">for</span> a <span class="k">in</span> actions):
+                problems.append((<span class="s">"error"</span>, where, f<span class="s">"grants {bad}, on the never-grant list"</span>))
+        read_only = all(a.split(<span class="s">":"</span>)[-1].startswith((<span class="s">"list"</span>, <span class="s">"describe"</span>, <span class="s">"get"</span>)) <span class="k">for</span> a <span class="k">in</span> actions)
+        <span class="k">if</span> <span class="s">"*"</span> <span class="k">in</span> resources <span class="k">and</span> <span class="k">not</span> read_only <span class="k">and</span> <span class="k">not</span> st.get(<span class="s">"Condition"</span>):
+            problems.append((<span class="s">"warn"</span>, where, <span class="s">"Resource is * with no condition: say why in the review"</span>))
+    <span class="k">return</span> problems
+
+folder = sys.argv[1] <span class="k">if</span> len(sys.argv) &gt; 1 <span class="k">else</span> <span class="s">"policies"</span>
+errors = 0
+<span class="k">for</span> path <span class="k">in</span> sorted(glob.glob(f<span class="s">"{folder}/*.json"</span>)):
+    problems = check(json.load(open(path)))
+    errors += sum(level == <span class="s">"error"</span> <span class="k">for</span> level, _, _ <span class="k">in</span> problems)
+    print(f<span class="s">"{path}: {len(problems) or 'no'} problem(s)"</span>)
+    <span class="k">for</span> level, where, text <span class="k">in</span> problems:
+        print(f<span class="s">"  {level.upper():&lt;5} {where}: {text}"</span>)
+print(f<span class="s">"\n{errors} error(s)"</span>)
+sys.exit(1 <span class="k">if</span> errors <span class="k">else</span> 0)</code></pre>
+
+<ol class="steps">
+  <li><strong>Make a folder <code>policies/</code></strong> with three files. Two are Larder's reviewed policies: Dispatch's task role (<a href="09-policies.html">Chapter 9</a>) and the production deploy role (<a href="17-ci-cd-oidc.html">Chapter 17</a>), written compactly:
+<p class="code-title"><span>policies/dispatch-task.json</span><span>JSON</span></p>
+<pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {"Sid": "ListConfig", "Effect": "Allow", "Action": "s3:ListBucket",
+     "Resource": "arn:aws:s3:::larder-dispatch-prod",
+     "Condition": {"StringLike": {"s3:prefix": "config/*"}}},
+    {"Sid": "ReadConfig", "Effect": "Allow", "Action": "s3:GetObject",
+     "Resource": "arn:aws:s3:::larder-dispatch-prod/config/*"},
+    {"Sid": "WriteRoutes", "Effect": "Allow", "Action": "s3:PutObject",
+     "Resource": "arn:aws:s3:::larder-dispatch-prod/routes/*"},
+    {"Sid": "MapsKey", "Effect": "Allow", "Action": "secretsmanager:GetSecretValue",
+     "Resource": "arn:aws:secretsmanager:eu-central-1:111122223333:secret:dispatch/prod/maps-api-key-*"}
+  ]
+}</code></pre>
+<p class="code-title"><span>policies/github-deploy-prod.json</span><span>JSON</span></p>
+<pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {"Sid": "PushImage", "Effect": "Allow",
+     "Action": ["ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart",
+                "ecr:CompleteLayerUpload", "ecr:PutImage"],
+     "Resource": "arn:aws:ecr:eu-central-1:111122223333:repository/larder-core"},
+    {"Sid": "EcrLogin", "Effect": "Allow", "Action": "ecr:GetAuthorizationToken", "Resource": "*"},
+    {"Sid": "TaskDefinitions", "Effect": "Allow",
+     "Action": ["ecs:RegisterTaskDefinition", "ecs:DescribeTaskDefinition"], "Resource": "*"},
+    {"Sid": "Deploy", "Effect": "Allow", "Action": ["ecs:UpdateService", "ecs:DescribeServices"],
+     "Resource": "arn:aws:ecs:eu-central-1:111122223333:service/prod/larder-core"},
+    {"Sid": "PassServiceRoles", "Effect": "Allow", "Action": "iam:PassRole",
+     "Resource": ["arn:aws:iam::111122223333:role/larder-core",
+                  "arn:aws:iam::111122223333:role/larder-core-execution"]}
+  ]
+}</code></pre>
+  The third is the reporting team's pull request:
+<p class="code-title"><span>policies/reporting-sync.json</span><span>JSON</span></p>
+<pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {"Sid": "ReadExports", "Effect": "Allow", "Action": "s3:*", "Resource": "*"},
+    {"Sid": "SetUpOwnUser", "Effect": "Allow", "Action": ["iam:Create*", "iam:Get*"], "Resource": "*"},
+    {"Sid": "PassAnyRole", "Effect": "Allow", "Action": "iam:PassRole", "Resource": "*"}
+  ]
+}</code></pre></li>
+  <li><strong>Run it</strong> with <code>python3 lint.py; echo "exit=$?"</code>:
+<pre><code>policies/dispatch-task.json: no problem(s)
+policies/github-deploy-prod.json: 1 problem(s)
+  WARN  TaskDefinitions: Resource is * with no condition: say why in the review
+policies/reporting-sync.json: 8 problem(s)
+  ERROR ReadExports: a whole service on every resource
+  ERROR ReadExports: grants s3:PutBucketPolicy, on the never-grant list
+  WARN  ReadExports: Resource is * with no condition: say why in the review
+  ERROR SetUpOwnUser: grants iam:CreateUser, on the never-grant list
+  ERROR SetUpOwnUser: grants iam:CreateAccessKey, on the never-grant list
+  WARN  SetUpOwnUser: Resource is * with no condition: say why in the review
+  ERROR PassAnyRole: iam:PassRole on every role
+  WARN  PassAnyRole: Resource is * with no condition: say why in the review
+
+5 error(s)
+exit=1</code></pre>
+  The exit code is what fails a CI job. Notice that <code>s3:*</code> was caught granting <code>s3:PutBucketPolicy</code>, and <code>iam:Create*</code> granting both forbidden IAM actions, even though neither name is written in the policy: the linter matches the forbidden actions <em>against</em> the policy's wildcards.</li>
+  <li><strong>Read the warning</strong> on <code>github-deploy-prod</code>. <code>ecs:RegisterTaskDefinition</code> doesn't support resource-level permissions, so <code>*</code> is the only option; the reviewer accepts it, with the reason in the pull request. Warnings don't fail the build: they ask a person to look.</li>
+  <li><strong>Fix the pull request.</strong> Replace <code>reporting-sync.json</code> with the reviewed version, which reads one prefix of the stock exports bucket and nothing else:
+<pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {"Sid": "ListDailyStock", "Effect": "Allow", "Action": "s3:ListBucket",
+     "Resource": "arn:aws:s3:::larder-stock-exports",
+     "Condition": {"StringLike": {"s3:prefix": "daily/*"}}},
+    {"Sid": "ReadDailyStock", "Effect": "Allow", "Action": "s3:GetObject",
+     "Resource": "arn:aws:s3:::larder-stock-exports/daily/*"}
+  ]
+}</code></pre>
+  Run again:
+<pre><code>policies/dispatch-task.json: no problem(s)
+policies/github-deploy-prod.json: 1 problem(s)
+  WARN  TaskDefinitions: Resource is * with no condition: say why in the review
+policies/reporting-sync.json: no problem(s)
+
+0 error(s)
+exit=0</code></pre></li>
+  <li><strong>Find the gap.</strong> The linter only checks <code>Action</code> against <code>NEVER_GRANT</code>; a policy that allows <code>"Action": "iam:*"</code> with <code>"Resource": "arn:aws:iam::111122223333:user/*"</code> passes the “whole service” rule because the resource isn't <code>*</code>. Does it still catch <code>iam:CreateUser</code>? Try it. Then think of one trick that would get past a text-based linter but not past Access Analyzer's <code>check-access-not-granted</code> (hint: <code>NotAction</code> with a <code>Deny</code>, or <code>NotResource</code>).</li>
+  <li><strong>Optional: the real check.</strong> With credentials for a sandbox account, run the first command in 24.4 against the original and then the fixed <code>reporting-sync.json</code>. It returns <code>FAIL</code> for the original and <code>PASS</code> for the fixed one. Nothing is created, so there's nothing to clean up.</li>
+</ol>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s24-11"><span class="n">24.11</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Code and console both in use</td><td>Drift; the next apply undoes a fix, or a change nobody reviewed stays.</td><td>Deny console changes to managed resources; nightly drift plan.</td></tr>
+      <tr><td>The pipeline role is the weakest link</td><td>Anyone who can edit a workflow or push to a branch becomes admin of the organisation.</td><td>Trust only <code>main</code> in a protected environment; code owners on workflow files.</td></tr>
+      <tr><td>Assigning permission sets to individuals in code</td><td>Hundreds of assignments; leavers linger.</td><td>Assign to groups; the IdP manages membership.</td></tr>
+      <tr><td>Reviewing the code, not the plan</td><td>A small diff with a big effect (a changed module) slips through.</td><td>Post the plan on the pull request.</td></tr>
+      <tr><td>Accepting generated policies as final</td><td>A job that runs monthly or yearly breaks.</td><td>Treat them as drafts; check against known schedules.</td></tr>
+      <tr><td>Replacing whole IAM policies on Google Cloud</td><td>A forgotten binding locks people out.</td><td>Use member or binding resources.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum24">
+  <h2 class="sec" id="sum24"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Put identity in <strong>one repository</strong>: SCPs, permission sets and group assignments, and roles, imported until the plan is clean.</li>
+    <li>Run <strong>checks before review</strong>: your own lint rules, Access Analyzer validation, <strong>check-access-not-granted</strong> and <strong>check-no-new-access</strong>.</li>
+    <li>Require <strong>two approvals</strong> through code owners, and protect the apply role like break-glass.</li>
+    <li>Catch <strong>drift</strong> with a nightly plan, and deny console changes to managed resources.</li>
+    <li>Shrink existing access with <strong>policy generation</strong>, unused access findings and last accessed data; write fewer policies with modules, ABAC and boundaries.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Identity as code</dt><dd>Managing roles, policies and assignments as reviewed files that a pipeline applies.</dd>
+    <dt>Drift</dt><dd>A difference between what the code says and what exists.</dd>
+    <dt>check-no-new-access</dt><dd>An Access Analyzer check that a new policy version grants nothing the old one didn't.</dd>
+    <dt>check-access-not-granted</dt><dd>An Access Analyzer check that a policy doesn't allow listed actions or resources.</dd>
+    <dt>Policy generation</dt><dd>Drafting a policy from a role's recorded activity in CloudTrail.</dd>
+    <dt>Code owners</dt><dd>People or teams whose approval a repository requires for changes to given paths.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Name three things a repository gives you for identity that a console doesn't. <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Any three of: one source of truth, so drift is detectable; review before change with named approvers; history that answers audit questions; automatic checks on every change; reuse through modules.</p></details>
+    </li>
+    <li>
+      <p>Why does <code>check-no-new-access</code> suit trust policies better than a text diff? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>It reasons about what the policy allows, not how it's written. A text diff of one changed condition can't tell whether the role is now open to more principals; the check proves whether any new access was granted, regardless of wildcards or rewording.</p></details>
+    </li>
+    <li>
+      <p>Policy generation from 90 days of activity proposes a narrower policy for <code>finance-reports</code>. What would you check before merging it? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Whether every scheduled job ran in the window: quarter-end and year-end reports may need actions not seen in 90 days. Also replace placeholder resources with real ARNs, and keep conditions the old policy had (such as <code>aws:ViaAWSService</code> for KMS).</p></details>
+    </li>
+    <li>
+      <p>An engineer can edit <code>.github/workflows/apply.yml</code> in a branch. How could that become organisation admin, and what stops it? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>If the apply role trusted any branch, their workflow could assume it and do anything. It's stopped by trusting only <code>main</code> in a protected environment, branch protection with two approvals, and code owners on workflow files.</p></details>
+    </li>
+    <li>
+      <p>Design the review rule for a pull request that changes <code>wmsb-nightly-file</code>'s trust policy. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Checks: lint, validate, and <code>check-no-new-access</code> against <code>main</code>. If it fails, the <code>new-access</code> label adds the security reviewer; approvals from platform and security, neither being the author. The plan is posted, and the perimeter exception tag is checked as well, since the RCP depends on it.</p></details>
+    </li>
+    <li>
+      <p>Compare how a Terraform mistake can lock you out on Google Cloud and how break-glass protects you on AWS. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>On Google Cloud, an authoritative <code>google_project_iam_policy</code> replaces all bindings, so a missing one removes access, perhaps your own. On AWS, a bad SCP or permission set could do the same, but the break-glass users and <code>break-glass-admin</code> sit outside the pipeline and are excepted in the guardrails, so there's a way back in.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-custom-policy-checks.html">Access Analyzer custom policy checks</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-policy-generation.html">policy generation</a>.</li>
+    <li>Terraform: <a href="https://developer.hashicorp.com/terraform/language/import">import blocks</a>. GitHub: <a href="https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners">code owners</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="23-audit-detect.html">23 · Auditing and detecting misuse</a></div>
+  <div><span>Next</span><a href="25-capstone.html">25 · Capstone: Larder's identity end to end</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 2 · Identity and Access in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

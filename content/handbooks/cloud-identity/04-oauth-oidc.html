@@ -1,0 +1,434 @@
+<!-- Handbook 2 · Identity and Access in the Cloud · Chapter 4. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part I · How access works</p>
+  <p class="chno">4</p>
+  <h1>OAuth 2.0 and OpenID Connect</h1>
+  <p class="promise">“Sign in with…”, “Allow this app to read your calendar?”, a CLI that opens a browser to log you in, a pipeline that deploys to the cloud without a key: all of these are OAuth 2.0 and OpenID Connect. This chapter explains the two standards from the problem they solve, walks through the one flow you'll use most, and gives you the checklist that keeps it safe.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Name the four OAuth roles in any real integration.</li>
+      <li>Walk through the authorization code flow with PKCE, and say what each parameter protects against.</li>
+      <li>Choose the right grant for a web app, a mobile app, a CLI and a backend service.</li>
+      <li>Tell an ID token from an access token, and validate each where it belongs.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Tokens, JWTs and refresh tokens (<a href="#ch3">Chapter 3</a>). The lab reuses <code>tokens.py</code> from Lab 3.</li>
+      <li>HTTP redirects help (Handbook 1, Chapter 6).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 50 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, Python 3, no cloud account</dd>
+      <dt>Main provider</dt><dd>provider-neutral, with AWS, Azure and Google Cloud in 4.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>On Tuesday 1 December 2026, Korenwolf's finance team emailed Mo, Larder's key account manager. Their expense system, a SaaS product called Spendwise, could import supplier invoices automatically. All it needed, the email said, was the Larder username and password of one of Korenwolf's office managers, “so it can log in and download the PDFs each month”.</p>
+  <p>Mo forwarded it to Eli with one line: “Is this OK?” It isn't. Spendwise would hold a password that can also place and cancel orders, change delivery addresses and see every office's history. It would work until the office manager changed jobs, and then break, or keep working for someone who's gone. The problem has a standard answer, and section 4.9 shows Larder adopting it.</p>
+</aside>
+
+<!-- ======================================================== 4.1 -->
+<h2 class="sec" id="s4-1"><span class="n">4.1</span>The problem: access without the password</h2>
+
+<p class="lead">Spendwise's request is the <strong>password anti-pattern</strong>: one application asks for your password to another. It gives the app <em>everything</em> you can do, for as long as the password lasts, and you can't take it back from that app alone. It also teaches people to type passwords into other sites, which is exactly what phishing relies on (<a href="#ch2">Chapter 2</a>).</p>
+
+<p><span class="term">OAuth 2.0</span> (RFC 6749) solves <strong>delegated authorisation</strong>: letting an application act on your behalf, with limited permissions, without ever seeing your password. You sign in at the service that holds your data, approve exactly what the app may do, and the app receives a token for that and nothing more. You can revoke it at any time without changing your password.</p>
+
+<p>OAuth on its own says nothing about who you are; it's about what an app may do. <span class="term">OpenID Connect</span> (OIDC) is a thin layer on top that adds sign-in: it tells the app <em>who</em> authenticated. Section 4.6 separates them.</p>
+
+<!-- ======================================================== 4.2 -->
+<h2 class="sec" id="s4-2"><span class="n">4.2</span>Four roles</h2>
+
+<p>Every OAuth integration has the same four parties. Name them first, and the rest of the protocol makes sense:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 4.1 · The four OAuth roles, in the Spendwise case</caption>
+    <thead><tr><th>Role</th><th>What it is</th><th>Here</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Resource owner</strong></td><td>the person who can grant access to the data</td><td>Korenwolf's office manager</td></tr>
+      <tr><td><strong>Client</strong></td><td>the application that wants access</td><td>Spendwise</td></tr>
+      <tr><td><strong>Authorization server</strong></td><td>authenticates the owner, asks for consent, issues tokens</td><td><code>login.larder.example</code></td></tr>
+      <tr><td><strong>Resource server</strong></td><td>the API holding the data; accepts access tokens</td><td><code>api.larder.example</code> (invoices)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<figure class="wide" id="fig4-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 220" role="img" aria-labelledby="fig4-1-t fig4-1-d">
+      <title id="fig4-1-t">The four OAuth roles and what passes between them</title>
+      <desc id="fig4-1-d">The resource owner, an office manager, signs in and consents at the authorization server, login.larder.example. The authorization server gives the client, Spendwise, an access token limited to reading invoices. The client calls the resource server, api.larder.example, with that token. The office manager's password goes only to the authorization server, never to the client.</desc>
+      <defs><marker id="c4ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c4ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="12" y="20" width="180" height="60" rx="5"/><text class="t-label" x="102" y="46" text-anchor="middle">resource owner</text><text class="t-small" x="102" y="66" text-anchor="middle">office manager</text>
+      <rect class="node-accent" x="290" y="20" width="200" height="60" rx="5"/><text class="t-label on-accent" x="390" y="46" text-anchor="middle">authorization server</text><text class="t-mono on-accent" x="390" y="66" text-anchor="middle">login.larder.example</text>
+      <rect class="node" x="12" y="140" width="180" height="60" rx="5"/><text class="t-label" x="102" y="166" text-anchor="middle">client</text><text class="t-small" x="102" y="186" text-anchor="middle">Spendwise</text>
+      <rect class="node" x="548" y="140" width="200" height="60" rx="5"/><text class="t-label" x="648" y="166" text-anchor="middle">resource server</text><text class="t-mono" x="648" y="186" text-anchor="middle">api.larder.example</text>
+      <path class="wire" d="M194 50 H286" marker-end="url(#c4ah)"/>
+      <text class="t-small" x="240" y="40" text-anchor="middle">signs in,</text>
+      <text class="t-small" x="240" y="68" text-anchor="middle">consents</text>
+      <path class="wire-accent" d="M330 82 L196 150" marker-end="url(#c4ah2)"/>
+      <text class="t-small t-accent" x="300" y="128">token: invoices:read</text>
+      <path class="wire" d="M194 170 H544" marker-end="url(#c4ah)"/>
+      <text class="t-small" x="369" y="162" text-anchor="middle">GET /invoices · Authorization: Bearer …</text>
+      <text class="t-small" x="560" y="40">the password goes here only,</text>
+      <text class="t-small" x="560" y="56">never to the client</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 4.1</b> The client never sees the owner's password. It gets a token limited to what the owner approved, which can be revoked on its own.</figcaption>
+</figure>
+
+<p>Clients also come in two kinds, and the difference matters for every flow. A <strong>confidential client</strong> runs on a server and can keep a secret (a client secret or a private key) to authenticate itself to the authorization server; Spendwise is one. A <strong>public client</strong> runs on the user's device (a single-page app, a mobile app, a CLI) where anything it contains can be extracted, so it can't keep a secret.</p>
+
+<!-- ======================================================== 4.3 -->
+<h2 class="sec" id="s4-3"><span class="n">4.3</span>The authorization code flow with PKCE</h2>
+
+<p>The flow you'll use for nearly every app that acts for a person is the <span class="term">authorization code flow</span>, with <span class="term">PKCE</span> (Proof Key for Code Exchange, pronounced “pixie”, RFC 7636). It's worth learning step by step:</p>
+
+<figure class="wide" id="fig4-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 400" role="img" aria-labelledby="fig4-2-t fig4-2-d">
+      <title id="fig4-2-t">The authorization code flow with PKCE</title>
+      <desc id="fig4-2-d">Four participants: the user's browser, the client, the authorization server and the API. Step 1: the client makes a random code verifier, keeps it, and redirects the browser to the authorization server with the hashed code challenge and a random state. Step 2: the user signs in and consents at the authorization server. Step 3: the authorization server redirects the browser back to the client's registered redirect URI with a one-time code and the state. Step 4: the browser delivers the code and state to the client, which checks the state. Step 5: the client sends the code and the code verifier to the authorization server's token endpoint, directly, not through the browser. Step 6: the authorization server checks that the verifier hashes to the challenge, and returns an access token, a refresh token and, with OpenID Connect, an ID token. Step 7: the client calls the API with the access token.</desc>
+      <defs><marker id="c4ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c4ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="30" y="12" width="130" height="40" rx="4"/><text class="t-label" x="95" y="37" text-anchor="middle">browser (user)</text>
+      <rect class="node" x="220" y="12" width="130" height="40" rx="4"/><text class="t-label" x="285" y="37" text-anchor="middle">client</text>
+      <rect class="node-accent" x="410" y="12" width="130" height="40" rx="4"/><text class="t-label on-accent" x="475" y="37" text-anchor="middle">authorization server</text>
+      <rect class="node" x="600" y="12" width="130" height="40" rx="4"/><text class="t-label" x="665" y="37" text-anchor="middle">API</text>
+      <path class="wire-dash" d="M95 52 V388 M285 52 V388 M475 52 V388 M665 52 V388"/>
+      <path class="wire" d="M285 88 H99" marker-end="url(#c4ah3)"/>
+      <text class="t-small halo-priv" x="104" y="80">① redirect: /authorize?code_challenge, state</text>
+      <path class="wire" d="M95 132 H471" marker-end="url(#c4ah3)"/>
+      <text class="t-small halo-priv" x="104" y="124">② sign in + consent (“read your invoices?”)</text>
+      <path class="wire" d="M475 176 H99" marker-end="url(#c4ah3)"/>
+      <text class="t-small halo-priv" x="104" y="168">③ redirect to redirect_uri?code=…&amp;state=…</text>
+      <path class="wire" d="M95 220 H281" marker-end="url(#c4ah3)"/>
+      <text class="t-small halo-priv" x="104" y="212">④ code + state</text>
+      <path class="wire-accent" d="M285 264 H471" marker-end="url(#c4ah4)"/>
+      <text class="t-small halo-priv" x="292" y="256">⑤ /token: code + code_verifier</text>
+      <path class="wire-accent" d="M475 308 H289" marker-end="url(#c4ah4)"/>
+      <text class="t-small halo-priv" x="292" y="300">⑥ access, refresh (+ ID) token</text>
+      <path class="wire" d="M285 352 H661" marker-end="url(#c4ah3)"/>
+      <text class="t-small halo-priv" x="292" y="344">⑦ GET /invoices · Bearer access token</text>
+      <text class="t-small" x="500" y="270">back channel:</text>
+      <text class="t-small" x="500" y="286">never through the browser</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 4.2</b> Steps ①–④ pass through the browser (the <em>front channel</em>), where anything can be seen. The tokens travel only on the direct <em>back channel</em> (⑤–⑥), and only to a client that proves it started the flow.</figcaption>
+</figure>
+
+<p>Each parameter is there to stop a specific attack:</p>
+<ul>
+  <li><strong><code>redirect_uri</code></strong>: where the code is sent. The authorization server must compare it <em>exactly</em> with the URIs registered for this client. A loose match (any path, any subdomain) lets an attacker send codes to a page they control.</li>
+  <li><strong><code>state</code></strong>: a random value the client stores and checks when the browser returns. It ties the response to the request this browser started, which stops an attacker from injecting their own code into your session (a form of CSRF).</li>
+  <li><strong><code>code</code></strong>: a one-time, short-lived (seconds to minutes) reference to the grant, safe to pass through the browser because it's useless on its own.</li>
+  <li><strong><code>code_verifier</code> and <code>code_challenge</code></strong>: PKCE. The client makes a random verifier, sends only its SHA-256 hash (the challenge) in step ①, and reveals the verifier only on the back channel in step ⑤. Someone who steals the code from a redirect, a log or a malicious app on the same phone can't redeem it without the verifier.</li>
+</ul>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Use the authorization code flow with PKCE for every client that acts for a person: web, mobile, single-page or CLI, public or confidential.</p>
+</div>
+
+<p>PKCE was invented for mobile apps, which can't keep a client secret, but current guidance (OAuth 2.0 Security Best Current Practice, RFC 9700, and the upcoming OAuth 2.1) recommends it for confidential clients too, because it also protects against code injection. Confidential clients additionally authenticate at the token endpoint with their secret or, better, a signed assertion with a private key.</p>
+
+<!-- ======================================================== 4.4 -->
+<h2 class="sec" id="s4-4"><span class="n">4.4</span>Scopes and consent</h2>
+
+<p>A <span class="term">scope</span> names a slice of access the client asks for: <code>invoices:read</code>, <code>orders:write</code>, <code>openid</code>. The authorization server shows the requested scopes on a <strong>consent screen</strong>, the user approves them (or a company administrator approves them for everyone), and the access token carries only the approved ones. The API must check the scope on every request, in addition to its own rules about the user: a token with <code>invoices:read</code> for an office manager lets the client read <em>that manager's</em> invoices, not anyone's.</p>
+
+<p>Good scope design is coarse enough to understand on a consent screen and fine enough that common integrations need little: separate read from write, and money-moving actions from everything else. Ask for the minimum, and ask for more later when a feature needs it (<em>incremental consent</em>).</p>
+
+<aside class="side"><b>Consent phishing</b>Attackers register real OAuth apps with convincing names and ask for broad scopes, such as reading all mail. Nothing is stolen; the user grants it. Companies limit which apps employees may approve, and review granted apps (<a href="#ch23">Chapter 23</a>).</aside>
+
+<!-- ======================================================== 4.5 -->
+<h2 class="sec" id="s4-5"><span class="n">4.5</span>The other grants</h2>
+
+<p>The “grant type” is how a client gets its token. Besides the authorization code, you'll meet these:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 4.2 · OAuth grant types</caption>
+    <thead><tr><th>Grant</th><th>Use it for</th><th>How it works</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Authorization code + PKCE</strong></td><td>any app acting for a person</td><td>4.3</td></tr>
+      <tr><td><strong>Client credentials</strong></td><td>a service acting for itself (no person involved)</td><td>the client authenticates with its own secret or key and gets a token for its own permissions</td></tr>
+      <tr><td><strong>Device authorization</strong></td><td>devices without a good browser: TVs, CLIs on remote machines</td><td>the device shows a short code; the user enters it on their phone or laptop; the device polls until approved</td></tr>
+      <tr><td><strong>Refresh token</strong></td><td>getting a new access token</td><td><a href="#ch3">Chapter 3</a>, 3.6</td></tr>
+      <tr><td><strong>Token exchange</strong></td><td>swapping one token for another, such as a CI system's token for cloud credentials</td><td><a href="#ch17">Chapter 17</a> uses the same idea</td></tr>
+      <tr><td>Implicit <em>(deprecated)</em></td><td>nothing</td><td>returned tokens in the browser URL; replaced by code + PKCE</td></tr>
+      <tr><td>Password <em>(deprecated)</em></td><td>nothing</td><td>the client collects the user's password: the anti-pattern of 4.1 in protocol form</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>You've probably used the device grant already: <code>aws sso login</code> and <code>az login --use-device-code</code> can both show a code to enter in a browser, which is handy on a machine you've connected to over SSH.</p>
+
+<!-- ======================================================== 4.6 -->
+<h2 class="sec" id="s4-6"><span class="n">4.6</span>OpenID Connect: adding sign-in</h2>
+
+<p>People used OAuth for sign-in long before it was designed for it: “if this token can read my profile, I must be this person”. That's unsafe, because an access token says what a client may do, not who logged in to <em>this</em> client; a token issued to another app could be replayed. OpenID Connect fixes this by adding:</p>
+<ul>
+  <li>The <code>openid</code> scope, which asks for sign-in.</li>
+  <li>An <span class="term">ID token</span>: a JWT for the <em>client</em>, saying who authenticated, when and how. Its <code>aud</code> is the client's own ID.</li>
+  <li>A <code>nonce</code>, sent in step ① and returned inside the ID token, so the client can check the token was made for this sign-in.</li>
+  <li>A <strong>UserInfo endpoint</strong> for extra profile details, and <strong>discovery</strong>: every OIDC provider publishes its endpoints, supported features and signing keys (JWKS) at <code>/.well-known/openid-configuration</code>.</li>
+</ul>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 4.3 · ID token or access token?</caption>
+    <thead><tr><th></th><th>ID token</th><th>Access token</th></tr></thead>
+    <tbody>
+      <tr><td>Defined by</td><td>OpenID Connect</td><td>OAuth 2.0</td></tr>
+      <tr><td>Meant for</td><td>the client (<code>aud</code> = client ID)</td><td>the API (resource server)</td></tr>
+      <tr><td>Says</td><td>who signed in, when, how (<code>sub</code>, <code>auth_time</code>, <code>amr</code>)</td><td>what the client may do (scopes)</td></tr>
+      <tr><td>Format</td><td>always a JWT</td><td>JWT or opaque; the client shouldn't care</td></tr>
+      <tr><td>Never</td><td>send it to an API as an access token</td><td>use it as proof that a user logged in</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>The client validates an ID token with the checklist from <a href="#ch3">Chapter 3</a> (3.5), with two OIDC specifics: <code>aud</code> must be <em>its own</em> client ID, and the <code>nonce</code> must match the one it sent. Once validated, the stable identifier for the person is the pair <strong><code>iss</code> + <code>sub</code></strong>, not the email address, which can change or be reassigned.</p>
+
+<!-- ======================================================== 4.7 -->
+<h2 class="sec" id="s4-7"><span class="n">4.7</span>The security checklist</h2>
+
+<ol class="steps">
+  <li><strong>Authorization code with PKCE</strong> for every client acting for a person. No implicit, no password grant.</li>
+  <li><strong>Exact redirect URI matching</strong>, registered per client; HTTPS only (or the platform's app-link schemes on mobile).</li>
+  <li><strong><code>state</code> and <code>nonce</code></strong> generated per request, stored, and checked.</li>
+  <li><strong>Mobile and desktop apps use the system browser</strong>, not an embedded web view, so the app can't read the password and the user's existing session (and passkeys) work.</li>
+  <li><strong>Minimal scopes</strong>, checked by the API on every call, together with its own rules about the user.</li>
+  <li><strong>Short access tokens, rotating refresh tokens</strong> (<a href="#ch3">Chapter 3</a>), revoked when the user disconnects the app.</li>
+  <li><strong>Validate tokens with a maintained library</strong>, configured with the issuer, audience and algorithms.</li>
+</ol>
+
+<!-- ======================================================== 4.8 -->
+<h2 class="sec" id="s4-8"><span class="n">4.8</span>Across providers</h2>
+
+<p>Every big cloud runs an OIDC provider for its own sign-in, sells one for your apps' users, and accepts OIDC tokens from outside as a way for workloads to get cloud credentials without keys:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 4.4 · OAuth and OIDC at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Identity for your app's users</td><td>Amazon Cognito user pools</td><td>Microsoft Entra External ID</td><td>Identity Platform</td></tr>
+      <tr><td>Registering a client</td><td>an app client in the user pool</td><td>an app registration (client ID, redirect URIs, secrets or certificates)</td><td>an OAuth client ID in the project</td></tr>
+      <tr><td>Your employees signing in to apps</td><td>IAM Identity Center applications</td><td>Entra ID enterprise applications</td><td>Cloud Identity / Workspace SSO</td></tr>
+      <tr><td>Trusting outside OIDC tokens</td><td>IAM OIDC identity providers + <code>AssumeRoleWithWebIdentity</code></td><td>workload identity federation on an app or managed identity</td><td>workload identity federation pools</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>The Microsoft identity platform uses the same flows with its own vocabulary: an <strong>app registration</strong> defines the client; a <strong>service principal</strong> is that app's identity in a tenant; scopes for Microsoft Graph look like <code>User.Read</code>; and administrators can grant consent for the whole organisation. Restricting which apps users may consent to is one of the first settings to review in a new tenant.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>OAuth clients live in a project with a configured <strong>consent screen</strong>; apps that ask for sensitive Google scopes, such as reading Gmail, must pass Google's verification before they can be used by the public. Google's ID tokens are also used to call your own Cloud Run services, where the audience is the service's URL.</p>
+</div>
+
+<!-- ======================================================== 4.9 -->
+<h2 class="sec" id="s4-9"><span class="n">4.9</span>At Larder: Spendwise, done properly</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Eli's reply to Mo: no passwords, but yes to Spendwise. Larder's login service already speaks OAuth and OIDC for its own apps, so in the second week of December Eli's team registered Spendwise as a confidential client with one exact redirect URI, added a new scope, <code>invoices:read</code>, and made the invoices API check it. An office manager clicks “Connect Larder” in Spendwise, signs in at <code>login.larder.example</code> (with a passkey, if they have one), and approves one line: <em>Spendwise wants to read your office's Larder invoices</em>. Spendwise never sees a password, can't place orders, and is disconnected from the office manager's account page with one click, or automatically when the person leaves Korenwolf.</p>
+  <p>The work turned up one more thing. Larder's own mobile app had been using the deprecated password grant since 2024: it collected the password in its own screen and posted it to the token endpoint. Dee's team moved it to the system browser with code + PKCE in the same release, which is also what made passkeys (<a href="#ch2">Chapter 2</a>) work in the app.</p>
+</aside>
+
+<!-- ======================================================== 4.10 -->
+<h2 class="sec" id="s4-10"><span class="n">4.10</span>Lab: play out the flow</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 4 · Authorization code with PKCE, in one file</p>
+  <p><strong>You'll</strong> compute a PKCE challenge and check it against the standard, build an authorization request, play a tiny authorization server that refuses a stolen code, then validate an ID token as the client and an access token as the API. <strong>You need</strong> Python 3 and <code>tokens.py</code> from Lab 3 in the same folder. <strong>Cost:</strong> nothing. (Real authorization servers sign with RS256 and publish keys; this lab reuses Lab 3's HS256 to stay small.)</p>
+</div>
+
+<p class="code-title"><span>oauth.py</span><span>Python 3.8+, next to tokens.py</span></p>
+<pre><code><span class="c"># oauth.py · the authorization code flow with PKCE, played out in one file</span>
+<span class="c"># Save next to tokens.py from Lab 3; it reuses sign() and verify().</span>
+<span class="k">import</span> base64, hashlib, hmac, json, secrets
+<span class="k">from</span> urllib.parse <span class="k">import</span> urlencode
+<span class="k">from</span> tokens <span class="k">import</span> sign, verify, unb64url
+
+<span class="k">def</span> b64url(data):
+    <span class="k">return</span> base64.urlsafe_b64encode(data).rstrip(b<span class="s">"="</span>).decode()
+
+<span class="k">def</span> challenge_for(verifier):
+    <span class="k">return</span> b64url(hashlib.sha256(verifier.encode()).digest())   <span class="c"># the S256 method</span>
+
+<span class="c"># 1. Check against RFC 7636, appendix B</span>
+rfc_verifier = <span class="s">"dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"</span>
+print(<span class="s">"RFC 7636 vector:"</span>, challenge_for(rfc_verifier) == <span class="s">"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"</span>)
+
+<span class="c"># 2. The client (an expense tool) starts the flow</span>
+CLIENT_ID, REDIRECT = <span class="s">"spendwise"</span>, <span class="s">"https://app.spendwise.example/callback/larder"</span>
+verifier = secrets.token_urlsafe(32)          <span class="c"># kept secret by the client</span>
+state, nonce = secrets.token_urlsafe(16), secrets.token_urlsafe(16)
+print(<span class="s">"\nsend the browser to:"</span>)
+print(<span class="s">"https://login.larder.example/authorize?"</span> + urlencode({
+    <span class="s">"response_type"</span>: <span class="s">"code"</span>, <span class="s">"client_id"</span>: CLIENT_ID, <span class="s">"redirect_uri"</span>: REDIRECT,
+    <span class="s">"scope"</span>: <span class="s">"openid invoices:read"</span>, <span class="s">"state"</span>: state, <span class="s">"nonce"</span>: nonce,
+    <span class="s">"code_challenge"</span>: challenge_for(verifier), <span class="s">"code_challenge_method"</span>: <span class="s">"S256"</span>})[:96] + <span class="s">"…"</span>)
+
+<span class="c"># 3. The authorization server: the user signs in and consents; a one-time code is issued</span>
+KEY, ISS, NOW = b<span class="s">"lab-only-key-printed-in-a-book-1"</span>, <span class="s">"https://login.larder.example"</span>, 1795597200
+CODES = {}
+<span class="k">def</span> authorize(challenge, redirect_uri, nonce):
+    code = secrets.token_urlsafe(16)
+    CODES[code] = {<span class="s">"challenge"</span>: challenge, <span class="s">"redirect_uri"</span>: redirect_uri, <span class="s">"nonce"</span>: nonce,
+                   <span class="s">"sub"</span>: <span class="s">"office-manager-207"</span>, <span class="s">"scope"</span>: <span class="s">"openid invoices:read"</span>}
+    <span class="k">return</span> code
+
+<span class="k">def</span> token(code, code_verifier, redirect_uri):
+    grant = CODES.pop(code, None)                   <span class="c"># a code works once</span>
+    <span class="k">if</span> grant <span class="k">is</span> None:
+        <span class="k">return</span> <span class="s">"error: invalid_grant (unknown or used code)"</span>
+    <span class="k">if</span> redirect_uri != grant[<span class="s">"redirect_uri"</span>]:
+        <span class="k">return</span> <span class="s">"error: invalid_grant (redirect_uri)"</span>
+    <span class="k">if not</span> hmac.compare_digest(challenge_for(code_verifier), grant[<span class="s">"challenge"</span>]):
+        <span class="k">return</span> <span class="s">"error: invalid_grant (PKCE verifier)"</span>
+    access = sign({<span class="s">"iss"</span>: ISS, <span class="s">"sub"</span>: grant[<span class="s">"sub"</span>], <span class="s">"aud"</span>: <span class="s">"larder-api"</span>, <span class="s">"iat"</span>: NOW,
+                   <span class="s">"exp"</span>: NOW + 600, <span class="s">"scope"</span>: <span class="s">"invoices:read"</span>}, KEY)
+    id_token = sign({<span class="s">"iss"</span>: ISS, <span class="s">"sub"</span>: grant[<span class="s">"sub"</span>], <span class="s">"aud"</span>: CLIENT_ID, <span class="s">"iat"</span>: NOW,
+                     <span class="s">"exp"</span>: NOW + 600, <span class="s">"nonce"</span>: grant[<span class="s">"nonce"</span>]}, KEY)
+    <span class="k">return</span> {<span class="s">"access_token"</span>: access, <span class="s">"id_token"</span>: id_token, <span class="s">"token_type"</span>: <span class="s">"Bearer"</span>, <span class="s">"expires_in"</span>: 600}
+
+code = authorize(challenge_for(verifier), REDIRECT, nonce)
+
+<span class="c"># 4. An attacker who intercepted the code, but not the verifier, tries first</span>
+print(<span class="s">"\nattacker:"</span>, token(code, secrets.token_urlsafe(32), REDIRECT))
+code = authorize(challenge_for(verifier), REDIRECT, nonce)   <span class="c"># the user tries again</span>
+result = token(code, verifier, REDIRECT)
+print(<span class="s">"client:  "</span>, sorted(result))
+print(<span class="s">"again:   "</span>, token(code, verifier, REDIRECT))
+
+<span class="c"># 5. The client checks the ID token (it's for the client), the API checks the access token</span>
+print(<span class="s">"\nID token for client:   "</span>, verify(result[<span class="s">"id_token"</span>], KEY, ISS, CLIENT_ID, now=NOW + 5))
+print(<span class="s">"nonce matches:         "</span>, json.loads(unb64url(result[<span class="s">"id_token"</span>].split(<span class="s">"."</span>)[1]))[<span class="s">"nonce"</span>] == nonce)
+print(<span class="s">"access token for API:  "</span>, verify(result[<span class="s">"access_token"</span>], KEY, ISS, <span class="s">"larder-api"</span>, now=NOW + 5))
+print(<span class="s">"ID token sent to API:  "</span>, verify(result[<span class="s">"id_token"</span>], KEY, ISS, <span class="s">"larder-api"</span>, now=NOW + 5))</code></pre>
+
+<ol class="steps">
+  <li><strong>Run it</strong> with <code>python3 oauth.py</code>. The random values differ each time; the results don't:
+<pre><code>RFC 7636 vector: True
+
+send the browser to:
+https://login.larder.example/authorize?response_type=code&amp;client_id=spendwise&amp;redirect_uri=https%3A%2F%2Fapp.spendwise.example%2Fcallba…
+
+attacker: error: invalid_grant (PKCE verifier)
+client:   ['access_token', 'expires_in', 'id_token', 'token_type']
+again:    error: invalid_grant (unknown or used code)
+
+ID token for client:    ok: office-manager-207
+nonce matches:          True
+access token for API:   ok: office-manager-207 may invoices:read
+ID token sent to API:   rejected: wrong audience</code></pre>
+  Read it against Figure 4.2: the attacker had a real code but not the verifier; a code works once; the ID token is good for the client and useless at the API.</li>
+  <li><strong>Remove the slice <code>[:96] + "…"</code></strong> and look at the full authorization URL. Find the challenge in it, and note that the verifier appears nowhere.</li>
+  <li><strong>Break it on purpose.</strong> In <code>token()</code>, delete the PKCE check: the attacker now gets tokens with a stolen code. Put it back, then change the redirect check to <code>if not redirect_uri.startswith("https://app.spendwise.example")</code> and pass <code>"https://app.spendwise.example.evil.example/x"</code> as the redirect URI: a loose prefix match accepts an attacker's domain.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Look at a real provider's discovery document: <code>curl -s https://accounts.google.com/.well-known/openid-configuration</code>. Find the authorization and token endpoints, the JWKS URL, and the list of supported code challenge methods.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s4-11"><span class="n">4.11</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Sharing passwords with other apps</td><td>Unlimited, irrevocable access for the app.</td><td>OAuth with narrow scopes.</td></tr>
+      <tr><td>Implicit or password grant</td><td>Tokens in URLs, or apps collecting passwords.</td><td>Authorization code + PKCE.</td></tr>
+      <tr><td>Loose redirect URI matching</td><td>Codes delivered to attacker-controlled pages.</td><td>Exact matching of registered URIs.</td></tr>
+      <tr><td>No <code>state</code> or <code>nonce</code></td><td>An attacker's code or token injected into a user's session.</td><td>Random per request, stored and checked.</td></tr>
+      <tr><td>Using access tokens as proof of login</td><td>Tokens for another app let attackers sign in as the user.</td><td>OIDC ID tokens with <code>aud</code> = your client ID.</td></tr>
+      <tr><td>Email address as the user's key</td><td>Account takeover when an address is reused or changed.</td><td><code>iss</code> + <code>sub</code>.</td></tr>
+      <tr><td>Embedded web views for login</td><td>The app can read the password; no passkeys or existing session.</td><td>The system browser.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum4">
+  <h2 class="sec" id="sum4"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li><strong>OAuth 2.0</strong> is delegated authorisation: an app gets a scoped, revocable token instead of your password. <strong>OpenID Connect</strong> adds sign-in with an ID token.</li>
+    <li>Four roles: resource owner, client, authorization server, resource server.</li>
+    <li>Use <strong>authorization code + PKCE</strong> for anything acting for a person; client credentials for services acting for themselves; the device grant for devices without a browser.</li>
+    <li><code>redirect_uri</code> (exact), <code>state</code>, one-time codes and PKCE each block a specific attack.</li>
+    <li>Scopes limit the client; the API still applies its own rules about the user.</li>
+    <li>ID tokens are for the client, access tokens for the API. Identify people by <code>iss</code> + <code>sub</code>.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>OAuth 2.0</dt><dd>A framework for granting applications limited access to resources on a user's behalf.</dd>
+    <dt>OpenID Connect</dt><dd>An identity layer on OAuth 2.0 that adds sign-in and ID tokens.</dd>
+    <dt>Client</dt><dd>The application requesting access; confidential (can keep a secret) or public.</dd>
+    <dt>Authorization server</dt><dd>Authenticates the user, collects consent and issues tokens.</dd>
+    <dt>Scope</dt><dd>A named slice of access a client requests and a token carries.</dd>
+    <dt>Authorization code</dt><dd>A short-lived, one-time reference exchanged for tokens on the back channel.</dd>
+    <dt>PKCE</dt><dd>Proof Key for Code Exchange: a secret verifier that proves the redeemer of a code started the flow.</dd>
+    <dt>ID token</dt><dd>An OIDC JWT, addressed to the client, describing the authentication.</dd>
+    <dt>Discovery</dt><dd>The <code>/.well-known/openid-configuration</code> document describing a provider.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Name the four OAuth roles when you let a photo-printing website read your photos from a cloud drive. <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Resource owner: you. Client: the printing website. Authorization server: the cloud drive provider's sign-in service. Resource server: the cloud drive's photo API.</p></details>
+    </li>
+    <li>
+      <p>An attacker's app on the same phone intercepts the redirect carrying an authorization code. Why can't it get tokens? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The token endpoint needs the PKCE code verifier, which only the real app has; the redirect carried only the code, and the challenge sent earlier is a one-way hash.</p></details>
+    </li>
+    <li>
+      <p>Which grant would you use for: a nightly job that pulls Larder's invoices for Korenwolf's finance system with no person present; a smart TV app; a single-page web app? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>A person must consent once, so: the authorization code flow once, then refresh tokens for the nightly job (or client credentials if Larder offers business-level access without a user). Device authorization for the TV. Authorization code + PKCE for the single-page app, ideally through a backend for frontend.</p></details>
+    </li>
+    <li>
+      <p>Your API receives an ID token in the <code>Authorization</code> header. What should it do, and why? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Reject it: its audience is the client, not the API, and it carries no scopes. Accepting it would let any app that received an ID token for the user call your API as them.</p></details>
+    </li>
+    <li>
+      <p>Design the scopes for Larder's business API, used by Spendwise and future integrations. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Something like <code>invoices:read</code>, <code>orders:read</code>, <code>orders:write</code>, <code>standing-orders:write</code> and <code>account:read</code>, keeping money-moving and address-changing actions separate from reading. Every call also checks that the user belongs to the business account whose data is requested.</p></details>
+    </li>
+    <li>
+      <p>Compare how you'd register an app that signs in employees on Azure and on AWS. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Azure: an app registration in Entra ID with redirect URIs and credentials, assigned to users or groups as an enterprise application. AWS: an application in IAM Identity Center (or a Cognito user pool federated with the company IdP), assigned to users or groups.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li><a href="https://datatracker.ietf.org/doc/html/rfc6749">RFC 6749, OAuth 2.0</a>; <a href="https://datatracker.ietf.org/doc/html/rfc7636">RFC 7636, PKCE</a>; <a href="https://datatracker.ietf.org/doc/html/rfc9700">RFC 9700, OAuth 2.0 Security Best Current Practice</a>; <a href="https://datatracker.ietf.org/doc/html/rfc8252">RFC 8252, OAuth for native apps</a>.</li>
+    <li><a href="https://openid.net/specs/openid-connect-core-1_0.html">OpenID Connect Core 1.0</a>.</li>
+    <li><a href="https://oauth.net/2.1/">OAuth 2.1</a>, which folds in today's best practice.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/entra/identity-platform/v2-oauth2-auth-code-flow">Microsoft identity platform and the authorization code flow</a>. AWS: <a href="https://docs.aws.amazon.com/cognito/latest/developerguide/federation-endpoints.html">Cognito OAuth endpoints</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="#ch3">3 · Sessions and tokens</a></div>
+  <div><span>Next</span><a href="#ch5">5 · SAML and federation</a></div>
+</nav>

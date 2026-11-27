@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Data perimeters · Identity and Access in the Cloud</title>
+<meta name="description" content="Making sure only your identities reach your data, and only from your networks. Picks up the endpoint policies from Handbook 1, Chapter 12.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 2</a> · <a href="index.html">Identity and Access in the Cloud</a></span><span>Part V · Chapter 22</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part V · Many accounts</p>
+  <p class="chno">22</p>
+  <h1>Data perimeters</h1>
+  <p class="promise">Every chapter so far has been about granting the right access. This one is about a backstop for when something goes wrong anyway: a bucket policy that's too generous, a leaked access key, code that copies data somewhere it shouldn't. A data perimeter is a small set of organisation-wide rules that say only our identities may touch our data, our identities may only send data to our resources, and the most sensitive data may only be reached from our own networks. Each rule is a few lines; together they turn whole classes of mistakes into denials.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain the identity, resource and network perimeters, and what each prevents.</li>
+      <li>Write the perimeter conditions with <code>aws:PrincipalOrgID</code>, <code>aws:ResourceOrgID</code>, <code>aws:SourceVpc</code> and their friends.</li>
+      <li>Choose where each perimeter lives: RCPs, SCPs, resource policies or VPC endpoint policies.</li>
+      <li>Design exceptions for AWS services and partners without punching holes.</li>
+      <li>Roll a perimeter out without breaking production.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>SCPs and RCPs (<a href="20-organizations.html">Chapter 20</a>); cross-account access and the confused deputy (<a href="21-cross-account.html">Chapter 21</a>).</li>
+      <li>Workload credentials and <code>aws:EC2InstanceSourceVPC</code> (<a href="15-workload-identity.html">Chapter 15</a>). VPC endpoints help (Handbook 1, Chapter 12).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, Python 3; optional AWS step, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 22.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>On 25 October 2027, Lena and Ana finished classifying Larder's data into four classes: public, internal, confidential and restricted. Two S3 buckets came out as <em>restricted</em>: the order exports (<a href="18-secrets-keys.html">Chapter 18</a>) and the payment providers' daily settlement files. A week later Lena asked Eli the question a data protection officer should ask: “For restricted data, can you show me that only Larder can reach it, even if somebody's key leaks, or somebody writes a bad bucket policy?”</p>
+  <p>Eli's honest answer was: mostly, but not provably. Every protection depended on each policy being right. Section 22.6 shows the three rules that changed the answer.</p>
+</aside>
+
+<!-- ======================================================== 22.1 -->
+<h2 class="sec" id="s22-1"><span class="n">22.1</span>Three perimeters</h2>
+
+<p class="lead">A <span class="term">data perimeter</span> is a set of coarse, preventive guardrails around everything your organisation owns. It doesn't replace least privilege; it catches what least privilege misses. It's built from three questions, each answered by one kind of rule:</p>
+
+<figure class="wide" id="fig22-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 270" role="img" aria-labelledby="fig22-1-t fig22-1-d">
+      <title id="fig22-1-t">The three data perimeters</title>
+      <desc id="fig22-1-d">Larder's organisation is drawn as a boundary holding its identities and its resources. Inside, a Larder identity reaching a Larder resource from a Larder network is allowed. Three arrows cross the boundary and are blocked. An outside identity reaching a Larder resource is blocked by the identity perimeter. A Larder identity sending data to an outside resource is blocked by the resource perimeter. A Larder identity's stolen credentials used from an outside network to reach restricted data are blocked by the network perimeter.</desc>
+      <defs><marker id="c22ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c22ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="vpc" x="200" y="20" width="360" height="200" rx="14"/>
+      <text class="t-label" x="380" y="44" text-anchor="middle">Larder's organisation</text>
+      <rect class="node" x="226" y="70" width="130" height="48" rx="5"/><text class="t-label" x="291" y="99" text-anchor="middle">our identities</text>
+      <rect class="pub" x="404" y="70" width="130" height="48" rx="5"/><text class="t-label" x="469" y="99" text-anchor="middle">our resources</text>
+      <path class="wire-accent" d="M358 94 H400" marker-end="url(#c22ah)"/>
+      <text class="t-small t-accent" x="300" y="146" text-anchor="middle">inside → inside: allowed</text>
+      <rect class="ext" x="12" y="72" width="140" height="44" rx="5"/><text class="t-small" x="82" y="98" text-anchor="middle">an outside identity</text>
+      <path class="wire" d="M154 94 H196"/><text class="t-title t-warn" x="206" y="101">✗</text>
+      <text class="t-small t-warn" x="82" y="134" text-anchor="middle">identity perimeter</text>
+      <rect class="ext" x="608" y="72" width="140" height="44" rx="5"/><text class="t-small" x="678" y="98" text-anchor="middle">an outside bucket</text>
+      <path class="wire" d="M560 94 H604"/><text class="t-title t-warn" x="568" y="88">✗</text>
+      <text class="t-small t-warn" x="678" y="134" text-anchor="middle">resource perimeter</text>
+      <rect class="ext" x="250" y="228" width="260" height="34" rx="5"/><text class="t-small" x="380" y="250" text-anchor="middle">our stolen key, used from an outside network</text>
+      <path class="wire" d="M469 226 V124"/><text class="t-title t-warn" x="476" y="212">✗</text>
+      <text class="t-small t-warn" x="560" y="250">network perimeter</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 22.1</b> Three ways data leaves, and the perimeter that stops each: strangers coming in, our identities sending out, and our credentials used from somewhere else.</figcaption>
+</figure>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 22.1 · The three perimeters</caption>
+    <thead><tr><th>Perimeter</th><th>Rule</th><th>Prevents</th><th>Enforced on</th><th>Main condition key</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Identity</strong></td><td>only trusted identities may access our resources</td><td>a too-generous bucket or key policy</td><td>our resources: RCPs, resource policies</td><td><code>aws:PrincipalOrgID</code></td></tr>
+      <tr><td><strong>Resource</strong></td><td>our identities may access only trusted resources</td><td>copying data out to an attacker's bucket</td><td>our identities: SCPs, VPC endpoint policies</td><td><code>aws:ResourceOrgID</code></td></tr>
+      <tr><td><strong>Network</strong></td><td>our data, and our credentials, only from expected networks</td><td>stolen credentials used from elsewhere</td><td>resource policies, SCPs</td><td><code>aws:SourceVpc</code>, <code>aws:SourceVpce</code>, <code>aws:SourceIp</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 22.2 -->
+<h2 class="sec" id="s22-2"><span class="n">22.2</span>The identity perimeter</h2>
+
+<p>The identity perimeter makes one statement for the whole organisation: <em>no request reaches our resources unless it comes from an identity in our organisation, or from an AWS service working for us.</em> A resource control policy (<a href="20-organizations.html">Chapter 20</a>) is the natural place, because it applies to every resource in every member account, whatever its own policy says:</p>
+
+<p class="code-title"><span>identity perimeter</span><span>RCP attached to the organisation root</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [
+    {
+      <span class="k">"Sid"</span>: <span class="s">"OnlyOurIdentities"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Deny"</span>, <span class="k">"Principal"</span>: <span class="s">"*"</span>,
+      <span class="k">"Action"</span>: [<span class="s">"s3:*"</span>, <span class="s">"kms:*"</span>, <span class="s">"secretsmanager:*"</span>, <span class="s">"sqs:*"</span>, <span class="s">"sts:AssumeRole"</span>],
+      <span class="k">"Resource"</span>: <span class="s">"*"</span>,
+      <span class="k">"Condition"</span>: {
+        <span class="k">"StringNotEqualsIfExists"</span>: { <span class="s">"aws:PrincipalOrgID"</span>: <span class="s">"o-a1b2c3d4e5"</span>,
+                                     <span class="s">"aws:ResourceTag/perimeter-exception"</span>: <span class="s">"vendor-role"</span> },
+        <span class="k">"BoolIfExists"</span>: { <span class="s">"aws:PrincipalIsAWSService"</span>: <span class="s">"false"</span> }
+      }
+    },
+    {
+      <span class="k">"Sid"</span>: <span class="s">"AWSServicesOnlyWhenWorkingForUs"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Deny"</span>, <span class="k">"Principal"</span>: <span class="s">"*"</span>,
+      <span class="k">"Action"</span>: [<span class="s">"s3:*"</span>, <span class="s">"kms:*"</span>, <span class="s">"secretsmanager:*"</span>, <span class="s">"sqs:*"</span>, <span class="s">"sts:AssumeRole"</span>],
+      <span class="k">"Resource"</span>: <span class="s">"*"</span>,
+      <span class="k">"Condition"</span>: {
+        <span class="k">"StringNotEqualsIfExists"</span>: { <span class="s">"aws:SourceOrgID"</span>: <span class="s">"o-a1b2c3d4e5"</span> },
+        <span class="k">"Bool"</span>: { <span class="s">"aws:PrincipalIsAWSService"</span>: <span class="s">"true"</span> }
+      }
+    }
+  ]
+}</code></pre>
+
+<p>Read aloud: “Deny any request to these services from a principal outside our organisation, unless it's an AWS service, or the resource is tagged as a vendor role. Deny an AWS service, unless it's acting for something in our organisation.” The second statement is the confused-deputy protection from <a href="21-cross-account.html">Chapter 21</a>, applied everywhere at once. (Conditions under one operator are ANDed, so the first statement denies only when <em>both</em> the caller is an outsider <em>and</em> the resource isn't tagged.)</p>
+
+<p>Notice how vendors pass. When WMS B assumes its role in Larder's account (<a href="21-cross-account.html">Chapter 21</a>), the <code>sts:AssumeRole</code> call itself comes from WMS B's account, outside the organisation, so it needs an exception: the tag <code>perimeter-exception=vendor-role</code> on that one role, which only the platform team may set (<a href="06-access-models.html">Chapter 6</a>, 6.4). Once assumed, WMS B acts as Larder's role, inside the organisation, and needs nothing more. A partner reaching your bucket <em>directly</em> through a bucket policy, as StockPilot once did, would need an exception on every resource it touches. That's why partners should come in through a few tagged roles you control.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">A perimeter doesn't grant anything. It makes the worst mistakes impossible: no policy anyone writes, in any account, can open our data to the outside world.</p>
+</div>
+
+<!-- ======================================================== 22.3 -->
+<h2 class="sec" id="s22-3"><span class="n">22.3</span>The resource perimeter</h2>
+
+<p>The opposite direction: <em>our identities may only use resources in our organisation.</em> Without it, code with legitimate access to customer data, or an attacker who has taken over that code, can copy the data to a bucket in an account they own, and the request looks perfectly normal: an authorised principal writing to S3.</p>
+
+<p class="code-title"><span>resource perimeter</span><span>SCP attached to the Workloads OU</span></p>
+<pre><code>{
+  <span class="k">"Sid"</span>: <span class="s">"OnlyOurResources"</span>,
+  <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+  <span class="k">"Action"</span>: [<span class="s">"s3:*"</span>, <span class="s">"sqs:*"</span>, <span class="s">"secretsmanager:*"</span>, <span class="s">"kms:*"</span>],
+  <span class="k">"Resource"</span>: <span class="s">"*"</span>,
+  <span class="k">"Condition"</span>: { <span class="k">"StringNotEqualsIfExists"</span>: { <span class="s">"aws:ResourceOrgID"</span>: <span class="s">"o-a1b2c3d4e5"</span> } }
+}</code></pre>
+
+<p>This one needs care. Some legitimate work reads resources AWS owns (operating-system package repositories in S3, AWS-published datasets) or resources partners own (WMS B's API isn't on AWS, but some partners' buckets are). List those as exceptions by account or ARN. VPC endpoint policies (Handbook 1, Chapter 12) apply the same idea at the network edge: the S3 endpoint in Larder's VPCs only lets requests through to Larder's buckets and the named exceptions.</p>
+
+<!-- ======================================================== 22.4 -->
+<h2 class="sec" id="s22-4"><span class="n">22.4</span>The network perimeter</h2>
+
+<p>The identity perimeter stops strangers, but a stolen key belongs to one of <em>your</em> identities. The network perimeter adds: <em>restricted data may only be reached from our networks, or by an AWS service working for us.</em> For Larder's two restricted buckets, the bucket policies carry:</p>
+
+<pre><code>{
+  <span class="k">"Sid"</span>: <span class="s">"RestrictedDataOnlyFromOurNetworks"</span>,
+  <span class="k">"Effect"</span>: <span class="s">"Deny"</span>, <span class="k">"Principal"</span>: <span class="s">"*"</span>,
+  <span class="k">"Action"</span>: <span class="s">"s3:*"</span>,
+  <span class="k">"Resource"</span>: [<span class="s">"arn:aws:s3:::larder-settlements"</span>, <span class="s">"arn:aws:s3:::larder-settlements/*"</span>],
+  <span class="k">"Condition"</span>: {
+    <span class="k">"StringNotEqualsIfExists"</span>: { <span class="s">"aws:SourceVpc"</span>: [<span class="s">"vpc-0prod1a2b3c4d5e6f"</span>] },
+    <span class="k">"BoolIfExists"</span>: { <span class="s">"aws:ViaAWSService"</span>: <span class="s">"false"</span>, <span class="s">"aws:PrincipalIsAWSService"</span>: <span class="s">"false"</span> },
+    <span class="k">"ArnNotLike"</span>: { <span class="s">"aws:PrincipalArn"</span>: <span class="s">"arn:aws:iam::*:role/break-glass-admin"</span> }
+  }
+}</code></pre>
+
+<p><code>aws:SourceVpc</code> is only present when a request arrives through a VPC endpoint, so a request from the internet has no value, <code>…IfExists</code> treats it as “not equal”, and the deny applies. <code>aws:ViaAWSService</code> exempts calls a service such as Athena or Glue makes for a Larder principal. For credentials issued to EC2 instances, the condition keys <code>aws:EC2InstanceSourceVPC</code> and <code>aws:EC2InstanceSourcePrivateIPv4</code> (<a href="15-workload-identity.html">Chapter 15</a>) let an SCP reject an instance's credentials when they're used anywhere but from that instance's own VPC.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: perimeters fail loudly, and in production</p>
+  <p>A perimeter applies to every request, including the ones nobody remembered: a nightly job that reads from an AWS-owned bucket, a service calling from outside the VPC, a support engineer's console session. Before enforcing, search CloudTrail (with S3 data events) for every request that <em>would</em> be denied, write exceptions for the legitimate ones, enforce on staging, then production. Keep the break-glass role as an exception, and test it.</p>
+</div>
+
+<!-- ======================================================== 22.5 -->
+<h2 class="sec" id="s22-5"><span class="n">22.5</span>Where each piece lives</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 22.2 · Data perimeter building blocks</caption>
+    <thead><tr><th>Control</th><th>Applies to</th><th>Good for</th></tr></thead>
+    <tbody>
+      <tr><td>RCP</td><td>every supported resource in the OUs it's attached to</td><td>the identity perimeter, everywhere at once</td></tr>
+      <tr><td>SCP</td><td>every principal in the OUs it's attached to</td><td>the resource perimeter; network rules for credentials</td></tr>
+      <tr><td>Resource-based policy</td><td>one resource</td><td>network rules for specific restricted data; services RCPs don't cover yet</td></tr>
+      <tr><td>VPC endpoint policy</td><td>traffic through one endpoint</td><td>resource perimeter at the network edge</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Tag what's sensitive (<code>data-class=restricted</code>) so reviews and Access Analyzer findings can tell restricted resources from the rest, and keep every perimeter policy in code with review (<a href="24-identity-as-code.html">Chapter 24</a>): they're the most powerful lines in the organisation.</p>
+
+<!-- ======================================================== 22.6 -->
+<h2 class="sec" id="s22-6"><span class="n">22.6</span>At Larder: an answer Lena could check</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Eli spent November 2027 on the perimeter, in the order above. First, a fortnight of looking: with the S3 data-event trail (<a href="23-audit-detect.html">Chapter 23</a>) he listed every request to Larder's buckets from outside the organisation or outside its VPCs in the previous 30 days. There were three kinds: the finance team's reconciliation script, run from laptops; Athena queries; and a nightly job reading AWS's public package repositories. The finance script moved off laptops into a small scheduled task inside the production VPC, running as the <code>finance-reports</code> role (<a href="18-secrets-keys.html">Chapter 18</a>); Athena is covered by <code>aws:ViaAWSService</code>; the package repositories became a named exception in the resource perimeter.</p>
+  <p>Then enforcement, staging first: the identity perimeter RCP on the root, with a single tagged exception (WMS B's delivery role, the only role an outside account may assume); the resource perimeter SCP on Workloads; and the network rule on the two restricted buckets. Lena got her answer as three short policies and a list of tested cases, the same cases as the lab below: a stolen finance key used from a laptop is refused; a bucket policy that accidentally named a stranger is overruled; code copying exports to an outside bucket is refused. The same month, Eli closed the medium review finding from October (<a href="19-api-access.html">Chapter 19</a>), alerting on any new federation trust, which is <a href="23-audit-detect.html">Chapter 23</a>'s subject.</p>
+</aside>
+
+<!-- ======================================================== 22.7 -->
+<h2 class="sec" id="s22-7"><span class="n">22.7</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 22.3 · Data perimeters at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Only our identities</td><td>RCPs and resource policies with <code>aws:PrincipalOrgID</code></td><td>cross-tenant access settings; tenant restrictions</td><td>domain-restricted sharing; VPC Service Controls</td></tr>
+      <tr><td>Only our resources</td><td>SCPs with <code>aws:ResourceOrgID</code>; endpoint policies</td><td>tenant restrictions v2 (block access to other tenants)</td><td>VPC Service Controls perimeters</td></tr>
+      <tr><td>Only our networks</td><td><code>aws:SourceVpc</code>/<code>aws:SourceVpce</code> conditions</td><td>private endpoints with public network access disabled</td><td>VPC Service Controls with access levels</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>Azure's network perimeter is mostly a resource setting: storage accounts, Key Vaults and databases can disable public network access and accept traffic only through <strong>private endpoints</strong> (and, more recently, network security perimeters around groups of PaaS resources). <strong>Tenant restrictions</strong> stop your users and devices signing in to other organisations' tenants, closing the “copy it to my personal tenant” route.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p><strong>VPC Service Controls</strong> draw a perimeter around a set of projects and services: data can't be moved out of it, and API calls from outside are refused unless an <em>access level</em> (network, device, identity) allows them. It covers all three of AWS's perimeters in one feature, and needs the same careful dry-run mode before enforcement.</p>
+</div>
+
+<!-- ======================================================== 22.8 -->
+<h2 class="sec" id="s22-8"><span class="n">22.8</span>Lab: test the perimeter before it's real</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 22 · Eight requests, three perimeters</p>
+  <p><strong>You'll</strong> run Larder's test cases through a model of the three perimeters, then break each perimeter to see what it was stopping. Optionally, you'll add a network rule to a bucket of your own. <strong>You need</strong> Python 3; for the optional part, the AWS CLI in a sandbox account. <strong>Cost:</strong> free.</p>
+</div>
+
+<p class="code-title"><span>perimeter.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># perimeter.py · the three data perimeters: trusted identities, trusted resources, expected networks</span>
+ORG = <span class="s">"o-a1b2c3d4e5"</span>                     <span class="c"># Larder's organisation</span>
+OUR_VPCS = {<span class="s">"vpc-prod"</span>, <span class="s">"vpc-staging"</span>}
+RESTRICTED = {<span class="s">"larder-order-exports"</span>, <span class="s">"larder-settlements"</span>}
+
+<span class="k">def</span> check(req):
+    ours_resource = req[<span class="s">"resource_org"</span>] == ORG
+    ours_principal = req[<span class="s">"principal_org"</span>] == ORG
+    service = req.get(<span class="s">"aws_service"</span>, False)
+    <span class="c"># 1. identity perimeter (RCP on our resources): only our identities, or AWS services working for us</span>
+    <span class="k">if</span> ours_resource <span class="k">and not</span> ours_principal <span class="k">and not</span> (service <span class="k">and</span> req.get(<span class="s">"source_org"</span>) == ORG) \
+            <span class="k">and not</span> req.get(<span class="s">"tagged_exception"</span>):
+        <span class="k">return</span> <span class="s">"DENY  identity perimeter: caller isn't in our organisation"</span>
+    <span class="c"># 2. resource perimeter (SCP on our identities): only resources in our organisation</span>
+    <span class="k">if</span> ours_principal <span class="k">and not</span> ours_resource <span class="k">and not</span> service:
+        <span class="k">return</span> <span class="s">"DENY  resource perimeter: target isn't in our organisation"</span>
+    <span class="c"># 3. network perimeter (restricted buckets' policies): only from our networks, or via an AWS service</span>
+    <span class="k">if</span> req[<span class="s">"bucket"</span>] <span class="k">in</span> RESTRICTED <span class="k">and</span> req.get(<span class="s">"source_vpc"</span>) <span class="k">not in</span> OUR_VPCS <span class="k">and not</span> service <span class="k">and not</span> req.get(<span class="s">"via_aws_service"</span>):
+        <span class="k">return</span> <span class="s">"DENY  network perimeter: not from our networks"</span>
+    <span class="k">return</span> <span class="s">"ALLOW (now IAM, resource policies and SCPs decide)"</span>
+
+<span class="k">def</span> r(who, bucket, principal_org=ORG, resource_org=ORG, **extra):
+    <span class="k">return</span> dict(who=who, bucket=bucket, principal_org=principal_org, resource_org=resource_org, **extra)
+
+cases = [
+    r(<span class="s">"finance-reports job in the prod VPC"</span>,           <span class="s">"larder-settlements"</span>, source_vpc=<span class="s">"vpc-prod"</span>),
+    r(<span class="s">"finance-reports keys, stolen, from a laptop"</span>,  <span class="s">"larder-settlements"</span>),
+    r(<span class="s">"Athena querying exports for a Larder role"</span>,    <span class="s">"larder-order-exports"</span>, via_aws_service=True),
+    r(<span class="s">"a stranger, via a too-generous bucket policy"</span>, <span class="s">"larder-wmsb-inbound"</span>, principal_org=<span class="s">"o-zz9stranger"</span>),
+    r(<span class="s">"Larder code copying data to an outside bucket"</span>, <span class="s">"exfil-bucket"</span>, resource_org=<span class="s">"o-zz9stranger"</span>, source_vpc=<span class="s">"vpc-prod"</span>),
+    r(<span class="s">"WMS B assuming its role (tagged exception)"</span>,    <span class="s">"role/wmsb-nightly-file"</span>, principal_org=<span class="s">"o-wmsb"</span>, tagged_exception=True),
+    r(<span class="s">"WMS B, as that role, writing the nightly file"</span>, <span class="s">"larder-wmsb-inbound"</span>),
+    r(<span class="s">"WMS B assuming any other Larder role"</span>,          <span class="s">"role/prod-operator"</span>, principal_org=<span class="s">"o-wmsb"</span>),
+    r(<span class="s">"CloudTrail writing Larder's logs"</span>,              <span class="s">"larder-org-trail"</span>, principal_org=None, aws_service=True, source_org=ORG),
+    r(<span class="s">"CloudTrail, for someone else's organisation"</span>,   <span class="s">"larder-org-trail"</span>, principal_org=None, aws_service=True, source_org=<span class="s">"o-zz9stranger"</span>),
+]
+<span class="k">for</span> c <span class="k">in</span> cases:
+    print(f<span class="s">"{c['who']:&lt;48} {check(c)}"</span>)</code></pre>
+
+<ol class="steps">
+  <li><strong>Predict, then run</strong> <code>python3 perimeter.py</code>:
+<pre><code>finance-reports job in the prod VPC              ALLOW (now IAM, resource policies and SCPs decide)
+finance-reports keys, stolen, from a laptop      DENY  network perimeter: not from our networks
+Athena querying exports for a Larder role        ALLOW (now IAM, resource policies and SCPs decide)
+a stranger, via a too-generous bucket policy     DENY  identity perimeter: caller isn't in our organisation
+Larder code copying data to an outside bucket    DENY  resource perimeter: target isn't in our organisation
+WMS B assuming its role (tagged exception)       ALLOW (now IAM, resource policies and SCPs decide)
+WMS B, as that role, writing the nightly file    ALLOW (now IAM, resource policies and SCPs decide)
+WMS B assuming any other Larder role             DENY  identity perimeter: caller isn't in our organisation
+CloudTrail writing Larder's logs                 ALLOW (now IAM, resource policies and SCPs decide)
+CloudTrail, for someone else's organisation      DENY  identity perimeter: caller isn't in our organisation</code></pre>
+  An ALLOW here only means the perimeter steps aside; every other policy still applies. Notice the three WMS B lines: one tagged role is the vendor's only way in, and once inside, it's an ordinary Larder session.</li>
+  <li><strong>Break each perimeter.</strong> Comment out one <code>if</code> block at a time and run again. Without the identity perimeter, the stranger, the misdirected CloudTrail and WMS B's attempt on <code>prod-operator</code> get in. (Point the stranger at a restricted bucket instead and the network perimeter still stops them: defence in depth.) Without the resource perimeter, the copy to an outside bucket goes through. Without the network perimeter, the stolen key works. Each rule stops exactly one kind of failure.</li>
+  <li><strong>Add an exception carefully.</strong> Add a case for StockPilot's role reading <code>larder-order-exports</code> directly, from outside the organisation, as it did before September 2027. It's denied. Now add an exception for it to the identity check; which other check still denies it, and why is that a good thing? (The network perimeter: the exports are restricted, and StockPilot's systems aren't in Larder's VPCs.)</li>
+  <li><strong>Optional: a network rule for real.</strong> In a sandbox account, add the statement from 22.4 to a test bucket's policy, using the ID of a VPC you have (or a made-up one), and with your own role's ARN as the <code>aws:PrincipalArn</code> exception so you can remove it again. From your laptop, <code>aws s3 ls s3://<i>bucket</i></code> as another role is refused with an explicit deny in a resource-based policy. Remove the statement afterwards.</li>
+</ol>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s22-9"><span class="n">22.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Relying on every bucket policy being right</td><td>One mistake exposes data.</td><td>An identity perimeter RCP that overrides mistakes.</td></tr>
+      <tr><td>No resource perimeter</td><td>Authorised code can copy data to any bucket in the world.</td><td>SCP and endpoint policies with <code>aws:ResourceOrgID</code>.</td></tr>
+      <tr><td>Forgetting AWS services</td><td>Logs, backups and analytics break when the perimeter goes on.</td><td><code>aws:PrincipalIsAWSService</code> with <code>aws:SourceOrgID</code>; <code>aws:ViaAWSService</code>.</td></tr>
+      <tr><td>Enforcing without looking first</td><td>Production jobs fail in the middle of the night.</td><td>Search CloudTrail for would-be denials; staging first.</td></tr>
+      <tr><td>Partners reaching your data directly</td><td>Every resource they touch needs an exception.</td><td>Partners assume a few tagged roles in your accounts (<a href="21-cross-account.html">Chapter 21</a>).</td></tr>
+      <tr><td>No break-glass exception</td><td>A broken perimeter locks out the people who'd fix it.</td><td>Exempt the break-glass role, and test it.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum22">
+  <h2 class="sec" id="sum22"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>A <strong>data perimeter</strong> is a few organisation-wide guardrails that make whole classes of mistakes harmless.</li>
+    <li><strong>Identity</strong>: only our identities (or AWS services working for us) reach our resources; an RCP with <code>aws:PrincipalOrgID</code>.</li>
+    <li><strong>Resource</strong>: our identities reach only our resources; an SCP and endpoint policies with <code>aws:ResourceOrgID</code>.</li>
+    <li><strong>Network</strong>: restricted data, and credentials, only from expected networks; <code>aws:SourceVpc</code>, <code>aws:ViaAWSService</code>, EC2 source keys.</li>
+    <li>Partners enter through a few tagged roles, the perimeter's only exceptions; after that they act inside it.</li>
+    <li>Look before you enforce, roll out by environment, keep break-glass working.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Data perimeter</dt><dd>Preventive guardrails ensuring only trusted identities reach trusted resources from expected networks.</dd>
+    <dt><code>aws:PrincipalOrgID</code></dt><dd>The organisation of the calling principal.</dd>
+    <dt><code>aws:ResourceOrgID</code></dt><dd>The organisation that owns the resource being accessed.</dd>
+    <dt><code>aws:SourceOrgID</code></dt><dd>The organisation of the resource an AWS service is acting for.</dd>
+    <dt><code>aws:SourceVpc</code> / <code>aws:SourceVpce</code></dt><dd>The VPC or VPC endpoint a request came through.</dd>
+    <dt><code>aws:ViaAWSService</code></dt><dd>True when an AWS service makes a request on a principal's behalf.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Which perimeter stops each: a bucket policy that grants <code>"Principal": "*"</code>; a compromised build job uploading source code to its own bucket; a leaked access key used from a hotel? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Identity perimeter; resource perimeter; network perimeter (for data and credentials it covers).</p></details>
+    </li>
+    <li>
+      <p>Why does the identity perimeter need a separate statement for AWS services? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>AWS services aren't in your organisation, so the first statement exempts them; but without a check they could be pointed at your resources by someone else (a confused deputy). The second statement allows services only when <code>aws:SourceOrgID</code> is your organisation.</p></details>
+    </li>
+    <li>
+      <p>After enforcing the network perimeter, the finance team's monthly report fails. What do you do? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Don't remove the rule: move the job to run inside the VPC (or through a service covered by <code>aws:ViaAWSService</code>), with its own role. If it truly can't, add a narrow, documented exception, and fix the process that let it go unnoticed before enforcement.</p></details>
+    </li>
+    <li>
+      <p>A vendor needs to read one Larder bucket. Should it get a bucket-policy grant or a role in Larder's account, given the perimeter? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>A role in Larder's account with an external ID, tagged as the vendor's perimeter exception: only the assume-role step needs the exception, its sessions are then inside Larder's organisation, and Larder controls the permissions. A direct bucket grant would need an exception on the bucket itself, and still meets the network rule for restricted data.</p></details>
+    </li>
+    <li>
+      <p>Why roll out perimeters with data-event analysis first, rather than relying on testing? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Perimeters apply to every request, including forgotten jobs and rare paths that tests don't cover. Real traffic from CloudTrail data events shows every request that would be denied, so exceptions can be written before anything breaks.</p></details>
+    </li>
+    <li>
+      <p>Compare how Google Cloud and AWS stop data being copied to an outside storage bucket. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Google Cloud: a VPC Service Controls perimeter around the projects blocks copying data to resources outside it. AWS: an SCP (and endpoint policies) denying requests whose <code>aws:ResourceOrgID</code> isn't your organisation.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://aws.amazon.com/identity/data-perimeters-on-aws/">Data perimeters on AWS</a>, the <a href="https://github.com/aws-samples/data-perimeter-policy-examples">data perimeter policy examples</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html">global condition keys</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/private-link/network-security-perimeter-concepts">Network security perimeter</a>. Google Cloud: <a href="https://cloud.google.com/vpc-service-controls/docs/overview">VPC Service Controls</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="21-cross-account.html">21 · Cross-account access and resource sharing</a></div>
+  <div><span>Next</span><a href="23-audit-detect.html">23 · Auditing and detecting misuse</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 2 · Identity and Access in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

@@ -2701,14 +2701,17 @@ def handbook_items(books):
         k = b["key"]
         n, total = len(b["written"]), b["n_chapters"]
         count = f"{n} of {total} chapters" if n < total else f"{total} chapters"
-        items.append(f'''    <li class="book book--handbook">
+        pdf = f'<a class="btn btn--ghost" href="handbooks/{k}/pdf/{k}-handbook.pdf">{DL}PDF</a>'
+        if not n:
+            count, pdf = f"coming soon · {total} chapters planned", ""
+        items.append(f'''    <li class="book book--handbook book--hb{b['no']}">
       <a class="book-cover" href="handbooks/{k}/index.html" aria-label="Open handbook {b['no']}: {esc(b['title'])}">
         <span class="book-band" aria-hidden="true"></span>
         <span class="book-label"><small>handbook {b['no']}</small><b>{esc(b['title'])}</b><i>{count}</i></span>
       </a>
       <div class="book-meta">
         <p>{esc(b['subtitle'])}. {esc(b['shelf_blurb'])}</p>
-        <p class="book-actions"><a class="btn" href="handbooks/{k}/index.html">Open book</a><a class="btn btn--ghost" href="handbooks/{k}/pdf/{k}-handbook.pdf">{DL}PDF</a></p>
+        <p class="book-actions"><a class="btn" href="handbooks/{k}/index.html">{"Open book" if n else "See the contents"}</a>{pdf}</p>
       </div>
     </li>''')
     return "\n".join(items)

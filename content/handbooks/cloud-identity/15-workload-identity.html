@@ -1,0 +1,366 @@
+<!-- Handbook 2 · Identity and Access in the Cloud · Chapter 15. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part IV · Access for software</p>
+  <p class="chno">15</p>
+  <h1>Identities for workloads</h1>
+  <p class="promise">Code needs credentials too: to read a bucket, send an email, publish an event. The worst place for them is where people usually put them first: in the code, an environment file, a container image. On AWS, the platform hands every workload short-lived credentials for its own role, refreshes them automatically, and never lets anyone see a key. This chapter shows how that works on EC2, ECS and Lambda, and how to stop an attacker borrowing those credentials through your own application.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain how code on EC2, ECS and Lambda gets role credentials without any key being stored.</li>
+      <li>Explain why the instance metadata service is a target, and require IMDSv2.</li>
+      <li>Tell an ECS task role from a task execution role, and give each the right permissions.</li>
+      <li>Give each workload its own narrow role, owned by a team.</li>
+      <li>Choose the right identity for workloads outside AWS.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Roles, service roles, <code>iam:PassRole</code> and the credential chain (<a href="#ch8">Chapter 8</a>).</li>
+      <li>Writing a least-privilege policy (<a href="#ch9">Chapter 9</a>, 9.9).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, Python 3; optional AWS step, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 15.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>On Monday 15 March 2027, an email arrived at <code>security@larder.example</code> from a security researcher. Larder Core, the original application, still running on three virtual machines, has a small endpoint that resizes product images: <code>/img?url=…</code>. It fetched <em>any</em> URL it was given. The researcher had asked it for <code>http://169.254.169.254/latest/meta-data/iam/security-credentials/</code>, and it had politely answered with a role name: <code>larder-core</code>. “I stopped there,” the email said. “The next request would have returned that role's credentials.”</p>
+  <p>The role had <code>AmazonS3FullAccess</code> and full access to the email-sending service. Section 15.9 shows what Larder did that afternoon, and the next week.</p>
+</aside>
+
+<!-- ======================================================== 15.1 -->
+<h2 class="sec" id="s15-1"><span class="n">15.1</span>The problem with keys in code</h2>
+
+<p class="lead">A workload is any software that calls cloud APIs: an application, a background job, a function. It needs credentials, and the tempting answer is an access key in a configuration file or environment variable. That key is long-lived (<a href="#ch1">Chapter 1</a>), so it ends up in backups, container images, crash dumps, logs and Git history, and works for whoever finds it until someone rotates it, which nobody does because rotation might break production.</p>
+
+<p>On AWS the answer is always the same: give the workload a <strong>role</strong>, and let the platform deliver that role's temporary credentials to the code at run time (<a href="#ch8">Chapter 8</a>). The SDK's credential chain finds them automatically and refreshes them before they expire. Nobody, not the developer, not the deployment, not the attacker who reads the config, ever sees a key.</p>
+
+<!-- ======================================================== 15.2 -->
+<h2 class="sec" id="s15-2"><span class="n">15.2</span>How it works on EC2</h2>
+
+<p>An EC2 instance gets a role through an <span class="term">instance profile</span>, a container for one role, attached at launch or later. Inside the instance, the <span class="term">instance metadata service</span> (IMDS), reachable at the link-local address <code>169.254.169.254</code>, serves that role's current temporary credentials. AWS rotates them automatically; the SDK fetches new ones before the old ones expire.</p>
+
+<figure class="wide" id="fig15-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 220" role="img" aria-labelledby="fig15-1-t fig15-1-d">
+      <title id="fig15-1-t">How code on an EC2 instance gets role credentials</title>
+      <desc id="fig15-1-d">Inside an EC2 instance, the application uses the AWS SDK. The SDK's credential chain asks the instance metadata service at 169.254.169.254 for a session token, then for the credentials of the role in the instance profile, larder-core. The metadata service returns temporary credentials that AWS issued for that role. The SDK signs calls to S3 and other services with them, and refreshes them before they expire. No key is stored on disk.</desc>
+      <defs><marker id="c15ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c15ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="vpc" x="12" y="14" width="470" height="192" rx="8"/>
+      <text class="t-label" x="140" y="38">EC2 instance · role larder-core</text>
+      <rect class="node" x="28" y="56" width="190" height="64" rx="5"/>
+      <text class="t-label" x="123" y="82" text-anchor="middle">application</text>
+      <text class="t-small" x="123" y="102" text-anchor="middle">AWS SDK, credential chain</text>
+      <rect class="node-accent" x="276" y="56" width="190" height="64" rx="5"/>
+      <text class="t-label on-accent" x="371" y="82" text-anchor="middle">metadata service</text>
+      <text class="t-mono on-accent" x="371" y="102" text-anchor="middle">169.254.169.254</text>
+      <path class="wire" d="M220 78 H272" marker-end="url(#c15ah)"/>
+      <text class="t-small" x="246" y="70" text-anchor="middle">① token</text>
+      <path class="wire" d="M272 100 H222" marker-end="url(#c15ah)"/>
+      <text class="t-small" x="246" y="136" text-anchor="middle">② credentials</text>
+      <rect class="priv" x="28" y="150" width="438" height="40" rx="5"/>
+      <text class="t-small" x="247" y="168" text-anchor="middle">temporary key (ASIA…), secret, session token, expiry in hours;</text>
+      <text class="t-small" x="247" y="183" text-anchor="middle">refreshed by the SDK, never written to disk</text>
+      <rect class="pub" x="560" y="56" width="188" height="64" rx="5"/>
+      <text class="t-label" x="654" y="82" text-anchor="middle">S3, SES, …</text>
+      <text class="t-small" x="654" y="102" text-anchor="middle">signed requests</text>
+      <path class="wire-accent" d="M123 54 V6 H654 V52" marker-end="url(#c15ah2)"/>
+      <text class="t-small t-accent halo-priv" x="646" y="26" text-anchor="end">③ calls, signed with the role's credentials</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 15.1</b> The instance's role travels from IAM to the SDK through the metadata service, which only answers requests from inside the instance.</figcaption>
+</figure>
+
+<!-- ======================================================== 15.3 -->
+<h2 class="sec" id="s15-3"><span class="n">15.3</span>Protecting the metadata service: IMDSv2</h2>
+
+<p>“Only answers requests from inside the instance” is exactly what makes IMDS a target. Any bug that makes your application send a request <em>for</em> an attacker, a <span class="term">server-side request forgery</span> (SSRF) like Larder's image proxy, an open proxy, a misconfigured firewall, comes from inside the instance. With the original metadata service, <strong>IMDSv1</strong>, a single GET returns the role's credentials, and an attacker can then use them from anywhere.</p>
+
+<p><strong>IMDSv2</strong> makes the metadata service session-oriented:</p>
+<ol class="steps">
+  <li>The caller first asks for a session token with an HTTP <code>PUT</code> to <code>/latest/api/token</code>, with a header saying how long the token should live.</li>
+  <li>Every metadata request must then carry that token in a header.</li>
+</ol>
+<p>Most SSRF bugs can only make the application send a GET to a URL; they can't choose the method or add headers. IMDSv2 also refuses to issue tokens to requests carrying an <code>X-Forwarded-For</code> header (a sign of a proxy), and the token response has a <strong>hop limit</strong>, the network packet's time-to-live: with a hop limit of 1, the response can't travel beyond the instance itself, so it can't reach a container running behind the host's network. Set it to 2 only if containers on the instance genuinely need the instance's role, and usually they shouldn't (15.4).</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Require IMDSv2 on every instance. It costs nothing, every current SDK supports it, and it turns the commonest cloud SSRF from a credential leak into an error.</p>
+</div>
+
+<p>Make it the default everywhere: set <code>HttpTokens=required</code> on running instances, in launch templates and AMIs, and as the account's default for new instances in every region. Later, deny launching instances without it, with the condition key <code>ec2:MetadataHttpTokens</code> in an SCP (<a href="#ch20">Chapter 20</a>). For defence in depth, condition keys such as <code>aws:EC2InstanceSourceVPC</code> let a policy accept an instance's credentials only when they're used from inside your own network (<a href="#ch22">Chapter 22</a>).</p>
+
+<!-- ======================================================== 15.4 -->
+<h2 class="sec" id="s15-4"><span class="n">15.4</span>ECS: two roles per task</h2>
+
+<p>Containers on ECS (on EC2 or on Fargate) don't use the instance's metadata service for their own identity. Each task definition names up to two roles, and confusing them is one of the commonest ECS mistakes:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 15.1 · The two roles of an ECS task</caption>
+    <thead><tr><th></th><th>Task role</th><th>Task execution role</th></tr></thead>
+    <tbody>
+      <tr><td>Used by</td><td>your application code inside the container</td><td>the ECS agent, before and around your code</td></tr>
+      <tr><td>For</td><td>whatever the app does: read config, write route plans (<a href="#ch9">Chapter 9</a>)</td><td>pulling the image from ECR, writing logs, fetching secrets to inject as environment variables</td></tr>
+      <tr><td>Delivered by</td><td>a credentials endpoint at <code>169.254.170.2</code>, found through <code>AWS_CONTAINER_CREDENTIALS_RELATIVE_URI</code></td><td>never visible to your code</td></tr>
+      <tr><td>Larder's Dispatch</td><td><code>dispatch-task</code></td><td><code>dispatch-task-execution</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Each task gets its own credentials, even when several tasks share an instance. On ECS on EC2, block containers from reaching the instance's metadata service (the ECS agent setting <code>ECS_AWSVPC_BLOCK_IMDS</code>, or a hop limit of 1), so a container can't step up to the instance's role.</p>
+
+<!-- ======================================================== 15.5 -->
+<h2 class="sec" id="s15-5"><span class="n">15.5</span>Lambda</h2>
+
+<p>A Lambda function has an <strong>execution role</strong>. Lambda assumes it and places the temporary credentials in the function's environment variables (<code>AWS_ACCESS_KEY_ID</code>, <code>AWS_SECRET_ACCESS_KEY</code>, <code>AWS_SESSION_TOKEN</code>) for the SDK to find. There's no metadata service to forge requests to, but there is an environment to leak: a function that echoes its environment in an error message, or reads arbitrary files (Linux exposes the environment at <code>/proc/self/environ</code>), hands out its role's credentials. Never log the environment, and give every function its own role.</p>
+
+<!-- ======================================================== 15.6 -->
+<h2 class="sec" id="s15-6"><span class="n">15.6</span>One role per workload</h2>
+
+<ul>
+  <li><strong>One role per workload</strong>, never one shared “app role”: a leak or a bug in one service then exposes only that service's permissions, and CloudTrail tells you which service did what (<a href="#ch1">Chapter 1</a>).</li>
+  <li><strong>Least privilege, with the method</strong> from <a href="#ch9">Chapter 9</a>: list what the code does, map to actions, narrow resources, validate, test, watch.</li>
+  <li><strong>An owning team</strong>, as a tag (<code>team=dispatch</code>), so the role isn't orphaned when people move (<a href="#ch13">Chapter 13</a>).</li>
+  <li><strong>Pass only what you mean to.</strong> Whoever launches the workload needs <code>iam:PassRole</code> on its role, and only its role (<a href="#ch8">Chapter 8</a>, 8.7).</li>
+</ul>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: “it already has a role” isn't the end</p>
+  <p>Moving from keys to roles removes the long-lived secret, but not the blast radius. A role with <code>AmazonS3FullAccess</code> is just as dangerous in an attacker's hands for the few hours its credentials last; they need minutes. Larder Core's problem wasn't a key; it was a broad role reachable through a bug.</p>
+</div>
+
+<!-- ======================================================== 15.7 -->
+<h2 class="sec" id="s15-7"><span class="n">15.7</span>Workloads outside AWS</h2>
+
+<p>Code that runs elsewhere still shouldn't hold access keys:</p>
+<ul>
+  <li><strong>CI/CD systems and other clouds</strong> that issue OIDC tokens exchange them for role sessions (<code>AssumeRoleWithWebIdentity</code>), as <a href="#ch17">Chapter 17</a> does for GitHub Actions.</li>
+  <li><strong>Servers in your own data centre or stores</strong> can use <strong>IAM Roles Anywhere</strong>: they authenticate with an X.509 certificate issued by a certificate authority you register with AWS, and get role sessions in return. The certificate's private key, ideally in a hardware module, replaces the access key.</li>
+  <li><strong>Third-party SaaS</strong> that acts in your account gets a cross-account role with an external ID (<a href="#ch21">Chapter 21</a>).</li>
+</ul>
+
+<!-- ======================================================== 15.8 -->
+<h2 class="sec" id="s15-8"><span class="n">15.8</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 15.2 · Workload identity at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Identity for a VM</td><td>instance profile → role</td><td>managed identity (system- or user-assigned)</td><td>attached service account</td></tr>
+      <tr><td>Where code gets tokens</td><td>IMDS at <code>169.254.169.254</code>, IMDSv2 token required</td><td>IMDS at <code>169.254.169.254</code>, header <code>Metadata: true</code> required</td><td>metadata server at <code>metadata.google.internal</code>, header <code>Metadata-Flavor: Google</code> required</td></tr>
+      <tr><td>Containers and functions</td><td>ECS task role, Lambda execution role</td><td>managed identities on Container Apps, Functions, App Service</td><td>per-service service accounts on Cloud Run and Cloud Functions</td></tr>
+      <tr><td>Outside the cloud</td><td>Roles Anywhere; OIDC federation</td><td>workload identity federation</td><td>workload identity federation</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>A <strong>managed identity</strong> is a service principal Azure creates and rotates for you. System-assigned identities live and die with one resource; user-assigned identities are separate resources you can share between, say, a pool of identical VMs. Code requests tokens for a specific resource (Storage, Key Vault, Graph) from the local metadata endpoint, which requires a <code>Metadata: true</code> header, the same anti-SSRF idea as IMDSv2's token.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>VMs and serverless services run as a <strong>service account</strong>; tokens come from the metadata server, which requires a <code>Metadata-Flavor: Google</code> header. Avoid the Compute Engine <em>default</em> service account, which in many projects has the broad Editor role: give each workload its own service account with narrow roles, and stop new projects granting Editor to it with the organisation policy for automatic default grants.</p>
+</div>
+
+<!-- ======================================================== 15.9 -->
+<h2 class="sec" id="s15-9"><span class="n">15.9</span>At Larder: an image proxy and a broad role</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Within the hour, Ben's team limited the image proxy to Larder's own image hosts and made it refuse private and link-local addresses. Eli required IMDSv2 on the three Larder Core instances, with a hop limit of 1, which took one command each and no restart; the application's SDK had supported it for years. He set IMDSv2 as the default for new instances in both accounts' regions, and searched CloudTrail for any use of <code>larder-core</code>'s credentials from outside Larder's network in the last 90 days: there was none. Larder thanked the researcher, and started a page about how to report vulnerabilities.</p>
+  <p>The next week, <code>larder-core</code> lost <code>AmazonS3FullAccess</code> and full email-service access, replaced by a policy written with the method from <a href="#ch9">Chapter 9</a>: two buckets, one sending identity, one queue. The same review removed the SSH key the engineers had shared since 2024 and the rule letting the office reach port 22: shell access now goes through Session Manager, which is authorised by Identity Center sessions and logged (<a href="#ch14">Chapter 14</a>).</p>
+</aside>
+
+<!-- ======================================================== 15.10 -->
+<h2 class="sec" id="s15-10"><span class="n">15.10</span>Lab: SSRF against IMDSv1 and IMDSv2</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 15 · A fake metadata service and a real bug</p>
+  <p><strong>You'll</strong> run a small imitation of the instance metadata service on your own machine, then call it two ways: like the AWS SDK does, and like an SSRF bug does, with tokens optional and then required. <strong>You need</strong> Python 3; for the optional step, the AWS CLI. <strong>Cost:</strong> nothing. The credentials in it are fake, and it listens only on <code>127.0.0.1</code>.</p>
+</div>
+
+<p class="code-title"><span>imds.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># imds.py · a fake instance metadata service, an SSRF bug, and what IMDSv2 changes</span>
+<span class="c"># Usage: python3 imds.py optional   (IMDSv1 allowed)   |   python3 imds.py required   (IMDSv2 only)</span>
+<span class="k">import</span> json, secrets, sys, threading, urllib.request
+<span class="k">from</span> http.server <span class="k">import</span> BaseHTTPRequestHandler, HTTPServer
+
+MODE = sys.argv[1] <span class="k">if</span> len(sys.argv) &gt; 1 <span class="k">else</span> <span class="s">"optional"</span>
+BASE = <span class="s">"http://127.0.0.1:8169"</span>                 <span class="c"># the real one is http://169.254.169.254</span>
+ROLE = <span class="s">"larder-core"</span>
+CREDS = {<span class="s">"Code"</span>: <span class="s">"Success"</span>, <span class="s">"AccessKeyId"</span>: <span class="s">"ASIAEXAMPLEFAKEKEY01"</span>, <span class="s">"SecretAccessKey"</span>: <span class="s">"fake/secret"</span>,
+         <span class="s">"Token"</span>: <span class="s">"fake-session-token"</span>, <span class="s">"Expiration"</span>: <span class="s">"2027-03-15T16:00:00Z"</span>}
+TOKENS = set()
+
+<span class="k">class</span> IMDS(BaseHTTPRequestHandler):
+    <span class="k">def</span> log_message(self, *args):
+        <span class="k">pass</span>
+
+    <span class="k">def</span> reply(self, code, body):
+        self.send_response(code)
+        self.end_headers()
+        self.wfile.write(body.encode())
+
+    <span class="k">def</span> do_PUT(self):
+        <span class="k">if</span> self.path != <span class="s">"/latest/api/token"</span> <span class="k">or</span> <span class="s">"X-aws-ec2-metadata-token-ttl-seconds"</span> <span class="k">not in</span> self.headers:
+            <span class="k">return</span> self.reply(400, <span class="s">"bad request"</span>)
+        <span class="k">if</span> <span class="s">"X-Forwarded-For"</span> <span class="k">in</span> self.headers:          <span class="c"># the real IMDS refuses tokens to proxied requests</span>
+            <span class="k">return</span> self.reply(403, <span class="s">"forbidden"</span>)
+        token = secrets.token_urlsafe(24)
+        TOKENS.add(token)
+        self.reply(200, token)
+
+    <span class="k">def</span> do_GET(self):
+        token = self.headers.get(<span class="s">"X-aws-ec2-metadata-token"</span>)
+        <span class="k">if</span> token <span class="k">not in</span> TOKENS <span class="k">and</span> (MODE == <span class="s">"required"</span> <span class="k">or</span> token <span class="k">is not</span> None):
+            <span class="k">return</span> self.reply(401, <span class="s">"unauthorized"</span>)
+        <span class="k">if</span> self.path == <span class="s">"/latest/meta-data/iam/security-credentials/"</span>:
+            <span class="k">return</span> self.reply(200, ROLE)
+        <span class="k">if</span> self.path == f<span class="s">"/latest/meta-data/iam/security-credentials/{ROLE}"</span>:
+            <span class="k">return</span> self.reply(200, json.dumps(CREDS))
+        self.reply(404, <span class="s">"not found"</span>)
+
+<span class="k">def</span> fetch_image(url):
+    <span class="s">"""Larder Core's product-image proxy: fetches whatever URL a request names. The SSRF bug."""</span>
+    <span class="k">try</span>:
+        <span class="k">with</span> urllib.request.urlopen(url, timeout=2) <span class="k">as</span> r:
+            <span class="k">return</span> r.read().decode()[:60]
+    <span class="k">except</span> Exception <span class="k">as</span> e:
+        <span class="k">return</span> f<span class="s">"error: {e}"</span>
+
+<span class="k">def</span> sdk_get_credentials():
+    <span class="s">"""What the AWS SDK does: get a session token with PUT, then read with it."""</span>
+    put = urllib.request.Request(f<span class="s">"{BASE}/latest/api/token"</span>, method=<span class="s">"PUT"</span>,
+                                 headers={<span class="s">"X-aws-ec2-metadata-token-ttl-seconds"</span>: <span class="s">"21600"</span>})
+    token = urllib.request.urlopen(put, timeout=2).read().decode()
+    get = urllib.request.Request(f<span class="s">"{BASE}/latest/meta-data/iam/security-credentials/{ROLE}"</span>,
+                                 headers={<span class="s">"X-aws-ec2-metadata-token"</span>: token})
+    <span class="k">return</span> json.loads(urllib.request.urlopen(get, timeout=2).read())[<span class="s">"AccessKeyId"</span>]
+
+<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:
+    server = HTTPServer((<span class="s">"127.0.0.1"</span>, 8169), IMDS)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    print(f<span class="s">"metadata service, tokens {MODE}"</span>)
+    print(<span class="s">"  SDK, with a token:      "</span>, sdk_get_credentials())
+    print(<span class="s">"  attacker via the proxy: "</span>, fetch_image(f<span class="s">"{BASE}/latest/meta-data/iam/security-credentials/"</span>))
+    print(<span class="s">"                          "</span>, fetch_image(f<span class="s">"{BASE}/latest/meta-data/iam/security-credentials/{ROLE}"</span>))
+    server.shutdown()</code></pre>
+
+<ol class="steps">
+  <li><strong>Tokens optional (IMDSv1 allowed).</strong> Run <code>python3 imds.py optional</code>:
+<pre><code>metadata service, tokens optional
+  SDK, with a token:       ASIAEXAMPLEFAKEKEY01
+  attacker via the proxy:  larder-core
+                           {"Code": "Success", "AccessKeyId": "ASIAEXAMPLEFAKEKEY01", "</code></pre>
+  Two GETs through the image proxy: the first finds the role's name (the researcher's request), the second returns its credentials.</li>
+  <li><strong>Tokens required (IMDSv2).</strong> Run <code>python3 imds.py required</code>:
+<pre><code>metadata service, tokens required
+  SDK, with a token:       ASIAEXAMPLEFAKEKEY01
+  attacker via the proxy:  error: HTTP Error 401: Unauthorized
+                           error: HTTP Error 401: Unauthorized</code></pre>
+  The application still works, because the SDK does the PUT first. The bug is still there, but it no longer leads anywhere.</li>
+  <li><strong>Break it on purpose.</strong> Make the proxy “smarter”: let it accept a method and headers from the request (<code>urllib.request.Request(url, method=…, headers=…)</code>) and use it to do the PUT. Now it can get a token, unless it adds <code>X-Forwarded-For</code>, as many proxies do: add that header and the token request is refused with 403. This is why SSRF fixes belong in the application too: IMDSv2 is a seat belt, not a reason to keep the bug.</li>
+  <li><strong>Optional: check your account.</strong> List instances that still allow IMDSv1, and make IMDSv2 the default for new instances in the current region (free, nothing is launched):
+<pre><code>aws ec2 describe-instances --query \
+  'Reservations[].Instances[?MetadataOptions.HttpTokens==`optional`].[InstanceId]' --output text
+aws ec2 modify-instance-metadata-defaults --http-tokens required --http-put-response-hop-limit 1
+aws ec2 get-instance-metadata-defaults</code></pre>
+  To fix one instance: <code>aws ec2 modify-instance-metadata-options --instance-id i-… --http-tokens required --http-put-response-hop-limit 1</code>.</li>
+</ol>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s15-11"><span class="n">15.11</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Access keys in config, env files or images</td><td>Long-lived keys leak with backups, images and repos.</td><td>Instance profiles, task roles, execution roles.</td></tr>
+      <tr><td>IMDSv1 left enabled</td><td>An SSRF bug becomes a credential leak.</td><td>IMDSv2 required, hop limit 1, account default, SCP.</td></tr>
+      <tr><td>Task role and execution role swapped or merged</td><td>The app can pull every image and read every secret, or the agent can't start the task.</td><td>Two roles, each with its own narrow policy.</td></tr>
+      <tr><td>One role shared by many workloads</td><td>One bug exposes everything; CloudTrail can't tell services apart.</td><td>One role per workload, tagged with its team.</td></tr>
+      <tr><td>Broad managed policies on workload roles</td><td>Minutes of stolen credentials are enough to do damage.</td><td>Least-privilege customer managed policies.</td></tr>
+      <tr><td>SSH keys shared by a team</td><td>No attribution, no expiry, an open port.</td><td>Session Manager, through SSO sessions.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum15">
+  <h2 class="sec" id="sum15"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Workloads get roles, and the platform delivers short-lived credentials; no key is stored or seen.</li>
+    <li>EC2: instance profile → role → credentials from the <strong>metadata service</strong>, refreshed by the SDK.</li>
+    <li><strong>IMDSv2</strong> (PUT for a token, token on every request, hop limit) turns SSRF credential theft into an error. Require it everywhere.</li>
+    <li>ECS: a <strong>task role</strong> for the app, a <strong>task execution role</strong> for the agent. Lambda: an execution role, with credentials in the environment.</li>
+    <li>One narrow role per workload, owned by a team; restrict who can pass it.</li>
+    <li>Outside AWS: OIDC federation, IAM Roles Anywhere, cross-account roles; never access keys.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Workload identity</dt><dd>The identity software uses to call cloud APIs.</dd>
+    <dt>Instance profile</dt><dd>The container that attaches a role to an EC2 instance.</dd>
+    <dt>Instance metadata service</dt><dd>The link-local endpoint that serves an instance's details and role credentials.</dd>
+    <dt>IMDSv2</dt><dd>The session-oriented metadata service: PUT for a token, then token on each request.</dd>
+    <dt>SSRF</dt><dd>Server-side request forgery: making a server send requests on an attacker's behalf.</dd>
+    <dt>Hop limit</dt><dd>How many network hops IMDSv2's token response may travel.</dd>
+    <dt>Task role / execution role</dt><dd>An ECS task's role for its code, and the ECS agent's role for starting it.</dd>
+    <dt>IAM Roles Anywhere</dt><dd>Role sessions for workloads outside AWS, authenticated with X.509 certificates.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Where does code running on an EC2 instance with an instance profile get its credentials, and who rotates them? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>From the instance metadata service at <code>169.254.169.254</code>. AWS issues and rotates the role's temporary credentials; the SDK fetches fresh ones before the old ones expire.</p></details>
+    </li>
+    <li>
+      <p>Explain why IMDSv2 stops a typical SSRF bug from stealing credentials, but doesn't make the bug harmless. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>A typical SSRF bug can only make the server send a GET to a chosen URL; IMDSv2 needs a PUT with a special header first, and refuses proxied token requests. But the bug can still reach other internal services, so it must be fixed in the application too.</p></details>
+    </li>
+    <li>
+      <p>An ECS task can't start: “unable to pull image”. Which role do you look at? And if the app gets “access denied” writing to S3? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Pulling the image is the task execution role's job (ECR permissions). Writing to S3 is the application's job, so the task role.</p></details>
+    </li>
+    <li>
+      <p>A Lambda function returns its full environment in an error message to the caller. Why is that a credential leak? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Lambda places the execution role's temporary credentials in environment variables. Anyone who sees the error gets a working key, secret and session token until they expire.</p></details>
+    </li>
+    <li>
+      <p>Design the identities for a new service with an API on ECS, a nightly batch job on Lambda, and a script on a store's back-office PC. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>An ECS task role and execution role for the API; a separate execution role for the batch function; IAM Roles Anywhere with a device certificate (or a narrowly scoped OIDC federation) for the PC. Each role narrow, tagged with the owning team, with PassRole restricted to the deployment pipeline.</p></details>
+    </li>
+    <li>
+      <p>Compare how Azure and Google Cloud protect their metadata endpoints from SSRF with how AWS does. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Azure requires a <code>Metadata: true</code> header and Google a <code>Metadata-Flavor: Google</code> header, which a GET-only SSRF usually can't add. AWS's IMDSv2 requires a PUT to obtain a session token, then a token header on every request, plus a hop limit and a refusal of proxied token requests.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html">Configure the instance metadata service</a>, <a href="https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html">ECS task IAM roles</a>, <a href="https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html">Lambda execution role</a>, <a href="https://docs.aws.amazon.com/rolesanywhere/latest/userguide/introduction.html">IAM Roles Anywhere</a>.</li>
+    <li>OWASP <a href="https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html">SSRF Prevention Cheat Sheet</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview">Managed identities</a>. Google Cloud: <a href="https://cloud.google.com/compute/docs/access/service-accounts">Service accounts for VMs</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="#ch14">14 · Privileged access and break-glass</a></div>
+  <div><span>Next</span><a href="#ch16">16 · Kubernetes and workload identity</a></div>
+</nav>

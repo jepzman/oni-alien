@@ -1,0 +1,286 @@
+<!-- Handbook 2 · Identity and Access in the Cloud · Chapter 25. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part VI · Running it</p>
+  <p class="chno">25</p>
+  <h1>Capstone: Larder's identity end to end</h1>
+  <p class="promise">Twenty-four chapters built Larder's identity one piece at a time. This chapter looks at the whole thing: an inventory of every way in, a review of the design against the principles from Part I, a check on what a second region changes, and a tabletop exercise where an attacker has an engineer's laptop. It ends with a method you can use on your own organisation.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Inventory every way people, software and partners get access.</li>
+      <li>Review an identity design layer by layer: people, workloads, guardrails, perimeter, detection.</li>
+      <li>Work out what a new region or a big change means for identity.</li>
+      <li>Run a tabletop exercise and turn its gaps into work.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>The whole book helps; each section links back to the chapters it builds on.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Exercise</dt><dd>60–90 minutes, a tabletop, alone or with your team</dd>
+      <dt>Main provider</dt><dd>AWS, with notes for Azure and Google Cloud</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>On 24 January 2028 ADR 0026 decided Larder would stay in one region, Frankfurt, with a <em>pilot light</em> in Paris for Tier 1: a database replica and the infrastructure code to rebuild the rest in four hours. Ana's review asked one question about identity: <em>if Frankfurt is gone, can the people doing the recovery even sign in?</em></p>
+  <p>Eli realised he couldn't answer from memory, and that nobody had looked at Larder's identity as a whole since the account audit of November 2026, fifteen months and two dozen changes ago. He booked two afternoons in February: one to review the whole design, one for a tabletop with Lena, Dee, Cho and Marco.</p>
+</aside>
+
+<!-- ======================================================== 25.1 -->
+<h2 class="sec" id="s25-1"><span class="n">25.1</span>Start with an inventory</h2>
+
+<p class="lead">You can't review what you can't list. Before judging anything, write down every way in: every kind of principal, how it authenticates, what it can reach and who owns it. For Larder, early 2028:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 25.1 · Every way into Larder, February 2028</caption>
+    <thead><tr><th>Who</th><th>Proves identity with</th><th>Gets</th><th>Owner · chapter</th></tr></thead>
+    <tbody>
+      <tr><td>Staff, all tools</td><td>company IdP, passkey or security key</td><td>SAML/OIDC sessions to 11 tools; SCIM accounts</td><td>IT · <a href="#ch13">13</a></td></tr>
+      <tr><td>Engineers, AWS</td><td>IdP → Identity Center, FIDO2</td><td>standing ViewOnly (prod), Developer (dev-staging); TEAM for the rest</td><td>platform · <a href="#ch12">12</a>, <a href="#ch14">14</a></td></tr>
+      <tr><td>Emergencies</td><td><code>break-glass-1/2</code>, hardware keys, safe</td><td><code>break-glass-admin</code> in every account</td><td>platform · <a href="#ch14">14</a></td></tr>
+      <tr><td>Root users</td><td>management only; FIDO2 keys, vault</td><td>root tasks; members' root centrally managed</td><td>Eli, Femke, Marco · <a href="#ch7">7</a>, <a href="#ch20">20</a></td></tr>
+      <tr><td>Services</td><td>task roles, via the container agent</td><td>one role per service, team-tagged</td><td>each team · <a href="#ch15">15</a></td></tr>
+      <tr><td>Pipelines</td><td>GitHub OIDC</td><td><code>github-deploy-*</code>, <code>identity-apply</code></td><td>platform · <a href="#ch17">17</a>, <a href="#ch24">24</a></td></tr>
+      <tr><td>Vendors</td><td>their AWS role + external ID</td><td><code>wmsb-nightly-file</code> (one prefix)</td><td>operations · <a href="#ch21">21</a></td></tr>
+      <tr><td>Business clients' systems</td><td>OAuth clients; 90-day API keys</td><td>Business API, their own offices</td><td>product · <a href="#ch19">19</a></td></tr>
+      <tr><td>Business clients' staff</td><td>their own IdP, federated</td><td>the business portal</td><td>product · <a href="#ch5">5</a>, <a href="#ch23">23</a></td></tr>
+      <tr><td>Customers</td><td>passkeys or passwords + checks</td><td>their own orders</td><td>Dee's team · <a href="#ch2">2</a></td></tr>
+      <tr><td>Webhooks in</td><td>shared-secret signatures</td><td>one endpoint each</td><td>payments · <a href="#ch19">19</a></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Any row you can't fill in completely is your first finding. An inventory also shows what's <em>not</em> there: Larder has no IAM users except break-glass, no access keys and no SSH keys. Each of those absences was work, and each needs a check that keeps it true: the watch list (<a href="#ch23">Chapter 23</a>) and the linter (<a href="#ch24">Chapter 24</a>).</p>
+
+<figure class="wide" id="fig25-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 330" role="img" aria-labelledby="fig25-1-t fig25-1-d">
+      <title id="fig25-1-t">Larder's identity on one page</title>
+      <desc id="fig25-1-d">Three kinds of principal on the left. People sign in through the company identity provider to IAM Identity Center, with TEAM for elevated access. Software, meaning services and pipelines, gets temporary role credentials from AWS STS through task roles and GitHub OIDC. Partners and customers come in through roles with external IDs, OAuth and API keys, and federated client identity providers to Larder's login service and APIs. All of it reaches the AWS organisation on the right: management, security, tooling, backup, prod, dev-staging and sandbox accounts. Across every account sit SCPs, RCPs and the data perimeter, and below them the organisation trail, GuardDuty and the watch list.</desc>
+      <defs><marker id="c25ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="12" y="30" width="170" height="70" rx="5"/><text class="t-label" x="97" y="58" text-anchor="middle">people</text><text class="t-small" x="97" y="78" text-anchor="middle">company IdP, FIDO2</text>
+      <rect class="node" x="12" y="130" width="170" height="70" rx="5"/><text class="t-label" x="97" y="158" text-anchor="middle">software</text><text class="t-small" x="97" y="178" text-anchor="middle">services, pipelines</text>
+      <rect class="node" x="12" y="230" width="170" height="70" rx="5"/><text class="t-label" x="97" y="258" text-anchor="middle">partners, customers</text><text class="t-small" x="97" y="278" text-anchor="middle">vendors, clients, shoppers</text>
+      <rect class="node" x="230" y="30" width="190" height="70" rx="5"/><text class="t-label" x="325" y="58" text-anchor="middle">Identity Center + TEAM</text><text class="t-small" x="325" y="78" text-anchor="middle">permission sets, just in time</text>
+      <rect class="node" x="230" y="130" width="190" height="70" rx="5"/><text class="t-label" x="325" y="158" text-anchor="middle">AWS STS</text><text class="t-small" x="325" y="178" text-anchor="middle">task roles, GitHub OIDC</text>
+      <rect class="node" x="230" y="230" width="190" height="70" rx="5"/><text class="t-label" x="325" y="258" text-anchor="middle">login service, APIs</text><text class="t-small" x="325" y="278" text-anchor="middle">OAuth, keys, external IDs</text>
+      <rect class="region" x="466" y="12" width="282" height="306" rx="6"/>
+      <text class="t-title" x="480" y="34">AWS organisation</text>
+      <rect class="node" x="480" y="48" width="124" height="32" rx="4"/><text class="t-small" x="542" y="68" text-anchor="middle">management</text>
+      <rect class="node" x="612" y="48" width="124" height="32" rx="4"/><text class="t-small" x="674" y="68" text-anchor="middle">security</text>
+      <rect class="node" x="480" y="88" width="124" height="32" rx="4"/><text class="t-small" x="542" y="108" text-anchor="middle">tooling (TEAM)</text>
+      <rect class="node" x="612" y="88" width="124" height="32" rx="4"/><text class="t-small" x="674" y="108" text-anchor="middle">backup</text>
+      <rect class="priv" x="480" y="128" width="124" height="32" rx="4"/><text class="t-small" x="542" y="148" text-anchor="middle">prod</text>
+      <rect class="node" x="612" y="128" width="124" height="32" rx="4"/><text class="t-small" x="674" y="148" text-anchor="middle">dev-staging</text>
+      <rect class="node" x="480" y="168" width="256" height="32" rx="4"/><text class="t-mono" x="608" y="188" text-anchor="middle">sandbox-&lt;name&gt;</text>
+      <rect class="node-accent" x="480" y="218" width="256" height="34" rx="4"/><text class="t-label on-accent" x="608" y="240" text-anchor="middle">SCPs · RCPs · data perimeter</text>
+      <rect class="pub" x="480" y="262" width="256" height="40" rx="4"/><text class="t-small" x="608" y="279" text-anchor="middle">org trail → security account</text><text class="t-small" x="608" y="294" text-anchor="middle">GuardDuty · watch list · Access Analyzer</text>
+      <path class="wire" d="M184 65 H226" marker-end="url(#c25ah)"/>
+      <path class="wire" d="M184 165 H226" marker-end="url(#c25ah)"/>
+      <path class="wire" d="M184 265 H226" marker-end="url(#c25ah)"/>
+      <path class="wire" d="M422 65 H476" marker-end="url(#c25ah)"/>
+      <path class="wire" d="M422 165 C446 165 446 150 476 150" marker-end="url(#c25ah)"/>
+      <path class="wire" d="M422 265 C450 265 446 138 476 138" marker-end="url(#c25ah)"/>
+    </svg>
+  </div>
+  <figcaption><b>Figure 25.1</b> Every way in goes through one of three doors, and every account sits under the same guardrails and the same audit trail.</figcaption>
+</figure>
+
+<!-- ======================================================== 25.2 -->
+<h2 class="sec" id="s25-2"><span class="n">25.2</span>Review it layer by layer</h2>
+
+<p>With the inventory in hand, walk the layers in the order the book built them. For each, ask the same four questions: <em>is it least privilege, is it temporary, is someone watching, and who owns it?</em></p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 25.2 · A review checklist, with Larder's answers</caption>
+    <thead><tr><th>Layer</th><th>Question</th><th>Larder, Feb 2028</th></tr></thead>
+    <tbody>
+      <tr><td>Authentication</td><td>Phishing-resistant for everyone with access to production?</td><td>Yes: FIDO2 for staff; passkeys offered to customers</td></tr>
+      <tr><td>People</td><td>One identity per person, from HR, removed on leaving?</td><td>Yes; three tools still manual, with leaver tickets</td></tr>
+      <tr><td>Privilege</td><td>No standing admin in production?</td><td>Yes: TEAM, 1–2 hours, approved</td></tr>
+      <tr><td>Emergencies</td><td>A tested way in when SSO is down?</td><td>Yes, quarterly; but only tested with Frankfurt up (25.3)</td></tr>
+      <tr><td>Workloads</td><td>One role per service, no keys, narrowed from use?</td><td>Yes; generation run on the five biggest roles</td></tr>
+      <tr><td>Pipelines</td><td>OIDC with exact <code>sub</code>, protected environments?</td><td>Yes</td></tr>
+      <tr><td>Secrets</td><td>In a manager, rotated, never in code?</td><td>Yes, with push protection</td></tr>
+      <tr><td>Partners</td><td>External IDs, narrow grants, expiry, an owner?</td><td>Yes; reviewed with the contract</td></tr>
+      <tr><td>Guardrails</td><td>SCPs that hold for admins, tested before rollout?</td><td>Yes; region list needs Paris (25.3)</td></tr>
+      <tr><td>Perimeter</td><td>Only our identities on our data, from expected networks?</td><td>Yes for restricted buckets</td></tr>
+      <tr><td>Detection</td><td>A short watch list that people read?</td><td>Yes since 30 Nov; no rule for unusual sign-ins (25.4)</td></tr>
+      <tr><td>Change</td><td>All in code, two approvals, drift detected?</td><td>Yes since 18 Feb</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Then check the principles from <a href="#ch6">Chapter 6</a> across layers, since they're easy to lose between them: <strong>separation of duties</strong> (can anyone approve their own access? Only on-call, for ProdOperator during an incident, reviewed the next morning, as designed in <a href="#ch14">Chapter 14</a>), <strong>default deny</strong> (do new accounts start with guardrails? yes, through the OU), and <strong>least privilege over time</strong> (are unused-access findings being closed? 31 open in February, owners assigned).</p>
+
+<!-- ======================================================== 25.3 -->
+<h2 class="sec" id="s25-3"><span class="n">25.3</span>What a second region changes</h2>
+
+<p>Big changes elsewhere in the architecture almost always touch identity. A second region is a good example, because identity services aren't all global in the same way:</p>
+<ul>
+  <li><strong>IAM is global</strong>: roles, policies and IAM users exist in every region. Sign-in and STS work from regional endpoints, so set your SDKs and CLI to use the recovery region's STS endpoint, not one that might be down.</li>
+  <li><strong>IAM Identity Center</strong> runs in the region where you enabled it. If that region has a serious outage, signing in through it may fail. Plan as if it will: break-glass IAM users are your way in, and they must be tested <em>with Frankfurt unavailable</em>, not just with SSO broken.</li>
+  <li><strong>SCPs</strong> that allow only certain regions (<a href="#ch20">Chapter 20</a>) must allow the recovery region before you need it, for the accounts and services the pilot light uses.</li>
+  <li><strong>KMS keys are regional.</strong> The database replica in Paris needs a key in Paris, either a multi-Region replica key or its own key. Its key policy needs the same review as the original (<a href="#ch18">Chapter 18</a>).</li>
+  <li><strong>Detection is mostly regional.</strong> The organisation trail covers all regions, but EventBridge rules, GuardDuty and Access Analyzer must be enabled in Paris too, or the watch list goes quiet there.</li>
+  <li><strong>Perimeter network rules</strong> (<a href="#ch22">Chapter 22</a>) list VPC endpoints and address ranges; the recovery VPC's endpoints must be added, or the restore fails on access denied.</li>
+  <li><strong>Pipelines</strong> deploy the pilot light, so the apply and deploy roles' policies must allow the recovery region, and the runbook must say how to run them if GitHub itself is impaired.</li>
+</ul>
+
+<aside class="side">
+  <p class="label">The same exercise elsewhere</p>
+  <p>On Azure, Entra ID is a global service, but managed identities and Key Vaults are regional, and Conditional Access may block sign-ins from a recovery site's addresses. On Google Cloud, IAM is global, but organisation policies restricting resource locations, Cloud KMS key rings and VPC Service Controls perimeters all need the recovery region added.</p>
+</aside>
+
+<!-- ======================================================== 25.4 -->
+<h2 class="sec" id="s25-4"><span class="n">25.4</span>Tabletop: an engineer's laptop</h2>
+
+<p>A <span class="term">tabletop exercise</span> walks through an incident on paper: one person reads out what happens, step by step, and the others say what they'd see and do. It finds gaps without breaking anything. Pick a realistic scenario; for identity, stolen sessions are the most common way in today, because they skip passwords and MFA alike.</p>
+
+<p>Larder's scenario: <em>on a Tuesday afternoon a developer installs a browser extension that pretends to be a PDF tool. It copies the browser's cookies and the files in the home folder to an attacker. Nobody notices until the next morning.</em> The group walked through it with the inventory on the screen:</p>
+
+<ol class="steps">
+  <li><strong>What does the attacker have?</strong> Session cookies for the company IdP, GitHub and the business portal's admin view; the AWS CLI's cached SSO token (<code>~/.aws/sso/cache</code>, valid for the rest of the 8-hour session); no passwords and no security keys.</li>
+  <li><strong>What can they reach?</strong> As the developer: Developer in dev-staging, ViewOnly in prod (no S3 object reads), the code in GitHub. Through TEAM they could <em>request</em> elevation, but a tech lead must approve. Pull requests need two approvals. The identity perimeter doesn't help, because these are Larder's own identities; the network rule on restricted buckets does, because the attacker isn't in the prod VPC.</li>
+  <li><strong>What would Larder see?</strong> GuardDuty might flag API calls from an unusual address. The IdP logs a session used from a new country. But neither was on the watch list as a page, so the first sign might be a TEAM request at an odd hour.</li>
+  <li><strong>How would Larder respond?</strong> Revoke the developer's IdP sessions, end their Identity Center sessions, revoke active role sessions in dev-staging (<a href="#ch13">Chapter 13</a>, <a href="#ch3">Chapter 3</a>), sign them out of GitHub and revoke their tokens; then search the trail for everything those sessions did (<a href="#ch11">Chapter 11</a>).</li>
+</ol>
+
+<div class="box box-warn">
+  <p class="label">What the tabletop found</p>
+  <p>Four gaps, each now a ticket with an owner. <strong>Sessions weren't bound to devices</strong>: a stolen IdP cookie worked from anywhere, so the IdP now requires a managed, compliant device for the AWS and GitHub apps. <strong>No alert on sign-ins from new countries</strong>: added to the watch list as a ticket, as a page for anyone in a production on-call group. <strong>The revoke steps were in three places</strong>: now one runbook, “contain a person”, practised in the next break-glass test. <strong>GitHub allowed classic personal access tokens</strong> with no expiry: the organisation now allows only fine-grained tokens, with 30-day expiry.</p>
+</div>
+
+<!-- ======================================================== 25.5 -->
+<h2 class="sec" id="s25-5"><span class="n">25.5</span>Across providers</h2>
+
+<p>The method works on any cloud, because it's about principals and decisions, not services. Table 25.3 is the book's design in one row per layer; <a href="#appB">Appendix B</a> translates every service name.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 25.3 · The same design at the big three</caption>
+    <thead><tr><th>Layer</th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>People</td><td>IdP → IAM Identity Center</td><td>Entra ID</td><td>Cloud Identity or Workspace, or a federated IdP</td></tr>
+      <tr><td>Just in time</td><td>TEAM</td><td>Entra PIM</td><td>Privileged Access Manager</td></tr>
+      <tr><td>Workloads</td><td>task and instance roles</td><td>managed identities</td><td>attached service accounts</td></tr>
+      <tr><td>Pipelines</td><td>OIDC → IAM role</td><td>workload identity federation → app registration</td><td>workload identity federation</td></tr>
+      <tr><td>Guardrails</td><td>SCPs, RCPs</td><td>Azure Policy, management groups</td><td>organisation policies, IAM deny</td></tr>
+      <tr><td>Perimeter</td><td>org conditions, endpoint policies</td><td>private endpoints, network rules</td><td>VPC Service Controls</td></tr>
+      <tr><td>Detection</td><td>CloudTrail, GuardDuty, Access Analyzer</td><td>Entra logs, Defender, Sentinel</td><td>Cloud Audit Logs, Security Command Center</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 25.6 -->
+<h2 class="sec" id="s25-6"><span class="n">25.6</span>At Larder: where it ended up</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>The design review on 15 February 2028 and the tabletop on 22 February produced seven tickets: the four from the tabletop, and three for the second region. By the end of March: <code>eu-west-3</code> added to the region SCP for the Prod OU and the backup account; a multi-Region replica of the snapshot key in Paris, with the same key policy; GuardDuty, Access Analyzer and the watch list rules enabled in Paris; the recovery VPC's endpoints in the perimeter's network rule; and a break-glass test run as if Frankfurt were down, with STS's Paris endpoint and the printed runbook. It took 26 minutes, seven more than the first test in 2027, because the runbook's Paris steps had never been read aloud.</p>
+  <p>Eli wrote the summary for Marco in five lines: one identity per person, phishing-resistant; no standing admin; no long-lived keys anywhere; guardrails no admin can switch off; every change reviewed, and every way in watched. Then he added a sixth: <em>review all of it again in a year, or when the next ADR touches it.</em></p>
+</aside>
+
+<!-- ======================================================== 25.7 -->
+<h2 class="sec" id="s25-7"><span class="n">25.7</span>Exercise: review your own</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Exercise 25 · Inventory, review and tabletop</p>
+  <p><strong>You'll</strong> apply this chapter's method to an organisation you know: your employer, a side project, or your sandbox account from the labs. <strong>You need</strong> a document, about an hour and a half, and ideally two colleagues. <strong>Cost:</strong> nothing; no cloud changes.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Inventory (30 minutes).</strong> Fill in Table 25.1's four columns for every kind of principal. Include the uncomfortable ones: shared accounts, old keys, the contractor's access, the CI system, the SaaS tools connected to your cloud. Mark every cell you couldn't fill in.</li>
+  <li><strong>Review (30 minutes).</strong> Answer Table 25.2's questions. For each “no” or “not sure”, write the smallest change that would turn it into a “yes” and the chapter that shows how.</li>
+  <li><strong>Tabletop (30 minutes).</strong> Pick one: a stolen laptop session (25.4); a leaked CI token; a vendor's account compromised; a departing administrator who is angry. For each, answer: what does the attacker have, what can they reach, what would you see, how would you stop it? Write down every “we'd have to check”.</li>
+  <li><strong>Prioritise.</strong> Sort the gaps by how much access they expose and how cheap they are to close. Do the top three this month.</li>
+  <li><strong>Optional, in your sandbox.</strong> Run the credential report check from <a href="#ch7">Chapter 7</a>'s lab and IAM Access Analyzer from <a href="#ch23">Chapter 23</a>'s, and check the findings against your inventory: anything they show that your inventory missed is a finding in itself.</li>
+</ol>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s25-8"><span class="n">25.8</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Reviewing controls without an inventory</td><td>The unlisted way in is the one that gets used.</td><td>List every principal first.</td></tr>
+      <tr><td>Treating identity as finished</td><td>Fifteen months of small changes quietly add up.</td><td>A yearly review, and one with each big architecture change.</td></tr>
+      <tr><td>Testing break-glass only for an SSO outage</td><td>It fails when the region or the vault process is the problem.</td><td>Test it in the scenarios you plan for, including a region loss.</td></tr>
+      <tr><td>Forgetting identity in a new region</td><td>Restores fail on access denied; alerts go quiet.</td><td>Region SCPs, keys, detection and perimeter, before you need them.</td></tr>
+      <tr><td>Tabletops that blame</td><td>People defend instead of noticing gaps.</td><td>Talk about the system, not the person who clicked.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum25">
+  <h2 class="sec" id="sum25"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Start every review with an <strong>inventory</strong> of every way in: who, how they prove it, what they get, who owns it.</li>
+    <li>Review <strong>layer by layer</strong> with four questions: least privilege, temporary, watched, owned.</li>
+    <li>Check the <strong>principles</strong> across layers: separation of duties, default deny, least privilege over time.</li>
+    <li>Every big architecture change, like a <strong>second region</strong>, has identity work: SCP regions, regional keys, detection, perimeter, break-glass.</li>
+    <li><strong>Tabletop</strong> realistic attacks, especially stolen sessions, and turn every gap into an owned ticket.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Access inventory</dt><dd>A list of every kind of principal, how it authenticates, what it can reach and who owns it.</dd>
+    <dt>Tabletop exercise</dt><dd>Walking through an incident scenario on paper to find gaps.</dd>
+    <dt>Pilot light</dt><dd>A minimal copy of critical systems in another region, ready to be scaled up in a disaster.</dd>
+    <dt>Session theft</dt><dd>Stealing an authenticated session's cookie or token, skipping passwords and MFA.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>What four things does the inventory record for each kind of principal? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Who it is, how it proves its identity, what it gets access to, and who owns it.</p></details>
+    </li>
+    <li>
+      <p>Why might break-glass work in a test but fail in a region outage? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>If the test only simulated SSO being down, it may still have relied on the primary region: the STS endpoint the CLI used, a runbook or vault stored there, or a region-restricting SCP that doesn't allow the recovery region. Test it with the region treated as gone.</p></details>
+    </li>
+    <li>
+      <p>In the laptop tabletop, why doesn't the identity perimeter stop the attacker, and what does? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The identity perimeter only allows Larder's identities, and the attacker is using a Larder identity. What limits them: least privilege (ViewOnly can't read objects), TEAM's approvals, the network rule on restricted buckets, and short sessions. Binding sessions to managed devices would stop the stolen cookie working at all.</p></details>
+    </li>
+    <li>
+      <p>Larder adds a city in Switzerland. List the identity questions you'd raise. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Does ADR 0026's trigger (a city outside the EU) fire, and with it a new region? Data-protection rules for the new market and where data may live; any new region in SCPs, keys, detection and perimeter; new staff in the IdP with the same joiner process; new partners (stores, payment providers) with their own access to inventory and review.</p></details>
+    </li>
+    <li>
+      <p>Design a tabletop for “a vendor's AWS account is compromised”, using WMS B as the vendor. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>The attacker has WMS B's delivery role and the external ID. They can reach only <code>wmsb-nightly-file</code>: PutObject on one prefix. Questions: what if they upload a malicious file (validate files before import); would Larder notice (unusual time or address for the upload, file validation failures); how to cut them off (remove the trust, or deny with a condition, while WMS B rebuilds); who calls WMS B, and is it in the contract?</p></details>
+    </li>
+    <li>
+      <p>Compare what “just in time” looks like at the three big providers. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>AWS has no built-in feature for it; tools like TEAM create and remove Identity Center assignments. Azure has Entra PIM, with eligible role assignments activated for a period, with approval. Google Cloud has Privileged Access Manager, with entitlements granting roles temporarily on request.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/welcome.html">Well-Architected security pillar</a>, <a href="https://docs.aws.amazon.com/prescriptive-guidance/latest/security-reference-architecture/welcome.html">Security Reference Architecture</a>.</li>
+    <li>CISA: <a href="https://www.cisa.gov/resources-tools/services/cisa-tabletop-exercise-packages">Tabletop exercise packages</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="#ch24">24 · Identity as code and least privilege at scale</a></div>
+  <div><span>Next</span><a href="#appA">Appendix A · Policy cookbook</a></div>
+</nav>

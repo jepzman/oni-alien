@@ -1,0 +1,439 @@
+<!-- Handbook 2 · Identity and Access in the Cloud · Chapter 3. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part I · How access works</p>
+  <p class="chno">3</p>
+  <h1>Sessions and tokens</h1>
+  <p class="promise">Nobody types a password for every click. After authentication, a person or program carries something instead: a session cookie, a bearer token, temporary cloud credentials. Whoever holds that thing <em>is</em> you until it expires. This chapter shows what these tokens contain, how to check one properly, and how to keep their lives short enough that losing one isn't a disaster.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain the difference between a server-side session and a self-contained token.</li>
+      <li>Read a JSON Web Token and list every check a server must make before trusting it.</li>
+      <li>Set cookie attributes that stop the common browser attacks.</li>
+      <li>Design token lifetimes, refresh and revocation, including “sign out everywhere”.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>The life of a request and the identity provider (<a href="#ch1">Chapter 1</a>, 1.5).</li>
+      <li>What an HMAC is (<a href="#ch2">Chapter 2</a>, 2.5). HTTP headers and cookies help (Handbook 1, Chapter 6).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, Python 3, no cloud account</dd>
+      <dt>Main provider</dt><dd>provider-neutral, with AWS, Azure and Google Cloud in 3.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>On Tuesday 24 November 2026, a customer's phone was stolen on the tram. That evening she changed her Larder password on the website, and felt safe. The next morning, two orders were placed from the Larder app on her stolen phone, paid with her saved card.</p>
+  <p>Changing the password hadn't touched the phone at all. The app hadn't seen her password since she first signed in, months earlier. It held two tokens: an access token the API accepted for 24 hours, and a refresh token that could fetch new ones for a year. Neither knew anything about passwords. Section 3.6 shows what Larder changed.</p>
+</aside>
+
+<!-- ======================================================== 3.1 -->
+<h2 class="sec" id="s3-1"><span class="n">3.1</span>Why sessions exist</h2>
+
+<p class="lead">HTTP is <strong>stateless</strong>: each request stands alone, and the server doesn't remember the last one. So after a person authenticates, the server hands back a <span class="term">session credential</span>, something the client sends with every following request to say “it's still me”. There are two ways to build one:</p>
+<ul>
+  <li>A <strong>server-side session</strong>: the server stores the session (who, since when, what was proved) and gives the client only a long random <strong>session ID</strong>, usually in a cookie. To check a request, the server looks the ID up.</li>
+  <li>A <strong>self-contained token</strong>: the server writes the facts into the token itself and signs it. To check a request, any server with the right key verifies the signature and reads the facts, with no lookup.</li>
+</ul>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 3.1 · Two ways to remember who's asking</caption>
+    <thead><tr><th></th><th>Server-side session</th><th>Self-contained token (such as a JWT)</th></tr></thead>
+    <tbody>
+      <tr><td>Client holds</td><td>a random ID</td><td>the facts, signed</td></tr>
+      <tr><td>Checking a request</td><td>a lookup in a session store</td><td>a signature check, no lookup</td></tr>
+      <tr><td>Ending it early</td><td>delete the session: immediate</td><td>hard: it's valid until it expires (3.6)</td></tr>
+      <tr><td>Works across services</td><td>only those sharing the session store</td><td>any service that trusts the signer</td></tr>
+      <tr><td>Typical use</td><td>a web app's own users</td><td>APIs, mobile apps, single sign-on, cloud credentials</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Neither is better. Self-contained tokens scale and cross boundaries easily; server-side sessions are easy to end. Most real systems use both, and the art is in combining them (3.6).</p>
+
+<!-- ======================================================== 3.2 -->
+<h2 class="sec" id="s3-2"><span class="n">3.2</span>Cookies, done properly</h2>
+
+<p>In a browser, session credentials usually travel in a <span class="term">cookie</span>, which the browser stores and sends back automatically with every request to the site that set it. That automatic sending is what makes cookies convenient, and also what attackers abuse. A cookie's attributes are its defences:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 3.2 · Cookie attributes for a session</caption>
+    <thead><tr><th>Attribute</th><th>Effect</th><th>Defends against</th></tr></thead>
+    <tbody>
+      <tr><td><code>Secure</code></td><td>sent only over HTTPS</td><td>theft on an unencrypted network</td></tr>
+      <tr><td><code>HttpOnly</code></td><td>invisible to JavaScript</td><td>theft by injected script (XSS)</td></tr>
+      <tr><td><code>SameSite=Lax</code> or <code>Strict</code></td><td>not sent on requests started by other sites</td><td>cross-site request forgery (CSRF)</td></tr>
+      <tr><td><code>Path=/</code>, no <code>Domain</code></td><td>sent only to the exact host that set it</td><td>leaking to other subdomains</td></tr>
+      <tr><td><code>Max-Age</code> or <code>Expires</code></td><td>when the browser forgets it</td><td>sessions that outlive the person's visit</td></tr>
+      <tr><td><code>__Host-</code> name prefix</td><td>the browser enforces <code>Secure</code>, <code>Path=/</code> and no <code>Domain</code></td><td>other subdomains overwriting it</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>A good session cookie looks like this:</p>
+<pre><code>Set-Cookie: __Host-session=k3Pz9Vq7xTn2Lw8RcY4bHs1dMf6Ga0Ue; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800</code></pre>
+
+<p>Sessions also need two timeouts: an <strong>idle timeout</strong> (end the session after, say, 30 minutes without activity) and an <strong>absolute timeout</strong> (end it after eight hours, however active). Issue a <strong>new session ID</strong> at login and whenever privileges change, so an attacker who planted an ID before login can't ride on it (<em>session fixation</em>).</p>
+
+<!-- ======================================================== 3.3 -->
+<h2 class="sec" id="s3-3"><span class="n">3.3</span>Bearer tokens</h2>
+
+<p>APIs and mobile apps usually skip cookies and send a token in a header:</p>
+<pre><code>GET /v1/orders HTTP/1.1
+Host: api.larder.example
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOi...</code></pre>
+
+<p>A <span class="term">bearer token</span> is exactly what the name says: whoever bears it gets access. There's no proof that the sender is the party it was issued to. That makes bearer tokens simple, and it makes every copy dangerous: in a log line, a crash report, a screenshot, a browser's history, a support ticket. Treat them like passwords, and keep them short-lived.</p>
+
+<p>Bearer tokens come in two forms. An <strong>opaque token</strong> is a random string; the API asks the issuer what it means (<em>introspection</em>), so it behaves like a server-side session. A <strong>structured token</strong> carries its own facts, signed, and the commonest format is the JWT.</p>
+
+<aside class="side"><b>Sender-constrained tokens</b>Standards such as DPoP and mutual TLS bind a token to a key the client holds, so a stolen copy is useless without the key too. They're increasingly common in banking and high-risk APIs.</aside>
+
+<!-- ======================================================== 3.4 -->
+<h2 class="sec" id="s3-4"><span class="n">3.4</span>Inside a JSON Web Token</h2>
+
+<p>A <span class="term">JSON Web Token</span> (JWT, often pronounced “jot”) is three parts separated by dots: a <strong>header</strong>, a <strong>payload</strong> of <em>claims</em>, and a <strong>signature</strong>. The first two are JSON, encoded with <em>base64url</em> (base64 with URL-safe characters and no padding). Encoded is not encrypted: anyone who has a JWT can read it.</p>
+
+<figure class="wide" id="fig3-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig3-1-t fig3-1-d">
+      <title id="fig3-1-t">The three parts of a JSON Web Token</title>
+      <desc id="fig3-1-d">A token in three parts separated by dots. The header decodes to alg HS256 and typ JWT. The payload decodes to the claims: issuer https://login.larder.example, subject customer-48213, audience larder-api, issued at and expiry times ten minutes apart, and scope orders:write. The signature is an HMAC-SHA256 of the encoded header, a dot and the encoded payload, using the issuer's key. Changing any character of the header or payload makes the signature wrong.</desc>
+      <rect class="priv" x="12" y="14" width="150" height="40" rx="4"/><text class="t-mono" x="87" y="39" text-anchor="middle">eyJhbGciOi…</text>
+      <text class="t-title" x="172" y="42">.</text>
+      <rect class="pub" x="184" y="14" width="370" height="40" rx="4"/><text class="t-mono" x="369" y="39" text-anchor="middle">eyJpc3MiOiJodHRwczovL2xvZ2luLmxh…</text>
+      <text class="t-title" x="564" y="42">.</text>
+      <rect class="node-accent" x="576" y="14" width="172" height="40" rx="4"/><text class="t-mono on-accent" x="662" y="39" text-anchor="middle">50-ZrTCS8tR6…</text>
+      <text class="t-small" x="87" y="74" text-anchor="middle">header</text>
+      <text class="t-small" x="369" y="74" text-anchor="middle">payload (claims)</text>
+      <text class="t-small" x="662" y="74" text-anchor="middle">signature</text>
+      <rect class="node" x="12" y="86" width="150" height="70" rx="4"/>
+      <text class="t-mono" x="22" y="110">"alg": "HS256",</text>
+      <text class="t-mono" x="22" y="130">"typ": "JWT"</text>
+      <rect class="node" x="184" y="86" width="370" height="150" rx="4"/>
+      <text class="t-mono" x="196" y="110">"iss": "https://login.larder.example",</text>
+      <text class="t-mono" x="196" y="130">"sub": "customer-48213",</text>
+      <text class="t-mono" x="196" y="150">"aud": "larder-api",</text>
+      <text class="t-mono" x="196" y="170">"iat": 1795597200,</text>
+      <text class="t-mono" x="196" y="190">"exp": 1795597800,</text>
+      <text class="t-mono" x="196" y="210">"scope": "orders:write"</text>
+      <text class="t-small" x="434" y="130">← who</text>
+      <text class="t-small" x="434" y="150">← for which API</text>
+      <text class="t-small" x="434" y="190">← 10 minutes later</text>
+      <rect class="node" x="576" y="86" width="172" height="110" rx="4"/>
+      <text class="t-small" x="588" y="110">HMAC-SHA256 of</text>
+      <text class="t-mono" x="588" y="130">header.payload</text>
+      <text class="t-small" x="588" y="150">with the issuer's key</text>
+      <text class="t-small" x="588" y="178">(or an RSA / EC</text>
+      <text class="t-small" x="588" y="192">signature: RS256, ES256)</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 3.1</b> A JWT, decoded. The signature covers the header and payload exactly, so changing one character of either invalidates it. This is the token the lab makes.</figcaption>
+</figure>
+
+<p>The <strong>registered claims</strong> you'll see everywhere:</p>
+<ul>
+  <li><code>iss</code> (issuer): who signed it, usually a URL.</li>
+  <li><code>sub</code> (subject): who it's about: a user or client ID.</li>
+  <li><code>aud</code> (audience): which API or app it's meant for.</li>
+  <li><code>exp</code> (expiry), <code>nbf</code> (not before), <code>iat</code> (issued at): Unix times.</li>
+  <li><code>jti</code> (JWT ID): a unique ID, useful for revocation lists and replay detection.</li>
+</ul>
+<p>Plus whatever the issuer adds: scopes, roles, group names, tenant IDs. Keep that short and non-sensitive: tokens end up in logs, and every request carries the whole thing.</p>
+
+<!-- ======================================================== 3.5 -->
+<h2 class="sec" id="s3-5"><span class="n">3.5</span>Checking a token: every step</h2>
+
+<p>The signature is only the beginning. An API that receives a JWT must check all of this, in this order, before it believes a single claim:</p>
+
+<ol class="steps">
+  <li><strong>Algorithm:</strong> accept only the algorithms you expect (an allow-list), whatever the header says. Never accept <code>none</code>.</li>
+  <li><strong>Key:</strong> find the right key for this issuer. For asymmetric tokens, issuers publish their public keys at a <em>JWKS</em> URL, and the header's <code>kid</code> says which key signed it. Cache the keys; refresh them when an unknown <code>kid</code> appears.</li>
+  <li><strong>Signature:</strong> verify it, comparing in constant time.</li>
+  <li><strong>Issuer:</strong> <code>iss</code> must be exactly the issuer you trust.</li>
+  <li><strong>Audience:</strong> <code>aud</code> must be <em>you</em>. A valid token for another API must fail here.</li>
+  <li><strong>Time:</strong> <code>exp</code> in the future and <code>nbf</code> in the past, allowing a small leeway (30–60 seconds) for clock differences.</li>
+  <li><strong>Then authorise:</strong> the token says who; your rules still decide whether this request is allowed (<a href="#ch1">Chapter 1</a>).</li>
+</ol>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: letting the token choose the algorithm</p>
+  <p>Two famous bugs come from trusting the header. With <code>"alg": "none"</code>, some libraries skipped the signature check entirely. With <em>algorithm confusion</em>, an attacker changes <code>RS256</code> to <code>HS256</code> and signs with the issuer's <em>public</em> key as if it were a shared secret; a library that picks the method from the header then verifies it. Always tell your library which algorithms and keys to accept, and use a well-maintained library rather than writing your own.</p>
+</div>
+
+<p><strong>HS256 or RS256?</strong> HS256 uses one shared secret to sign and verify, so every API that checks tokens could also create them: fine inside one service, wrong across many. Asymmetric algorithms (RS256, ES256) sign with a private key only the issuer has, and verify with a public key anyone can have. Identity providers use asymmetric signatures for exactly that reason.</p>
+
+<!-- ======================================================== 3.6 -->
+<h2 class="sec" id="s3-6"><span class="n">3.6</span>Expiry, refresh and revocation</h2>
+
+<p>A self-contained token can't be taken back: every API that trusts the signer will accept it until <code>exp</code>. So the main defence is a short life. But nobody wants to sign in every ten minutes. The standard answer is two tokens:</p>
+<ul>
+  <li>An <span class="term">access token</span>: self-contained, sent with every API call, short-lived (5–15 minutes).</li>
+  <li>A <span class="term">refresh token</span>: opaque, sent <em>only</em> to the identity provider to get a new access token, longer-lived, and recorded server-side, so it <strong>can</strong> be revoked.</li>
+</ul>
+
+<figure class="wide" id="fig3-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 230" role="img" aria-labelledby="fig3-2-t fig3-2-d">
+      <title id="fig3-2-t">Short access tokens, rotating refresh tokens, and reuse detection</title>
+      <desc id="fig3-2-d">A timeline. Each access token lives ten minutes. When one expires, the app sends its refresh token R1 to the identity provider and gets a new access token and a new refresh token R2; R1 is now used up. Then R2 gives R3. If a thief who copied R1 later tries to use it, the identity provider sees a refresh token used twice and revokes the whole family, R1 to R3, so both the thief and the app must sign in again. Signing out everywhere or changing the password also revokes the family; the last access token stops working within ten minutes.</desc>
+      <defs><marker id="c3ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <path class="wire" d="M20 60 H740" marker-end="url(#c3ah)"/>
+      <text class="t-small" x="740" y="50" text-anchor="end">time</text>
+      <rect class="pub" x="20" y="70" width="150" height="26" rx="3"/><text class="t-mono" x="95" y="88" text-anchor="middle">access 1 · 10 min</text>
+      <rect class="pub" x="176" y="70" width="150" height="26" rx="3"/><text class="t-mono" x="251" y="88" text-anchor="middle">access 2 · 10 min</text>
+      <rect class="pub" x="332" y="70" width="150" height="26" rx="3"/><text class="t-mono" x="407" y="88" text-anchor="middle">access 3 · 10 min</text>
+      <rect class="node" x="20" y="108" width="150" height="26" rx="3"/><text class="t-mono" x="95" y="126" text-anchor="middle">refresh R1</text>
+      <rect class="node" x="176" y="108" width="150" height="26" rx="3"/><text class="t-mono" x="251" y="126" text-anchor="middle">refresh R2</text>
+      <rect class="node" x="332" y="108" width="150" height="26" rx="3"/><text class="t-mono" x="407" y="126" text-anchor="middle">refresh R3</text>
+      <text class="t-small" x="173" y="152" text-anchor="middle">R1 → access 2 + R2</text>
+      <text class="t-small" x="329" y="152" text-anchor="middle">R2 → access 3 + R3</text>
+      <rect class="ext" x="500" y="96" width="248" height="52" rx="5"/>
+      <text class="t-label t-warn" x="512" y="117">thief replays stolen R1</text>
+      <text class="t-small" x="512" y="137">already used: revoke R1, R2, R3</text>
+      <rect class="node-accent" x="20" y="176" width="728" height="40" rx="5"/>
+      <text class="t-label on-accent" x="36" y="201">Sign out everywhere / password change: revoke the refresh tokens. Access dies within 10 minutes.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 3.2</b> Refresh token rotation. Each refresh token works once; reusing one is a sign of theft, and ends the whole chain.</figcaption>
+</figure>
+
+<p><span class="term">Refresh token rotation</span> issues a new refresh token every time one is used, and treats a second use of an old one as theft: it revokes everything descended from that sign-in. Combine that with short access tokens, and you have revocation that works within minutes:</p>
+<ul>
+  <li><strong>Sign out</strong> revokes this device's refresh token.</li>
+  <li><strong>Sign out everywhere</strong>, <strong>password change</strong> and <strong>account lock</strong> revoke all of the user's refresh tokens.</li>
+  <li>If you need faster than the access token's lifetime, keep a small <strong>denylist</strong> of revoked token IDs (<code>jti</code>) or a per-user “sessions valid after” time, and check it on sensitive actions such as payments.</li>
+</ul>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">A token you can't take back must die young. Keep the power to end a session in something you can revoke.</p>
+</div>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Ben's and Dee's teams made four changes, live on 10 December. Access tokens now last 10 minutes instead of 24 hours. Refresh tokens rotate on every use, with reuse detection, and expire after 30 days without use. A password change, “sign out everywhere” (new, under Account → Devices, which lists every signed-in device) and an account lock all revoke every refresh token. And paying with a saved card checks a per-customer “sessions valid after” time, so a revoked phone can't order even in its last ten minutes.</p>
+  <p>Replayed against the new design, Tuesday's theft ends within ten minutes of the password change, and the thief's next refresh fails.</p>
+</aside>
+
+<!-- ======================================================== 3.7 -->
+<h2 class="sec" id="s3-7"><span class="n">3.7</span>Where tokens should live</h2>
+
+<ul>
+  <li><strong>Browsers:</strong> keep tokens out of JavaScript's reach. Storing an access token in <code>localStorage</code> means any injected script can read and send it. The safer pattern is a <strong>backend for frontend</strong>: the browser holds only an <code>HttpOnly</code> session cookie for your own server, which holds the tokens and calls the APIs.</li>
+  <li><strong>Mobile apps:</strong> the platform's secure storage (Keychain on iOS, Keystore-backed storage on Android), never plain preferences or files.</li>
+  <li><strong>Servers and workloads:</strong> in memory, fetched from the platform when needed (<a href="#ch15">Chapter 15</a>), not in environment files committed to Git.</li>
+  <li><strong>Never</strong> in URLs (they end up in logs, browser history and the <code>Referer</code> header), and never logged in full. If you must log one, log its <code>jti</code> or a hash.</li>
+</ul>
+
+<!-- ======================================================== 3.8 -->
+<h2 class="sec" id="s3-8"><span class="n">3.8</span>Across providers</h2>
+
+<p>The clouds themselves run on the same ideas. When you assume a role on AWS, sign in to Azure or run code on Google Cloud, you get short-lived tokens, and the long-lived things (passwords, keys) stay elsewhere:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 3.3 · Short-lived credentials at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>For calling the cloud's APIs</td><td>STS temporary credentials: access key, secret and session token; 15 minutes to 12 hours</td><td>Entra ID access tokens (JWTs), typically about an hour</td><td>OAuth access tokens, one hour by default</td></tr>
+      <tr><td>How they're renewed</td><td>assume the role again, or refresh through Identity Center's session</td><td>refresh tokens held by the client library</td><td>the client library, from the user's or workload's credentials</td></tr>
+      <tr><td>Revoking early</td><td>a deny policy on tokens issued before a time (<code>aws:TokenIssueTime</code>; the console's “Revoke active sessions”)</td><td>revoke refresh tokens; Continuous Access Evaluation cuts access tokens on critical events</td><td>revoke the user's or service account's tokens; short lifetimes</td></tr>
+      <tr><td>For your own apps' users</td><td>Amazon Cognito: ID, access and refresh tokens</td><td>Entra ID and Entra External ID</td><td>Identity Platform / Firebase Authentication</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p><strong>Continuous Access Evaluation</strong> lets supporting services (Exchange, SharePoint, Microsoft Graph and others) learn about critical events, such as a disabled account, a password reset or a changed network location, and reject a still-valid access token straight away, instead of waiting for it to expire.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>Google's access tokens are opaque strings, not JWTs; Google's <em>ID tokens</em> are JWTs. Workloads ask the metadata server for an access token when they need one, so there's nothing long-lived on disk to steal (<a href="#ch15">Chapter 15</a>).</p>
+</div>
+
+<!-- ======================================================== 3.9 -->
+<h2 class="sec" id="s3-9"><span class="n">3.9</span>Lab: make and check a JWT</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 3 · Sign, read, verify and attack a token</p>
+  <p><strong>You'll</strong> build an HS256 JWT by hand, read it without the key, and write a verifier that rejects a forged subject, an expired token, <code>alg: none</code> and a token for another API. Then you'll remove checks and watch attacks get through. <strong>You need</strong> Python 3. <strong>Cost:</strong> nothing. (In real code, use a maintained library such as PyJWT; writing one teaches what the library does for you.)</p>
+</div>
+
+<p class="code-title"><span>tokens.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># tokens.py · make and check a JSON Web Token (HS256) with the standard library</span>
+<span class="k">import</span> base64, hashlib, hmac, json, time
+
+<span class="k">def</span> b64url(data):
+    <span class="k">return</span> base64.urlsafe_b64encode(data).rstrip(b<span class="s">"="</span>).decode()
+
+<span class="k">def</span> unb64url(text):
+    <span class="k">return</span> base64.urlsafe_b64decode(text + <span class="s">"="</span> * (-len(text) % 4))
+
+<span class="k">def</span> encode(part):
+    <span class="k">return</span> b64url(json.dumps(part, separators=(<span class="s">","</span>, <span class="s">":"</span>)).encode())
+
+<span class="k">def</span> sign(claims, key):
+    signing_input = encode({<span class="s">"alg"</span>: <span class="s">"HS256"</span>, <span class="s">"typ"</span>: <span class="s">"JWT"</span>}) + <span class="s">"."</span> + encode(claims)
+    signature = hmac.new(key, signing_input.encode(), hashlib.sha256).digest()
+    <span class="k">return</span> signing_input + <span class="s">"."</span> + b64url(signature)
+
+<span class="k">def</span> verify(token, key, issuer, audience, now=None, leeway=30):
+    now = time.time() <span class="k">if</span> now <span class="k">is</span> None <span class="k">else</span> now
+    <span class="k">try</span>:
+        h64, p64, s64 = token.split(<span class="s">"."</span>)
+        header, claims = json.loads(unb64url(h64)), json.loads(unb64url(p64))
+    <span class="k">except</span> ValueError:
+        <span class="k">return</span> <span class="s">"rejected: malformed"</span>
+    <span class="k">if</span> header.get(<span class="s">"alg"</span>) != <span class="s">"HS256"</span>:                  <span class="c"># an allow-list; never obey the header</span>
+        <span class="k">return</span> f<span class="s">"rejected: alg {header.get('alg')}"</span>
+    expected = hmac.new(key, f<span class="s">"{h64}.{p64}"</span>.encode(), hashlib.sha256).digest()
+    <span class="k">if not</span> hmac.compare_digest(expected, unb64url(s64)):
+        <span class="k">return</span> <span class="s">"rejected: bad signature"</span>
+    <span class="k">if</span> claims.get(<span class="s">"iss"</span>) != issuer:
+        <span class="k">return</span> <span class="s">"rejected: wrong issuer"</span>
+    <span class="k">if</span> claims.get(<span class="s">"aud"</span>) != audience:
+        <span class="k">return</span> <span class="s">"rejected: wrong audience"</span>
+    <span class="k">if</span> now &gt; claims.get(<span class="s">"exp"</span>, 0) + leeway:
+        <span class="k">return</span> <span class="s">"rejected: expired"</span>
+    scope = f<span class="s">" may {claims['scope']}"</span> <span class="k">if</span> <span class="s">"scope"</span> <span class="k">in</span> claims <span class="k">else</span> <span class="s">""</span>
+    <span class="k">return</span> f<span class="s">"ok: {claims['sub']}{scope}"</span>
+
+<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:
+    KEY = b<span class="s">"lab-only-key-printed-in-a-book-1"</span>
+    NOW = 1795597200                                   <span class="c"># 25 Nov 2026, 09:00 UTC</span>
+    ISS, AUD = <span class="s">"https://login.larder.example"</span>, <span class="s">"larder-api"</span>
+    claims = {<span class="s">"iss"</span>: ISS, <span class="s">"sub"</span>: <span class="s">"customer-48213"</span>, <span class="s">"aud"</span>: AUD,
+              <span class="s">"iat"</span>: NOW, <span class="s">"exp"</span>: NOW + 600, <span class="s">"scope"</span>: <span class="s">"orders:write"</span>}
+    token = sign(claims, KEY)
+    print(token, <span class="s">"\n"</span>)
+    print(<span class="s">"anyone can read it:"</span>, unb64url(token.split(<span class="s">"."</span>)[1]).decode(), <span class="s">"\n"</span>)
+
+    h64, p64, s64 = token.split(<span class="s">"."</span>)
+    forged_claims = encode(dict(claims, sub=<span class="s">"customer-1"</span>))
+    none_token = encode({<span class="s">"alg"</span>: <span class="s">"none"</span>, <span class="s">"typ"</span>: <span class="s">"JWT"</span>}) + <span class="s">"."</span> + p64 + <span class="s">"."</span>
+    tests = [
+        (<span class="s">"as issued"</span>,            token,                          NOW + 60),
+        (<span class="s">"someone else's id"</span>,    f<span class="s">"{h64}.{forged_claims}.{s64}"</span>, NOW + 60),
+        (<span class="s">"an hour later"</span>,        token,                          NOW + 3600),
+        (<span class="s">'alg "none"'</span>,           none_token,                     NOW + 60),
+        (<span class="s">"for another API"</span>,      sign(dict(claims, aud=<span class="s">"larder-admin"</span>), KEY), NOW + 60),
+    ]
+    <span class="k">for</span> name, t, at <span class="k">in</span> tests:
+        print(f<span class="s">"{name:&lt;20} {verify(t, KEY, ISS, AUD, now=at)}"</span>)</code></pre>
+
+<ol class="steps">
+  <li><strong>Run it</strong> with <code>python3 tokens.py</code>. The clock is fixed, so you'll see exactly this:
+<pre><code>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2xvZ2luLmxhcmRlci5leGFtcGxlIiwic3ViIjoiY3VzdG9tZXItNDgyMTMiLCJhdWQiOiJsYXJkZXItYXBpIiwiaWF0IjoxNzk1NTk3MjAwLCJleHAiOjE3OTU1OTc4MDAsInNjb3BlIjoib3JkZXJzOndyaXRlIn0.50-ZrTCS8tR64tATvnFMEdyxU3Esy6ddzmGvzO14c-I
+
+anyone can read it: {"iss":"https://login.larder.example","sub":"customer-48213","aud":"larder-api","iat":1795597200,"exp":1795597800,"scope":"orders:write"}
+
+as issued            ok: customer-48213 may orders:write
+someone else's id    rejected: bad signature
+an hour later        rejected: expired
+alg "none"           rejected: alg none
+for another API      rejected: wrong audience</code></pre></li>
+  <li><strong>Read a token without the key.</strong> Paste the token into any JWT decoder, or decode the middle part yourself with <code>unb64url</code>. Nothing in a JWT is secret unless it's encrypted (JWE), which is rare.</li>
+  <li><strong>Break it on purpose.</strong> Remove the two lines that check <code>aud</code>, and run again: the token meant for <code>larder-admin</code> is now accepted by <code>larder-api</code>. Put them back. Then set <code>leeway=7200</code>: the hour-old token is accepted. Finally, replace the algorithm check with <code>if header.get("alg") == "none": return "ok: " + claims["sub"]</code>, the bug some early libraries had in spirit, and watch the unsigned token get in.</li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Add a <code>jti</code> to the claims and a <code>REVOKED</code> set to the verifier; revoke a token and check it's refused before it expires. (2) Install PyJWT (<code>pip install pyjwt</code>) and verify the same token with <code>jwt.decode(token, KEY, algorithms=["HS256"], audience="larder-api", issuer=ISS, options={"verify_exp": False})</code>. Then try it without <code>algorithms=</code>: the library refuses, which is the right design.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s3-10"><span class="n">3.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Long-lived access tokens</td><td>A stolen phone or leaked log grants access for hours or days.</td><td>5–15 minute access tokens with refresh.</td></tr>
+      <tr><td>Password change doesn't end sessions</td><td>The thief keeps going, as at Larder.</td><td>Revoke refresh tokens on password change and account lock.</td></tr>
+      <tr><td>Skipping <code>aud</code> or <code>iss</code> checks</td><td>Tokens for other apps, or from other issuers, are accepted.</td><td>Check every claim in 3.5; use a library and configure it.</td></tr>
+      <tr><td>Trusting the header's <code>alg</code></td><td><code>none</code> and algorithm-confusion attacks.</td><td>An explicit allow-list of algorithms and keys.</td></tr>
+      <tr><td>Tokens in <code>localStorage</code>, URLs or logs</td><td>Stolen by injected scripts or read from logs and history.</td><td><code>HttpOnly</code> cookies with a backend for frontend; never log tokens.</td></tr>
+      <tr><td>Sensitive data in claims</td><td>Anyone holding the token can read it.</td><td>IDs and scopes only; look up the rest.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum3">
+  <h2 class="sec" id="sum3"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>After authentication, a <strong>session credential</strong> stands in for the person: a server-side session ID or a self-contained signed token.</li>
+    <li>Session cookies need <code>Secure</code>, <code>HttpOnly</code>, <code>SameSite</code>, a narrow scope, and idle and absolute timeouts.</li>
+    <li>A <strong>bearer token</strong> works for whoever holds it. Treat every copy like a password.</li>
+    <li>A JWT is a readable header and payload plus a signature. Check algorithm, key, signature, issuer, audience and time, then authorise.</li>
+    <li>Self-contained tokens can't be taken back: keep <strong>access tokens short</strong>, and put revocable power in <strong>rotating refresh tokens</strong>.</li>
+    <li>Password changes and “sign out everywhere” must revoke refresh tokens.</li>
+    <li>Keep tokens out of JavaScript, URLs and logs.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Session</dt><dd>The state that lets a server recognise later requests after one authentication.</dd>
+    <dt>Bearer token</dt><dd>A token that grants access to whoever presents it.</dd>
+    <dt>JWT</dt><dd>JSON Web Token: base64url-encoded header and claims, plus a signature.</dd>
+    <dt>Claim</dt><dd>A statement in a token, such as <code>sub</code>, <code>aud</code> or <code>exp</code>.</dd>
+    <dt>Audience</dt><dd>The service a token is meant for; others must reject it.</dd>
+    <dt>Access token</dt><dd>A short-lived token sent to APIs.</dd>
+    <dt>Refresh token</dt><dd>A longer-lived, revocable token used only to get new access tokens.</dd>
+    <dt>Rotation</dt><dd>Issuing a new refresh token at each use, and treating reuse as theft.</dd>
+    <dt>JWKS</dt><dd>JSON Web Key Set: an issuer's published public keys.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Why didn't changing her password stop the thief at Larder? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>The phone held an access token and a refresh token, neither tied to the password. The API accepted the access token for 24 hours, and nothing revoked the refresh token when the password changed.</p></details>
+    </li>
+    <li>
+      <p>You receive a JWT whose signature is valid. List what else you must check before acting on it. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>That the algorithm was one you allow (checked before the signature), the issuer is the one you trust, the audience is your service, it hasn't expired and isn't used before <code>nbf</code>, and then whether this subject is authorised for this request.</p></details>
+    </li>
+    <li>
+      <p>Explain why an identity provider uses RS256 or ES256 rather than HS256 for tokens many APIs will check. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>With HS256, every API that can verify a token holds the same secret and could also forge one. With an asymmetric algorithm, only the provider holds the private signing key; APIs verify with the public key, which can't sign.</p></details>
+    </li>
+    <li>
+      <p>A security reviewer says “your access tokens last 15 minutes, so a fired employee keeps access for up to 15 minutes”. When is that acceptable, and what would you add when it isn't? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Acceptable for most actions, since refresh is revoked immediately. For sensitive actions (payments, admin changes, data exports), check a denylist of token IDs or a per-user “valid after” time, or require fresh authentication.</p></details>
+    </li>
+    <li>
+      <p>Which cookie attribute stops a script injected into your page from reading the session cookie, and which stops another site making the user's browser send it? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p><code>HttpOnly</code> hides it from JavaScript. <code>SameSite=Lax</code> or <code>Strict</code> stops it being sent on most cross-site requests.</p></details>
+    </li>
+    <li>
+      <p>Compare how you'd cut off a compromised identity's cloud API access early on AWS and on Azure. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>AWS: temporary credentials can't be recalled, so attach a policy that denies everything for sessions issued before now (<code>aws:TokenIssueTime</code>), which the console's “Revoke active sessions” does for roles, and disable the source identity. Azure: revoke the user's refresh tokens and disable the account; Continuous Access Evaluation makes supporting services reject existing access tokens quickly.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li><a href="https://datatracker.ietf.org/doc/html/rfc7519">RFC 7519, JSON Web Token</a>, and <a href="https://datatracker.ietf.org/doc/html/rfc8725">RFC 8725, JWT Best Current Practices</a>.</li>
+    <li>OWASP <a href="https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html">Session Management Cheat Sheet</a>.</li>
+    <li><a href="https://datatracker.ietf.org/doc/html/rfc9700">RFC 9700, OAuth 2.0 Security Best Current Practice</a> (refresh token rotation and sender-constrained tokens).</li>
+    <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_revoke-sessions.html">Revoking role session credentials</a>. Azure: <a href="https://learn.microsoft.com/entra/identity/conditional-access/concept-continuous-access-evaluation">Continuous Access Evaluation</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="#ch2">2 · Passwords, MFA and passkeys</a></div>
+  <div><span>Next</span><a href="#ch4">4 · OAuth 2.0 and OpenID Connect</a></div>
+</nav>

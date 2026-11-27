@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Single sign-on with IAM Identity Center · Identity and Access in the Cloud</title>
+<meta name="description" content="Connecting a company identity provider, permission sets and account assignments, and SSO from the CLI. Larder retires its shared IAM users.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 2</a> · <a href="index.html">Identity and Access in the Cloud</a></span><span>Part III · Chapter 12</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part III · Access for people</p>
+  <p class="chno">12</p>
+  <h1>Single sign-on with IAM Identity Center</h1>
+  <p class="promise">This is the chapter where people stop having IAM users. With IAM Identity Center, everyone signs in once, with strong MFA, and picks an account and a job; AWS hands them a role session for exactly that. Access is granted to groups, in one place, across every account. This chapter explains how the pieces fit, how to design permission sets and assignments, and what changes in the console, the CLI and CloudTrail.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain instances, identity sources, permission sets and account assignments, and how they become IAM roles.</li>
+      <li>Design a small set of permission sets by job, and assign them to groups.</li>
+      <li>Sign in to the console and the CLI through the AWS access portal.</li>
+      <li>Read Identity Center sessions in CloudTrail, and write guardrails that refer to them.</li>
+      <li>Retire IAM users safely.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Roles and sessions (<a href="08-users-roles.html">Chapter 8</a>); access models (<a href="06-access-models.html">Chapter 6</a>); federation (<a href="05-saml-federation.html">Chapter 5</a>).</li>
+      <li>Guardrails and <code>aws:PrincipalArn</code> (<a href="10-evaluation.html">Chapter 10</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, Python 3; AWS steps need a sandbox organisation, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 12.9</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>By January 2027, Larder's AWS access is safer than it was in November, and much more awkward. The eight engineers who use AWS have IAM users in the production account, and most of them a second one in the staging account; Larder's other ten engineers have no AWS access at all, and ask a colleague when they need to look at something. The six on call assume <code>prod-operator</code> with a code from an authenticator app, because the security keys Eli bought in November don't work for the CLI (<a href="08-users-roles.html">Chapter 8</a>). A new joiner needs two users, two passwords and two MFA devices before lunch; a leaver needs someone to remember both.</p>
+  <p>Eli's January goal is simple to state: by the end of the month, nobody at Larder has an IAM user. Section 12.10 shows how it went.</p>
+</aside>
+
+<!-- ======================================================== 12.1 -->
+<h2 class="sec" id="s12-1"><span class="n">12.1</span>Why single sign-on for the cloud</h2>
+
+<p class="lead">Everything in Part I points the same way: one identity per person, strong and phishing-resistant authentication, short-lived credentials, access granted to groups and removed in one place. <span class="term">IAM Identity Center</span> is AWS's service for exactly that. It's where people sign in, it's connected to your company directory, and it turns “Ben is on the on-call team” into a one-hour role session in the production account, with nothing long-lived in between.</p>
+
+<p>For people, it replaces IAM users completely. Workloads still use roles directly (<a href="15-workload-identity.html">Chapter 15</a>); Identity Center is for humans.</p>
+
+<!-- ======================================================== 12.2 -->
+<h2 class="sec" id="s12-2"><span class="n">12.2</span>The pieces</h2>
+
+<figure class="wide" id="fig12-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 290" role="img" aria-labelledby="fig12-1-t fig12-1-d">
+      <title id="fig12-1-t">How IAM Identity Center turns groups into roles</title>
+      <desc id="fig12-1-d">In the management account, an Identity Center instance has an identity source holding users and groups, such as the on-call group, and permission sets, such as ProdOperator. An account assignment joins three things: a group, a permission set and an account. For each assignment, Identity Center creates an IAM role in the target account, named AWSReservedSSO_ProdOperator followed by a suffix, whose trust policy trusts Identity Center. Members of the group sign in to the access portal and get a session of that role.</desc>
+      <defs><marker id="c12ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c12ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="region" x="12" y="14" width="420" height="262" rx="8"/>
+      <text class="t-label" x="26" y="38">management account · Identity Center instance</text>
+      <rect class="node" x="26" y="54" width="180" height="88" rx="5"/>
+      <text class="t-label" x="116" y="76" text-anchor="middle">identity source</text>
+      <text class="t-small" x="116" y="96" text-anchor="middle">users and groups</text>
+      <text class="t-mono" x="116" y="120" text-anchor="middle">group: on-call</text>
+      <rect class="node" x="238" y="54" width="180" height="88" rx="5"/>
+      <text class="t-label" x="328" y="76" text-anchor="middle">permission set</text>
+      <text class="t-small" x="328" y="96" text-anchor="middle">policies + session length</text>
+      <text class="t-mono" x="328" y="120" text-anchor="middle">ProdOperator · 1 h</text>
+      <rect class="node-accent" x="26" y="172" width="392" height="88" rx="5"/>
+      <text class="t-label on-accent" x="222" y="198" text-anchor="middle">account assignment</text>
+      <text class="t-mono on-accent" x="222" y="222" text-anchor="middle">group on-call + ProdOperator + 111122223333</text>
+      <text class="t-small on-accent" x="222" y="244" text-anchor="middle">who · what job · which account</text>
+      <path class="wire" d="M116 144 V168" marker-end="url(#c12ah)"/>
+      <path class="wire" d="M328 144 V168" marker-end="url(#c12ah)"/>
+      <rect class="vpc" x="478" y="14" width="270" height="262" rx="8"/>
+      <text class="t-label" x="494" y="38">account 111122223333 · prod</text>
+      <rect class="pub" x="494" y="54" width="238" height="110" rx="5"/>
+      <text class="t-label" x="613" y="78" text-anchor="middle">IAM role, created for you</text>
+      <text class="t-mono" x="613" y="102" text-anchor="middle">AWSReservedSSO_</text>
+      <text class="t-mono" x="613" y="120" text-anchor="middle">ProdOperator_3f9a…</text>
+      <text class="t-small" x="613" y="146" text-anchor="middle">trusts Identity Center only</text>
+      <rect class="node" x="494" y="188" width="238" height="72" rx="5"/>
+      <text class="t-label" x="613" y="214" text-anchor="middle">session for ben@larder.example</text>
+      <text class="t-small" x="613" y="236" text-anchor="middle">after portal sign-in, 1 hour</text>
+      <path class="wire-accent" d="M420 216 H462 V110 H490" marker-end="url(#c12ah2)"/>
+      <text class="t-small t-accent halo-priv" x="452" y="165" text-anchor="middle" transform="rotate(-90 452 165)">provisions</text>
+      <path class="wire" d="M613 166 V184" marker-end="url(#c12ah)"/>
+    </svg>
+  </div>
+  <figcaption><b>Figure 12.1</b> An account assignment is a sentence: <em>this group</em> may work as <em>this job</em> in <em>this account</em>. Identity Center writes the IAM role for you, in every account where the permission set is assigned.</figcaption>
+</figure>
+
+<ul>
+  <li>An <strong>instance</strong> of Identity Center. To give access to AWS accounts you need an <em>organisation instance</em>, which lives in an AWS Organization's management account (or is administered from a delegated member account). An <em>account instance</em> in a standalone account can only serve applications, not AWS account access.</li>
+  <li>An <strong>identity source</strong>: where users and groups come from (12.4).</li>
+  <li>A <span class="term">permission set</span>: a template for a role: AWS managed policies, references to customer managed policies, an inline policy, an optional permissions boundary, and a session duration (1 to 12 hours).</li>
+  <li>An <span class="term">account assignment</span>: a user or group, a permission set, and an account. For each assignment, Identity Center creates an IAM role named <code>AWSReservedSSO_<i>PermissionSetName</i>_<i>suffix</i></code> in that account, with a trust policy that only Identity Center can use. You don't edit these roles; you change the permission set, and Identity Center updates them everywhere.</li>
+  <li>The <strong>AWS access portal</strong> (<code>https://<i>your-alias</i>.awsapps.com/start</code>): where people sign in and choose an account and a permission set.</li>
+</ul>
+
+<!-- ======================================================== 12.3 -->
+<h2 class="sec" id="s12-3"><span class="n">12.3</span>It needs an organisation</h2>
+
+<p>Because account access needs an organisation instance, single sign-on is usually the moment a company creates an AWS Organization. <a href="20-organizations.html">Chapter 20</a> covers organisations properly; for now, three decisions matter:</p>
+<ul>
+  <li><strong>Create it from a new, empty account.</strong> The management account can't be restricted by SCPs and controls every member, so it should run nothing else. Turning an existing production account into the management account means living with that forever.</li>
+  <li><strong>Invite the existing accounts</strong> as members. Their resources, IAM users and roles are untouched by joining.</li>
+  <li><strong>Choose Identity Center's region</strong> carefully; the instance lives in one region. Pick the one your team works in (Larder: Frankfurt, <code>eu-central-1</code>).</li>
+</ul>
+
+<!-- ======================================================== 12.4 -->
+<h2 class="sec" id="s12-4"><span class="n">12.4</span>Where people come from: identity sources</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 12.1 · Identity Center's identity sources</caption>
+    <thead><tr><th>Source</th><th>How people sign in</th><th>How users and groups arrive</th><th>Use it when</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Identity Center directory</strong></td><td>a password and MFA stored in Identity Center</td><td>you create them (console, CLI, API)</td><td>no company IdP yet; small teams</td></tr>
+      <tr><td><strong>Active Directory</strong></td><td>AD credentials, through AWS Managed Microsoft AD or AD Connector</td><td>synced from AD</td><td>an existing Windows estate</td></tr>
+      <tr><td><strong>External IdP</strong></td><td>at your IdP (Entra ID, Google, Okta…), via SAML 2.0</td><td>pushed by the IdP with SCIM</td><td>you have a company IdP: almost always the goal</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>You can start with the built-in directory and switch to an external IdP later; users are matched by user name, and assignments to groups carry over if the groups are recreated with the same names. That's Larder's path: the directory now, the company IdP in May (<a href="13-lifecycle.html">Chapter 13</a>).</p>
+
+<p>With the built-in directory, set MFA to be required at every sign-in, and allow only FIDO2 authenticators (security keys and passkeys) if you can. Unlike MFA for IAM users' CLI calls (<a href="08-users-roles.html">Chapter 8</a>), these work everywhere, CLI included, because the CLI signs in through the browser.</p>
+
+<!-- ======================================================== 12.5 -->
+<h2 class="sec" id="s12-5"><span class="n">12.5</span>Designing permission sets</h2>
+
+<p>Permission sets are roles by job (<a href="06-access-models.html">Chapter 6</a>): describe what a kind of work needs, and let assignments say where. A handful usually covers a company of Larder's size:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 12.2 · Larder's permission sets</caption>
+    <thead><tr><th>Permission set</th><th>Policies</th><th>Session</th><th>Who, where</th></tr></thead>
+    <tbody>
+      <tr><td><code>ViewOnly</code></td><td>AWS managed <code>ViewOnlyAccess</code>: see configuration, not data</td><td>8 h</td><td>all engineers, prod</td></tr>
+      <tr><td><code>Developer</code></td><td><code>PowerUserAccess</code>, boundary <code>team-boundary</code></td><td>8 h</td><td>all engineers, dev-staging</td></tr>
+      <tr><td><code>ProdOperator</code></td><td>customer managed <code>prod-operator</code> (from <a href="08-users-roles.html">Chapter 8</a>)</td><td>1 h</td><td>on-call group, prod</td></tr>
+      <tr><td><code>DbChange</code></td><td>customer managed <code>db-change</code></td><td>1 h</td><td>the two database owners, prod</td></tr>
+      <tr><td><code>PlatformAdmin</code></td><td><code>AdministratorAccess</code></td><td>1 h</td><td>platform team, every account</td></tr>
+      <tr><td><code>Billing</code></td><td>AWS managed <code>Billing</code> job-function policy</td><td>8 h</td><td>finance, management account</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Two design notes:</p>
+<ul>
+  <li><strong><code>ViewOnlyAccess</code> rather than <code>ReadOnlyAccess</code>.</strong> <code>ReadOnlyAccess</code> reads <em>data</em>, including every object in every bucket and every secret's metadata; <code>ViewOnlyAccess</code> shows resources and configuration without their contents. For “all engineers in production”, that difference is everything.</li>
+  <li><strong>Customer managed policy references</strong> attach a policy <em>by name</em>, which must exist in each account where the permission set is assigned. That lets the policy differ per account (with the right ARNs) while the permission set stays the same. Create the policy first, or provisioning fails.</li>
+</ul>
+
+<!-- ======================================================== 12.6 -->
+<h2 class="sec" id="s12-6"><span class="n">12.6</span>Assignments: groups, never people</h2>
+
+<p>An assignment can name a user or a group. Assign to groups, always. A group assignment is a policy you can review (“the on-call team operates production”); a user assignment is an exception nobody remembers. When someone joins, moves or leaves, you change their group memberships, ideally in the company directory (<a href="13-lifecycle.html">Chapter 13</a>), and every assignment follows.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Permission sets describe jobs; groups describe people; assignments say where. Nobody gets access as an individual.</p>
+</div>
+
+<p>Together, groups × permission sets × accounts are an access matrix (<a href="06-access-models.html">Chapter 6</a>), and the lab turns them into one so you can read who can do what, where. Review it whenever it changes, and look for two things above all: assignments to individuals, and powerful permission sets held permanently in production. The second is <a href="14-privileged-access.html">Chapter 14</a>'s subject.</p>
+
+<!-- ======================================================== 12.7 -->
+<h2 class="sec" id="s12-7"><span class="n">12.7</span>Signing in: console, CLI and CloudTrail</h2>
+
+<figure class="wide" id="fig12-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 180" role="img" aria-labelledby="fig12-2-t fig12-2-d">
+      <title id="fig12-2-t">From one sign-in to console and CLI sessions</title>
+      <desc id="fig12-2-d">A person signs in once at the AWS access portal with their password and a security key. The portal lists the accounts and permission sets assigned to their groups. Choosing prod and ProdOperator opens the console as that role. For the CLI, aws sso login opens the browser to the same portal, and the CLI then fetches short-lived role credentials for whichever profile is used, refreshing them while the portal session lasts.</desc>
+      <defs><marker id="c12ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="12" y="54" width="170" height="70" rx="5"/>
+      <text class="t-label" x="97" y="82" text-anchor="middle">sign in once</text>
+      <text class="t-small" x="97" y="104" text-anchor="middle">password + security key</text>
+      <rect class="node-accent" x="232" y="40" width="230" height="98" rx="5"/>
+      <text class="t-label on-accent" x="347" y="66" text-anchor="middle">AWS access portal</text>
+      <text class="t-mono on-accent" x="347" y="90" text-anchor="middle">prod · ViewOnly</text>
+      <text class="t-mono on-accent" x="347" y="108" text-anchor="middle">prod · ProdOperator</text>
+      <text class="t-mono on-accent" x="347" y="126" text-anchor="middle">dev-staging · Developer</text>
+      <rect class="pub" x="506" y="22" width="242" height="58" rx="5"/>
+      <text class="t-label" x="627" y="46" text-anchor="middle">console</text>
+      <text class="t-small" x="627" y="66" text-anchor="middle">as AWSReservedSSO_ProdOperator_…</text>
+      <rect class="pub" x="506" y="98" width="242" height="58" rx="5"/>
+      <text class="t-label" x="627" y="122" text-anchor="middle">CLI and SDKs</text>
+      <text class="t-small" x="627" y="142" text-anchor="middle">aws sso login, then any profile</text>
+      <path class="wire" d="M184 89 H228" marker-end="url(#c12ah3)"/>
+      <path class="wire" d="M464 70 L502 54" marker-end="url(#c12ah3)"/>
+      <path class="wire" d="M464 110 L502 124" marker-end="url(#c12ah3)"/>
+    </svg>
+  </div>
+  <figcaption><b>Figure 12.2</b> One sign-in serves the console and the CLI. Each choice of account and permission set becomes its own short role session.</figcaption>
+</figure>
+
+<p>For the CLI, configure a profile per account and permission set, sharing one sign-in session:</p>
+<pre><code>[sso-session larder]
+sso_start_url = https://larder.awsapps.com/start
+sso_region = eu-central-1
+sso_registration_scopes = sso:account:access
+
+[profile prod-operator]
+sso_session = larder
+sso_account_id = 111122223333
+sso_role_name = ProdOperator
+region = eu-central-1</code></pre>
+<p><code>aws sso login --sso-session larder</code> opens the browser (the authorization code flow with PKCE from <a href="04-oauth-oidc.html">Chapter 4</a>; <code>--use-device-code</code> for remote machines), and afterwards <code>aws s3 ls --profile prod-operator</code> just works, with credentials that are fetched and refreshed for you and never written to <code>~/.aws/credentials</code>.</p>
+
+<p>In CloudTrail, a session shows the role and the person:</p>
+<pre><code><span class="k">"userIdentity"</span>: {
+  <span class="k">"type"</span>: <span class="s">"AssumedRole"</span>,
+  <span class="k">"arn"</span>: <span class="s">"arn:aws:sts::111122223333:assumed-role/AWSReservedSSO_ProdOperator_3f9a8c1e2d4b5a60/ben@larder.example"</span>,
+  <span class="k">"sessionContext"</span>: { <span class="k">"sessionIssuer"</span>: {
+    <span class="k">"arn"</span>: <span class="s">"arn:aws:iam::111122223333:role/aws-reserved/sso.amazonaws.com/eu-central-1/AWSReservedSSO_ProdOperator_3f9a8c1e2d4b5a60"</span> } }
+}</code></pre>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: guardrails that name roles</p>
+  <p>Identity Center's roles have a generated suffix and a path, <code>/aws-reserved/sso.amazonaws.com/</code>, and the suffix changes if a permission set is deleted and recreated. A guardrail exception that names <code>role/db-change</code> (<a href="10-evaluation.html">Chapter 10</a>) stops matching once people work through Identity Center. Match on the stable part with a wildcard, <code>arn:aws:iam::111122223333:role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_DbChange_*</code>, and test it.</p>
+</div>
+
+<!-- ======================================================== 12.8 -->
+<h2 class="sec" id="s12-8"><span class="n">12.8</span>Attributes, not just groups</h2>
+
+<p>Identity Center can pass attributes from the identity source into every session as <strong>session tags</strong> (<em>attributes for access control</em>): a person's team, cost centre or department. A policy can then compare <code>aws:PrincipalTag/team</code> with a resource's <code>team</code> tag, which is the ABAC pattern from <a href="09-policies.html">Chapter 9</a> (9.6), with the attribute coming from the company directory instead of being set by hand on a role. One permission set can then serve every team, each seeing only its own resources.</p>
+
+<!-- ======================================================== 12.9 -->
+<h2 class="sec" id="s12-9"><span class="n">12.9</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 12.3 · Workforce single sign-on at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Where people sign in</td><td>IAM Identity Center (its directory, AD, or an external IdP)</td><td>Entra ID, natively</td><td>Google accounts (Cloud Identity / Workspace), or workforce identity federation</td></tr>
+      <tr><td>A job's permissions</td><td>permission set</td><td>role definition</td><td>IAM role</td></tr>
+      <tr><td>Granting it</td><td>account assignment: group + permission set + account</td><td>role assignment: group + role + scope</td><td>allow-policy binding: group + role on a resource</td></tr>
+      <tr><td>What the person gets</td><td>a role session per account</td><td>their own identity, with the role at that scope</td><td>their own identity, with the role on that resource</td></tr>
+      <tr><td>CLI sign-in</td><td><code>aws sso login</code></td><td><code>az login</code></td><td><code>gcloud auth login</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p>On Azure, single sign-on isn't an extra service: Entra ID <em>is</em> the sign-in for the portal, CLI and every subscription, and people keep one identity everywhere. The equivalent design rule is the same: assign Azure RBAC roles to Entra ID <strong>groups</strong> at the narrowest scope, not to users.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>People sign in with Google accounts managed in Cloud Identity or Workspace, usually federated to the company IdP, and groups are Google Groups, which you bind to roles on the organisation, folders or projects. <strong>Workforce identity federation</strong> lets people from an external IdP use Google Cloud without Google accounts at all, the closest match to Identity Center with an external IdP.</p>
+</div>
+
+<!-- ======================================================== 12.10 -->
+<h2 class="sec" id="s12-10"><span class="n">12.10</span>At Larder: no more IAM users</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>On 5 January 2027, Eli created a new, empty account, <code>larder-management</code> (<code>777788889999</code>), and secured its root user by the checklist in <a href="07-account-root.html">Chapter 7</a>, with the same group email pattern and two more security keys. From it he created Larder's AWS Organization and invited the production and staging accounts, which accepted the same day. No SCPs yet: that's <a href="20-organizations.html">Chapter 20</a>. He enabled IAM Identity Center in Frankfurt with its own directory, required MFA at every sign-in, and allowed only security keys and passkeys.</p>
+  <p>The permission sets and groups are Table 12.2's. Before go-live, he ran the lab's assignment check: it found one assignment to an individual, Dee's <code>PlatformAdmin</code> in staging, left over from setting up her team's sandbox, which became a time-limited request instead (<a href="14-privileged-access.html">Chapter 14</a>). It also flagged the platform team's standing <code>PlatformAdmin</code> in production, which went on Chapter 14's list. The guardrail's exceptions were rewritten for Identity Center's role names (12.7) and tested.</p>
+  <p>Engineers moved over in the week of 11 January. Their IAM users were disabled on 18 January and deleted on 1 February, with <code>ops</code>, the <code>prod-operator</code> role and its authenticator-app MFA devices. The security keys from November finally work for everything. The only IAM user left in either account is <code>deploy-bot</code>, which isn't a person, and whose turn comes in <a href="17-ci-cd-oidc.html">Chapter 17</a>.</p>
+</aside>
+
+<!-- ======================================================== 12.11 -->
+<h2 class="sec" id="s12-11"><span class="n">12.11</span>Lab: read the access matrix</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 12 · Assignments to access, and a real sign-in</p>
+  <p><strong>You'll</strong> turn Larder's groups, permission sets and assignments into a per-person view and find the two kinds of risky assignment; then, in a sandbox organisation, create a permission set, a group and an assignment and sign in to the CLI with them. <strong>You need</strong> Python 3; for steps 3–6, an AWS Organization sandbox with IAM Identity Center enabled (Appendix C), the AWS CLI v2, and your own Identity Center user. <strong>Cost:</strong> free.</p>
+</div>
+
+<p class="code-title"><span>assignments.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># assignments.py · who can do what, in which account, through IAM Identity Center</span>
+ACCOUNTS = {<span class="s">"777788889999"</span>: <span class="s">"management"</span>, <span class="s">"111122223333"</span>: <span class="s">"prod"</span>, <span class="s">"444455556666"</span>: <span class="s">"dev-staging"</span>}
+
+PERMISSION_SETS = {                       <span class="c"># name: (policies, session hours)</span>
+    <span class="s">"ViewOnly"</span>:      ([<span class="s">"ViewOnlyAccess"</span>], 8),
+    <span class="s">"Developer"</span>:     ([<span class="s">"PowerUserAccess"</span>, <span class="s">"boundary: team-boundary"</span>], 8),
+    <span class="s">"ProdOperator"</span>:  ([<span class="s">"prod-operator"</span>], 1),
+    <span class="s">"DbChange"</span>:      ([<span class="s">"db-change"</span>], 1),
+    <span class="s">"PlatformAdmin"</span>: ([<span class="s">"AdministratorAccess"</span>], 1),
+    <span class="s">"Billing"</span>:       ([<span class="s">"Billing"</span>], 8),
+}
+
+GROUPS = {
+    <span class="s">"engineers"</span>: {<span class="s">"ben"</span>, <span class="s">"cho"</span>, <span class="s">"dee"</span>, <span class="s">"eli"</span>},
+    <span class="s">"on-call"</span>:   {<span class="s">"ben"</span>, <span class="s">"cho"</span>, <span class="s">"eli"</span>},
+    <span class="s">"db-owners"</span>: {<span class="s">"ben"</span>, <span class="s">"eli"</span>},
+    <span class="s">"platform"</span>:  {<span class="s">"eli"</span>},
+    <span class="s">"finance"</span>:   {<span class="s">"marco"</span>},
+}
+
+ASSIGNMENTS = [                           <span class="c"># (principal, permission set, account)</span>
+    (<span class="s">"group:engineers"</span>, <span class="s">"ViewOnly"</span>,      <span class="s">"111122223333"</span>),
+    (<span class="s">"group:engineers"</span>, <span class="s">"Developer"</span>,     <span class="s">"444455556666"</span>),
+    (<span class="s">"group:on-call"</span>,   <span class="s">"ProdOperator"</span>,  <span class="s">"111122223333"</span>),
+    (<span class="s">"group:db-owners"</span>, <span class="s">"DbChange"</span>,      <span class="s">"111122223333"</span>),
+    (<span class="s">"group:platform"</span>,  <span class="s">"PlatformAdmin"</span>, <span class="s">"777788889999"</span>),
+    (<span class="s">"group:platform"</span>,  <span class="s">"PlatformAdmin"</span>, <span class="s">"111122223333"</span>),
+    (<span class="s">"group:platform"</span>,  <span class="s">"PlatformAdmin"</span>, <span class="s">"444455556666"</span>),
+    (<span class="s">"group:finance"</span>,   <span class="s">"Billing"</span>,       <span class="s">"777788889999"</span>),
+    (<span class="s">"user:dee"</span>,        <span class="s">"PlatformAdmin"</span>, <span class="s">"444455556666"</span>),   <span class="c"># left over from setting up staging</span>
+]
+
+<span class="k">def</span> members(principal):
+    kind, name = principal.split(<span class="s">":"</span>)
+    <span class="k">return</span> GROUPS[name] <span class="k">if</span> kind == <span class="s">"group"</span> <span class="k">else</span> {name}
+
+<span class="k">def</span> effective_access():
+    access = {}
+    <span class="k">for</span> principal, pset, account <span class="k">in</span> ASSIGNMENTS:
+        <span class="k">for</span> person <span class="k">in</span> members(principal):
+            access.setdefault(person, {}).setdefault(ACCOUNTS[account], set()).add(pset)
+    <span class="k">return</span> access
+
+<span class="k">def</span> findings():
+    <span class="k">for</span> principal, pset, account <span class="k">in</span> ASSIGNMENTS:
+        <span class="k">if</span> principal.startswith(<span class="s">"user:"</span>):
+            <span class="k">yield</span> f<span class="s">"direct assignment: {principal} → {pset} in {ACCOUNTS[account]} (use a group)"</span>
+        <span class="k">if</span> <span class="s">"AdministratorAccess"</span> <span class="k">in</span> PERMISSION_SETS[pset][0] <span class="k">and</span> ACCOUNTS[account] == <span class="s">"prod"</span>:
+            <span class="k">yield</span> f<span class="s">"standing admin in prod: {principal} → {pset} (make it just-in-time, Chapter 14)"</span>
+
+<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:
+    <span class="k">for</span> person, accounts <span class="k">in</span> sorted(effective_access().items()):
+        line = <span class="s">"  "</span>.join(f<span class="s">"{acct}: {', '.join(sorted(sets))}"</span> <span class="k">for</span> acct, sets <span class="k">in</span> sorted(accounts.items()))
+        print(f<span class="s">"{person:&lt;6} {line}"</span>)
+    print()
+    <span class="k">for</span> f <span class="k">in</span> findings():
+        print(<span class="s">"!"</span>, f)</code></pre>
+
+<ol class="steps">
+  <li><strong>Run it</strong> with <code>python3 assignments.py</code>:
+<pre><code>ben    dev-staging: Developer  prod: DbChange, ProdOperator, ViewOnly
+cho    dev-staging: Developer  prod: ProdOperator, ViewOnly
+dee    dev-staging: Developer, PlatformAdmin  prod: ViewOnly
+eli    dev-staging: Developer, PlatformAdmin  management: PlatformAdmin  prod: DbChange, PlatformAdmin, ProdOperator, ViewOnly
+marco  management: Billing
+
+! standing admin in prod: group:platform → PlatformAdmin (make it just-in-time, Chapter 14)
+! direct assignment: user:dee → PlatformAdmin in dev-staging (use a group)</code></pre>
+  Nine assignments become one line per person. Eli's line is the one to worry about: four ways into production, one of them unlimited.</li>
+  <li><strong>Make a change and review it.</strong> Move Cho from <code>on-call</code> to <code>db-owners</code> (a “mover”, <a href="13-lifecycle.html">Chapter 13</a>) and run again: one membership change updates every account at once. Then add a fourth account, <code>"555566667777": "data"</code>, and give <code>engineers</code> <code>ViewOnly</code> there.</li>
+  <li><strong>In your sandbox, find the instance</strong> (as an administrator of the management or delegated administrator account):
+<pre><code>INSTANCE=$(aws sso-admin list-instances --query 'Instances[0].InstanceArn' --output text)
+STORE=$(aws sso-admin list-instances --query 'Instances[0].IdentityStoreId' --output text)
+ACCOUNT=&lt;a member account ID&gt;</code></pre></li>
+  <li><strong>Create a permission set, a group and an assignment.</strong>
+<pre><code>PS=$(aws sso-admin create-permission-set --instance-arn $INSTANCE --name LabViewOnly \
+  --session-duration PT1H --query PermissionSet.PermissionSetArn --output text)
+aws sso-admin attach-managed-policy-to-permission-set --instance-arn $INSTANCE \
+  --permission-set-arn $PS --managed-policy-arn arn:aws:iam::aws:policy/job-function/ViewOnlyAccess
+G=$(aws identitystore create-group --identity-store-id $STORE --display-name lab-viewers \
+  --query GroupId --output text)
+ME=$(aws identitystore get-user-id --identity-store-id $STORE --alternate-identifier \
+  '{"UniqueAttribute": {"AttributePath": "userName", "AttributeValue": "YOUR-USER-NAME"}}' \
+  --query UserId --output text)
+aws identitystore create-group-membership --identity-store-id $STORE --group-id $G --member-id UserId=$ME
+aws sso-admin create-account-assignment --instance-arn $INSTANCE --target-id $ACCOUNT \
+  --target-type AWS_ACCOUNT --permission-set-arn $PS --principal-type GROUP --principal-id $G</code></pre>
+  Within a minute, the access portal shows the new account and <code>LabViewOnly</code>.</li>
+  <li><strong>Sign in from the CLI.</strong> Run <code>aws configure sso</code>, choose the account and <code>LabViewOnly</code>, name the profile <code>lab-view</code>, then:
+<pre><code>aws sts get-caller-identity --profile lab-view --query Arn --output text
+aws s3 ls --profile lab-view                                     <span class="c"># works: ViewOnly can list buckets</span>
+aws s3 cp s3://SOME-BUCKET/SOME-KEY - --profile lab-view         <span class="c"># denied: it can't read data</span></code></pre>
+  The ARN ends in <code>assumed-role/AWSReservedSSO_LabViewOnly_…/<i>your user name</i></code>. As an administrator in the member account, <code>aws iam list-roles --path-prefix /aws-reserved/sso.amazonaws.com/ --query 'Roles[].Arn'</code> shows the role Identity Center created.</li>
+  <li><strong>Clean up</strong>: <code>aws sso-admin delete-account-assignment</code> with the same arguments as the create, then <code>aws sso-admin delete-permission-set --instance-arn $INSTANCE --permission-set-arn $PS</code>, then <code>aws identitystore delete-group --identity-store-id $STORE --group-id $G</code>. The role in the member account disappears with the assignment.</li>
+</ol>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s12-12"><span class="n">12.12</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Keeping IAM users “just in case” after SSO</td><td>Long-lived credentials and a second way in nobody reviews.</td><td>Delete them; keep only designed break-glass access (<a href="14-privileged-access.html">Chapter 14</a>).</td></tr>
+      <tr><td>An existing workload account as the management account</td><td>A workload compromise controls the organisation; SCPs can't restrict it.</td><td>A new, empty management account.</td></tr>
+      <tr><td>Assigning permission sets to individuals</td><td>Exceptions pile up unseen.</td><td>Groups only; review the matrix.</td></tr>
+      <tr><td><code>ReadOnlyAccess</code> for everyone</td><td>Everyone can read all data and secrets' metadata.</td><td><code>ViewOnlyAccess</code>, plus narrow data access where needed.</td></tr>
+      <tr><td>Long sessions for powerful permission sets</td><td>Stolen or forgotten sessions stay useful for hours.</td><td>One hour for admin and production change; longer for viewing.</td></tr>
+      <tr><td>Guardrails naming exact SSO role names</td><td>Exceptions break when permission sets are recreated.</td><td>Match <code>AWSReservedSSO_<i>Name</i>_*</code> with wildcards, and test.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum12">
+  <h2 class="sec" id="sum12"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li><strong>IAM Identity Center</strong> gives people one sign-in, strong MFA and short role sessions in every account; it replaces IAM users for humans.</li>
+    <li>Account access needs an <strong>organisation instance</strong>; create the organisation from a new, empty management account.</li>
+    <li>People come from an <strong>identity source</strong>: Identity Center's directory, AD, or an external IdP with SAML and SCIM.</li>
+    <li>A <strong>permission set</strong> describes a job; an <strong>account assignment</strong> gives it to a group in an account; Identity Center creates <code>AWSReservedSSO_…</code> roles.</li>
+    <li>Assign to groups, never individuals; review the resulting matrix.</li>
+    <li>The console and CLI share one sign-in; CloudTrail shows role and person; guardrails must match SSO role names with wildcards.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>IAM Identity Center</dt><dd>AWS's workforce sign-in service for accounts and applications.</dd>
+    <dt>Organisation instance</dt><dd>An Identity Center instance in an organisation, able to grant AWS account access.</dd>
+    <dt>Identity source</dt><dd>Where Identity Center's users and groups come from.</dd>
+    <dt>Permission set</dt><dd>A template of policies and session length that becomes a role in each assigned account.</dd>
+    <dt>Account assignment</dt><dd>A user or group, a permission set and an account.</dd>
+    <dt>AWS access portal</dt><dd>The page where people sign in and choose an account and permission set.</dd>
+    <dt>Attributes for access control</dt><dd>Identity attributes passed into sessions as tags, for ABAC.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>What three things does an account assignment connect, and what does Identity Center create as a result? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>A user or group, a permission set and an AWS account. It creates (and maintains) an IAM role named <code>AWSReservedSSO_<i>PermissionSet</i>_<i>suffix</i></code> in that account, trusted only by Identity Center.</p></details>
+    </li>
+    <li>
+      <p>Why does single sign-on for AWS accounts usually start with creating an organisation, and why from a new account? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Only an organisation instance of Identity Center can grant access to AWS accounts. The management account can't be restricted by SCPs and controls all members, so it should hold no workloads; a new, empty account is the simplest way to guarantee that.</p></details>
+    </li>
+    <li>
+      <p>An engineer needs to read one bucket's objects in production for a week. How do you grant it without changing <code>ViewOnly</code> for everyone? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Create (or reuse) a narrow permission set for that bucket, assign it to a small group in production, add the engineer to the group with an end date, and remove them after the week, ideally through the time-limited process of <a href="14-privileged-access.html">Chapter 14</a>.</p></details>
+    </li>
+    <li>
+      <p>After moving to Identity Center, a guardrail's exception for <code>role/db-change</code> no longer lets the database owners make changes. Why, and what's the fix? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Their sessions now come from <code>AWSReservedSSO_DbChange_<i>suffix</i></code> under the <code>/aws-reserved/sso.amazonaws.com/</code> path. Change the exception to match that pattern with wildcards, and test it with the policy simulator or a real session.</p></details>
+    </li>
+    <li>
+      <p>Design the permission sets and groups for a company with three product teams, a platform team, finance and support, and four accounts. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Roughly: <code>ViewOnly</code> for all engineers in production; <code>Developer</code> (with a boundary) for each team in development and staging; <code>ProdOperator</code> for on-call, time-limited; <code>PlatformAdmin</code> for platform, time-limited in production; <code>Billing</code> for finance in the management account; support gets application tools, not AWS access. All assigned to groups, ideally with a team attribute for ABAC.</p></details>
+    </li>
+    <li>
+      <p>Compare how a person gets admin rights in one subscription on Azure with one account on AWS. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Azure: their Entra ID group gets a role assignment (such as Owner or Contributor) at the subscription scope; they use their own identity. AWS: their group gets an account assignment of an admin permission set; they sign in through the portal and receive a session of the role Identity Center created in that account.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/singlesignon/latest/userguide/what-is.html">What is IAM Identity Center?</a>, <a href="https://docs.aws.amazon.com/singlesignon/latest/userguide/permissionsetsconcept.html">permission sets</a>, <a href="https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html">CLI with IAM Identity Center</a>, <a href="https://docs.aws.amazon.com/singlesignon/latest/userguide/abac.html">attributes for access control</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/role-based-access-control/best-practices">Azure RBAC best practices</a>. Google Cloud: <a href="https://cloud.google.com/iam/docs/workforce-identity-federation">Workforce identity federation</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="11-access-denied.html">11 · Debugging “access denied”</a></div>
+  <div><span>Next</span><a href="13-lifecycle.html">13 · Joiners, movers and leavers</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 2 · Identity and Access in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>
