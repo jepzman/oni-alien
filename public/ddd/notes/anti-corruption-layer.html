@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Anti-Corruption Layer · Jef’s Notes</title>
+<meta name="description" content="Translate another model at your border, so its words and quirks don&#x27;t leak into yours.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-ddd">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 7 · domain-driven design</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="anti-corruption-layer">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 04.02.27</span><span class="topic">collection · <b>between contexts</b></span></div>
+  <p class="kicker">a.k.a. “the interpreter at the edge of the table”</p>
+  <h1><span class="hl">Anti-Corruption Layer</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>When you must integrate with a model you don't like and can't change (legacy, a vendor, another team's mess), put a <b>translation layer</b> at your border. It talks to the other system in <b>its</b> terms and gives your code only <b>your</b> types, in <b>your</b> language. The other model's names, codes and quirks <b>stop at the layer</b>, so your model stays clean and the other system stays <b>replaceable</b>.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> context relationship</li><li><b>From:</b> Evans (2003), ch. 14</li><li><b>Made of:</b> facades, adapters, translators</li><li><b>Pairs with:</b> strangler fig, conformist (the alternative)</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Integrating directly with a poor or foreign model lets <span class="hl-pink">its names and quirks leak</span> into your code, until your model is theirs.</p>
+  <ul>
+    <li>Legacy field names and magic codes appear in new code.</li>
+    <li>Rules are written in the other system's terms: <code>LIFSD === '01'</code>.</li>
+    <li>Replacing the old system later means touching everything.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="Doodle of a legacy model leaking into a new system. The old ERP has a customer table called KNA1 with fields like KUNNR and LIFSD. The new Ordering code starts using those names directly: if customer.LIFSD equals 01, block delivery. Soon the ERP&#x27;s odd codes and names are everywhere in the new code."><g class="rough"><rect class="d f-paper" x="20" y="40" width="230" height="130" rx="10"/><path class="d d-red" d="M254 105 L330 105"/><path class="d d-red" d="M319.2 110.2 L330 105 L319.2 99.8"/><rect class="d f-green" x="340" y="30" width="400" height="160" rx="10"/></g><text class="t-head" x="135" y="101" text-anchor="middle">old ERP</text><text class="t" x="135" y="125" text-anchor="middle" font-size="17">KNA1 · KUNNR · LIFSD</text><text class="t-head" x="540" y="64" text-anchor="middle">new Ordering</text><text class="t" x="540" y="104" text-anchor="middle">if (c.LIFSD === &#x27;01&#x27;) …</text><text class="t" x="540" y="140" text-anchor="middle">order.kunnr = …</text><text class="t-s t-red" x="380" y="240" text-anchor="middle">the old model is taking over the new one</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The old ERP's names and codes (KUNNR, LIFSD = '01') spread through the new code.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the interpreter</span></h2>
+  <p>At an international meeting, an <b>interpreter</b> sits at the edge of the table and translates <b>both ways</b>. The hosts never learn the visitors' grammar; the visitors never learn the hosts'. If something is ambiguous, one person, whose job it is, sorts it out.</p>
+  <ul>
+    <li>The interpreter is the <b>anti-corruption layer</b>.</li>
+    <li>Each side keeps its <b>own language</b>.</li>
+    <li>A new delegation means a new interpreter, not new hosts.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of an interpreter at a business meeting. The visiting delegation speaks its own language; the interpreter translates both ways at the edge of the table, so the host team never has to learn the visitors&#x27; grammar, and misunderstandings are caught by one person whose job is exactly that."><g class="rough"><rect class="d f-paper" x="20" y="60" width="220" height="90" rx="10"/><rect class="d f-y" x="290" y="50" width="180" height="110" rx="10"/><rect class="d f-green" x="520" y="60" width="220" height="90" rx="10"/><path class="d" d="M244 105 L286 105"/><path class="d" d="M275.2 110.2 L286 105 L275.2 99.8"/><path class="d" d="M254.8 99.8 L244 105 L254.8 110.2"/><path class="d" d="M474 105 L516 105"/><path class="d" d="M505.2 110.2 L516 105 L505.2 99.8"/><path class="d" d="M484.8 99.8 L474 105 L484.8 110.2"/></g><text class="t-head" x="130" y="101" text-anchor="middle">visitors</text><text class="t" x="130" y="125" text-anchor="middle" font-size="17">their language</text><text class="t-head" x="380" y="101" text-anchor="middle">interpreter</text><text class="t" x="380" y="125" text-anchor="middle" font-size="17">both ways</text><text class="t-head" x="630" y="101" text-anchor="middle">hosts</text><text class="t" x="630" y="125" text-anchor="middle" font-size="17">our language</text><text class="t-s t-pen" x="380" y="220" text-anchor="middle">nobody has to learn the other&#x27;s grammar</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>An interpreter at the edge of the table: each side keeps its own language.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Visitors' language</td><td>The legacy or vendor model: KNA1, LIFSD</td></tr>
+      <tr><td>Hosts' language</td><td>Your model: <code>Customer.deliveryBlocked</code></td></tr>
+      <tr><td>The interpreter</td><td>Facade + translator + adapter at your border</td></tr>
+      <tr><td>Translating both ways</td><td>Mapping requests out and responses back</td></tr>
+      <tr><td>A new delegation</td><td>Swapping the vendor changes only the layer</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">translate at the border, both ways</span></h2>
+  <p>An ACL is the opposite of <b>conformist</b>: it costs code, but keeps your model yours. It's also the main tool of the <b>strangler fig</b>: new code sits behind an ACL while the old system is replaced piece by piece.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 330" role="img" aria-label="An anti-corruption layer between Ordering and the legacy ERP. Inside the layer: a facade that calls the ERP, adapters, and translators that turn ERP records like KNA1 into Ordering&#x27;s Customer with a deliveryBlocked boolean, and back. Ordering&#x27;s model only sees its own types. A test checks that nothing outside the layer imports the ERP client."><g class="rough"><rect class="d f-paper" x="20" y="40" width="200" height="220" rx="10"/><rect class="d f-y d-dash" x="260" y="30" width="240" height="240" rx="10"/><rect class="d f-paper" x="280" y="84" width="200" height="50" rx="10"/><rect class="d f-paper" x="280" y="146" width="200" height="50" rx="10"/><rect class="d f-paper" x="280" y="208" width="200" height="50" rx="10"/><rect class="d f-green" x="540" y="40" width="200" height="220" rx="10"/><path class="d" d="M224 150 L256 150"/><path class="d" d="M245.2 155.2 L256 150 L245.2 144.8"/><path class="d" d="M234.8 144.8 L224 150 L234.8 155.2"/><path class="d" d="M504 150 L536 150"/><path class="d" d="M525.2 155.2 L536 150 L525.2 144.8"/><path class="d" d="M514.8 144.8 L504 150 L514.8 155.2"/></g><text class="t-head" x="120" y="146" text-anchor="middle">ERP</text><text class="t" x="120" y="170" text-anchor="middle" font-size="17">KNA1 · LIFSD</text><text class="t-head" x="380" y="62" text-anchor="middle">ACL</text><text class="t-head" x="380" y="116" text-anchor="middle" font-size="16">facade</text><text class="t-head" x="380" y="178" text-anchor="middle" font-size="16">translator</text><text class="t-head" x="380" y="240" text-anchor="middle" font-size="16">adapter</text><text class="t-head" x="640" y="146" text-anchor="middle">Ordering</text><text class="t" x="640" y="170" text-anchor="middle" font-size="17">deliveryBlocked</text><text class="t-s t-pen" x="380" y="310" text-anchor="middle">a test fails if anything else imports the ERP client</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The layer translates both ways. Ordering only ever sees its own types.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Define your model first</b><p>Write the types your code wants, in your language, ignoring the other system.</p></li>
+    <li><b>Wrap the other system</b><p>A facade that hides its protocol, sessions and error codes.</p></li>
+    <li><b>Translate</b><p>Pure functions that map their records to your types and back. Test them with real examples.</p></li>
+    <li><b>Expose a port</b><p>Your code depends on an interface (<code>CustomerDirectory</code>), not on the facade.</p></li>
+    <li><b>Guard the border</b><p>An architecture test fails if anything outside the layer imports the other system's client or types.</p></li>
+    <li><b>Translate events too</b><p>Their webhooks become your domain events, in your words.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Anti-corruption layer</dt><dd>A translation layer that protects your model from another model.</dd></div>
+    <div><dt>Facade</dt><dd>A simple interface over a complicated system.</dd></div>
+    <div><dt>Adapter</dt><dd>Converts one interface to another.</dd></div>
+    <div><dt>Translator</dt><dd>Maps data between two models.</dd></div>
+    <div><dt>Port</dt><dd>The interface your domain code depends on; the ACL implements it.</dd></div>
+    <div><dt>Corruption</dt><dd>The other model's concepts leaking into yours.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>ordering/acl/erp-customers.ts</span><span>their words stop here</span></div>
+<pre><code><span class="c">// Ordering's own port, in Ordering's language</span>
+<span class="k">export</span> <span class="k">interface</span> CustomerDirectory {
+  find(id: CustomerId): Promise&lt;Customer | <span class="k">undefined</span>&gt;;
+}
+
+<span class="c">// The ACL: the only place that knows about the ERP</span>
+<span class="k">export</span> <span class="k">class</span> ErpCustomerDirectory implements CustomerDirectory {
+  constructor(<span class="k">private</span> erp: ErpClient) {}
+  <span class="k">async</span> find(id: CustomerId) {
+    <span class="k">const</span> r = <span class="k">await</span> this.erp.read(<span class="s">"KNA1"</span>, { KUNNR: toErpNumber(id) });
+    <span class="k">return</span> r &amp;&amp; toCustomer(r);
+  }
+}
+
+<span class="k">const</span> toCustomer = (r: Kna1Row): Customer =&gt; ({
+  id: fromErpNumber(r.KUNNR),
+  name: r.NAME1.trim(),
+  deliveryBlocked: r.LIFSD === <span class="s">"01"</span> || r.LIFSD === <span class="s">"02"</span>,   <span class="c">// ERP code -&gt; our rule</span>
+});</code></pre>
+  </div>
+  <p class="aside">tools: plain code (ports and adapters), an integration platform or API gateway for protocol translation, ArchUnit or dependency-cruiser to forbid imports of the other system's client outside the layer.</p>
+  <section class="thennow verdict-core" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="as useful as when it was written">still core</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Evans, 2003</small></h3><p>Evans described the ACL for integrating with legacy systems: a layer of facades, adapters and translators that let a new model talk to an old one without being corrupted by it.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>It's everywhere: in front of SaaS and ERP systems, in strangler-fig migrations, and in hexagonal architecture as an adapter behind a port. Architecture tests now enforce the border automatically.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> Still core, and even more common now that most systems integrate with several vendors.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Your model stays yours</b>, in your language.</li><li><b>The other system is replaceable</b>: only the layer changes.</li><li><b>One place</b> to understand the integration.</li><li><b>Testable</b>: translators are pure functions.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More code</b> to write and maintain.</li><li><b>Translation can lose</b> or distort meaning.</li><li><b>Extra latency</b> if it's a separate service.</li><li><b>Needs discipline</b>: one shortcut import breaks it.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Code-design ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>using the other system's model directly (conformist)</b> to <b>translating it in an anti-corruption layer</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Clean model inside, one more layer to read.</td></tr>
+      <tr data-before="2" data-after="5"><td>Domain clarity<small>reads like the business?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Your code speaks only your language.</td></tr>
+      <tr data-before="2" data-after="4"><td>Correctness<small>rules can't be broken?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Odd codes are interpreted once, correctly, in one place.</td></tr>
+      <tr data-before="2" data-after="4"><td>Changeability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The other side changes; only the layer follows.</td></tr>
+      <tr data-before="2" data-after="4"><td>Testability<small>test without the world?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Your domain tests use your types; translators have their own tests.</td></tr>
+      <tr data-before="1" data-after="5"><td>Low coupling<small>parts change alone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The main gain: the other model can't reach your code.</td></tr>
+      <tr data-before="4" data-after="3"><td>Performance<small>fast enough?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A little mapping cost, more if it's a separate service.</td></tr>
+      <tr data-before="4" data-after="2"><td>Low ceremony<small>little boilerplate?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Translators, facades and their tests.</td></tr>
+      <tr data-before="3" data-after="4"><td>Team scalability<small>many teams at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Teams on each side change their model alone.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>A layer that only renames</h3><p>Fields are copied 1:1 with new names; the old concepts survive. <span class="fix">Fix →</span> translate meaning, not just names (LIFSD codes → <code>deliveryBlocked</code>).</p></li>
+    <li><h3>Leaky shortcuts</h3><p>One team imports the ERP client “just this once”. <span class="fix">Fix →</span> an architecture test that fails the build.</p></li>
+    <li><h3>One giant ACL for everything</h3><p>A central integration team becomes a bottleneck. <span class="fix">Fix →</span> each context owns the ACL at its own border.</p></li>
+    <li><h3>Over-using it</h3><p>An ACL in front of a well-designed internal API that fits your model. <span class="fix">Fix →</span> if the upstream model is good, conforming is cheaper.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Integrating with legacy systems, ERPs or vendors with a different or poor model.</li><li>Replacing a system gradually (with the strangler fig).</li><li>Another team's model doesn't fit yours and they can't change it.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>The upstream model is good and fits yours (conform).</li><li>A short-lived integration you'll remove soon (weigh the cost).</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/customer-supplier.html"><b>Customer–Supplier &amp; Conformist</b></a></li><li><a href="../notes/context-map.html"><b>Context Map</b></a></li><li><a href="../../distributed/notes/strangler-fig.html"><b>Strangler Fig</b></a> (Vol. 1)</li><li><a href="../../architect-4/notes/anti-corruption-layer.html"><b>Anti-Corruption Layer</b></a> (Ana, vol. 4)</li><li><a href="../../architect-4/notes/saas-integration.html"><b>SaaS &amp; Vendor Integration</b></a> (Ana, vol. 4)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does an anti-corruption layer protect?</summary><p>Your model and language, from another system's model leaking in.</p></details>
+    <details><summary>What's the alternative relationship, and when is it better?</summary><p>Conformist: use the upstream model directly. Better when that model is good and fits yours.</p></details>
+    <details><summary>Name three building blocks of an ACL.</summary><p>A facade over the other system, translators that map data, and adapters that implement your ports.</p></details>
+    <details><summary>How does an ACL help when replacing a legacy system?</summary><p>Your code only depends on your own port, so the old system can be swapped behind the layer without changing your model.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A new team integrates with a CRM and their code is full of <code>crm_status_cd</code> and <code>acct__c</code>. The company plans to switch CRM next year. What do you ask them to change?</span></summary><p>Define their own Customer types and a port, and move every CRM name and code into an anti-corruption layer that translates both ways. Add an architecture test so only the layer imports the CRM client. Next year, only the layer is rewritten.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Find one place where your code uses another system's field names or status codes directly. Define your own type for it, write a pure translator function with three example tests, and route all access through one adapter.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Let their words stop <span class="hl">at the door</span>; inside, speak <span class="hl">your own language</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/08-anti-corruption-layer.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Eric Evans, <i>Domain-Driven Design</i> (2003), ch. 14.</li><li>Microsoft Azure Architecture Center, “Anti-corruption Layer pattern”.</li><li>Martin Fowler, “StranglerFigApplication” (bliki, 2004, updated 2019).</li><li>Vlad Khononov, <i>Learning Domain-Driven Design</i> (2021), ch. 4.</li></ul>
+  </div>
+  <p class="folio">08</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="shared-kernel.html"><small>← previous note</small>07 · Shared Kernel &amp; Partnership</a>
+  <a href="open-host-service.html"><small>Next note →</small>09 · Open Host Service &amp; Published Language</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 7 · a student's bullet journal on domain-driven design</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

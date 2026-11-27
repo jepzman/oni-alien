@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Adapter &amp; Facade · Jef’s Notes</title>
+<meta name="description" content="Make a foreign interface fit yours, and hide a complicated one behind a simple door.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-app">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 8 · inside the application</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="adapter-facade">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 11.05.27</span><span class="topic">collection · <b>classic patterns</b></span></div>
+  <p class="kicker">a.k.a. “the plug adapter and the concierge”</p>
+  <h1><span class="hl">Adapter &amp; Facade</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Two structural patterns you'll use weekly. An <b>adapter</b> makes an existing interface <b>fit the one you need</b>: each carrier SDK is wrapped to implement your <code>ShippingPort</code>, converting names, units and errors. A <b>facade</b> puts a <b>simple door</b> in front of a complicated subsystem: <code>invoicePdf.render(invoice)</code> hides fifteen setup steps. Both keep foreign APIs <b>at the edge</b>, so an upgrade or a swap touches <b>one file</b>.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> structural patterns (GoF)</li><li><b>From:</b> Gamma et al. (1994)</li><li><b>Today as:</b> adapters in ports &amp; adapters, SDK wrappers, BFFs</li><li><b>Pairs with:</b> anti-corruption layer (Vol. 7)</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Calling foreign APIs directly from many places spreads <span class="hl-pink">their shapes and quirks</span> through your code.</p>
+  <ul>
+    <li>Three carrier SDKs with different names, units and errors, used in twenty places.</li>
+    <li>A PDF library's fifteen setup steps copied nine times.</li>
+    <li>An SDK upgrade touches every caller.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="Doodle of foreign interfaces spread through the code. Three shipping carriers each have their own SDK with different method names, units and error types, called directly from twenty places. A PDF library needs fifteen setup steps, repeated in every place that makes a document. Upgrading one SDK means editing every caller."><g class="rough"><rect class="d f-paper" x="20" y="20" width="220" height="56" rx="10"/><path class="d d-red d-dash" d="M244 48 L320 120"/><path class="d d-red" d="M308.6 116.4 L320 120 L315.7 108.8"/><rect class="d f-paper" x="20" y="90" width="220" height="56" rx="10"/><path class="d d-red d-dash" d="M244 118 L320 120"/><path class="d d-red" d="M309.1 124.9 L320 120 L309.3 114.5"/><rect class="d f-paper" x="20" y="160" width="220" height="56" rx="10"/><path class="d d-red d-dash" d="M244 188 L320 120"/><path class="d d-red" d="M315.4 131.1 L320 120 L308.5 123.3"/><rect class="d f-pink d-red" x="330" y="80" width="180" height="80" rx="10"/><rect class="d f-pink d-red" x="560" y="60" width="180" height="120" rx="10"/></g><text class="t-head" x="130" y="44" text-anchor="middle" font-size="16">DHL SDK</text><text class="t" x="130" y="68" text-anchor="middle" font-size="13">kg, createShipment()</text><text class="t-head" x="130" y="114" text-anchor="middle" font-size="16">PostNL SDK</text><text class="t" x="130" y="138" text-anchor="middle" font-size="13">grams, label()</text><text class="t-head" x="130" y="184" text-anchor="middle" font-size="16">DPD SDK</text><text class="t" x="130" y="208" text-anchor="middle" font-size="13">lbs?, book()</text><text class="t-head t-red" x="420" y="127" text-anchor="middle" font-size="17">20 callers</text><text class="t-head t-red" x="650" y="116" text-anchor="middle">PDF lib</text><text class="t" x="650" y="140" text-anchor="middle" font-size="17">15 steps × 9</text><text class="t-s t-red" x="380" y="254" text-anchor="middle">an SDK upgrade touches every caller</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Three carrier SDKs called directly from 20 places, and a PDF library's 15 setup steps copied everywhere.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the plug adapter and the concierge</span></h2>
+  <p>A <b>travel plug adapter</b> makes a foreign socket fit your charger, without changing either. A hotel <b>concierge</b> hides a whole city: you say “dinner and a taxi at eight” and they deal with the restaurant, the taxi company and the timing.</p>
+  <ul>
+    <li>The plug adapter is an <b>adapter</b>: one shape to another.</li>
+    <li>The concierge is a <b>facade</b>: one simple door to a complicated system.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a travel plug adapter and a hotel concierge. The plug adapter makes a foreign socket fit your charger, without changing either. The concierge hides the complexity of the city: you say I want dinner and a taxi at eight, and they deal with the restaurant, the taxi company and the timing."><g class="rough"><rect class="d f-y" x="20" y="40" width="340" height="120" rx="10"/><rect class="d f-green" x="400" y="40" width="340" height="120" rx="10"/></g><text class="t-head" x="190" y="74" text-anchor="middle">plug adapter</text><text class="t" x="190" y="112" text-anchor="middle">foreign socket → my plug</text><text class="t-head" x="570" y="74" text-anchor="middle">concierge</text><text class="t" x="570" y="112" text-anchor="middle">“dinner + taxi at 8”</text><text class="t-s t-pen" x="190" y="200" text-anchor="middle">adapter</text><text class="t-s t-pen" x="570" y="200" text-anchor="middle">facade</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A plug adapter makes one shape fit another; a concierge hides a whole city behind one desk.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Foreign socket</td><td>A carrier SDK's interface</td></tr>
+      <tr><td>Your charger's plug</td><td>Your <code>ShippingPort</code></td></tr>
+      <tr><td>The plug adapter</td><td><code>DhlShippingAdapter implements ShippingPort</code></td></tr>
+      <tr><td>The concierge desk</td><td><code>InvoicePdf.render(invoice)</code></td></tr>
+      <tr><td>Restaurant, taxi, timing</td><td>The PDF library's fonts, pages, layout and streams</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">fit a shape, or simplify a subsystem</span></h2>
+  <p>An adapter <b>converts</b> an interface; a facade <b>simplifies</b> one. An anti-corruption layer (Vol. 7) is adapters and facades with an extra job: translating a whole <b>model</b>, not just method names.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 320" role="img" aria-label="Adapters and a facade. The core defines one ShippingPort with bookParcel in grams and its own errors. A DHL adapter, a PostNL adapter and a DPD adapter each implement it, converting units, names and errors. Separately, an InvoicePdf facade offers one method, render invoice, hiding the PDF library&#x27;s fifteen setup steps. Callers use only the port and the facade."><g class="rough"><rect class="d f-y" x="270" y="20" width="220" height="70" rx="10"/><rect class="d f-green" x="20" y="140" width="220" height="56" rx="10"/><path class="d d-dash" d="M130 136 L380 94"/><path class="d" d="M370.2 100.9 L380 94 L368.5 90.6"/><rect class="d f-green" x="270" y="140" width="220" height="56" rx="10"/><path class="d d-dash" d="M380 136 L380 94"/><path class="d" d="M385.2 104.8 L380 94 L374.8 104.8"/><rect class="d f-green" x="520" y="140" width="220" height="56" rx="10"/><path class="d d-dash" d="M630 136 L380 94"/><path class="d" d="M391.5 90.6 L380 94 L389.8 100.9"/><rect class="d f-blue" x="200" y="236" width="360" height="64" rx="10"/></g><text class="t-head" x="380" y="51" text-anchor="middle">ShippingPort</text><text class="t" x="380" y="75" text-anchor="middle" font-size="17">bookParcel(grams)</text><text class="t-head" x="130" y="175" text-anchor="middle" font-size="16">DHL adapter</text><text class="t-head" x="380" y="175" text-anchor="middle" font-size="16">PostNL adapter</text><text class="t-head" x="630" y="175" text-anchor="middle" font-size="16">DPD adapter</text><text class="t-head" x="380" y="264" text-anchor="middle">InvoicePdf facade</text><text class="t" x="380" y="288" text-anchor="middle" font-size="17">render(invoice) → hides 15 steps</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Adapters make each carrier fit one port; a facade gives the PDF library one simple door.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Define what you need</b><p>A port in your terms: <code>bookParcel(order, weight: Grams)</code>.</p></li>
+    <li><b>Adapt each provider</b><p>One adapter per SDK, converting names, units and errors.</p></li>
+    <li><b>Translate errors</b><p>Provider errors become your error types; callers never catch SDK exceptions.</p></li>
+    <li><b>Facade complex libraries</b><p>One small class with the operations you use, hiding setup.</p></li>
+    <li><b>Keep them at the edge</b><p>Only adapters and facades import the SDK.</p></li>
+    <li><b>Contract-test adapters</b><p>The same tests against every adapter of a port.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Adapter</dt><dd>Converts one interface into another that clients expect.</dd></div>
+    <div><dt>Facade</dt><dd>A simple interface to a complex subsystem.</dd></div>
+    <div><dt>Wrapper</dt><dd>A loose term for either.</dd></div>
+    <div><dt>Anti-corruption layer</dt><dd>Adapters and facades that also translate a foreign model.</dd></div>
+    <div><dt>SDK</dt><dd>A provider's client library.</dd></div>
+    <div><dt>Leaky abstraction</dt><dd>A wrapper that still exposes the wrapped API's details.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>shipping/dhl.adapter.ts</span><span>adapter: their SDK, your port</span></div>
+<pre><code><span class="k">export</span> <span class="k">interface</span> ShippingPort {
+  bookParcel(p: { orderId: OrderId; weight: Grams; to: Address }): Promise&lt;TrackingNo&gt;;
+}
+
+<span class="k">export</span> <span class="k">class</span> DhlShippingAdapter implements ShippingPort {
+  constructor(<span class="k">private</span> dhl: DhlClient) {}
+  <span class="k">async</span> bookParcel({ orderId, weight, to }) {
+    <span class="k">try</span> {
+      <span class="k">const</span> res = <span class="k">await</span> this.dhl.createShipment({
+        reference: orderId, weightKg: weight.value / 1000, receiver: toDhlAddress(to) });
+      <span class="k">return</span> trackingNo(res.shipmentTrackingNumber);
+    } <span class="k">catch</span> (e) {
+      <span class="k">if</span> (e instanceof DhlValidationError) <span class="k">throw</span> <span class="k">new</span> InvalidAddress(to, e.message);
+      <span class="k">throw</span> <span class="k">new</span> CarrierUnavailable(<span class="s">"dhl"</span>, e);
+    }
+  }
+}
+
+<span class="c">// facade: one door to a complicated library</span>
+<span class="k">export</span> <span class="k">const</span> invoicePdf = { render: (inv: InvoiceView) =&gt; renderWithPdfLib(inv /* 15 steps inside */) };</code></pre>
+  </div>
+  <p class="aside">tools: plain classes or functions; contract tests per port; SDK generators (OpenAPI generator) behind your own adapter; dependency-cruiser rules so only adapters import vendor SDKs.</p>
+  <section class="thennow verdict-core" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="as useful as when it was written">still core</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Gamma et al., 1994</small></h3><p>The GoF described Adapter (make incompatible interfaces work together) and Facade (a unified interface to a subsystem) with examples from GUI toolkits and compilers.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>Both are daily tools: adapters are the “adapters” of ports and adapters, every SaaS integration needs one, and facades sit in front of SDKs, BFFs and complex libraries. The names stuck because the needs never went away.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> Still core, and more common than in 1994 because systems now talk to so many vendors.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Foreign APIs at the edge</b>, in one file each.</li><li><b>Swap or upgrade</b> providers in one place.</li><li><b>Your own errors and units</b> everywhere else.</li><li><b>Simple calls</b> for complex libraries.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More code</b>: one adapter per provider.</li><li><b>Lowest common denominator</b>: special features get hidden.</li><li><b>Leaky wrappers</b> if done carelessly.</li><li><b>Another layer</b> to step through when debugging.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Code-design ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>calling vendor SDKs and complex libraries directly from many places</b> to <b>adapters behind ports and facades for complex libraries</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="2" data-after="4"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Callers use one simple, consistent interface.</td></tr>
+      <tr data-before="3" data-after="4"><td>Domain clarity<small>reads like the business?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Your names and units, not each vendor's.</td></tr>
+      <tr data-before="3" data-after="4"><td>Correctness<small>rules can't be broken?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Unit and error conversions done once, correctly.</td></tr>
+      <tr data-before="2" data-after="5"><td>Changeability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">An SDK upgrade touches one adapter.</td></tr>
+      <tr data-before="2" data-after="4"><td>Testability<small>test without the world?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fake the port; contract-test the adapters.</td></tr>
+      <tr data-before="1" data-after="5"><td>Low coupling<small>parts change alone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Vendors are confined to their adapters.</td></tr>
+      <tr data-before="3" data-after="3"><td>Performance<small>fast enough?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low ceremony<small>little boilerplate?</small></td><td class="dcell"></td><td class="score"></td><td class="why">An adapter per provider, a facade per library.</td></tr>
+      <tr data-before="3" data-after="4"><td>Team scalability<small>many teams at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Integration work happens in parallel per provider.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Leaky adapters</h3><p>The port returns the SDK's response type. <span class="fix">Fix →</span> return your own types; convert inside.</p></li>
+    <li><h3>Lowest common denominator</h3><p>A carrier's useful feature can't be reached through the port. <span class="fix">Fix →</span> add an optional capability, or a second port for it.</p></li>
+    <li><h3>Facade that grows into a god class</h3><p>Every library feature added to the facade. <span class="fix">Fix →</span> only the operations your app uses.</p></li>
+    <li><h3>Wrapping stable standard libraries</h3><p>A facade around <code>fetch</code> or <code>Date</code> with no added meaning. <span class="fix">Fix →</span> wrap only what's volatile or awkward.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Integrating several providers for the same job.</li><li>A complicated library used in many places.</li><li>Third-party APIs likely to change or be replaced.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Stable, well-designed standard libraries.</li><li>A one-off call in a script.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/dependency-inversion.html"><b>Dependency Inversion</b></a></li><li><a href="../notes/ports-adapters.html"><b>Ports &amp; Adapters</b></a></li><li><a href="../notes/decorator-middleware.html"><b>Decorator &amp; Middleware</b></a></li><li><a href="../../ddd/notes/anti-corruption-layer.html"><b>Anti-Corruption Layer</b></a> (Vol. 7)</li><li><a href="../notes/dto-remote-facade.html"><b>DTOs &amp; Remote Facade</b></a></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What's the difference between an adapter and a facade?</summary><p>An adapter converts one interface into another; a facade simplifies a complex subsystem behind a simple interface.</p></details>
+    <details><summary>How does an anti-corruption layer relate?</summary><p>It's built from adapters and facades, with the extra job of translating a foreign model.</p></details>
+    <details><summary>Why translate provider errors?</summary><p>So callers handle your own error types and never depend on an SDK's exceptions.</p></details>
+    <details><summary>What's a leaky adapter?</summary><p>One whose interface still exposes the wrapped API's types or details.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Your company switches SMS provider. The old provider's client is imported in 31 files, each building messages slightly differently. What do you do first?</span></summary><p>Define an <code>SmsSender</code> port in your terms, write an adapter for the old provider, and move the 31 callers onto the port (behaviour unchanged). Then write an adapter for the new provider, contract-test both, and switch in the composition root.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Search your code for imports of one vendor SDK. Count the files. Write a port and one adapter for it, move two callers over, and add a lint rule that only the adapter may import the SDK.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>A <span class="hl">plug adapter</span> for each foreign socket; a <span class="hl">concierge</span> for each complicated city.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/17-adapter-facade.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Erich Gamma et al., <i>Design Patterns</i> (1994), “Adapter”, “Facade”.</li><li>Alistair Cockburn, “Hexagonal Architecture” (2005).</li><li>Microsoft Azure Architecture Center, “Anti-corruption Layer pattern”.</li><li>Eric Freeman &amp; Elisabeth Robson, <i>Head First Design Patterns</i>, 2nd ed. (2020), ch. 7.</li></ul>
+  </div>
+  <p class="folio">17</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="decorator-middleware.html"><small>← previous note</small>16 · Decorator &amp; Middleware</a>
+  <a href="pattern-museum.html"><small>Next note →</small>18 · The Pattern Museum</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 8 · a student's bullet journal on inside the application</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

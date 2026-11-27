@@ -6,12 +6,17 @@ Live site: https://jepzman.github.io/oni-alien/
 
 | Volume | Journal | Notes | Paper / palette | Ratings |
 |---|---|---|---|---|
-| 1 | Distributed Design Patterns (`/distributed/`) | 18 | dot grid, mustard / sage / dusty pink | architecture characteristics (simplicity, cost, deployability, testability, scalability, elasticity, fault tolerance, performance, evolvability) |
-| 2 | Frontend Design Patterns (`/frontend/`) | 15 | square grid, lavender / teal / coral | frontend qualities (simplicity, reusability, testability, maintainability, performance, bundle size, accessibility, developer experience, team scalability) |
-| 3 | Data & Database Patterns (`/data/`) | 15 | ledger paper (ruled lines, double red margin), ledger green / burnt orange / sky blue | database qualities (simplicity, read speed, write speed, integrity, scalability, storage cost, query flexibility, operability, evolvability) |
-| 4 | Testing Patterns (`/testing/`) | 15 | lab notebook ("+" cross grid, PASS stamp), raspberry / pass green / amber | test-suite qualities (simplicity, fast feedback, confidence, reliability, isolation, maintainability, realism, cost, scalability) |
-| 5 | Security Patterns (`/security/`) | 15 | field dossier (manila, security-envelope crosshatch, redaction-bar titles, CONFIDENTIAL stamp), steel blue / crimson / khaki | security qualities (simplicity, usability, confidentiality, integrity, availability, containment, auditability, cost, developer experience) |
-| 6 | Cloud & DevOps Patterns (`/cloud/`) | 15 | isometric grid paper (dimension-line titles, status pill), cobalt / sky / signal yellow | operations qualities (simplicity, delivery speed, release safety, reliability, scalability, recoverability, observability, cost, developer experience) |
+| 1 | Distributed Design Patterns (`/distributed/`) | 21 | dot grid, mustard / sage / dusty pink | architecture characteristics (simplicity, cost, deployability, testability, scalability, elasticity, fault tolerance, performance, evolvability) |
+| 2 | Frontend Design Patterns (`/frontend/`) | 18 | square grid, lavender / teal / coral | frontend qualities (simplicity, reusability, testability, maintainability, performance, bundle size, accessibility, developer experience, team scalability) |
+| 3 | Data & Database Patterns (`/data/`) | 18 | ledger paper (ruled lines, double red margin), ledger green / burnt orange / sky blue | database qualities (simplicity, read speed, write speed, integrity, scalability, storage cost, query flexibility, operability, evolvability) |
+| 4 | Testing Patterns (`/testing/`) | 18 | lab notebook ("+" cross grid, PASS stamp), raspberry / pass green / amber | test-suite qualities (simplicity, fast feedback, confidence, reliability, isolation, maintainability, realism, cost, scalability) |
+| 5 | Security Patterns (`/security/`) | 18 | field dossier (manila, security-envelope crosshatch, redaction-bar titles, CONFIDENTIAL stamp), steel blue / crimson / khaki | security qualities (simplicity, usability, confidentiality, integrity, availability, containment, auditability, cost, developer experience) |
+| 6 | Cloud & DevOps Patterns (`/cloud/`) | 18 | isometric grid paper (dimension-line titles, status pill), cobalt / sky / signal yellow | operations qualities (simplicity, delivery speed, release safety, reliability, scalability, recoverability, observability, cost, developer experience) |
+| 7 | Domain-Driven Design (`/ddd/`) | 18 | surveyor's field map (contour lines, dashed frontier titles, compass stamp), forest green / sea blue / ochre | code-design qualities (simplicity, domain clarity, correctness, changeability, testability, low coupling, performance, low ceremony, team scalability) |
+| 8 | Inside the Application (`/inside-app/`) | 18 | green engineering pad (ruler titles, “✓ LGTM” stamp), rust / graphite / blue pen | code-design qualities (same as Vol. 7) |
+| 9 | Data Pipelines & Analytics (`/pipelines/`) | 18 | green-bar printout (sprocket holes, dot-matrix titles, “RUN COMPLETE” stamp), navy / green-bar green / highlighter orange | pipeline qualities (simplicity, freshness, correctness, replayability, scalability, cost, query flexibility, observability, evolvability) |
+
+**Then & now.** The code-design volumes (Vol. 7, and Vol. 8 · Inside the Application: SOLID, PoEAA, ports and adapters, classic GoF and a museum of retired patterns) build on books twenty or more years old, so every note has a **then & now** box: what the original book said, what changed since, and a verdict (still core, matters more now, built in now, rethought, mostly retired). The index tags each note with its verdict. Field `then_now` on a note, `then_now=True` on the journal; plan in `docs/PLAN-code-design.md`. Vol. 9 · Data Pipelines & Analytics (ETL, warehousing and reporting, one homeware shop throughout; plan in `docs/PLAN-data-pipelines.md`) adds a then & now box to the seven notes with a long history (ETL, SCD, fact table types, conformed dimensions, data vault, one big table, lambda vs kappa). Planned next: Vol. 10 · AI App Patterns.
 
 **Series 2 · The Practitioner's Notebooks.** Book 1 is *The Solution Architect's Notebook* (Ana) and Book 2 *The Product Owner's Notebook* (Grace, product-board skin `theme-product`). Book 1 uses the drafting-sheet skin `theme-architect`: blueprint grid, Architects Daughter, orange / teal / cobalt, a title block on every sheet). Every note follows one case study, Larder: the public **case file** (`/larder/`, built from `content/larder/casefile.py`) introduces the company, its history, goals, cast, books and a story timeline, and each Series 2 book index opens with a “story so far” box (the journal's `story` field). The facts live in `docs/larder-casebook.md`; the plan for the book is `docs/HANDOFF-solution-architect.md`.
 
@@ -29,8 +34,52 @@ Live site: https://jepzman.github.io/oni-alien/
 | 2 · 4 | Measuring & Learning (`/product-4/`) | 15 | product ratings |
 | 2 · 5 | Stakeholders & Influence (`/product-5/`) | 15 | product ratings |
 | 2 · 6 | Growing the Product (`/product-6/`) | 15 | product ratings |
+| 3 · 6 | Making It Yours (`/project-6/`) | 15 | project ratings |
+| 3 · 5 | People Outside, and Surprises (`/project-5/`) | 15 | project ratings |
+| 3 · 4 | Money and People (`/project-4/`) | 15 | project ratings |
+| 3 · 3 | What, and By When (`/project-3/`) | 15 | project ratings |
+| 3 · 2 | Starting, Steering, Closing (`/project-2/`) | 15 | project ratings |
+| 3 · 1 | The Lay of the Land (`/project-1/`) | 15 | project ratings (value focus, predictability, risk reduction, transparency, stakeholder confidence, team ownership, adaptability, quality built in, low overhead) |
+
+**Book 5 · The IT Operations Notebook** (Eli, the platform and operations engineer; skin `theme-ops`, an incident logbook of carbon-copy forms) covers ITIL 4 and SRE in plain words. Each note is a question someone running IT must answer, with an **ITIL tag** under the title (practice group, the six value chain activities, the practices, the SRE word, older names), a **maturity ladder** (by hand → written down → scripted → automatic) in place of gains vs losses, and on incident notes a **pager log**: the alert as it arrived. Ratings: nine operations ratings (user impact, reliability, recovery speed, change safety, visibility, toil reduction, cost awareness, sustainable on-call, low overhead). Book 5 is complete (six volumes); plan and decisions in `docs/HANDOFF-it-operations.md`. Independent study notes, not affiliated with PeopleCert or AXELOS.
+
+**Series 5 · On the Client's Floor** (Ines, lead architect at Wrenfield Digital, a vendor; skin `theme-vendor`, a consultant's daybook with a visitor pass clipped to every note, `public/assets/vendor.css`) follows the same MetroVolt as the Darkside grimoire, from outside: winning the Lodestar programme, signing it, digging into the legacy system, delivering wave 1, the client's politics, and the cost and the ending. Complete in six volumes; the series ends open, outside room 27A. Each note adds **both sides of the table**, **what the contract says**, an **account health** dial (green / amber / red), a **pressure gauge** and **the 23:00 note**. Ratings: nine vendor ratings (client trust, team health, margin protected, scope clarity, technical integrity, risk control, political cover, speed, low overhead). Renderer `scripts/vendor.py`; facts `docs/lodestar-casebook.md`; plan `docs/PLAN-vendor-side.md`.
+
+| Vol. | Journal | Notes |
+|---|---|---|
+| 1 | Winning the Work (`/vendor-1/`) | 15 |
+| 2 | Signing and Starting (`/vendor-2/`) | 15 |
+| 3 | Digging Up the Legacy (`/vendor-3/`) | 15 |
+| 4 | Delivery Under Fire (`/vendor-4/`) | 15 |
+| 5 | Other People's Politics (`/vendor-5/`) | 15 |
+| 6 | The Cost and the Ending (`/vendor-6/`) | 15 |
+
+| Book · vol. | Journal | Notes |
+|---|---|---|
+| 5 · 1 | Keeping the Lights On (`/ops-1/`) | 15 |
+| 5 · 2 | When Things Break (`/ops-2/`) | 15 |
+| 5 · 3 | Changing Things Safely (`/ops-3/`) | 15 |
+| 5 · 4 | Promises & Measures (`/ops-4/`) | 15 |
+| 5 · 5 | Ready for the Worst (`/ops-5/`) | 15 |
+| 5 · 6 | Building the Reliability Team (`/ops-6/`) | 15 |
+
+Book 3 is *The Project Manager's Notebook* (Sanne, binder skin `theme-project`): the whole **PMBOK Guide, eighth edition** in plain words. Each note is a question a project manager must answer, with a PMBOK tag under the title (domain, focus areas, what it covers, what older editions called it), a **light / standard / heavy** dial in place of gains vs losses, and, on key notes, a **deep dive**. The **PMBOK map** (`/pmbok/`, data in `content/pmbok/map.py`) shows the whole guide on one page and links each part to its note. **The project file** (`/rotterdam/`) collects every template card of the book in order, grouped by project: Rotterdam (vols. 1–4), Antwerp (vol. 5) and the 2028 programme (vol. 6), worked sets of project documents. Book 3 is complete (six volumes). Plan and decisions: `docs/HANDOFF-project-manager.md`. These are independent study notes, not affiliated with PMI.
 
 The landing page (`/`) shows two shelves (Series 1: design patterns; Series 2: practitioner's notebooks, with `series=2` in `JOURNALS`), planned volumes (`PLANNED`, `PLANNED_2`) and a “future log” of upcoming work.
+
+## Deep dives (Series 3)
+
+Long, chaptered pages that start where a note stops (`/deep-dives/<slug>/`): the real mechanism, failure drills,
+testing, operations and tools, in the “annotated textbook” skin with a skim mode and a phone chapter dock.
+Written so far: **Saga**, **Reliable Messaging**, **The Resilience Stack**, **Event Sourcing & CQRS**, **Caching**, **Zero-Downtime Change**, **Sign-in, Tokens & Sessions**, **Replication, Failover & Leader Election**, **Sharding & Partitioning**, **Indexes & Query Plans**, **Rendering on the Web**, **From App Database to Warehouse**, **History in the Warehouse**, **One Number Everywhere** and **Data Quality & Pipeline Observability** (10 chapters each, about a 30-minute read). Content `content/deep-dives/<slug>.py`, renderer `scripts/dive.py`, styles and
+script `public/assets/dive.css` / `dive.js`. Plan and format: `docs/HANDOFF-deep-dives.md`.
+
+## Revisions to finished notes
+
+Later additions to a finished volume live beside its notes: `content/<key>/revisions.py` (extra “what would you do?”
+questions, try it, a revised stamp) and `content/<key>/deeper.py` (a going-deeper chapter). The build merges them into the
+notes. Related notes are written as text and become links when they name a note; pattern notes also list the Series 2
+notes that use them (“seen at Larder”). Plan: `docs/PLAN-improve-earlier-books.md`.
 
 ## Cheat sheets
 
@@ -40,9 +89,15 @@ a subway-map branch diagram on top and boxed panels below (3 columns on desktop 
 | Cheat sheet | Cards | Content |
 |---|---|---|
 | Git Flow (`/cheatsheets/git-flow/`) | 4 | the branch map, everyday work and merge strategies, releases and UAT fixes, hotfixes, emergencies and undo |
+| Docker & Kubernetes (`/cheatsheets/docker-kubernetes/`) | 4 | Docker and Compose, the Kubernetes object map and kubectl, rollouts, probes, resources and config, pod troubleshooting |
+| SQL (`/cheatsheets/sql/`) | 4 | query order and NULLs, joins as Venn diagrams, set operations and CTEs, window functions, upserts and paging, indexes, EXPLAIN and transactions |
+| NFR Checklists (`/cheatsheets/nfr-checklists/`) | 4 | writing measurable NFRs, then questions, measures and typical targets per quality attribute, and the common trade-offs |
+| Refactoring (`/cheatsheets/refactoring/`) | 4 | the 24 code smells by family, a smell → refactoring map, the core refactorings before and after (TypeScript), refactoring safely: the loop, two hats, legacy code, IDE moves, codemods |
+| Data Warehouse (`/cheatsheets/warehouse/`) | 4 | modelling (grain, fact table types, bus matrix, dim_date), history (SCD types, type 2 load, point-in-time lookup, three pasts, traps), loading (idempotent patterns, MERGE newer-only, watermarks, late data, dbt incremental), trust and serving (reconciliation, data tests, drill across, aggregates, metrics, row-level security) |
+| Shell & Network (`/cheatsheets/shell-network/`) | 5 | shell pipes and power tools, walking the network layers (DNS, ports, firewalls), HTTP and TLS with curl and openssl, an error-message decoder, SSH and tunnels |
 
 - Content: `content/cheatsheets/<name>.py` (`PAGES`, each with an optional `figure`, `legend`, `strategies` and a list of `box()` panels).
-- Helpers: `scripts/cheatsheet.py` (`Graph` for git graphs, `cmd()` terminal blocks, `box()` panels); styles in `public/assets/cheatsheet.css`.
+- Helpers: `scripts/cheatsheet.py` (`Graph` for git graphs, `Diagram` for box-and-arrow maps, `cmd()` terminal blocks, `code()` YAML/Dockerfile cards, `box()` panels); styles in `public/assets/cheatsheet.css`.
 - Add one: write the content file, add its name to `CHEATSHEETS` in `scripts/build_notes.py`, build. It is added to `journals.json`, so the workflow builds its PDF.
 
 ## Handoff
@@ -60,7 +115,7 @@ Start with `docs/HANDOFF.md`: current state, next steps, how to build, verify an
 - `content/<journal>/*.py`: note content as data, including the doodles
 - `scripts/build_notes.py`: journal configs (`JOURNALS`, `PLANNED`, `FUTURE_LOG`) and the page templates
 - `scripts/doodle.py`: the hand-drawn SVG helpers (including `table()` for database tables), icon library and code highlighter (JS/TS, Python and SQL keywords)
-- `scripts/build-pdf.mjs`: builds `public/<journal>/pdf/` (one PDF per note + the whole journal) with Playwright
+- `scripts/build-pdf.mjs`: builds `public/<journal>/pdf/` (one PDF per note + the whole journal) with Playwright. Only PDFs whose page changed are rendered; the rest come from `.pdf-cache/` (`npm run pdf -- --all` renders everything). `pdf-build.json` chooses by hand: `rebuild` lists journals or PDFs to always render, and `only_listed: true` renders nothing else (`npm run pdf -- --dry-run` shows the plan)
 
 ## Editing
 
@@ -76,4 +131,4 @@ npm run serve                       # preview on http://localhost:8080
 
 ## Publishing (GitHub Pages)
 
-`.github/workflows/pages.yml` runs on every push to `main`: it installs Chromium, builds the PDFs for every journal, checks every page and PDF exists, and deploys `public/` to GitHub Pages and to the Cloudflare Worker mirror (https://oni-alien.jepzman.workers.dev/, via `wrangler.jsonc`; needs the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets, and is skipped without them). PDFs are not committed. You can also run it from the Actions tab (“Run workflow”).
+`.github/workflows/pages.yml` runs on every push to `main`: it restores the PDF cache, renders only the PDFs whose page (or the stylesheets, or the PDF script) changed, saves the cache, checks every page and PDF exists, and deploys `public/` to GitHub Pages and to the Cloudflare Worker mirror (https://oni-alien.jepzman.workers.dev/, via `wrangler.jsonc`; needs the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets, and is skipped without them). PDFs are not committed. You can also run it from the Actions tab (“Run workflow”); tick “Render every PDF again” to ignore the cache.

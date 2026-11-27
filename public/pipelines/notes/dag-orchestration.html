@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DAG Orchestration &amp; Lineage · Jef’s Notes</title>
+<meta name="description" content="Run steps when their inputs are ready, not at a time on the clock, and know what feeds what.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-pipelines">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 9 · data pipelines &amp; analytics</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="dag-orchestration">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 17.06.27</span><span class="topic">collection · <b>keeping it trustworthy</b></span></div>
+  <p class="kicker">a.k.a. “run on readiness, not on the clock”</p>
+  <h1><span class="hl">DAG Orchestration &amp; Lineage</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Describe the pipeline as a <b>graph of steps and their inputs</b> (a DAG), and let a scheduler run each step <b>when everything it depends on has succeeded</b> for that period, with retries and alerts. Runs are per period (logical date), so backfills are the same graph for old dates. The same graph is your <b>lineage</b>: trace a wrong number back to its source, and a broken source forward to every affected report.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> keeping it trustworthy</li><li><b>DAG:</b> directed acyclic graph</li><li><b>Lives in:</b> Airflow, Dagster, Prefect, dbt</li><li><b>Pairs with:</b> idempotent loads, write–audit–publish</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Three cron jobs: extract at 01:00, transforms at 03:00, dashboard refresh at 06:00. One night the extract runs until 03:40. The transforms start at 03:00 on <span class="hl-pink">half the data</span>, the dashboards refresh with half a day, and when finance asks which reports are wrong, nobody can say.</p>
+  <ul>
+    <li>Timings are guesses; slack is added until the pipeline takes all night.</li>
+    <li>A failure upstream doesn't stop the steps after it.</li>
+    <li>There's no map of what feeds what.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of jobs scheduled by the clock. Extract is set for 01:00, transforms for 03:00, dashboard refresh for 06:00. One night the extract runs until 03:40, so the transforms run at 03:00 on half the data and the dashboards refresh with half a day. Nobody can tell which reports used the broken table."><g class="rough"><path class="d" d="M30 180 H730"/><path class="d" d="M60 172 v16"/><path class="d" d="M300 172 v16"/><path class="d" d="M380 172 v16"/><path class="d" d="M660 172 v16"/><rect class="d f-blue" x="60" y="30" width="320" height="50" rx="10"/><rect class="d f-pink d-red" x="300" y="100" width="160" height="50" rx="10"/><rect class="d f-pink d-red" x="600" y="100" width="140" height="50" rx="10"/></g><text class="t-s" x="60" y="210" text-anchor="middle">01:00</text><text class="t-s" x="300" y="210" text-anchor="middle">03:00</text><text class="t-s" x="380" y="210" text-anchor="middle">03:40</text><text class="t-s" x="660" y="210" text-anchor="middle">06:00</text><text class="t-head" x="220" y="62" text-anchor="middle" font-size="20">extract</text><text class="t-head t-red" x="380" y="132" text-anchor="middle" font-size="20">transform</text><text class="t-head t-red" x="670" y="132" text-anchor="middle" font-size="20">refresh</text><text class="t-s t-red" x="380" y="245" text-anchor="middle">transform started on half the data · which dashboards are wrong?</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Jobs on a clock: the extract runs late, and everything after it runs on half the data.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">baking a cake</span></h2>
+  <p>You bake, then cool, then ice. You <b>ice when the cake has cooled</b>, not at three o'clock. If the cake burns, you know exactly which steps to redo, and which other dishes used the same oven batch.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="Doodle of baking a cake. Bake, then cool, then ice. You ice when the cake has cooled, not at three o&#x27;clock. If the cake burns, you know exactly which steps after it to redo."><g class="rough"><rect class="d f-y" x="14" y="40" width="204" height="90" rx="10"/><rect class="d f-blue" x="278" y="40" width="204" height="90" rx="10"/><path class="d" d="M222 85 L274 85"/><path class="d" d="M263.2 90.2 L274 85 L263.2 79.8"/><rect class="d f-green" x="542" y="40" width="204" height="90" rx="10"/><path class="d" d="M486 85 L538 85"/><path class="d" d="M527.2 90.2 L538 85 L527.2 79.8"/><g transform="translate(660 150) scale(0.8)"><g class="d d-red"><circle class="f-paper" cx="30" cy="30" r="26"/><path d="M30 14 V30 H42"/></g></g></g><text class="t-head" x="116" y="81" text-anchor="middle" font-size="22">bake</text><text class="t" x="116" y="105" text-anchor="middle" font-size="15">40 min</text><text class="t-head" x="380" y="81" text-anchor="middle" font-size="22">cool</text><text class="t" x="380" y="105" text-anchor="middle" font-size="15">until cold</text><text class="t-head" x="644" y="81" text-anchor="middle" font-size="22">ice</text><text class="t" x="644" y="105" text-anchor="middle" font-size="15">when cool</text><text class="t-s t-pen" x="380" y="200" text-anchor="middle">the trigger is “cool”, not “15:00”</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Ice the cake when it has cooled, not at three o'clock.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Bake, cool, ice</td><td>Steps in a DAG</td></tr>
+      <tr><td>“When it's cool”</td><td>Run when upstream steps have succeeded</td></tr>
+      <tr><td>Not at 15:00</td><td>No fixed clock times between steps</td></tr>
+      <tr><td>Redo the steps after the burnt cake</td><td>Rerun downstream of a fixed step</td></tr>
+      <tr><td>Which dishes used that oven batch</td><td>Lineage: downstream impact</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">steps, dependencies, periods</span></h2>
+  <p>Each step declares its inputs. The scheduler starts the graph on a schedule (or when new data arrives) and runs each step as soon as its inputs succeeded for the same period, with retries and backoff. If a step fails, nothing downstream runs, and the owner is alerted. Each run is for a <b>logical date</b>, so a backfill is the same graph run for old periods, which only works if every step is idempotent.</p>
+  <p>Because dependencies are declared, the graph doubles as <b>lineage</b>: tools draw it, and you can ask “what feeds this dashboard?” or “what breaks if this source is late?”.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="A dependency graph. Extract orders and extract products feed staging models, which feed fact sales and dim product, which feed the revenue dashboard and the stock report. The scheduler runs a step only when everything it depends on has succeeded for that day. The same graph is the lineage: from the dashboard you can trace back to the sources, and from a broken source forward to every affected report."><g class="rough"><rect class="d f-y" x="20" y="30" width="150" height="56" rx="10"/><rect class="d f-y" x="20" y="190" width="150" height="56" rx="10"/><rect class="d f-blue" x="210" y="30" width="150" height="56" rx="10"/><rect class="d f-blue" x="210" y="190" width="150" height="56" rx="10"/><rect class="d f-blue" x="400" y="30" width="150" height="56" rx="10"/><rect class="d f-blue" x="400" y="190" width="150" height="56" rx="10"/><rect class="d f-green" x="590" y="30" width="150" height="56" rx="10"/><rect class="d f-green" x="590" y="190" width="150" height="56" rx="10"/><path class="d" d="M174 58 L206 58"/><path class="d" d="M195.2 63.2 L206 58 L195.2 52.8"/><path class="d" d="M174 218 L206 218"/><path class="d" d="M195.2 223.2 L206 218 L195.2 212.8"/><path class="d" d="M364 58 L396 58"/><path class="d" d="M385.2 63.2 L396 58 L385.2 52.8"/><path class="d" d="M364 218 L396 218"/><path class="d" d="M385.2 223.2 L396 218 L385.2 212.8"/><path class="d" d="M364 218 L396 58"/><path class="d" d="M399.0 69.6 L396 58 L388.8 67.6"/><path class="d" d="M554 58 L586 58"/><path class="d" d="M575.2 63.2 L586 58 L575.2 52.8"/><path class="d" d="M554 218 L586 58"/><path class="d" d="M589.0 69.6 L586 58 L578.8 67.6"/><path class="d" d="M554 218 L586 218"/><path class="d" d="M575.2 223.2 L586 218 L575.2 212.8"/></g><text class="t-head" x="95" y="65" text-anchor="middle" font-size="17">x_orders</text><text class="t-head" x="95" y="225" text-anchor="middle" font-size="17">x_products</text><text class="t-head" x="285" y="65" text-anchor="middle" font-size="17">stg_orders</text><text class="t-head" x="285" y="225" text-anchor="middle" font-size="17">stg_products</text><text class="t-head" x="475" y="65" text-anchor="middle" font-size="17">fct_sales</text><text class="t-head" x="475" y="225" text-anchor="middle" font-size="17">dim_product</text><text class="t-head" x="665" y="65" text-anchor="middle" font-size="17">revenue</text><text class="t-head" x="665" y="225" text-anchor="middle" font-size="17">stock report</text><text class="t-s t-pen" x="380" y="280" text-anchor="middle" font-size="16">run when inputs are ready · trace back to sources · trace forward to reports</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Each step runs when its inputs are ready. The same graph tells you what feeds what.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Declare inputs, not times</b><p>Each step lists what it reads; only the first step has a schedule.</p></li>
+    <li><b>Run per period</b><p>Pass the logical date to every step; no <code>now()</code>.</p></li>
+    <li><b>Retry, then alert</b><p>Retries with backoff for flaky sources; a clear owner when retries run out.</p></li>
+    <li><b>Set deadlines</b><p>Alert if the revenue dashboard isn't fresh by 07:00, whatever the reason.</p></li>
+    <li><b>Publish lineage</b><p>Table- and column-level lineage from the DAG and SQL, so impact is one click away.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>DAG</dt><dd>A directed acyclic graph: steps and dependencies, no cycles.</dd></div>
+    <div><dt>Task / asset</dt><dd>One step, or the table it produces (Dagster's view).</dd></div>
+    <div><dt>Logical date</dt><dd>The period a run is for.</dd></div>
+    <div><dt>Sensor</dt><dd>A step that waits for data to arrive.</dd></div>
+    <div><dt>Lineage</dt><dd>Which datasets each dataset is derived from.</dd></div>
+    <div><dt>SLA miss</dt><dd>A deadline passed without fresh data.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>sales_daily.py</span><span>Airflow 2 TaskFlow</span></div>
+<pre><code><span class="k">from</span> airflow.decorators <span class="k">import</span> dag, task
+<span class="k">from</span> pendulum <span class="k">import</span> datetime
+
+@dag(schedule=<span class="s">"0 1 * * *"</span>, start_date=datetime(2026, 1, 1), catchup=False,
+     default_args={<span class="s">"retries"</span>: 3, <span class="s">"retry_exponential_backoff"</span>: True})
+<span class="k">def</span> sales_daily():
+    @task
+    <span class="k">def</span> extract(table, ds=None):          <span class="c"># ds = the logical date, passed in</span>
+        load_raw(table, day=ds)
+
+    @task
+    <span class="k">def</span> transform(ds=None):               <span class="c"># dbt build for that day, tests included</span>
+        run_dbt(<span class="s">"build --select fct_sales+"</span>, vars={<span class="s">"day"</span>: ds})
+
+    @task
+    <span class="k">def</span> refresh_dashboards(ds=None):
+        refresh(<span class="s">"revenue"</span>, day=ds)
+
+    [extract(<span class="s">"orders"</span>), extract(<span class="s">"order_lines"</span>), extract(<span class="s">"products"</span>)] &gt;&gt; transform() &gt;&gt; refresh_dashboards()
+
+sales_daily()</code></pre>
+  </div>
+  <p class="aside">tools: Apache Airflow (datasets for data-aware scheduling), Dagster (software-defined assets, partitions), Prefect, dbt (the DAG from <code>ref()</code>), cloud schedulers; lineage with OpenLineage and Marquez, DataHub, dbt docs.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Steps run when inputs are ready</b>: no guessing, no slack.</li><li><b>Failures stop downstream</b> instead of spreading.</li><li><b>Backfills are just runs</b> for old periods.</li><li><b>Lineage for free</b>: impact and root cause in a click.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>A scheduler to run</b> and keep upgraded.</li><li><b>Python and config</b> to learn.</li><li><b>One broken step blocks</b> everything after it (on purpose).</li><li><b>Graphs grow</b> into hundreds of steps without naming rules.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Pipeline ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>independent cron jobs at fixed times</b> to <b>a DAG run per period with dependencies, retries and lineage</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A scheduler to learn, but the graph is visible.</td></tr>
+      <tr data-before="2" data-after="4"><td>Freshness<small>how recent?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Steps start as soon as inputs are ready.</td></tr>
+      <tr data-before="2" data-after="4"><td>Correctness<small>is the number right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Nothing runs on half-finished inputs.</td></tr>
+      <tr data-before="2" data-after="5"><td>Replayability<small>safe to rerun?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Backfill any period with the same graph.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>10× the data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Many pipelines, parallel steps, one scheduler.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Scheduler costs offset by less slack.</td></tr>
+      <tr data-before="3" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="1" data-after="5"><td>Observability<small>know when it's wrong?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Failures, deadlines and lineage in one place.</td></tr>
+      <tr data-before="2" data-after="4"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New steps declare their inputs and fit in.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Times between steps</h3><p>Each task still has its own cron time inside the scheduler. <span class="fix">Fix →</span> schedule only the start; everything else waits on dependencies.</p></li>
+    <li><h3>Non-idempotent tasks</h3><p>Retries and backfills duplicate data. <span class="fix">Fix →</span> make every task safe to run twice for the same period.</p></li>
+    <li><h3>Work inside the scheduler</h3><p>Heavy transforms run on the scheduler's workers and starve it. <span class="fix">Fix →</span> the scheduler triggers; the warehouse or a job runner does the work.</p></li>
+    <li><h3>Lineage that stops at the warehouse</h3><p>Nobody knows which dashboards use a table. <span class="fix">Fix →</span> include BI dashboards and exports in lineage.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>More than two steps that depend on each other.</li><li>Pipelines that are retried or backfilled.</li><li>Several teams' pipelines sharing tables.</li><li>Deadlines that matter (“fresh by 07:00”).</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>One script that runs once a day and nothing depends on.</li><li>Pure streaming pipelines; they run continuously.</li><li>Replacing a scheduler you have with another for fashion.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/idempotent-loads.html"><b>Idempotent loads</b></a></li><li><a href="../notes/write-audit-publish.html"><b>Write–audit–publish</b></a></li><li><a href="../notes/layered-zones.html"><b>Layered zones</b></a></li><li><a href="../../distributed/notes/saga.html"><b>Saga</b></a> (Vol. 1)</li></ul>
+  <p class="aside deeper">go deeper → <a href="../../deep-dives/data-quality-observability/index.html">Data Quality &amp; Pipeline Observability: the deep dive</a></p>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does a DAG scheduler use to decide when a step runs?</summary><p>Whether all the step's upstream dependencies succeeded for the same period.</p></details>
+    <details><summary>Why pass a logical date to every task?</summary><p>So each run is for a specific period and backfills rerun the same code for old dates.</p></details>
+    <details><summary>What does lineage let you answer?</summary><p>What a dataset is built from, and what is affected if a source is broken or late.</p></details>
+    <details><summary>Why must tasks be idempotent?</summary><p>Schedulers retry them and backfills rerun them; they must not duplicate data.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Finance asks every Monday “is the dashboard right today?”. Your jobs are cron entries an hour apart. What do you build first?</span></summary><p>Put the jobs in one DAG with declared dependencies so nothing runs on half-finished inputs, add a freshness deadline alert for 07:00, and show “data as of” on the dashboard. Then finance sees the answer before asking.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Draw your pipeline as boxes and arrows from sources to dashboards. Mark every arrow that is really a time gap between cron jobs. Pick one and replace it with a dependency in your scheduler.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Ice it when it's <span class="hl">cool</span>, not at three. The <span class="hl">graph</span> is also the map.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/14-dag-orchestration.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Apache Airflow documentation, “DAGs”, “Data-aware scheduling” and “Backfill”.</li><li>Dagster documentation, “Software-defined assets” and “Partitions”.</li><li>OpenLineage specification.</li><li>Maxime Beauchemin, “The Rise of the Data Engineer” (2017).</li></ul>
+  </div>
+  <p class="folio">14</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="quality-checks.html"><small>← previous note</small>13 · Quality Checks &amp; Quarantine</a>
+  <a href="metrics-layer.html"><small>Next note →</small>15 · Metrics Layer</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 9 · a student's bullet journal on data pipelines &amp; analytics</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

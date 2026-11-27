@@ -19,8 +19,11 @@ from datetime import date, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from doodle import Doodle, esc, highlight  # noqa: E402
+from doodle import ICONS, Doodle, esc, highlight  # noqa: E402
 import cheatsheet  # noqa: E402
+import dive  # noqa: E402
+import grimoire
+import vendor  # noqa: E402
 import build_handbooks  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -106,6 +109,40 @@ PRODUCT_ATTRS = [
     ("Flow", "small steps to customers?", "Value reaches customers in small, frequent steps."),
     ("Low overhead", "light to run?", "Time and ceremony it takes. High = light."),
 ]
+PROJECT_ATTRS = [
+    ("Value focus", "serves the outcome?", "Keeps the project aimed at the benefit, not at the paperwork."),
+    ("Predictability", "dates and costs hold?", "Forecasts get closer to what really happens."),
+    ("Risk reduction", "fewer surprises?", "Trouble is found while it is still cheap."),
+    ("Transparency", "true status visible?", "Anyone can see where the project really is."),
+    ("Stakeholder confidence", "they trust the plan?", "Sponsors and partners believe the updates."),
+    ("Team ownership", "team decides and commits?", "The people doing the work own the plan."),
+    ("Adaptability", "easy to change course?", "Change is absorbed without chaos."),
+    ("Quality built in", "right first time?", "Problems are prevented, not inspected out at the end."),
+    ("Low overhead", "light to run?", "Time and ceremony it takes. High = light."),
+]
+# PMBOK Guide, Eighth Edition: the seven performance domains (binder tabs) and the five focus areas.
+PMBOK_DOMAINS = [("governance", "Governance"), ("scope", "Scope"), ("schedule", "Schedule"), ("finance", "Finance"),
+                 ("stakeholders", "Stakeholders"), ("resources", "Resources"), ("risk", "Risk")]
+PMBOK_FOCUS = ["initiating", "planning", "executing", "monitoring", "closing"]
+PMI_NOTE = ("Independent study notes, written in my own words. Not affiliated with or endorsed by the Project Management "
+            "Institute. PMBOK is a registered mark of the Project Management Institute, Inc.")
+OPS_ATTRS = [
+    ("User impact", "customers notice less?", "Fewer customers, pickers and couriers hurt when something breaks."),
+    ("Reliability", "breaks less often?", "Things fail less, and fail smaller."),
+    ("Recovery speed", "back up faster?", "Time from \u201cit's broken\u201d to \u201cit works again\u201d."),
+    ("Change safety", "changes land quietly?", "Changes rarely cause incidents, and can be undone."),
+    ("Visibility", "we can see it?", "Anyone on call can see what runs, what's wrong and what changed."),
+    ("Toil reduction", "less repeat handwork?", "Repetitive manual work goes down instead of up."),
+    ("Cost awareness", "worth what it costs?", "Money and people's time are spent where they matter."),
+    ("Sustainable on-call", "people sleep?", "The load is shared and bearable; nobody is the only one who knows."),
+    ("Low overhead", "light to run?", "Time and ceremony the practice takes. High = light."),
+]
+# ITIL 4: the three practice groups (tabs) and the six value chain activities (the row under the tabs).
+ITIL_GROUPS = [("general", "General management"), ("service", "Service management"), ("technical", "Technical management")]
+ITIL_CHAIN = [("plan", "plan"), ("improve", "improve"), ("engage", "engage"), ("design", "design &amp; transition"),
+              ("build", "obtain / build"), ("deliver", "deliver &amp; support")]
+ITIL_NOTE = ("Independent study notes, written in my own words. Not affiliated with or endorsed by PeopleCert or AXELOS. "
+             "ITIL\u00ae is a registered trademark of PeopleCert.")
 CLOUD_ATTRS = [
     ("Simplicity", "easy to run &amp; explain?", "Few moving parts; the on-call person can understand it at 3 a.m."),
     ("Delivery speed", "fast from commit to prod?", "Short lead time and frequent, small releases."),
@@ -117,6 +154,54 @@ CLOUD_ATTRS = [
     ("Low cost", "cheap to run?", "Cloud bill, tooling and people time. High = cheap."),
     ("Developer experience", "pleasant to ship with?", "Self-service, fast feedback, little toil."),
 ]
+
+# Shared by the code-design volumes: Vol. 7 (Domain-Driven Design) and Vol. 8 (Inside the Application, planned).
+CODE_ATTRS = [
+    ("Simplicity", "easy to follow?", "A new teammate can read the code and predict what it does."),
+    ("Domain clarity", "reads like the business?", "The code uses the words the business uses, and its rules are easy to find."),
+    ("Correctness", "rules can't be broken?", "Invalid states and broken business rules are hard or impossible to create."),
+    ("Changeability", "safe to change?", "A new rule or feature touches a few places, not twenty."),
+    ("Testability", "test without the world?", "Business rules can be tested without a database, a network or a framework."),
+    ("Low coupling", "parts change alone?", "One module or team can change without breaking the others."),
+    ("Performance", "fast enough?", "Queries, memory and latency stay reasonable. High = no extra cost."),
+    ("Low ceremony", "little boilerplate?", "Few extra classes, layers and mappings to write. High = light."),
+    ("Team scalability", "many teams at once?", "Several teams can work on the system without stepping on each other."),
+]
+PIPELINE_ATTRS = [
+    ("Simplicity", "easy to follow?", "A new teammate can trace a number from the report back to the source."),
+    ("Freshness", "how recent?", "How old the data in the report is when someone reads it."),
+    ("Correctness", "is the number right?", "No missing, doubled or misfiled rows, even after failures."),
+    ("Replayability", "safe to rerun?", "Any step can be run again, for any period, and give the same result."),
+    ("Scalability", "10× the data?", "Keeps working when sources, rows and users grow by 10× or 100×."),
+    ("Low cost", "cheap to run?", "Compute, storage and the people who keep it going. High = cheap."),
+    ("Query flexibility", "answer new questions?", "Analysts can ask new questions without a new pipeline."),
+    ("Observability", "know when it's wrong?", "Failures, delays and bad data are seen before the report is read."),
+    ("Evolvability", "easy to change?", "New sources, columns and definitions without rebuilding everything."),
+]
+
+# Series 5 · On the Client's Floor (the vendor side, at MetroVolt): nine ratings for the note's main move.
+VENDOR_ATTRS = [
+    ("Client trust", "do they believe us?", "The client believes what we say, and can check it."),
+    ("Team health", "can people sleep?", "The vendor team's load and stress stay bearable."),
+    ("Margin protected", "do we still make money?", "The firm is paid for the work it actually does."),
+    ("Scope clarity", "do we agree what's in?", "Both sides could write down the same list of what's in and out."),
+    ("Technical integrity", "is the design honest?", "The solution isn't bent to fit a promise or a politics."),
+    ("Risk control", "do we see it coming?", "Risks are found early, owned and tested."),
+    ("Political cover", "is there a paper trail?", "Decisions and warnings are written down where they'll be found."),
+    ("Speed", "how quick to do?", "Time it takes before it starts paying off. High = quick."),
+    ("Low overhead", "light to keep up?", "Ceremony and upkeep it needs afterwards. High = light."),
+]
+VENDOR_NOTE = ("A story about fictional companies: MetroVolt, Wrenfield Digital, Vexmoor Consulting and Halvorsen Systems are invented. "
+               "Contract wording is illustrative, not legal advice; real contracts and procurement rules differ by country.")
+
+# “Then & now” verdicts (code-design volumes): how a classic idea from the 2000s holds up today.
+VERDICTS = {
+    "core": ("still core", "as useful as when it was written"),
+    "grown": ("matters more now", "more relevant today than when it was written"),
+    "built-in": ("built in now", "your framework or language does it for you; know it to use the tool well"),
+    "rethought": ("rethought", "the idea holds, the way the book did it has changed"),
+    "retired": ("mostly retired", "rarely worth doing the original way today"),
+}
 
 # ---------------------------------------------------------------- journals
 JOURNALS = [
@@ -154,6 +239,9 @@ JOURNALS = [
             (16, "replication", "Leader–Follower Replication", "data", "Copy data to followers for reads and failover; one leader takes the writes."),
             (17, "cache-aside", "Cache-Aside", "data", "Check a fast cache first; on a miss, load from the database and keep a copy."),
             (18, "leader-election", "Leader Election", "coordination", "Pick exactly one node to do a job, and safely pick a new one when it dies."),
+            (19, "strangler-fig", "Strangler Fig", "communication", "Put a routing layer in front of the old system and move one route at a time to the new one."),
+            (20, "backpressure", "Backpressure", "resilience", "When work arrives faster than you can finish it, push back instead of queueing without limit."),
+            (21, "consistent-hashing", "Consistent Hashing", "data", "Spread keys across nodes so adding or removing a node moves only a small share of them."),
         ],
     ),
     dict(
@@ -186,6 +274,9 @@ JOURNALS = [
             (13, "micro-frontends", "Micro-Frontends", "architecture", "Split a big frontend into apps owned and deployed by separate teams."),
             (14, "design-tokens", "Design Tokens", "architecture", "Name every colour, size and font once, and use those names everywhere."),
             (15, "error-boundaries", "Error Boundaries", "architecture", "Catch a crashing part of the UI and show a fallback, instead of a blank page."),
+            (16, "debounce-throttle", "Debounce & Throttle", "rendering", "Run a handler once after the user pauses, or at most every so often, instead of on every event."),
+            (17, "web-workers", "Web Workers", "rendering", "Move heavy work off the main thread so the page keeps responding to taps."),
+            (18, "offline-first", "Offline-First Sync", "state", "Write to a local store first and sync with the server when the connection allows."),
         ],
     ),
     dict(
@@ -218,6 +309,9 @@ JOURNALS = [
             (13, "multitenancy", "Multitenancy", "growing", "Serve many customers from one database while keeping each one's data apart."),
             (14, "connection-pooling", "Connection Pooling", "growing", "Reuse a small set of open connections instead of opening one per request."),
             (15, "star-schema", "Star Schema", "growing", "Shape analytics data as facts surrounded by dimensions, for fast reports."),
+            (16, "upserts", "Upserts", "changing", "Insert a row or update the one that's already there, in one atomic statement."),
+            (17, "bitemporal-data", "Bitemporal Data", "modelling", "Record both when a fact was true and when you knew it, so corrections never erase history."),
+            (18, "vector-indexes", "Vector Indexes", "reading", "Find the nearest items by meaning, not by exact value, without comparing against every row."),
         ],
     ),
     dict(
@@ -250,6 +344,9 @@ JOURNALS = [
             (13, "deterministic-tests", "Controlled Time & Randomness", "reliability", "Inject the clock, the random seed and the ids, so every run is the same."),
             (14, "flaky-tests", "Flaky Test Quarantine", "reliability", "Detect tests that pass and fail at random, isolate them and fix the cause."),
             (15, "parallel-selective", "Parallel & Selective Runs", "reliability", "Split the suite across workers and run only the tests a change can affect."),
+            (16, "fuzzing", "Fuzzing", "techniques", "Feed a program huge numbers of generated, malformed inputs and watch for crashes."),
+            (17, "visual-regression", "Visual Regression Tests", "techniques", "Compare screenshots with approved ones so layout and style bugs fail the build."),
+            (18, "fault-injection", "Fault Injection Tests", "reliability", "Make dependencies slow, fail or drop connections in tests, and check the code copes."),
         ],
     ),
     dict(
@@ -282,6 +379,9 @@ JOURNALS = [
             (13, "audit-logging", "Audit Logging", "operations", "Record who did what, when and from where, in a log attackers can't quietly edit."),
             (14, "supply-chain", "Supply-Chain Hygiene", "operations", "Pin, scan and verify the packages and images you depend on."),
             (15, "defense-in-depth", "Defence in Depth", "operations", "Stack independent layers so one failure doesn't mean a breach."),
+            (16, "passkeys", "Passkeys", "identity", "Sign in with a key pair kept on the user's device, so there is no password to steal or phish."),
+            (17, "signed-webhooks", "Signed Webhooks", "input", "Check a signature and timestamp on every incoming webhook before trusting it."),
+            (18, "login-throttling", "Rate-Limited Login", "identity", "Slow down and block password guessing per account, per IP and overall."),
         ],
     ),
     dict(
@@ -314,6 +414,122 @@ JOURNALS = [
             (13, "disaster-recovery", "Backups & Disaster Recovery", "resilience", "Keep tested backups and a rehearsed plan to restore service elsewhere."),
             (14, "postmortems", "Incident Response & Postmortems", "resilience", "Handle incidents with clear roles, then learn from them without blame."),
             (15, "finops", "Cost Visibility (FinOps)", "resilience", "Tag, measure and own cloud spend, so cost is a design input, not a surprise."),
+            (16, "progressive-delivery", "Progressive Delivery", "shipping", "Roll a change out ring by ring, with automatic checks deciding each next step."),
+            (17, "service-catalogue", "Service Catalogue", "running", "One place that says what each service is, who owns it, and how to run it."),
+            (18, "chaos-engineering", "Chaos Engineering", "resilience", "Run planned experiments that break things on purpose, to learn before an incident does."),
+        ],
+    ),
+    # Vol. 7 · Domain-Driven Design. Plan: docs/PLAN-code-design.md. Every note carries a “then & now” box (then_now).
+    dict(
+        key="ddd", vol=7, title="Domain-Driven Design", short="domain-driven design",
+        theme="theme-ddd", subject="domain-driven design", term="Spring term · 2027", weekdays=(0, 3), start=date(2027, 1, 11),
+        kicker="surveyed, mapped and argued over with the people who know",
+        lead="My field notes on <span class=\"hl\">domain-driven design</span>: how to find the part of the business that matters, draw borders around models, connect the teams on either side, and write code that speaks the business's language and keeps its rules. {n} patterns in {c} collections, with the same eight sections as the other volumes, rated on nine <b>code-design</b> qualities like domain clarity, correctness and low coupling. Most of the ideas come from Eric Evans's 2003 book, so every note adds a <b>then &amp; now</b> box: what the book said, what changed in twenty years, and a verdict. Examples use TypeScript, but the ideas work in any language.",
+        blurb="Language, subdomains and bounded contexts, context maps, the tactical building blocks, and a then &amp; now verdict on each.",
+        attrs=CODE_ATTRS, attrs_title="The nine code-design ratings", attrs_side="what a reviewer of the model would ask", ratings_h2="Code-design ratings",
+        first_law="Model the part of the business that makes you different with care, and buy or borrow the rest. A model is only right inside its own border.",
+        then_now=True,
+        handmade=set(),
+        collections=[
+            ("strategic", "Finding the domain", "what matters, what it's called, and where it ends"),
+            ("relations", "Between contexts", "how models and the teams behind them connect"),
+            ("tactical", "Building blocks", "the shapes inside one model"),
+            ("honest", "Keeping it honest", "modern habits that keep a model sharp"),
+        ],
+        catalogue=[
+            (1, "ubiquitous-language", "Ubiquitous Language", "strategic", "One vocabulary shared by experts and code, inside one context, and used everywhere."),
+            (2, "subdomains", "Core, Supporting & Generic Subdomains", "strategic", "Sort the business into what makes you different, what supports it, and what everyone has."),
+            (3, "bounded-context", "Bounded Context", "strategic", "Draw a border around one model, so each word means exactly one thing inside it."),
+            (4, "event-storming", "Event Storming", "strategic", "Map a business process with orange sticky notes and the people who run it, in one room."),
+            (5, "context-map", "Context Map", "relations", "Draw every context and how each pair relates, including who depends on whom."),
+            (6, "customer-supplier", "Customer–Supplier & Conformist", "relations", "Decide whether a downstream team gets a say in its upstream's model, or simply takes it."),
+            (7, "shared-kernel", "Shared Kernel & Partnership", "relations", "Share a small piece of model between two teams that agree to change it together."),
+            (8, "anti-corruption-layer", "Anti-Corruption Layer", "relations", "Translate another model at your border, so its words and quirks don't leak into yours."),
+            (9, "open-host-service", "Open Host Service & Published Language", "relations", "Offer one documented, versioned interface and format to every consumer."),
+            (10, "value-object", "Value Object", "tactical", "A small immutable type defined by its value, like Money or EmailAddress, that checks itself."),
+            (11, "entity", "Entity", "tactical", "Something with an identity that lasts while its details change, like a customer or an order."),
+            (12, "aggregate", "Aggregate", "tactical", "A cluster of objects changed together through one root, which guards their rules."),
+            (13, "domain-events", "Domain Events", "tactical", "Record that something the business cares about happened, in the past tense, for others to react to."),
+            (14, "repository", "Repository", "tactical", "Load and save whole aggregates through a collection-like interface, hiding the database."),
+            (15, "domain-service", "Domain & Application Services", "tactical", "Put rules that belong to no single object in a domain service, and use cases in an application service."),
+            (16, "specification", "Specification", "honest", "Name a business rule as an object you can combine, test and reuse for checks and queries."),
+            (17, "illegal-states", "Make Illegal States Unrepresentable", "honest", "Use types so a wrong combination of data can't even be built."),
+            (18, "anemic-domain-model", "Anemic Domain Model", "honest", "Data classes with all the logic elsewhere: when it's a smell, and when it's fine."),
+        ],
+    ),
+    # Vol. 8 · Inside the Application. Plan: docs/PLAN-code-design.md. Same ratings and then & now box as Vol. 7.
+    dict(
+        key="inside-app", vol=8, title="Inside the Application", short="inside the application",
+        theme="theme-app", subject="application design", term="Spring term · 2027", weekdays=(1, 4), start=date(2027, 3, 16),
+        kicker="worked out on an engineering pad, between code reviews",
+        lead="My notes on <span class=\"hl\">what goes on inside one application</span>: the SOLID principles read with today's eyes, the enterprise patterns hiding inside your ORM, ways to shape an app so it stays easy to change, and the classic object patterns that still earn their place. {n} patterns in {c} collections, rated on the same nine <b>code-design</b> qualities as Vol. 7. The sources are mostly from 1994 to 2005 (the Gang of Four, Fowler's <i>Patterns of Enterprise Application Architecture</i>, Robert C. Martin), so every note has a <b>then &amp; now</b> box with a verdict, and the last note is a museum of patterns you can retire. Examples use TypeScript.",
+        blurb="SOLID read today, the patterns inside your ORM, ports and adapters, vertical slices, and the classic patterns worth keeping, with then &amp; now verdicts.",
+        attrs=CODE_ATTRS, attrs_title="The nine code-design ratings", attrs_side="what a reviewer would ask in a pull request", ratings_h2="Code-design ratings",
+        first_law="A pattern is a name for a solution to a problem you have. If you can't name the problem, you don't need the pattern, however famous the book.",
+        then_now=True,
+        handmade=set(),
+        collections=[
+            ("solid", "SOLID, read today", "five principles, minus the misreadings"),
+            ("orm", "Inside your ORM", "enterprise patterns you use every day without naming them"),
+            ("shape", "Shaping the app", "where code goes, so it stays easy to change"),
+            ("classic", "Classic patterns", "the Gang of Four, what to keep, and what to retire"),
+        ],
+        catalogue=[
+            (1, "single-responsibility", "Single Responsibility", "solid", "Keep together what changes for the same people, and apart what changes for different ones."),
+            (2, "open-closed", "Open–Closed", "solid", "Add new cases by adding code, not by editing a growing switch."),
+            (3, "liskov-substitution", "Liskov Substitution", "solid", "A subtype must keep every promise its parent makes, or callers break."),
+            (4, "interface-segregation", "Interface Segregation", "solid", "Depend on small interfaces shaped by what you use, not on fat ones."),
+            (5, "dependency-inversion", "Dependency Inversion", "solid", "Business code defines the interfaces; databases and APIs plug into them."),
+            (6, "active-record-data-mapper", "Active Record vs Data Mapper", "orm", "Objects that save themselves, or a separate mapper that saves them: pick by complexity."),
+            (7, "unit-of-work", "Unit of Work & Identity Map", "orm", "Track what changed in one request, keep one copy of each row, and save it all at once."),
+            (8, "lazy-loading", "Lazy Loading", "orm", "Load related data only when it's touched, and know when that's a trap."),
+            (9, "offline-locks", "Offline Locks & ETags", "orm", "Stop one user's save silently overwriting another's, across minutes of editing."),
+            (10, "dto-remote-facade", "DTOs & Remote Facade", "orm", "Send one shaped message per use case, not your entities, and not thirty small calls."),
+            (11, "transaction-script", "Transaction Script vs Domain Model", "shape", "One procedure per use case, or objects that hold the rules: choose per area."),
+            (12, "ports-adapters", "Ports & Adapters", "shape", "Put the business core in the middle; HTTP, databases and APIs are adapters around it."),
+            (13, "vertical-slices", "Vertical Slices", "shape", "Organise code by feature, end to end, instead of by technical layer."),
+            (14, "functional-core", "Functional Core, Imperative Shell", "shape", "Make decisions in pure functions; do all the input and output around them."),
+            (15, "strategy-command", "Strategy & Command as Functions", "classic", "Swap behaviour and queue actions with functions and data, not class hierarchies."),
+            (16, "decorator-middleware", "Decorator & Middleware", "classic", "Wrap a thing in another with the same shape to add logging, retries or caching."),
+            (17, "adapter-facade", "Adapter & Facade", "classic", "Make a foreign interface fit yours, and hide a complicated one behind a simple door."),
+            (18, "pattern-museum", "The Pattern Museum", "classic", "Singleton, Service Locator, Visitor and friends: what replaced them, and why."),
+        ],
+    ),
+    # Vol. 9 · Data Pipelines & Analytics. Plan: docs/PLAN-data-pipelines.md. One homeware shop throughout.
+    dict(
+        key="pipelines", vol=9, title="Data Pipelines & Analytics", short="data pipelines &amp; analytics",
+        theme="theme-pipelines", fonts="VT323", subject="data pipelines", term="Summer term · 2027", weekdays=(0, 3), start=date(2027, 5, 3),
+        kicker="printed on green-bar paper, between nightly runs",
+        lead="My notes on <span class=\"hl\">getting data out of the app and into reports people trust</span>: how to extract and load it so a rerun never double-counts, how to model a warehouse past one star, how to keep it trustworthy, and how to serve one number everywhere. {n} patterns in {c} collections, with the same eight sections as the other volumes, rated on nine <b>pipeline</b> qualities like freshness, correctness and replayability. Every note follows the same homeware shop: a web store and 30 shops, orders, order lines, products and customers. SQL is generic warehouse SQL; tools named are examples.",
+        blurb="ETL and ELT, incremental and idempotent loads, slowly changing dimensions, data vault, data contracts, the metrics layer and reporting.",
+        attrs=PIPELINE_ATTRS, attrs_title="The nine pipeline ratings", attrs_side="what finance would ask, and the on-call engineer", ratings_h2="Pipeline ratings",
+        first_law="A pipeline is correct only if you can run any part of it again, for any day, and get the same answer. Everything else is plumbing.",
+        handmade=set(),
+        collections=[
+            ("in", "Getting data in", "extract and load without losing or doubling a row"),
+            ("model", "Modelling the warehouse", "shapes that answer questions and keep history"),
+            ("trust", "Keeping it trustworthy", "stop bad data before anyone reads it"),
+            ("serve", "Serving reports", "one number, fast, for everyone allowed to see it"),
+        ],
+        catalogue=[
+            (1, "etl-vs-elt", "ETL vs ELT", "in", "Transform before loading, or load raw data and transform it inside the warehouse."),
+            (2, "incremental-extract", "Incremental Extract", "in", "Copy only what changed since last time, using a high-water mark, without missing late rows."),
+            (3, "idempotent-loads", "Idempotent Loads", "in", "Load so that running the same batch twice gives the same table as running it once."),
+            (4, "layered-zones", "Layered Zones (Raw, Staging, Marts)", "in", "Keep raw data untouched, clean it in staging, and shape it for reports in marts."),
+            (5, "late-arriving-data", "Late-Arriving Data", "in", "Put each event in the period it happened, even when it reaches you days later."),
+            (6, "slowly-changing-dimensions", "Slowly Changing Dimensions", "model", "Decide per column whether a change overwrites the past or adds a new version."),
+            (7, "fact-table-types", "Fact Table Types", "model", "Transactions, periodic snapshots, accumulating snapshots and factless facts: pick by question."),
+            (8, "conformed-dimensions", "Conformed Dimensions & the Bus Matrix", "model", "Share one product, one customer and one calendar across every fact table."),
+            (9, "data-vault", "Data Vault", "model", "Hubs, links and satellites: an insert-only layer that integrates many sources and keeps all history."),
+            (10, "one-big-table", "One Big Table vs Star", "model", "Flatten everything into one wide table, or keep facts and dimensions apart: choose by engine and team."),
+            (11, "write-audit-publish", "Write–Audit–Publish", "trust", "Build into a hidden table, test it, and swap it in only when the tests pass."),
+            (12, "data-contracts", "Data Contracts", "trust", "Agree a versioned schema and rules with the team that produces the data."),
+            (13, "quality-checks", "Quality Checks & Quarantine", "trust", "Test rows and whole batches on every load; set bad rows aside instead of loading them."),
+            (14, "dag-orchestration", "DAG Orchestration & Lineage", "trust", "Run steps when their inputs are ready, not at a time on the clock, and know what feeds what."),
+            (15, "metrics-layer", "Metrics Layer", "serve", "Define each business number once, in code, and let every dashboard use that definition."),
+            (16, "aggregates-rollups", "Aggregates & Rollups", "serve", "Pre-compute summaries at coarser grain so dashboards stay fast on billions of rows."),
+            (17, "lambda-vs-kappa", "Lambda vs Kappa", "serve", "Fresh numbers from a batch plus a speed layer, or from one stream you can replay."),
+            (18, "embedded-reporting", "Multi-tenant & Embedded Reporting", "serve", "Show each customer or shop only their own numbers, without slowing the app down."),
         ],
     ),
     # ---- Series 2 · The Solution Architect's Notebook ----
@@ -757,25 +973,731 @@ JOURNALS = [
             (15, "handing-over", "Handing Over a Product Area", "growing", "Pass on the why, the people and the open bets, then step back on purpose."),
         ],
     ),
+    dict(
+        key="project-1", vol=1, title="The Lay of the Land", short="the lay of the land",
+        series=2, book="The Project Manager's Notebook", narrator="Sanne", brand="project manager's notebook", book_no=3,
+        title_block=True, sheet_doodles="project",
+        theme="theme-project", fonts="Patrick+Hand+SC", subject="project management",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Winter term · 2029", weekdays=(1, 3), start=date(2029, 1, 9),
+        kicker="the project manager's notebook · book 3 · vol. 1",
+        story="<b>January 2026.</b> Larder has promised its investors six cities by the end of 2027. The second city, Rotterdam, must open on <b>27 April 2026</b>: the store lease is signed. Ana is three months into the architecture and Grace into the product. There is a date, a building and a lot of goodwill, but no plan and nobody whose job is the launch. Sanne joins on 12 January as delivery manager. This volume follows her first seven weeks: working out what kind of thing she has been handed, what good project management rests on, and how much process Rotterdam needs.",
+        lead="Volume 1 of <span class=\"hl\">The Project Manager's Notebook</span>, a plain-words walk through the whole <b>PMBOK Guide</b> (eighth edition). {n} notes in {c} collections: what a project is, the six principles, and the ways of working. Each note is one <b>question a project manager must answer</b>; the official PMBOK term is on the tag under the title. Every note follows <b>Sanne</b> at <b>Larder</b>, in the same months as Ana's and Grace's notebooks. Key notes go further with a <b>going deeper</b> chapter, and every note ends with a <b>try it</b> for your own project.",
+        blurb="What a project is, the six principles, life cycles, focus areas, the seven domains and tailoring: the ground the rest of the PMBOK Guide stands on.",
+        attrs=PROJECT_ATTRS, attrs_title="The nine project ratings", attrs_side="what a good project practice is judged on", ratings_h2="Project ratings",
+        first_law="A project is finished when the benefit shows up, not when the plan is ticked off. Use as much process as the risk needs, and no more.",
+        disclaimer=PMI_NOTE, pmbok=True,
+        deep_dives={"value-delivery-system", "life-cycles", "focus-areas", "tailoring"},
+        handmade=set(),
+        collections=[
+            ("what", "What a project is", "know what you have been handed before you plan it"),
+            ("principles", "The six principles", "what good project management rests on, whatever the method"),
+            ("ways", "Ways of working", "how the work is shaped, watched and sized"),
+        ],
+        catalogue=[
+            (1, "project-product-operations", "Is This a Project?", "what", "Tell a project from a product and from operations, so each gets the right kind of management."),
+            (2, "value-delivery-system", "What Is It All For?", "what", "Follow the chain from strategy to portfolio, programme, project and operations, and from output to benefit."),
+            (3, "project-manager-role", "What Is My Job Here?", "what", "What a project manager does, what the sponsor does, and where the role ends."),
+            (4, "project-environment", "What Was Here Before Me?", "what", "Read the surroundings a project lands in: rules, habits, people and what already exists."),
+            (5, "holistic-view", "See the Whole", "principles", "Treat the project as one connected system, so a fix in one place doesn't break another."),
+            (6, "focus-on-value", "Focus on Value", "principles", "Steer by the benefit the project exists for, not by the list of tasks."),
+            (7, "embed-quality", "Build Quality In", "principles", "Put quality into how the work is done, instead of inspecting for it at the end."),
+            (8, "accountable-leader", "Own the Outcome", "principles", "Lead by taking responsibility for the result, the truth of the status and the people."),
+            (9, "sustainability", "Think Past the Finish", "principles", "Weigh the long-term effect on people, planet and money in every project decision."),
+            (10, "empowered-culture", "Let the Team Decide", "principles", "Give the people doing the work the room, the facts and the trust to decide."),
+            (11, "life-cycles", "Plan It All, or Learn As We Go?", "ways", "Choose a predictive, adaptive or hybrid approach for each part of the work."),
+            (12, "focus-areas", "What Do I Do When?", "ways", "Initiating, planning, executing, monitoring and controlling, closing: five kinds of attention, not five phases."),
+            (13, "performance-domains", "What Must I Keep an Eye On?", "ways", "The seven performance domains: seven things a project manager watches all the way through."),
+            (14, "tailoring", "How Much Process Do We Need?", "ways", "Fit the approach, the documents and the meetings to this project, on purpose."),
+            (15, "pmo", "Who Helps the Project Managers?", "ways", "What a project management office is for, and the lightest version that still helps."),
+        ],
+    ),
+    dict(
+        key="project-2", vol=2, title="Starting, Steering, Closing", short="starting, steering, closing",
+        series=2, book="The Project Manager's Notebook", narrator="Sanne", brand="project manager's notebook", book_no=3,
+        title_block=True, sheet_doodles="project",
+        theme="theme-project", fonts="Patrick+Hand+SC", subject="project management",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Spring term · 2029", weekdays=(1, 3), start=date(2029, 3, 6),
+        kicker="the project manager's notebook · book 3 · vol. 2",
+        story="<b>Late February 2026.</b> Sanne has been at Larder for six weeks. Rotterdam opens on <b>27 April</b>; the team has made its own plan, there are seven workstreams, five shared milestones, a budget of €380k and a reserve of €6k. What the launch still lacks is governance: nobody has written down why it exists, who decides what, when it is allowed to move to the next step, how a change gets agreed, or what “finished” means. This volume follows the launch from its charter to its closing report on 22 May, through a scope misread, a late builder, a forgotten internet line and an opening day.",
+        lead="Volume 2 of <span class=\"hl\">The Project Manager's Notebook</span>: the <b>Governance</b> domain of the PMBOK Guide (eighth edition), all nine of its processes. {n} notes in {c} collections: starting a project properly, making one plan, running and steering the work, and closing it. Each note is one <b>question a project manager must answer</b>, and its template card is a real page of <b>the Rotterdam project file</b>, which grows through the book. Four notes go further with a <b>going deeper</b> chapter.",
+        blurb="The Governance domain: the charter, who decides, phase gates, one plan, sourcing, baselines, running the work, honest status, change control, lessons, handover and closing.",
+        attrs=PROJECT_ATTRS, attrs_title="The nine project ratings", attrs_side="what a good project practice is judged on", ratings_h2="Project ratings",
+        first_law="Governance is a few clear answers, agreed early: why, who decides, when we move on, how we change, and when we are done.",
+        disclaimer=PMI_NOTE, pmbok=True,
+        deep_dives={"project-charter", "project-management-plan", "status-reports", "change-control"},
+        handmade=set(),
+        collections=[
+            ("starting", "Starting", "agree why, who decides, and when the next step may begin"),
+            ("plan", "One plan", "one plan everyone works from, and what was promised"),
+            ("running", "Running and steering", "do the work, see where it stands, change course on purpose"),
+            ("closing", "Closing", "finish properly: learn, hand over, close"),
+        ],
+        catalogue=[
+            (1, "project-charter", "Should This Project Exist?", "starting", "The project charter: one page that says why, what for, who is behind it and within what limits."),
+            (2, "governance-structure", "Who Decides What?", "starting", "A sponsor, a steering group and decision levels, written down before the first hard decision."),
+            (3, "phase-gates", "May We Take the Next Step?", "starting", "Phase gates and go / no-go: agreed criteria, checked at fixed points, with three possible answers."),
+            (4, "project-management-plan", "What's the Plan?", "plan", "One plan that makes scope, dates, money, people and risks agree with each other."),
+            (5, "sourcing-strategy", "Make It, Buy It, or Hire It?", "plan", "Decide what to do yourself and what to buy, and pick the contract that puts each risk in the right hands."),
+            (6, "baselines", "What Exactly Did We Promise?", "plan", "A baseline is the approved version of the plan that progress and changes are measured against."),
+            (7, "directing-the-work", "Is the Work Actually Happening?", "running", "A weekly rhythm that keeps seven workstreams moving and clears what blocks them."),
+            (8, "issue-log", "What's in the Way Right Now?", "running", "An issue is a problem that has already happened: log it, give it an owner and a date, close it."),
+            (9, "quality-assurance", "Is Our Way of Working Working?", "running", "Quality assurance checks the process; quality control checks the result. A project needs both."),
+            (10, "status-reports", "Where Are We, Really?", "running", "Measure against the baseline, forecast the end, and report a colour that follows written rules."),
+            (11, "change-control", "Can We Change That?", "running", "Every change to what was promised is written down, sized, decided by the right person and then built into the plan."),
+            (12, "escalation", "When Do I Take It Upstairs?", "running", "Escalate early, with options and a recommendation, when a decision is above your limit."),
+            (13, "lessons-learned", "What Did We Learn?", "closing", "Capture lessons while they are fresh, sort them, and put them where the next project will trip over them."),
+            (14, "handover", "Who Looks After It Now?", "closing", "Hand the result to the people who will run it, with everything they need and nothing left hanging."),
+            (15, "closing-a-project", "Are We Done?", "closing", "Close on purpose: results accepted, contracts and money settled, benefits handed to their owners, the team released."),
+        ],
+    ),
+    dict(
+        key="project-3", vol=3, title="What, and By When", short="what, and by when",
+        series=2, book="The Project Manager's Notebook", narrator="Sanne", brand="project manager's notebook", book_no=3,
+        title_block=True, sheet_doodles="project",
+        theme="theme-project", fonts="Patrick+Hand+SC", subject="project management",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Summer term · 2029", weekdays=(1, 3), start=date(2029, 5, 8),
+        kicker="the project manager's notebook · book 3 · vol. 3",
+        story="<b>February → April 2026, again.</b> Vol. 2 followed the Rotterdam launch from its charter to its closing report: who decided, how it was steered, how it ended. This volume goes back over the same weeks for the two questions every plan rests on: <b>what exactly</b> will be delivered, and <b>by when</b>. Here are the 71 must-haves broken down, the estimates behind the plan of 20 February, the builder's network of twelve activities and the one path through it that set the handover date, and what happened to that path when an electrical inspector re-booked on 23 March.",
+        lead="Volume 3 of <span class=\"hl\">The Project Manager's Notebook</span>: the <b>Scope</b> and <b>Schedule</b> domains of the PMBOK Guide (eighth edition), all nine of their processes. {n} notes in {c} collections: pinning down what will be delivered, estimating how big it is, turning work into dates, and holding scope and dates where they were promised. Every number comes from one worked example, the Rotterdam launch, and its template card is a page of <b>the Rotterdam project file</b>. Four notes go further with a <b>going deeper</b> chapter: the work breakdown structure, three-point estimates, the critical path and schedule tracking.",
+        blurb="The Scope and Schedule domains: requirements, the scope statement, the work breakdown structure, estimates as ranges, the network, critical path, float, Gantt charts, crashing and fast-tracking, tracking dates, acceptance and scope creep.",
+        attrs=PROJECT_ATTRS, attrs_title="The nine project ratings", attrs_side="what a good project practice is judged on", ratings_h2="Project ratings",
+        first_law="A date is only as good as the list of work under it and the longest chain through that work. Find both before you promise.",
+        disclaimer=PMI_NOTE, pmbok=True,
+        deep_dives={"work-breakdown-structure", "three-point-estimates", "critical-path", "schedule-tracking"},
+        handmade=set(),
+        collections=[
+            ("scope", "What, exactly?", "pin down what will be delivered, and what won't"),
+            ("estimating", "How big is it?", "estimate honestly, as a range, with the people who do the work"),
+            ("schedule", "By when?", "turn work and estimates into dates you can defend"),
+            ("control", "Holding the line", "keep dates and scope where they were promised, or move them on purpose"),
+        ],
+        catalogue=[
+            (1, "scope-schedule-approach", "How Will We Pin It Down?", "scope", "Decide, before you start, how scope and dates will be defined, detailed, measured and changed."),
+            (2, "requirements", "What Do They Actually Need?", "scope", "Draw needs out of the people who will live with the result, and trace each one to something you'll deliver and check."),
+            (3, "scope-statement", "What's In, and What's Out?", "scope", "One page that names the deliverables, how each will be accepted, and what is deliberately left out."),
+            (4, "work-breakdown-structure", "How Do We Break It Down?", "scope", "Break the whole result into smaller deliverables until each piece can be owned, estimated and checked."),
+            (5, "estimating-methods", "How Long, Roughly?", "estimating", "Three ways to estimate: from a similar past job, from a rate, or by adding up the parts."),
+            (6, "three-point-estimates", "How Sure Are We?", "estimating", "Ask for the best case, the likely case and the worst case, and turn them into a range with odds."),
+            (7, "estimating-with-the-team", "Who Should Guess?", "estimating", "Let the people who do the work estimate, independently first, so nobody's number anchors the rest."),
+            (8, "network-diagram", "What Waits for What?", "schedule", "Draw which activities wait for which, including waits on things outside the project."),
+            (9, "critical-path", "What Decides the Finish Date?", "schedule", "The longest chain of dependent activities sets the end date. Find it, and watch it."),
+            (10, "float-and-buffers", "How Much Can This Slip?", "schedule", "Float is how late an activity can be without moving the end; a buffer is slack you put in on purpose."),
+            (11, "gantt-and-milestones", "How Do We Show the Dates?", "schedule", "A milestone chart for the people who decide, a Gantt chart for the people who do the work."),
+            (12, "crashing-and-fast-tracking", "Can We Go Faster?", "schedule", "Two ways to shorten a schedule: pay to speed up critical work, or overlap work that was meant to follow."),
+            (13, "schedule-tracking", "Are We Still on Time?", "control", "Track predictive work by its milestones and float, adaptive work by a burn-up, and forecast both every week."),
+            (14, "validate-scope", "Is This What We Asked For?", "control", "The people who asked for each deliverable formally accept it against criteria agreed in advance."),
+            (15, "scope-creep", "Where Did That Come From?", "control", "Small, unapproved additions eat the schedule quietly. Make every addition a decision."),
+        ],
+    ),
+    dict(
+        key="project-4", vol=4, title="Money and People", short="money and people",
+        series=2, book="The Project Manager's Notebook", narrator="Sanne", brand="project manager's notebook", book_no=3,
+        title_block=True, sheet_doodles="project",
+        theme="theme-project", fonts="Patrick+Hand+SC", subject="project management",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Autumn term · 2029", weekdays=(1, 3), start=date(2029, 9, 4),
+        kicker="the project manager's notebook · book 3 · vol. 4",
+        story="<b>January → May 2026, a third time.</b> Vol. 2 showed how the Rotterdam launch was governed and Vol. 3 what it delivered and when. This volume follows the same launch through the two things every plan spends: <b>money</b> and <b>people</b>. Here is how the €380k was built and set aside, when the cash actually left the bank, whether the money was buying progress (earned value said, on 20 March, that the reserve would be used to the last euro, and it was), and how forty pickers and couriers were found, trained and led by a project manager who was nobody's boss.",
+        lead="Volume 4 of <span class=\"hl\">The Project Manager's Notebook</span>: the <b>Finance</b> and <b>Resources</b> domains of the PMBOK Guide (eighth edition), all nine of their processes. {n} notes in {c} collections: planning the money, watching it, getting the people and things, and leading and balancing them. The numbers are the Rotterdam launch's, and every template card is a page of <b>the Rotterdam project file</b>. Four notes go further with a <b>going deeper</b> chapter: the budget and its reserves, earned value, resource levelling, and leading without authority.",
+        blurb="The Finance and Resources domains: cost estimates, the budget and its reserves, cash flow, committed vs spent, earned value, forecasting, payback, RACI, estimating and getting people, levelling, leading without authority, conflict and keeping resources available.",
+        attrs=PROJECT_ATTRS, attrs_title="The nine project ratings", attrs_side="what a good project practice is judged on", ratings_h2="Project ratings",
+        first_law="A plan spends two things: money and people's time. Know where both are going every week, and ask before you borrow either.",
+        disclaimer=PMI_NOTE, pmbok=True,
+        deep_dives={"budget-and-reserves", "earned-value", "resource-levelling", "leading-without-authority"},
+        handmade=set(),
+        collections=[
+            ("money-plan", "Planning the money", "what it costs, what is set aside, and when the cash goes out"),
+            ("money-watch", "Watching the money", "is the money buying progress, where will it end, and was it worth it?"),
+            ("people-plan", "Getting the people and things", "who does what, how many, and where they come from"),
+            ("people-lead", "Leading and balancing", "keep people from overload, pulling together, and available"),
+        ],
+        catalogue=[
+            (1, "financial-management", "Whose Money Is It?", "money-plan", "Agree, before spending, what the budget covers, who may spend what, and how money is counted and reported."),
+            (2, "cost-estimates", "What Will It Cost?", "money-plan", "Estimate each piece of work in money, from quotes, rates and past jobs, and say how sure each number is."),
+            (3, "budget-and-reserves", "How Much Do We Set Aside?", "money-plan", "Add the estimates into a budget, put a visible reserve on top, and spread it over time."),
+            (4, "cash-flow", "When Does the Money Leave?", "money-plan", "Spending is agreed when it's committed but leaves the bank later. Plan the cash, not just the total."),
+            (5, "committed-and-spent", "How Much Have We Spent?", "money-watch", "Three different numbers: committed, actually spent, and forecast. Report all three, line by line."),
+            (6, "earned-value", "Is the Money Buying Progress?", "money-watch", "Compare the value of the work done with what was planned and what it cost, in one set of numbers."),
+            (7, "cost-forecasting", "Where Will the Money End Up?", "money-watch", "Forecast the final cost two ways, by formula and line by line, and compare them with the budget."),
+            (8, "payback", "Was It Worth It?", "money-watch", "Put the money spent next to the money the result brings back, and say when it pays for itself."),
+            (9, "raci", "Who Does What?", "people-plan", "A responsibility table: who does the work, who answers for it, who is asked and who is told."),
+            (10, "estimating-resources", "How Many People, and What Else?", "people-plan", "Work out the people and equipment from the demand they must serve, not from habit."),
+            (11, "acquiring-resources", "Where Do They Come From?", "people-plan", "Hire, borrow, lease or buy, and agree every loan with whoever owns the person or thing."),
+            (12, "resource-levelling", "Who Is Overloaded?", "people-lead", "Spot people booked over 100 % and move work in time or to others before they break."),
+            (13, "leading-without-authority", "How Do I Lead People Who Don't Report to Me?", "people-lead", "Lead with a shared goal, facts, favours and credit when you can't give orders."),
+            (14, "team-conflict", "Why Is the Team Arguing?", "people-lead", "Teams go through stages and conflict is part of them. Work on the interests behind the positions."),
+            (15, "monitoring-resources", "Are the People and Things Still There?", "people-lead", "Check every day that the people, equipment and suppliers the plan needs are actually available."),
+        ],
+    ),
+    dict(
+        key="project-5", vol=5, title="People Outside, and Surprises", short="people outside, and surprises",
+        series=2, book="The Project Manager's Notebook", narrator="Sanne", brand="project manager's notebook", book_no=3,
+        title_block=True, sheet_doodles="project",
+        theme="theme-project", fonts="Patrick+Hand+SC", subject="project management",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Winter term · 2030", weekdays=(1, 3), start=date(2030, 1, 8),
+        kicker="the project manager's notebook · book 3 · vol. 5",
+        story="<b>October 2026 → October 2027: Antwerp.</b> Rotterdam opened on time and on budget, and Utrecht and The Hague open in 2027 from its playbook. Antwerp is different: <b>the first city abroad</b>, with Belgian rules, Flemish and French, a city permit office, a food-safety agency and a street of forty-six houses behind the loading yard. Sanne planned it for Monday 13 September 2027. It opened on <b>Monday 18 October</b>, five weeks late, and the reason had been on her risk register since November, rated low, with no owner. This volume is how that happened, and everything else that went right around it.",
+        lead="Volume 5 of <span class=\"hl\">The Project Manager's Notebook</span>: the <b>Stakeholders</b> and <b>Risk</b> domains of the PMBOK Guide (eighth edition), all thirteen of their processes. {n} notes in {c} collections: finding everyone the project touches, working abroad, finding and sizing what could happen, and doing something about it. The worked example is the Antwerp launch, and every template card is a page of its <b>project file</b>. Four notes go further with a <b>going deeper</b> chapter: the engagement matrix, the risk register, simulation, and risk responses.",
+        blurb="The Stakeholders and Risk domains: the stakeholder register, power and interest, the communications plan, managing expectations, meetings, stakeholders abroad, the risk register, probability and impact, expected monetary value, Monte Carlo simulation, risk responses, and risks becoming issues.",
+        attrs=PROJECT_ATTRS, attrs_title="The nine project ratings", attrs_side="what a good project practice is judged on", ratings_h2="Project ratings",
+        first_law="The people outside the project and the things that might happen to it are the same list seen twice. Whoever can stop you is a stakeholder and a risk: give them both an owner.",
+        disclaimer=PMI_NOTE, pmbok=True,
+        deep_dives={"power-and-interest", "risk-register", "monte-carlo", "risk-responses"},
+        handmade=set(),
+        collections=[
+            ("involved", "Who's involved?", "find everyone the project touches, and decide how much of you each one needs"),
+            ("abroad", "Abroad", "new rules, a new language, and knowing whether people are still with you"),
+            ("could-happen", "What could happen?", "plan for risk, list it, and size it in days and euros"),
+            ("doing", "Doing something about it", "choose responses, carry them out, and keep the list true"),
+        ],
+        catalogue=[
+            (1, "stakeholder-register", "Who Cares About This?", "involved", "Find everyone the project affects or who can affect it, from more than one source, and write down what each one needs."),
+            (2, "power-and-interest", "Who Matters Most, and How Much?", "involved", "Place stakeholders by power and interest, mark where they are and where you need them, and act on the gaps."),
+            (3, "communications-plan", "Who Hears What, and When?", "involved", "One table: what each audience needs, how, how often, in which language and from whom."),
+            (4, "managing-expectations", "How Do We Keep Them With Us?", "involved", "Meet people early, promise only what you control, and turn every concern into something the plan can see."),
+            (5, "meetings-that-work", "Are We Being Understood?", "abroad", "A meeting is only finished when everyone leaves with the same decisions, in writing, in their language."),
+            (6, "stakeholders-abroad", "Different Country, Different Rules", "abroad", "A new country brings new regulators, new laws and new habits. Map them with someone local, early."),
+            (7, "monitoring-engagement", "Are They Still With Us?", "abroad", "Re-score every key stakeholder each month, from what they say and do, not from what you hope."),
+            (8, "risk-approach", "How Will We Handle Risk?", "could-happen", "Agree, before listing risks, how much risk the sponsor will take, the scales, the owners and the rhythm."),
+            (9, "risk-register", "What Could Happen?", "could-happen", "Write each risk as cause, event and effect, with an owner and a response, and include the good surprises."),
+            (10, "probability-and-impact", "How Likely, and How Bad?", "could-happen", "Score each risk on scales everyone agreed, and re-score it whenever someone who knows more speaks up."),
+            (11, "expected-monetary-value", "What Is It Worth?", "could-happen", "Put a likely cost on each risk, add them up, and size the contingency and the management reserve from it."),
+            (12, "monte-carlo", "What If We Ran It a Thousand Times?", "could-happen", "Run the plan a thousand times with its uncertainties and read the date off as odds, not a single day."),
+            (13, "risk-responses", "What Do We Do About It?", "doing", "Avoid, transfer, mitigate or accept a threat; exploit, enhance, share or accept an opportunity; escalate what isn't yours."),
+            (14, "implementing-responses", "Did We Do What We Said?", "doing", "A response is only real when a named person does it by a date, and someone watches its trigger."),
+            (15, "risk-monitoring", "Is the List Still True?", "doing", "Review risks on a rhythm, close the dead ones, and when one happens, move it to the issue log."),
+        ],
+    ),
+    dict(
+        key="project-6", vol=6, title="Making It Yours", short="making it yours",
+        series=2, book="The Project Manager's Notebook", narrator="Sanne", brand="project manager's notebook", book_no=3,
+        title_block=True, sheet_doodles="project",
+        theme="theme-project", fonts="Patrick+Hand+SC", subject="project management",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On the project",
+        term="Spring term · 2030", weekdays=(1, 3), start=date(2030, 4, 2),
+        kicker="the project manager's notebook · book 3 · vol. 6",
+        story="<b>September 2027 → September 2028.</b> Antwerp opened five weeks late and taught Larder that regulators are stakeholders. Eindhoven opened eight weeks after its first page, run from the playbook with a third of Rotterdam's paperwork. In 2028 Sanne runs a programme instead of a launch: Ghent in June and Haarlem in September, eight cities by the board of 28 September. She hires a second project manager, Nadia, coaches her, and hands Haarlem to her. This last volume is about fitting the method to the work, choosing tools and documents that earn their keep, and growing: yourself, and the next person.",
+        lead="Volume 6 of <span class=\"hl\">The Project Manager's Notebook</span>, the last: the parts of the PMBOK Guide (eighth edition) around the forty processes. {n} notes in {c} collections: tailoring a whole project, the playbook, programmes and benefits; models, methods and artefacts, AI and sustainability; the PMO, servant leadership and ethics; and growing, hiring and handing over. Template cards are the <b>programme</b> pages of the project file. Four notes go further with a <b>going deeper</b> chapter: tailoring a whole project, the playbook, AI in project work, and growing as a project manager.",
+        blurb="Tailoring a whole project, the city launch playbook, programmes and portfolios, benefits realisation, models and methods, artefacts, AI in project work, sustainability, the PMO, servant leadership, ethics, growing, hiring and handing over.",
+        attrs=PROJECT_ATTRS, attrs_title="The nine project ratings", attrs_side="what a good project practice is judged on", ratings_h2="Project ratings",
+        first_law="The plan is the team's, the truth is yours, and the thing that sets your date is usually outside the room.",
+        disclaimer=PMI_NOTE, pmbok=True,
+        deep_dives={"tailoring-a-whole-project", "city-launch-playbook", "ai-in-project-work", "growing-as-a-project-manager"},
+        handmade=set(),
+        collections=[
+            ("fitting", "Fitting it to the work", "size the method, write the recipe, group the projects, check the benefits"),
+            ("models", "Models, methods, artefacts", "choose tools by the question, keep the documents that are used, use AI and think long-term"),
+            ("leading", "Leading others", "an office that helps, a colleague you coach, and the truth under pressure"),
+            ("growing", "Growing", "get better on purpose, hire well, hand over, and look back"),
+        ],
+        catalogue=[
+            (1, "tailoring-a-whole-project", "How Light Can We Go?", "fitting", "Set the whole method for one project on one page: keep, shorten, drop, and check the fit."),
+            (2, "city-launch-playbook", "Can a Launch Be a Recipe?", "fitting", "Turn repeated projects into a versioned playbook: fixed, local, a kit, and changes after every launch."),
+            (3, "programmes-and-portfolios", "One Project, or Many?", "fitting", "Run projects that share a benefit as a programme; choose what to fund as a portfolio."),
+            (4, "benefits-realisation", "Did We Get What We Paid For?", "fitting", "Check each benefit, by its owner, on dates booked before the project closes."),
+            (5, "models-and-methods", "Which Tools, When?", "models", "Choose models and methods by the question the project must answer, not by name."),
+            (6, "artefact-review", "Which Documents Earn Their Keep?", "models", "Keep the documents that were used after they were written; make the rest examples."),
+            (7, "ai-in-project-work", "Can AI Help?", "models", "Use AI for drafts, summaries and checks; check every fact, own every line, keep decisions human."),
+            (8, "sustainability-in-practice", "What Does It Leave Behind?", "models", "Decide what a project leaves running while it's still on paper, priced over its life."),
+            (9, "pmo-grown-up", "Who Helps the Project Managers Now?", "leading", "A supportive office with few mandatory rules, measured by what it makes easier."),
+            (10, "servant-leadership", "Who Serves Whom?", "leading", "Coach what's new, delegate what's known, unblock, give credit, and don't grab the pan."),
+            (11, "ethics", "What Would You Do?", "leading", "Never shade a report; offer the person under pressure a true version that helps."),
+            (12, "growing-as-a-project-manager", "How Do I Get Better at This?", "growing", "A log, feedback, a weak thing, a stretch, someone to coach, and a standard."),
+            (13, "hiring-a-project-manager", "Who Do We Hire?", "growing", "A role card, a real work sample, a scoring sheet written first, and a mixed panel."),
+            (14, "handing-over-a-programme", "Can Someone Else Run This?", "growing", "Move decision rights, tell everyone who calls, step out on a date, and stop answering."),
+            (15, "what-was-it-all-for", "What Was It All For?", "growing", "The six principles revisited: the day each one changed a decision."),
+        ],
+    ),
+    dict(
+        key="ops-1", vol=1, title="Keeping the Lights On", short="keeping the lights on",
+        series=2, book="The IT Operations Notebook", narrator="Eli", brand="IT operations notebook", book_no=5,
+        title_block=True, sheet_doodles="ops",
+        theme="theme-ops", fonts="IBM+Plex+Mono:wght@500;700", subject="IT operations",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="In operations",
+        term="Spring term · 2030", weekdays=(1, 3), start=date(2030, 3, 5),
+        kicker="the IT operations notebook · book 5 · vol. 1",
+        story="<b>Late March 2026.</b> Rotterdam opens on <b>27 April</b>, on a 4G router, because the store's internet line won't arrive until May. In the week of 23 March, Sanne's plan showed Eli, Larder's only platform engineer, at <b>160 %</b>: platform work, the Dispatch RFC, a week on call, the internet line and an alert fix. Ana took his on-call week. Eli realised the problem wasn't the week: everything about running Larder lives in his head. This volume follows him from <b>30 March to June 2026</b>: finding out what Larder runs, who is woken up when it breaks, how the stores ask for help, and how to get it all written down.",
+        lead="Volume 1 of <span class=\"hl\">The IT Operations Notebook</span>: the ground floor of IT operations, in plain words, following the <b>ITIL 4</b> practices with the habits of <b>site reliability engineering</b>. {n} notes in {c} collections: knowing what you run, watching it, answering the stores, and getting it out of one person's head. Each note is a <b>question someone running IT must answer</b>, with an ITIL tag under the title, a <b>maturity ladder</b> from “by hand” to “automatic”, and a <b>try it</b> for your own systems. Every note follows <b>Eli</b> at <b>Larder</b>, in the same months as Ana's, Grace's and Sanne's notebooks.",
+        blurb="The service value system, a catalogue of what you run, dependencies, assets, joiners and leavers, on-call, monitoring, alerts, runbooks, the service desk, store networks, knowledge and toil.",
+        attrs=OPS_ATTRS, attrs_title="The nine operations ratings", attrs_side="what a good operations practice is judged on", ratings_h2="Operations ratings",
+        first_law="If it only works because one person remembers how, it isn't running: it's being held up. Write it down, share the pager, then automate.",
+        disclaimer=ITIL_NOTE, ops=True,
+        handmade=set(),
+        collections=[
+            ("inventory", "What we run", "know what you run, what it hangs on, and who it's for"),
+            ("watching", "Watching it", "who is woken, by what, and what they do next"),
+            ("stores", "Answering the stores", "one door for help, standard requests, networks and kit"),
+            ("memory", "Out of one head", "write it down, and count the handwork"),
+        ],
+        catalogue=[
+            (1, "what-is-it-operations", "What Is IT Operations For?", "inventory", "Operations exists to keep the services customers pay for working; the value is in the outcome, not the servers."),
+            (2, "what-we-run", "What Do We Run, and Who Owns It?", "inventory", "A service catalogue: every service in plain words, with an owner, its users and how much it matters."),
+            (3, "dependency-map", "What Is Connected to What?", "inventory", "Map what each service depends on, so an incident starts with a picture, not an argument."),
+            (4, "it-assets", "What Do We Own, and Where Is It?", "inventory", "One list of devices, accounts, licences and renewals, with who has each one."),
+            (5, "joiners-leavers", "Forty New People on Monday", "inventory", "Joiners, movers and leavers: accounts and devices from one checklist, on day one, and gone on the last day."),
+            (6, "on-call-rota", "Who Gets Woken Up?", "watching", "A shared on-call rota with a handover, a backup and rest afterwards, so no one person is the pager."),
+            (7, "monitoring", "How Do We Know It's Broken?", "watching", "Watch what customers feel first (orders, errors, speed), then the machines behind it."),
+            (8, "alert-hygiene", "Which Alerts Deserve a Human?", "watching", "Page only for things that hurt customers now and need a person; everything else waits for daylight."),
+            (9, "runbooks", "What Do I Do at 3 a.m.?", "watching", "Short, tested steps for each alert, written for a tired person who has never seen it before."),
+            (10, "service-desk", "Where Do People Report Problems?", "stores", "One door for every store and office problem, instead of one engineer's phone."),
+            (11, "service-requests", "Can I Have a New Handheld?", "stores", "Standard requests with a form, an owner and a promised time, so they stop being favours."),
+            (12, "store-network", "Is It the Network?", "stores", "Know each store's Wi-Fi, line and 4G backup, test the failover, and measure it before blaming it."),
+            (13, "store-it-kit", "How Does a New Store Get Its IT?", "stores", "A store IT kit: the line ordered in week one, devices enrolled centrally, and a checklist the next city reuses."),
+            (14, "knowledge", "Where Is That Written Down?", "memory", "Write down the why as well as the how, next to the thing it describes, and prune what's stale."),
+            (15, "toil", "Why Am I Always Busy?", "memory", "Measure the repetitive manual work, cap it, and remove the worst piece each month."),
+        ],
+    ),
+    dict(
+        key="ops-2", vol=2, title="When Things Break", short="when things break",
+        series=2, book="The IT Operations Notebook", narrator="Eli", brand="IT operations notebook", book_no=5,
+        title_block=True, sheet_doodles="ops",
+        theme="theme-ops", fonts="IBM+Plex+Mono:wght@500;700", subject="IT operations",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="In operations",
+        term="Summer term · 2030", weekdays=(1, 3), start=date(2030, 5, 7),
+        kicker="the IT operations notebook · book 5 · vol. 2",
+        story="<b>June 2026.</b> Larder now has a catalogue, a shared on-call rota, fourteen alerts that mean something and eight runbooks. Rotterdam is open and the stores report problems in one place. What Larder still doesn't have is a way to handle an incident together: who leads, who tells the stores, when it is big, and what happens afterwards. This volume follows Eli from <b>June to December 2026</b>: a Friday payment failure nobody could size, a vendor that only answers in office hours, the network rule change of <b>29 October</b>, and the Christmas failover of <b>18 December</b>.",
+        lead="Volume 2 of <span class=\"hl\">The IT Operations Notebook</span>: incident and problem management, from the ITIL 4 practices and the SRE habit of blameless learning. {n} notes in {c} collections: responding together, learning afterwards, and the hard cases. Each note is a <b>question someone running IT must answer</b>; incident notes open with the <b>pager log</b>, the alert as it arrived. Every note follows <b>Eli</b> at <b>Larder</b> from June to December 2026.",
+        blurb="Severity levels, incident roles, communication, escalation, vendors at peak, tiers and swarming, blameless reviews, problems, known errors, action items, incident numbers, changes, clients and major incidents.",
+        attrs=OPS_ATTRS, attrs_title="The nine operations ratings", attrs_side="what a good operations practice is judged on", ratings_h2="Operations ratings",
+        first_law="An incident is over when the service works again; it is finished when the thing that caused it can't do it again. Restore first, learn second, blame never.",
+        disclaimer=ITIL_NOTE, ops=True,
+        handmade=set(),
+        collections=[
+            ("response", "Responding", "size it, lead it, tell people, and get the right person"),
+            ("learning", "Learning", "review without blame, find the cause, and finish the actions"),
+            ("hard", "The hard ones", "changes, clients, major incidents and the ones that nearly happened"),
+        ],
+        catalogue=[
+            (1, "severity-levels", "How Bad Is It?", "response", "Severity levels defined by customer harm, agreed in advance, so nobody argues about size during the incident."),
+            (2, "incident-roles", "Who Is in Charge?", "response", "One incident lead, one fixer group, one person on communication and one scribe, named in the first five minutes."),
+            (3, "incident-communication", "Who Needs to Know?", "response", "Short, regular updates in fixed places for support, stores, leaders and customers, including a status page."),
+            (4, "escalation", "Who's Next If Nobody Answers?", "response", "Escalation policies: who is paged next, after how long, and how to pull in a specialist."),
+            (5, "vendor-escalation", "The Vendor Is Down at Peak", "response", "Know each vendor's support hours, contacts and status page before you need them, and plan for their outage."),
+            (6, "tiers-swarming", "Who Fixes What?", "response", "Support tiers for the common, swarming for the new: when to hand a problem on and when to pull people in."),
+            (7, "post-incident-review", "What Can We Learn from It?", "learning", "A blameless review: the timeline, what made sense at the time, what helped, and a few actions."),
+            (8, "problem-management", "Why Did It Really Happen?", "learning", "Problem management: look for causes and patterns across incidents, and fix the thing that keeps breaking."),
+            (9, "known-errors", "We Know the Bug, Now What?", "learning", "Known errors: write down the workaround where the desk can find it, until the real fix lands."),
+            (10, "action-items", "Why Do Action Items Never Close?", "learning", "Few, small, owned and dated actions, reviewed weekly until they're done or honestly dropped."),
+            (11, "incident-metrics", "Which Incident Numbers Mean Anything?", "learning", "Count customer harm and trends by severity; treat averages like MTTR with care."),
+            (12, "change-related-incidents", "Was It a Change?", "hard", "Ask “what changed?” first, and make recent changes visible to whoever is on call."),
+            (13, "client-incident-reports", "Telling a Business Client", "hard", "An incident report a business client can use: what they felt, why, what we did, what changes."),
+            (14, "major-incidents", "When Is It a Major Incident?", "hard", "A separate, practised procedure for the rare incident that hurts the whole business."),
+            (15, "near-misses", "What About the Near Misses?", "hard", "Collect the things that almost broke, because they are free lessons."),
+        ],
+    ),
+    dict(
+        key="ops-3", vol=3, title="Changing Things Safely", short="changing things safely",
+        series=2, book="The IT Operations Notebook", narrator="Eli", brand="IT operations notebook", book_no=5,
+        title_block=True, sheet_doodles="ops",
+        theme="theme-ops", fonts="IBM+Plex+Mono:wght@500;700", subject="IT operations",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="In operations",
+        term="Autumn term · 2030", weekdays=(1, 3), start=date(2030, 9, 3),
+        kicker="the IT operations notebook · book 5 · vol. 3",
+        story="<b>January 2027.</b> The Christmas failover cost 38 minutes and about 900 orders, and on 12 January Femke chose option B (ADR 0017): failover in under two minutes, and no changes in the windows that matter. Two months earlier a tidy-up of network rules, applied at the start of the evening peak, had stopped Dispatch for 25 minutes. Larder now makes about 200 changes a month, and 2027 adds a warehouse move store by store, two new cities and a picker app that ships every week. This volume follows Eli from <b>January to June 2027</b>: deciding which changes need a second look, when nothing may change, how to undo things, and keeping an ageing platform patched and supported.",
+        lead="Volume 3 of <span class=\"hl\">The IT Operations Notebook</span>: change enablement, release and deployment, testing and keeping the platform current, from the ITIL 4 practices with the SRE and DORA view of safe, frequent change. {n} notes in {c} collections: deciding about changes, safety nets, moving big things, and keeping it current. Every note follows <b>Eli</b> at <b>Larder</b> from January to June 2027, in the same months as Ana's warehouse migration and Sanne's Antwerp plan.",
+        blurb="Standard, normal and emergency changes, peer review instead of a change board, freezes, release vs deploy, risk scores, rollbacks, testing, DORA numbers, store cutovers, device rollouts, production access, patching and end-of-life.",
+        attrs=OPS_ATTRS, attrs_title="The nine operations ratings", attrs_side="what a good operations practice is judged on", ratings_h2="Operations ratings",
+        first_law="Most outages start with a change, and most changes are fine. Make the safe ones fast and boring, look twice at the risky few, and never make one you can't undo.",
+        disclaimer=ITIL_NOTE, ops=True,
+        handmade=set(),
+        collections=[
+            ("deciding", "Deciding about changes", "which changes need a second look, who looks, and when nothing changes"),
+            ("nets", "Safety nets", "undo it, test it, handle the urgent one, and count what fails"),
+            ("moving", "Moving big things", "store cutovers, new cities and a fleet of handhelds"),
+            ("current", "Keeping it current", "who may touch production, patching and end-of-life"),
+        ],
+        catalogue=[
+            (1, "change-types", "Which Changes Need a Second Look?", "deciding", "Sort changes into standard (pre-approved recipes), normal (reviewed) and emergency, so most go fast and a few get care."),
+            (2, "change-board", "Do We Need a Change Board?", "deciding", "Peer review by someone who knows the system beats a weekly board; keep a board only for the rare high-risk change."),
+            (3, "change-calendar", "When Must We Not Change Anything?", "deciding", "A change calendar with critical windows and freezes, enforced by the pipeline, with a clear way to make exceptions."),
+            (4, "release-vs-deploy", "Release or Deploy?", "deciding", "Deploying puts code in production; releasing lets people use it. Separate them, and each gets safer."),
+            (5, "change-risk", "How Risky Is This Change?", "deciding", "Five quick questions give a risk score that decides how much review, testing and timing a change needs."),
+            (6, "rollback-plans", "How Do We Undo It?", "nets", "Every change has a tested way back, or a written plan to go forward when there is no way back."),
+            (7, "validation", "Is It Really Ready?", "nets", "Test where it matters: in an environment that is honestly like production, and in production itself, carefully."),
+            (8, "emergency-changes", "The Urgent Fix at 17:00 on a Friday", "nets", "Emergency changes: fewer checks, never zero, two people, and the paperwork afterwards."),
+            (9, "dora-metrics", "Which Changes Fail?", "nets", "Four delivery numbers (frequency, lead time, failure rate, time to restore) show whether change is getting safer."),
+            (10, "store-cutover", "Cutting Over a Store", "moving", "A cutover plan for moving a store to a new system: shadow run, go / no-go, a quiet hour, and a way back."),
+            (11, "new-city-it", "A New City by Checklist", "moving", "The IT side of opening a city as a versioned runbook that gets shorter with every launch."),
+            (12, "device-rollouts", "Updating 120 Handhelds", "moving", "Roll out app versions to store devices in rings, outside store hours, with a way to stop and roll back."),
+            (13, "production-access", "Who May Touch Production?", "current", "Few standing permissions, access on request for a time, and a break-glass account that alarms when used."),
+            (14, "patching", "Patching Without Fear", "current", "A patch routine: automatic for the small, a monthly window for the rest, and machines rebuilt rather than repaired."),
+            (15, "end-of-life", "The Database Runs Out of Support", "current", "Keep a lifecycle register of versions and end-of-support dates, and upgrade on your schedule, not the vendor's."),
+        ],
+    ),
+    dict(
+        key="ops-4", vol=4, title="Promises &amp; Measures", short="promises and measures",
+        series=2, book="The IT Operations Notebook", narrator="Eli", brand="IT operations notebook", book_no=5,
+        title_block=True, sheet_doodles="ops",
+        theme="theme-ops", fonts="IBM+Plex+Mono:wght@500;700", subject="IT operations",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="In operations",
+        term="Winter term · 2031", weekdays=(1, 3), start=date(2031, 1, 7),
+        kicker="the IT operations notebook · book 5 · vol. 4",
+        story="<b>July 2027.</b> Larder runs four cities, the warehouse move is almost done, and Korenwolf's renewal talks start in the autumn, with Ruben asking for an availability number in the contract. Inside, Femke asks the question every head of operations dreads: “how reliable are we, actually?” Eli can count incidents, but he can't yet say what “working” means for each service, or how much unreliability is acceptable. This volume follows him from <b>July to December 2027</b>: SLIs, SLOs and error budgets, Korenwolf's SLA, measuring availability and capacity honestly, a vendor that goes quiet, switching systems off, Antwerp, and the Christmas peak.",
+        lead="Volume 4 of <span class=\"hl\">The IT Operations Notebook</span>: service level management, availability, capacity, measurement and reporting, from the ITIL 4 practices and SRE's SLIs, SLOs and error budgets. {n} notes in {c} collections: making promises, measuring honestly, and running the year. Every note follows <b>Eli</b> at <b>Larder</b> from July to December 2027, in the same months as Ana's capacity and availability work and Grace's service levels in the portal.",
+        blurb="SLIs, SLOs, error budgets, SLAs and OLAs, measuring availability and capacity, service reviews, dashboards, asking users, a quiet vendor, self-service, a second country, decommissioning and a peak.",
+        attrs=OPS_ATTRS, attrs_title="The nine operations ratings", attrs_side="what a good operations practice is judged on", ratings_h2="Operations ratings",
+        first_law="Promise a little less than you can do, measure it the way the user feels it, and decide in advance what happens when you miss.",
+        disclaimer=ITIL_NOTE, ops=True,
+        handmade=set(),
+        collections=[
+            ("promises", "Making promises", "what working means, how good is enough, and what we signed"),
+            ("measuring", "Measuring honestly", "availability, capacity, reports, dashboards and the users' own view"),
+            ("running", "Running the year", "vendors, self-service, a second country, switching off and a peak"),
+        ],
+        catalogue=[
+            (1, "slis", "What Do Users Count as Working?", "promises", "Service level indicators: measure each service the way its users experience it, as good events over all events."),
+            (2, "slos", "How Good Is Good Enough?", "promises", "Service level objectives: a target per indicator, below 100 %, chosen with the business and reviewed quarterly."),
+            (3, "error-budgets", "When Do We Stop Shipping Features?", "promises", "The error budget is the unreliability the SLO allows; a written policy says what happens when it runs out."),
+            (4, "slas", "What Did We Sign?", "promises", "An SLA is a contract with consequences; keep it looser than your SLO, define it precisely and report it automatically."),
+            (5, "olas", "What Do Teams Promise Each Other?", "promises", "Operational level agreements: the internal promises that make the external ones possible."),
+            (6, "measuring-availability", "How Available Were We, Really?", "measuring", "Count availability from real requests and outside checks, with rules for partial outages and maintenance."),
+            (7, "capacity-headroom", "Will Christmas Fit?", "measuring", "Watch headroom on the few limits that matter, alert before they run out, and review capacity before every peak."),
+            (8, "service-reviews", "The Monthly Service Review", "measuring", "One monthly report per service against its SLOs, and a short meeting with its owner that ends in decisions."),
+            (9, "dashboards", "Dashboards People Actually Open", "measuring", "Fewer dashboards, each answering one question for one audience, and delete the ones nobody opens."),
+            (10, "user-satisfaction", "Asking the Users", "measuring", "Ask stores, support and clients how IT feels to them: uptime can be green while people are unhappy."),
+            (11, "vendor-silence", "The Vendor Went Quiet", "running", "Supplier management for silent failures: watch what a vendor should send, review vendors quarterly, keep score."),
+            (12, "shift-left", "What Can the Stores Fix Themselves?", "running", "Move common fixes to the people closest to the problem, with safe self-service and short guides."),
+            (13, "second-country", "Operating in a Second Country", "running", "A new country changes support hours, languages, vendors, holidays and rules; list the differences before opening."),
+            (14, "decommissioning", "Switching a System Off", "running", "Retire systems on purpose: find users, announce, go read-only, keep the data you must, cancel, delete, update the catalogue."),
+            (15, "running-a-peak", "Running a Peak", "running", "Prepare for the busiest weeks with a readiness review, a freeze, extra cover and a daily check-in."),
+        ],
+    ),
+    dict(
+        key="ops-5", vol=5, title="Ready for the Worst", short="ready for the worst",
+        series=2, book="The IT Operations Notebook", narrator="Eli", brand="IT operations notebook", book_no=5,
+        title_block=True, sheet_doodles="ops",
+        theme="theme-ops", fonts="IBM+Plex+Mono:wght@500;700", subject="IT operations",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="In operations",
+        term="Spring term · 2031", weekdays=(1, 3), start=date(2031, 3, 4),
+        kicker="the IT operations notebook · book 5 · vol. 5",
+        story="<b>January 2028.</b> Larder runs seven cities and two countries, Christmas went quietly, and Korenwolf has renewed with a 99.8 % promise. Then, on 10 January, the first full restore of the database takes <b>3 hours 40 minutes</b>. Nobody had ever tried one end to end. It is a quiet week, and nothing is lost, but it shows how much of Larder's safety is assumed rather than tested. This volume follows Eli from <b>January to June 2028</b>: what matters most if everything fails, restores that work, paper fallback in the stores, game days, security operations, access and secrets, the cloud bill, risks, Korenwolf's supplier questionnaire, leaving vendors and keeping continuity plans alive.",
+        lead="Volume 5 of <span class=\"hl\">The IT Operations Notebook</span>: service continuity, information security in operation, risk and money, from the ITIL 4 practices and the SRE habit of practising failure. {n} notes in {c} collections: recovering, security operations, and risk, money and vendors. Every note follows <b>Eli</b> at <b>Larder</b> from January to June 2028, in the same months as Ana's disaster-recovery and cost work and Sanne's 2028 programme.",
+        blurb="Business impact, restore tests, paper fallback, game days, invoking the plan, live plans, security monitoring and incidents, access reviews, secrets, the cloud bill, risks, audits, vendor exits and the office.",
+        attrs=OPS_ATTRS, attrs_title="The nine operations ratings", attrs_side="what a good operations practice is judged on", ratings_h2="Operations ratings",
+        first_law="A backup you have never restored, a plan nobody has practised and a key nobody has rotated are hopes, not safeguards. Test the worst case on a quiet Tuesday, so it's boring on the bad day.",
+        disclaimer=ITIL_NOTE, ops=True,
+        handmade=set(),
+        collections=[
+            ("recover", "Recovering", "what matters most, restoring it, working without it, and practising"),
+            ("security", "Security operations", "seeing attacks, handling them, and keeping access and keys clean"),
+            ("risk", "Risk, money and vendors", "the bill, the risks, the auditor, the exit and the office"),
+        ],
+        catalogue=[
+            (1, "business-impact", "What Matters Most If Everything Fails?", "recover", "A business impact analysis gives each service a recovery time and a data-loss limit, set by what its loss costs."),
+            (2, "restore-tests", "Can We Actually Restore?", "recover", "A backup is only real once it has been restored, timed and checked, on a schedule."),
+            (3, "manual-fallback", "When the Picker App Is Down", "recover", "A practised way to keep working without the system: paper pick lists, hand dispatch and a clear switch-back."),
+            (4, "game-days", "Breaking Things on Purpose", "recover", "Game days and small chaos experiments: practise failures in daylight with a plan, a stop button and a review."),
+            (5, "invoking-the-plan", "Who Decides to Invoke the Plan?", "recover", "A named crisis team, clear triggers and a decision clock for switching to continuity plans."),
+            (6, "living-plans", "The Plan Nobody Has Read", "recover", "Keep continuity plans short, owned, tested and changed after every test, or they rot."),
+            (7, "security-monitoring", "Is the Alarm Real?", "security", "Collect the few logs that show attacks, keep them as long as needed, and alert on what matters."),
+            (8, "security-incidents", "When the Incident Is a Security Incident", "security", "The incident process with extra steps: preserve evidence, contain, involve legal, and notify on time."),
+            (9, "access-reviews", "Who Still Has Access?", "security", "A quarterly review where each owner confirms who has access to what, and removes the rest."),
+            (10, "secrets-rotation", "Rotating the Keys", "security", "Keep secrets in a vault, know their owners and ages, rotate them on a schedule, and practise a full rotation."),
+            (11, "cloud-costs", "What Does It Cost to Run?", "risk", "Service financial management: cost per service and per order, owners who see their bill, and waste removed monthly."),
+            (12, "ops-risk-register", "Which Risks Keep Us Up at Night?", "risk", "An operational risk register with owners, scores, actions and triggers, reviewed monthly."),
+            (13, "audit-evidence", "Prove It to the Auditor", "risk", "Collect evidence as you work, so questionnaires and audits are answered from records, not memory."),
+            (14, "vendor-exit", "Leaving a Vendor", "risk", "An exit plan per critical vendor: data, steps, time and cost, written while you're still friends."),
+            (15, "office-outage", "When the Office Is the Outage", "risk", "Laptops, sign-in, the office network and email are services too: plan for losing them."),
+        ],
+    ),
+    dict(
+        key="ops-6", vol=6, title="Building the Reliability Team", short="building the reliability team",
+        series=2, book="The IT Operations Notebook", narrator="Eli", brand="IT operations notebook", book_no=5,
+        title_block=True, sheet_doodles="ops",
+        theme="theme-ops", fonts="IBM+Plex+Mono:wght@500;700", subject="IT operations",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="In operations",
+        term="Summer term · 2031", weekdays=(1, 3), start=date(2031, 5, 6),
+        kicker="the IT operations notebook · book 5 · vol. 6",
+        story="<b>April 2028.</b> Larder has 30 engineers in five product teams, eight cities by September, and a plan for 60,000 orders a day. Operations still rests on Eli and Bram, and on product teams who carry pagers for systems they didn't choose to run. Femke and Ana agree that Larder needs a <b>reliability team</b> by the autumn, and Eli is asked to build it. This volume follows him from <b>April to October 2028</b>: deciding who runs what, readiness reviews, hiring, humane on-call, handing over the pager on 1 October, the first incident without him, tools, strategy, change, AI and growing people, the last part of making himself unnecessary at 3 a.m.",
+        lead="Volume 6 of <span class=\"hl\">The IT Operations Notebook</span>, the last: building and leading an operations team, from the ITIL 4 practices for workforce, strategy, improvement and organisational change, and SRE's ways of shaping teams and engagement. {n} notes in {c} collections: shaping the team, handing over, setting direction, and leading. Every note follows <b>Eli</b> at <b>Larder</b> from April to October 2028, in the same months as Ana's last notebook.",
+        blurb="Who runs what, production readiness, hiring SREs, humane on-call, handing over the pager, early life support, automation, tools, maturity, strategy, improvement, change, AI, careers and making it yours.",
+        attrs=OPS_ATTRS, attrs_title="The nine operations ratings", attrs_side="what a good operations practice is judged on", ratings_h2="Operations ratings",
+        first_law="The goal was never to be the one who keeps it running. It was to build something that keeps running, and people who keep improving it, without you.",
+        disclaimer=ITIL_NOTE, ops=True,
+        handmade=set(),
+        collections=[
+            ("team", "Shaping the team", "who runs what, who joins, and an on-call people can live with"),
+            ("handover", "Handing over", "readiness, the pager, and the weeks after"),
+            ("direction", "Setting direction", "what to automate, which tools, where we stand and where we're going"),
+            ("leading", "Leading", "improvement that lasts, change, AI, careers and making it yours"),
+        ],
+        catalogue=[
+            (1, "who-runs-what", "Who Runs What?", "team", "Choose per service: the team that builds it runs it, or a reliability team does, with clear terms either way."),
+            (2, "hiring-sres", "Hiring the First SREs", "team", "Hire for curiosity, calm and coding, with a work sample that looks like the real job."),
+            (3, "humane-on-call", "On-Call People Can Live With", "team", "Measure on-call load, cap it, pay and rest fairly, and fix the pages instead of toughening the people."),
+            (4, "production-readiness", "Is This Service Ready for Production?", "handover", "A production readiness review before a team takes on a service: SLOs, alerts, runbooks, capacity, a way back."),
+            (5, "pager-handover", "Handing Over the Pager", "handover", "Move on-call responsibility in steps: shadow, reverse shadow, game days, then a date, with a way back."),
+            (6, "early-life-support", "Did the Handover Work?", "handover", "Early life support: a few weeks of extra help and close watching after a handover, with an exit test."),
+            (7, "automation-strategy", "What to Automate Next", "direction", "Choose automation by toil saved and risk removed, keep a toil budget, and automate the whole job, not half."),
+            (8, "ops-toolset", "Which Tools Do We Really Need?", "direction", "Fewer tools, each with an owner and a job; consolidate overlaps and check what each one costs and saves."),
+            (9, "maturity-check", "Where Are We Weak?", "direction", "A short, honest maturity check per practice, done together, to choose what to improve next."),
+            (10, "ops-strategy", "Where Are We Going?", "direction", "An operations strategy on a page and a roadmap tied to the business plan."),
+            (11, "improvement-register", "Continual Improvement That Continues", "leading", "One improvement register for everything, a small budget of time, and a rhythm that outlives the enthusiasm."),
+            (12, "leading-change", "Leading Change in How Teams Work", "leading", "Change how teams work with a reason, a pilot, help, and patience; people adopt what helps them."),
+            (13, "ai-in-ops", "AI in Operations: Where It Helps, Where It Lies", "leading", "Use AI for drafts, summaries and search, never as the last word on production; check every fact."),
+            (14, "growing-ops-engineers", "Growing Operations Engineers", "leading", "A career path, coaching and real responsibility, so people grow into the jobs you used to do."),
+            (15, "making-it-yours", "Making It Yours", "leading", "Look back at the whole book, pick what fits your place, and start where you are."),
+        ],
+    ),
+    # ------------------------------------------------------------ Series 5 · On the Client's Floor (docs/PLAN-vendor-side.md)
+    dict(
+        key="vendor-1", vol=1, title="Winning the Work", short="winning the work",
+        series=5, book="On the Client's Floor", narrator="Ines", brand="on the client's floor", book_no=1,
+        title_block=True, vendor=True, css=("vendor.css",),
+        theme="theme-vendor", fonts="Archivo+Narrow:wght@500;700&family=IM+Fell+English+SC", subject="the vendor side",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On Lodestar",
+        attrs=VENDOR_ATTRS, attrs_title="The nine vendor ratings", attrs_side="what a move on the vendor side is judged on", ratings_h2="Vendor ratings",
+        disclaimer=VENDOR_NOTE, handmade=set(),
+        term="Spring 2027 · the bid", weekdays=(0,), start=date(2027, 2, 1),
+        kicker="on the client's floor · notes from the vendor side · vol. 1",
+        story="<b>February 2027.</b> MetroVolt, the city's electricity distributor, has just cancelled <b>Project Orion</b>: three years, three lost project leads, £2.4m over budget, and nothing live. Its customers still live in <b>MAVIS</b>, a system written in 1997. On <b>3 February</b> MetroVolt publishes a tender for <b>Lodestar</b>, Orion's replacement. At <b>Wrenfield Digital</b>, an 80-person consultancy in Leeds, Ines Duarte is the lead architect. She has never bid for anything this big. Neither has Wrenfield. This volume follows the bid from the day the tender lands to the day MetroVolt picks a winner: <b>3 February to 6 May 2027</b>.",
+        lead="Volume 1 of <span class=\"hl\">On the Client's Floor</span>: winning the work, seen from the vendor's side of the table. {n} notes in {c} collections: reading the tender, shaping the answer, competing, and closing. Each note is a <b>question a vendor's architect has to answer</b>, with <b>both sides of the table</b>, <b>what the contract says</b>, an <b>account health</b> dial, a <b>pressure gauge</b> and a <b>template to copy</b>. Every note follows <b>Ines</b> and the Wrenfield team at <b>MetroVolt</b>, the same company as in <i>The Darkside of the Corporation</i>, seen from outside.",
+        blurb="Reading a tender, bid or no bid, clarification questions, a solution on two pages, assumptions, estimating, pricing models, the incumbent, a big rival, a sales promise, the orals, references, the final offer and the handover to delivery.",
+        first_law="On the vendor side, everything you don't write down, you've agreed to carry. Everything you write down, you'll be held to. Write carefully.",
+        collections=[
+            ("reading", "Reading the tender", "what they asked for, what they meant, and whether to try"),
+            ("shaping", "Shaping the answer", "a design, its assumptions, an estimate and a price"),
+            ("competing", "Up against the others", "the incumbent, the big rival, our own sales team, and the room"),
+            ("closing", "Closing the deal", "references, the final offer, and handing the promises to delivery"),
+        ],
+        catalogue=[
+            (1, "reading-a-tender", "How Do I Read a Tender?", "reading", "Read it three times: for how it's scored, for the work hidden in every “will”, and for the history nobody wrote down."),
+            (2, "bid-no-bid", "Should We Even Bid?", "reading", "A bid costs real money. Decide with a scorecard, a reason to win and your conditions, before anyone falls in love with it."),
+            (3, "who-wrote-the-tender", "Who Wrote This Tender?", "reading", "Requirements copied from someone else's design tell you who the client has been talking to. Ask openly, then decide if you can still win."),
+            (4, "clarification-questions", "What Do We Ask Before We Answer?", "reading", "Every bidder sees every answer: ask what shrinks your risk, word it so it gives nothing away, and read the other bidders' questions."),
+            (5, "solution-on-two-pages", "How Do I Design on Two Pages of Facts?", "shaping", "Compare three honest options, pick one you can draw on a page, and say what you must learn before you commit."),
+            (6, "assumptions", "What Are We Assuming?", "shaping", "Write down the world your price assumes: assumptions, dependencies and exclusions, each with a number, an owner, a test and a consequence."),
+            (7, "estimating-in-fog", "How Long Will It Really Take?", "shaping", "Estimate in ranges, check them against what similar projects really took (including the client's own failure), and price the range, not the hope."),
+            (8, "pricing-models", "Fixed Price, or Time and Materials?", "shaping", "Match the model to what you know: paid discovery while it's foggy, a fixed price once you can see, a rate card for the rest."),
+            (9, "the-incumbent", "What About the Vendor Already Here?", "competing", "The incumbent knows the systems and the people, and you'll need their interfaces. Treat them as a future partner, not an enemy."),
+            (10, "big-consultancy", "How Do We Compete with a Big Consultancy?", "competing", "Don't fight a famous name on size. Win on named people, specific knowledge and a plan the client can check, and never attack their past."),
+            (11, "sales-already-promised", "What If Sales Already Promised?", "competing", "When someone has already promised a date, re-anchor it in public with a smaller first delivery, before the promise becomes the plan."),
+            (12, "the-orals", "How Do We Win the Room?", "competing", "Bring the people who'll do the work, show your thinking on the client's own data, and answer the hardest question before it's asked."),
+            (13, "references", "Who Will Vouch for Us?", "closing", "References win on specifics. Brief your referees on the client's real worries, and let them be honest."),
+            (14, "best-and-final-offer", "What Do We Give Away in the Final Offer?", "closing", "Trade, don't cut: every pound off the price buys back scope, risk or time, and the contingency goes last."),
+            (15, "bid-to-delivery", "Who Remembers What We Promised?", "closing", "Hand the bid to the delivery team with a promises register, named people and the assumptions, so nobody discovers the deal in month six."),
+        ],
+    ),
+    dict(
+        key="vendor-2", vol=2, title="Signing and Starting", short="signing and starting",
+        series=5, book="On the Client's Floor", narrator="Ines", brand="on the client's floor", book_no=1,
+        title_block=True, vendor=True, css=("vendor.css",),
+        theme="theme-vendor", fonts="Archivo+Narrow:wght@500;700&family=IM+Fell+English+SC", subject="the vendor side",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On Lodestar",
+        attrs=VENDOR_ATTRS, attrs_title="The nine vendor ratings", attrs_side="what a move on the vendor side is judged on", ratings_h2="Vendor ratings",
+        disclaimer=VENDOR_NOTE, handmade=set(),
+        term="Summer 2027 · the start", weekdays=(0,), start=date(2027, 5, 10),
+        kicker="on the client's floor · notes from the vendor side · vol. 2",
+        story="<b>May 2027.</b> On <b>6 May</b> MetroVolt names Wrenfield preferred bidder for Lodestar. The same morning, MetroVolt announces <b>Project Horizon</b>: a 15 % cost cut, about 600 roles, led by Rupert Thorne with <b>Vexmoor Consulting</b>, the firm Wrenfield has just beaten, as his advisers. Lodestar moves under Horizon's transformation office, and the contract has to be approved all over again. This volume follows Ines and the team from <b>May to September 2027</b>: the contract, the six weeks it stalls, the first day on floor 19, the laptops that take 23 days, the kick-off, and the baseline everything will be measured against.",
+        lead="Volume 2 of <span class=\"hl\">On the Client's Floor</span>: signing the contract and starting the work. {n} notes in {c} collections: the paper, arriving on the client's floor, and working as one team across three firms. Each note is a <b>question a vendor's architect has to answer</b>, with <b>both sides of the table</b>, <b>what the contract says</b>, an <b>account health</b> dial, a <b>pressure gauge</b> and a <b>template to copy</b>. Every note follows <b>Ines</b> and the Wrenfield team at <b>MetroVolt</b>.",
+        blurb="The statement of work, acceptance criteria, change control, a stalled signature, working at risk, day one on site, access, the client's real power map, the kick-off, governance, a multi-vendor RACI, the client's programme director, one team, the first status report and the baseline.",
+        first_law="The contract is what you'll argue about. The relationship is what decides whether you have to. Build both in the first ninety days.",
+        collections=[
+            ("paper", "The paper", "what we signed, how it changes, and what to do while it isn't signed"),
+            ("arriving", "Arriving", "day one, access, the real power map, the kick-off and who decides"),
+            ("together", "Two firms, one team", "other vendors, the client's people, honest reporting and the baseline"),
+        ],
+        catalogue=[
+            (1, "statement-of-work", "What Does the Contract Actually Say?", "paper", "Read the statement of work clause by clause, with the delivery team, and fix the five clauses that decide every future argument."),
+            (2, "acceptance-criteria", "How Will We Know It's Done?", "paper", "Acceptance criteria both sides can test: what is checked, by whom, how long they have, and what happens if they say nothing."),
+            (3, "change-control", "How Do We Change the Deal Without a War?", "paper", "A change process that's quick for small things and fair for big ones, so changes are raised early instead of fought over late."),
+            (4, "contract-stalls", "What If the Signature Stalls?", "paper", "When a reorg freezes your contract, find the new decision path, give the new people what they need, and keep the team together."),
+            (5, "working-at-risk", "Should We Start Before It's Signed?", "paper", "Work at risk only with a written letter of intent, a cap, a scope and a date you stop; otherwise you're lending money to a client."),
+            (6, "day-one", "What Do We Do on Day One?", "arriving", "Arrive with a first-week plan, meet the people who'll judge you, and learn the building before you try to change anything."),
+            (7, "access-purgatory", "Why Can't We Log In?", "arriving", "Treat laptops, accounts and badges as a dependency with dates, track the cost of every idle day, and work around it in public."),
+            (8, "mapping-the-client", "Who Really Decides Here?", "arriving", "Draw the client's real power map from outside: who decides, who blocks, who's listened to, and what each of them needs."),
+            (9, "the-kick-off", "How Do We Set the Rules at Kick-off?", "arriving", "Use the kick-off to agree how you'll work, decide and disagree, and walk through the assumptions in front of everyone."),
+            (10, "governance", "Who Decides What, and Where?", "arriving", "One steering group, one design authority, working groups and a decision log, with clear rights and an escalation path."),
+            (11, "multi-vendor-raci", "Who Does What When Three Firms Share a Project?", "together", "A responsibility chart for every shared interface, written with the other vendors, so a failure has an owner and not a blame war."),
+            (12, "client-counterpart", "How Do We Earn the Programme Director's Trust?", "together", "No surprises, early bad news, kept small promises and a weekly hour together turn a wary client into a working partner."),
+            (13, "one-team", "How Do Two Companies Work as One Team?", "together", "Mixed teams, shared tools and one set of rituals, while staying honest about who is paid by whom."),
+            (14, "first-status-report", "What Goes in the First Status Report?", "together", "The first report sets the tone: honest colours, facts before adjectives, and the bad news in the first line."),
+            (15, "the-baseline", "What Are We Measured Against?", "together", "Agree the baseline in writing: scope, plan, price, risks and assumptions, signed, so every later change is measured against the same thing."),
+        ],
+    ),
+    dict(
+        key="vendor-3", vol=3, title="Digging Up the Legacy", short="digging up the legacy",
+        series=5, book="On the Client's Floor", narrator="Ines", brand="on the client's floor", book_no=1,
+        title_block=True, vendor=True, css=("vendor.css",),
+        theme="theme-vendor", fonts="Archivo+Narrow:wght@500;700&family=IM+Fell+English+SC", subject="the vendor side",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On Lodestar",
+        attrs=VENDOR_ATTRS, attrs_title="The nine vendor ratings", attrs_side="what a move on the vendor side is judged on", ratings_h2="Vendor ratings",
+        disclaimer=VENDOR_NOTE, handmade=set(),
+        term="Autumn 2027 · discovery", weekdays=(0,), start=date(2027, 9, 6),
+        kicker="on the client's floor · notes from the vendor side · vol. 3",
+        story="<b>September 2027.</b> The baseline is signed: pilot on 6 March 2028, wave 1 on 24 June. Wrenfield finally has access to <b>MAVIS</b>, MetroVolt's 1997 customer system, and fourteen weeks of discovery to find out what's really inside it. The bid assumed no more than <b>5 %</b> of customer records would fail the address check; MetroVolt's sample showed 7.8 %. Vexmoor's assurance note has already called the migration plan “optimistic”. This volume follows Ines and the team from <b>September 2027 to February 2028</b>: four million lines of COBOL, the man who knows them, a batch job that does more than anyone said, the real data, a plan to strangle MAVIS, and the change request nobody wanted.",
+        lead="Volume 3 of <span class=\"hl\">On the Client's Floor</span>: discovery in a legacy estate, and telling the client what you found. {n} notes in {c} collections: inside MAVIS, the data and its seams, bad news told honestly, and a plan that survives it. Each note is a <b>question a vendor's architect has to answer</b>, with <b>both sides of the table</b>, <b>what the contract says</b>, an <b>account health</b> dial, a <b>pressure gauge</b> and a <b>template to copy</b>.",
+        blurb="Software archaeology, the person who knows, reading code nobody owns, the 02:10 job, data profiling, mainframe integration, the billing interface, a strangler plan, the discovery report, bad news, the honest change request, security reviews, migration waves, being overruled and design authority day.",
+        first_law="Discovery is paid for so that bad news arrives early, in writing, with a price. A discovery that finds nothing either didn't look or didn't say.",
+        collections=[
+            ("inside", "Inside MAVIS", "what's really there, who knows it, and what the night batch does"),
+            ("seams", "The data and its seams", "the real data, getting it out, the billing boundary and the plan"),
+            ("news", "Bad news, honestly", "the report, the telling, the change request and the security review"),
+            ("plan", "A plan that survives", "moving customers in waves, being overruled, and getting the design approved"),
+        ],
+        catalogue=[
+            (1, "software-archaeology", "What Is Actually in There?", "inside", "Map a legacy system from what it does (logs, schedules, data), not from what its documents say, and colour it by what's used."),
+            (2, "the-person-who-knows", "Who Knows How It Really Works?", "inside", "Capture the expert's knowledge without draining them: pair, record, write answers once, and plan their succession with them."),
+            (3, "reading-legacy-code", "How Do We Read Code Nobody Owns?", "inside", "Pin down what old code does with characterisation tests on real inputs before you trust any explanation of it."),
+            (4, "the-0210-job", "What Does the 02:10 Job Really Do?", "inside", "Trace a batch job step by step, by its inputs and outputs, and find the side effects everyone relies on and nobody wrote down."),
+            (5, "profiling-the-data", "How Bad Is the Data, Really?", "seams", "Profile all the data, not a sample: completeness, validity, duplicates and consistency, with numbers per district and per field."),
+            (6, "mainframe-integration", "How Do We Get Data Out of a Mainframe?", "seams", "Choose change capture by testing it: database logs, timestamps or snapshots, and the copybooks, encodings and packed numbers in between."),
+            (7, "billing-interface", "What Does the Billing System Really Need?", "seams", "Treat another vendor's interface as a contract: test it, version it, and put a translation layer between their model and yours."),
+            (8, "strangler-plan", "How Do We Strangle a Customer System?", "seams", "Move customers district by district, with one system of record per account, a way back, and reconciliation every night."),
+            (9, "discovery-report", "What Do We Say When Discovery Changes Everything?", "news", "A discovery report that leads with findings and numbers, explains what they mean, and offers priced options with a recommendation."),
+            (10, "delivering-bad-news", "How Do We Tell Them It's Worse Than They Think?", "news", "Tell bad news in person, in the right order, to the people who own the problem, with evidence and without blame."),
+            (11, "honest-change-request", "How Do We Ask for More Money Honestly?", "news", "A change request built from the contract's own assumptions and rates, line by line, with options, and room to negotiate in the open."),
+            (12, "security-review", "Why Does Security Take Twelve Weeks?", "news", "Start the security and data-protection reviews early, bring evidence in their format, and treat the reviewers as designers, not gatekeepers."),
+            (13, "migration-waves", "How Do We Move 380,000 Customers?", "plan", "A pilot, rehearsals, an exception queue and a reconciliation for every wave, so each move is boring because it was practised."),
+            (14, "overruled", "What If the Client Overrules Our Design?", "plan", "Disagree in writing, with the cost, then commit to the client's decision and make it work; record the dissent, not a grudge."),
+            (15, "design-authority", "How Do We Get the Design Approved?", "plan", "Pre-wire each member, send a decision paper, not a deck, and leave the meeting with conditions you can meet."),
+        ],
+    ),
+    dict(
+        key="vendor-4", vol=4, title="Delivery Under Fire", short="delivery under fire",
+        series=5, book="On the Client's Floor", narrator="Ines", brand="on the client's floor", book_no=1,
+        title_block=True, vendor=True, css=("vendor.css",),
+        theme="theme-vendor", fonts="Archivo+Narrow:wght@500;700&family=IM+Fell+English+SC", subject="the vendor side",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On Lodestar",
+        attrs=VENDOR_ATTRS, attrs_title="The nine vendor ratings", attrs_side="what a move on the vendor side is judged on", ratings_h2="Vendor ratings",
+        disclaimer=VENDOR_NOTE, handmade=set(),
+        term="2028 · the build and the night", weekdays=(0,), start=date(2028, 3, 6),
+        kicker="on the client's floor · notes from the vendor side · vol. 4",
+        story="<b>March 2028.</b> The change request is agreed: £700k and three months more, with MetroVolt's own team cleaning a third of the bad addresses. The new baseline: the pilot (20,000 customers) on <b>5 June 2028</b>, wave 1 (380,000) on the night of <b>Saturday 23 September</b>. The design is approved. Now Wrenfield has to build it, test it in environments it doesn't control, connect it to Halvorsen, and survive a steering committee where Vexmoor's assurance has become something closer to a rival bid. This volume follows the team from <b>March to September 2028</b>, ending on wave 1 night.",
+        lead="Volume 4 of <span class=\"hl\">On the Client's Floor</span>: delivering under pressure, from the build to the cutover night. {n} notes in {c} collections: telling the truth about progress, other people's moves, holding the line, and the night itself. Each note is a <b>question a vendor's architect has to answer</b>, with <b>both sides of the table</b>, <b>what the contract says</b>, an <b>account health</b> dial, a <b>pressure gauge</b> and a <b>template to copy</b>.",
+        blurb="The watermelon report, a RAID log people read, scope through the side door, multi-vendor blame, the rival as adviser, the steering ambush, escalation, re-planning, test environments, defect triage, quoting the contract, protecting margin, cutover planning, go / no-go and wave 1 night.",
+        first_law="Under pressure, every shortcut looks reasonable on the day you take it. Write down which corners you won't cut before the pressure arrives.",
+        collections=[
+            ("truth", "Telling the truth", "status that isn't a watermelon, a risk log people read, and scope that creeps"),
+            ("moves", "Other people's moves", "a vendor's blame, a rival's review, an ambush, and going over heads"),
+            ("line", "Holding the line", "re-planning, environments, defects, the contract and the margin"),
+            ("night", "The night", "the cutover plan, the go / no-go and wave 1"),
+        ],
+        catalogue=[
+            (1, "watermelon-report", "Why Is Everything Green Except the Truth?", "truth", "Status from measures, not moods: burn-up, test pass rates and reconciliation, so the colour can't be green outside and red inside."),
+            (2, "raid-log", "Is Anyone Reading the RAID Log?", "truth", "A short log of risks, assumptions, issues and dependencies, each with an owner, a date and a next step, reviewed every week in fifteen minutes."),
+            (3, "side-door-scope", "Where Did This Extra Work Come From?", "truth", "Catch the small requests that arrive by chat and corridor, count them, and route them through the change pool before they eat the plan."),
+            (4, "vendor-blame", "Whose Fault Is the Billing Failure?", "moves", "When another vendor blames you, go to the evidence together, under the interface agreement, and fix the cause before the blame."),
+            (5, "rival-adviser", "What Do We Do When Our Rival Advises the Client?", "moves", "Be transparent within the contract, ask the sponsor to define the reviewer's scope, protect your IP, and let the evidence answer."),
+            (6, "steering-ambush", "What Happens When Steering Turns on Us?", "moves", "Don't fight a surprise slide in the room: ask for the data, promise an answer in 48 hours, and pre-wire every steering after that."),
+            (7, "escalation", "When Do We Go Over Their Heads?", "moves", "Escalate up a ladder agreed in advance, tell the person first, bring a proposal not a complaint, and come back down quickly."),
+            (8, "re-planning", "How Do We Re-plan Without Lying?", "line", "Re-plan from the critical path and real velocity, show the options (scope, date, people), and never hide the slip in the buffer."),
+            (9, "test-environments", "Why Do the Test Environments Never Work?", "line", "Count the test days lost, book shared environments like a resource, and test what you can without them."),
+            (10, "defect-triage", "Is It a Defect or a Change?", "line", "A triage board with agreed definitions: a defect breaks the agreed criteria; a wish is a change, however it's labelled."),
+            (11, "quoting-the-contract", "When Do We Quote the Contract?", "line", "Read the contract aloud rarely: calmly, with an offer, and only when the relationship can't settle it."),
+            (12, "protecting-margin", "How Do We Protect the Margin?", "line", "Protect the margin by managing scope, staffing and change, never by cutting testing, quality or honesty."),
+            (13, "cutover-plan", "What Happens on the Night?", "night", "A minute-by-minute cutover runbook, rehearsed three times, with named roles, checkpoints and a point of no return."),
+            (14, "go-no-go", "Do We Go?", "night", "Go / no-go against criteria agreed weeks before, decided by the sponsor, with the dissent recorded."),
+            (15, "wave-one-night", "What Did the Night Teach Us?", "night", "Run the night by the book, fix what the book didn't foresee, and write down what happened before anyone sleeps."),
+        ],
+    ),
+    dict(
+        key="vendor-5", vol=5, title="Other People's Politics", short="other people's politics",
+        series=5, book="On the Client's Floor", narrator="Ines", brand="on the client's floor", book_no=1,
+        title_block=True, vendor=True, css=("vendor.css",),
+        theme="theme-vendor", fonts="Archivo+Narrow:wght@500;700&family=IM+Fell+English+SC", subject="the vendor side",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On Lodestar",
+        attrs=VENDOR_ATTRS, attrs_title="The nine vendor ratings", attrs_side="what a move on the vendor side is judged on", ratings_h2="Vendor ratings",
+        disclaimer=VENDOR_NOTE, handmade=set(),
+        term="Autumn 2028 · hypercare", weekdays=(0,), start=date(2028, 10, 2),
+        kicker="on the client's floor · notes from the vendor side · vol. 5",
+        story="<b>October 2028.</b> Wave 1 is live: 379,997 customers moved off MAVIS on the night of 23 September, and the first bills went out without complaints. Wrenfield is in eight weeks of <b>hypercare</b>, then a 60-day warranty. Outside the glass, MetroVolt is changing: Rupert Thorne's transformation office wants more, faster, for less; Gareth Pound wants the meter data; Vexmoor wants phase 2. This volume follows Ines from <b>October 2028 to January 2029</b>: a sponsor who moves on, an executive who wants a slide, a client who shouts, a rival on the same floor, and a request to change the numbers.",
+        lead="Volume 5 of <span class=\"hl\">On the Client's Floor</span>: the politics you can see from the vendor's desk but not touch. {n} notes in {c} collections: reading the room, holding your ground, people (theirs and ours), and integrity under pressure. Each note is a <b>question a vendor's architect has to answer</b>, with <b>both sides of the table</b>, <b>what the contract says</b>, an <b>account health</b> dial, a <b>pressure gauge</b> and a <b>template to copy</b>.",
+        blurb="Reading the client's politics, a sponsor who moves on, the budget holder, an executive's slide, saying no, liked or trusted, gifts and the register, sharing a floor with the rival, staff who fear for their jobs, managing up in your own firm, protecting your team, the client who shouts, what you overhear, being asked to change the numbers, and building a champion.",
+        first_law="You're a guest in the client's politics. Notice everything, take sides with nobody, and never let anyone else's ambitions change your numbers.",
+        collections=[
+            ("room", "Reading the room", "politics from outside, a new sponsor, the budget holder and an executive's slide"),
+            ("ground", "Holding your ground", "saying no, trust, gifts and a rival at the next desk"),
+            ("people", "People, theirs and ours", "frightened staff, your own boss, your team, and a client who shouts"),
+            ("integrity", "Integrity under pressure", "what you overhear, the numbers, and a champion"),
+        ],
+        catalogue=[
+            (1, "reading-client-politics", "How Do We Read the Client's Politics from Outside?", "room", "Read the signals (meetings, budgets, seating, announcements), update the power map, and use it to avoid surprises, never to play."),
+            (2, "sponsor-moves", "What If Our Sponsor Moves On?", "room", "Thank the old sponsor and keep them as an ally; brief the new one in a page within two weeks, learn what they measure, and re-confirm the decisions."),
+            (3, "budget-holder", "What About the Stakeholder Who Holds the Budget?", "room", "When an opponent gains budget power, find what they need, give them credit and a shared win, and keep everything in writing."),
+            (4, "executive-slide", "What If an Executive Wants a Slide?", "room", "Give senior people the slide they need, built from facts, with credit to the people who did the work, and let them claim the rest."),
+            (5, "saying-no", "How Do We Say No to a Client?", "ground", "Say no to the request, yes to the need: explain why, offer what you can do, and put both in writing."),
+            (6, "liked-or-trusted", "Do They Like Us, or Trust Us?", "ground", "Being liked opens doors; being trusted keeps them open. Earn trust with accurate numbers, kept promises and early bad news."),
+            (7, "gifts-and-dinners", "Can We Take the Client to the Football?", "ground", "Know the client's gifts and hospitality rules, keep a register, and say no to anything during a procurement, however friendly."),
+            (8, "sharing-a-floor", "How Do We Share a Floor with the Rival?", "ground", "Be polite, careful and unremarkable: clean desks, private screens, no corridor talk, no poaching, and a kitchen kettle you share."),
+            (9, "staff-fear", "What If Client Staff Fear We'll Take Their Jobs?", "people", "Don't promise what you can't, say what you know, involve them in what comes next, and send job questions to the client."),
+            (10, "managing-up-own-firm", "How Do We Manage Up in Our Own Firm?", "people", "Give your own leadership the same honesty as the client: a weekly note, the numbers, options, and the decisions only they can make."),
+            (11, "protecting-the-team", "How Do We Protect Our Team from the Client?", "people", "Set boundaries for how your team is treated, route demands through one door, and step in at once when someone crosses the line."),
+            (12, "client-who-shouts", "What Do We Do When the Client Shouts?", "people", "Stay calm, acknowledge the worry, answer with facts, follow up in writing, and talk about the shouting privately, later."),
+            (13, "what-you-overhear", "What Do We Do with What We Overhear?", "integrity", "Treat what you overhear as confidential: don't repeat it, don't trade on it, and if it matters legally, get advice."),
+            (14, "change-the-numbers", "What If the Client Asks Us to Change the Numbers?", "integrity", "Refuse to misstate facts, offer an accurate way to say what they want to say, and put your refusal and your offer in writing."),
+            (15, "building-a-champion", "How Do We Build a Champion?", "integrity", "Champions are made by evidence they can repeat, credit they can share and promises you keep; never ask them to lobby improperly."),
+        ],
+    ),
+    dict(
+        key="vendor-6", vol=6, title="The Cost and the Ending", short="the cost and the ending",
+        series=5, book="On the Client's Floor", narrator="Ines", brand="on the client's floor", book_no=1,
+        title_block=True, vendor=True, css=("vendor.css",),
+        theme="theme-vendor", fonts="Archivo+Narrow:wght@500;700&family=IM+Fell+English+SC", subject="the vendor side",
+        problem_h2="The situation", related_h3="Related notes", map_caption="Translating it to the job", map_col="On Lodestar",
+        attrs=VENDOR_ATTRS, attrs_title="The nine vendor ratings", attrs_side="what a move on the vendor side is judged on", ratings_h2="Vendor ratings",
+        disclaimer=VENDOR_NOTE, handmade=set(),
+        term="2029 · the ending", weekdays=(0,), start=date(2029, 1, 8),
+        kicker="on the client's floor · notes from the vendor side · vol. 6",
+        story="<b>January 2029.</b> Wave 1 has run for four months. The warranty is ending, and MetroVolt is preparing a tender for <b>phase 2</b>: waves 2 to 4, the rest of MAVIS's 2.3 million customers, about £9m. Vexmoor will bid. So will Wrenfield, if it can. But eighteen months on a fixed price have cost something: Hana hasn't had a weekend since August, and Ines's own 23:00 notes have got longer. This volume follows the team from <b>January to June 2029</b>: the cost, the handover, the next bid, and the last day on floor 19.",
+        lead="Volume 6 of <span class=\"hl\">On the Client's Floor</span>: what the work cost, handing it over, the next deal, and the ending. {n} notes in {c} collections. Each note is a <b>question a vendor's architect has to answer</b>, with <b>both sides of the table</b>, <b>what the contract says</b>, an <b>account health</b> dial, a <b>pressure gauge</b> and a <b>template to copy</b>.",
+        blurb="Stress on a vendor team, your own late nights, sustainable pace, rotating people off, the warranty, knowledge transfer, a lessons session both sides attend, the handover architecture, the phase 2 bid, waiting to win or lose, the case study, when to walk away, leaving well, what the vendor side teaches, and the last day on the client's floor.",
+        first_law="The project ends; the people don't. Hand the work over so it lasts, and hand your team back in better shape than you borrowed them.",
+        collections=[
+            ("cost", "The cost", "a tired team, your own nights, pace and rotation"),
+            ("handover", "Handing it over", "warranty, knowledge, lessons and the architecture they'll keep"),
+            ("next", "The next deal", "the phase 2 bid, the wait, the story and when to walk away"),
+            ("ending", "Endings", "leaving well, what it taught, and the last day"),
+        ],
+        catalogue=[
+            (1, "team-stress", "How Do We Notice Stress on a Vendor Team?", "cost", "Look for the quiet signs (hours, tone, silence, weekends), ask directly in private, and change the work, not just the mood."),
+            (2, "own-late-nights", "What About My Own 23:00 Notes?", "cost", "The leader's stress spreads. Notice your own signs, say them to someone, and set limits you'll actually keep."),
+            (3, "sustainable-pace", "Can a Fixed-Price Team Keep a Sustainable Pace?", "cost", "Measure hours worked against hours booked, cap overtime, plan recovery after peaks, and make pace part of the plan, not a favour."),
+            (4, "rotating-off", "How Do We Rotate Someone Off an Account?", "cost", "Rotate people before they break: agree it with them and the client, hand over properly, and keep the door open for their return."),
+            (5, "warranty", "What Do We Owe After Go-Live?", "handover", "Know exactly what the warranty covers, triage every report against it, fix fast, and close the warranty in writing."),
+            (6, "knowledge-transfer", "How Do We Hand It Over So It Sticks?", "handover", "Transfer knowledge by doing, not presenting: shadow, reverse-shadow, runbooks, and a sign-off by the people who'll be called at night."),
+            (7, "joint-lessons", "How Do We Run a Lessons Session Both Sides Attend?", "handover", "A blameless session with client, vendors and the people who did the work, ending in a few lessons with owners, not a list nobody reads."),
+            (8, "handover-architecture", "What Should the Handover Architecture Say?", "handover", "Hand over the why as well as the what: a one-page picture, the decisions and their reasons, the known debts, and how to change it safely."),
+            (9, "phase-2-bid", "How Do We Bid Against the Rival for the Next Phase?", "next", "Bid from evidence: real velocity, real data, real lessons and a named team, and price the next phase on what you now know."),
+            (10, "win-or-lose", "How Do We Wait for the Decision?", "next", "Prepare for both outcomes: a plan for winning, a plan for handing over gracefully, and a team that knows both."),
+            (11, "case-study", "Can We Tell Lodestar's Story?", "next", "Tell the story with the client's permission, the hard parts included, and nothing published during a procurement."),
+            (12, "walking-away", "When Should We Walk Away?", "next", "Set walk-away conditions before you need them, test the deal against them calmly, and leave politely if it fails."),
+            (13, "leaving-well", "How Do We Leave Well?", "ending", "Thank people by name, finish what you promised, leave the documents tidy and the relationships intact."),
+            (14, "what-it-taught", "What Did the Vendor Side Teach Me?", "ending", "Write down what you learned while it's fresh: the rules you'd give your younger self."),
+            (15, "last-day", "The Last Day on Floor 19", "ending", "The last day: hand back the badge, say goodbye properly, and walk into whatever room you're asked to."),
+        ],
+    ),
+]
+# Planned volumes of Series 5 (see docs/PLAN-vendor-side.md).
+PLANNED_VENDOR = [
 ]
 
 # Planned journals and other work, shown on the landing page.
 PLANNED = [
-    (7, "AI App Patterns", "Retrieval-augmented generation, agents and tools, evaluation, guardrails and cost-aware LLM apps."),
+    (10, "AI App Patterns", "Retrieval-augmented generation, agents and tools, evaluation, guardrails and cost-aware LLM apps."),
 ]
 # Planned volumes of Series 2, book 1 (see docs/HANDOFF-solution-architect.md).
 PLANNED_2 = [
 ]
 PLANNED_PRODUCT = [
 ]
+# Planned volumes of Series 2, book 3 (see docs/HANDOFF-project-manager.md).
+PLANNED_PROJECT = [
+]
+# Planned volumes of Series 2, book 5 (see docs/HANDOFF-it-operations.md).
+PLANNED_OPS = [
+]
 FUTURE_LOG = [
-    ("Dec 2026", [("•", "Vol. 7 · AI App Patterns"), ("•", "Search across every journal")]),
+    ("Dec 2026", [("•", "Going-deeper chapters for Vols. 7 and 8: aggregates, bounded contexts, ports &amp; adapters"), ("•", "Search across every journal")]),
     ("Jan 2027", [("•", "One-page printable cheat sheet per collection")]),
-    ("Feb 2027", [("•", "Vol. 1 extra notes: Strangler Fig, Backpressure, Consistent Hashing")]),
-    ("Mar 2027", [("★", "Book 3 · <b>The Project Manager's Notebook</b> (Sanne, the Rotterdam launch): planning, estimation, risks and dependencies, delivery rhythms, status that tells the truth"), ("•", "Vol. 3 extra notes: Upserts, Bitemporal Data, Vector Indexes")]),
-    ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations"), ("•", "Vol. 4 extra notes: Fuzzing, Visual Regression, Chaos Experiments")]),
-    ("Mid 2027", [("•", "A Series 2 index: every Larder note from both books in one timeline")]),
-    ("Someday", [("•", "Extra notes for Vols. 2, 5 and 6: Debounce &amp; Throttle, Passkeys, Signed Webhooks, Chaos Engineering, Service Catalogues"), ("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
+    ("Mar 2027", [("•", "Cheat sheets for Book 3: PMBOK 8 on one page, earned value, critical path"), ("•", "Vol. 10 · AI App Patterns"), ("•", "A dimensional modelling cheat sheet for Vol. 9")]),
+    ("Apr 2027", [("★", "Book 4 · <b>The Client Manager's Notebook</b> (Mo and Korenwolf): expectations, scope change, reporting, workshops, difficult conversations")]),
+    ("Mid 2027", [("↓", "More deep dives: Observability &amp; SLOs, Multitenancy, History in the Warehouse"), ("•", "A Series 2 index: every Larder note from both books in one timeline")]),
+    ("Someday", [("•", "Quiz mode that remembers your score"), ("•", "A “compare two patterns” page")]),
 ]
 
 
@@ -853,7 +1775,40 @@ PRODUCT_DOODLES = (
     '<rect class="d d-thin f-blue" x="160" y="38" width="30" height="24"/><circle class="d f-red" cx="120" cy="10" r="6"/></g></svg>'
     '</div>'
 )
-DESK_DOODLES = {True: SHEET_DOODLES, "architect": SHEET_DOODLES, "product": PRODUCT_DOODLES}
+# Desk doodles around a project manager's sheet: a wall calendar, a binder clip, and a small Gantt chart.
+PROJECT_DOODLES = (
+    '<div class="sheet-doodles" aria-hidden="true">'
+    '<svg class="sd sd-coffee" viewBox="0 0 120 120"><g class="rough">'
+    '<rect class="d d-thin f-paper" x="14" y="22" width="92" height="84" rx="3"/><path class="d d-thin f-red" d="M14 25 a3 3 0 0 1 3 -3 h86 a3 3 0 0 1 3 3 v19 h-92 z"/>'
+    '<path class="d d-thin" d="M34 14 v16 M86 14 v16"/><path class="d d-thin d-soft" d="M14 64 h92 M14 84 h92 M45 44 v62 M76 44 v62"/>'
+    '<circle class="d d-red" cx="60" cy="74" r="9" fill="none"/></g></svg>'
+    '<svg class="sd sd-compass" viewBox="0 0 70 110"><g class="rough">'
+    '<path class="d f-ink" d="M12 40 h46 v52 h-46 z"/><path class="d" d="M22 40 q-6 -30 13 -32 q19 2 13 32" fill="none"/>'
+    '<path class="d d-thin" d="M20 92 q-4 10 15 12 q19 -2 15 -12" fill="none"/></g></svg>'
+    '<svg class="sd sd-pencil" viewBox="0 0 240 80"><g class="rough">'
+    '<rect class="d d-thin f-paper" x="10" y="6" width="220" height="68" rx="3"/>'
+    '<path class="d d-thin d-soft" d="M66 6 v68 M107 6 v68 M148 6 v68 M189 6 v68"/>'
+    '<rect class="d d-thin f-blue" x="22" y="16" width="70" height="10"/><rect class="d d-thin f-y" x="66" y="32" width="84" height="10"/>'
+    '<rect class="d d-thin f-green" x="120" y="48" width="74" height="10"/><path class="d f-red" d="M206 54 l8 8 l-8 8 l-8 -8 z"/></g></svg>'
+    '</div>'
+)
+# Desk doodles around an operations sheet: a pager, a coffee-stained runbook and a server rack.
+OPS_DOODLES = (
+    '<div class="sheet-doodles" aria-hidden="true">'
+    '<svg class="sd sd-coffee" viewBox="0 0 120 120"><g class="rough">'
+    '<rect class="d f-paper" x="22" y="18" width="76" height="92" rx="12"/><rect class="d d-thin f-green" x="32" y="30" width="56" height="34" rx="3"/>'
+    '<path class="d d-thin" d="M38 42 h30 M38 52 h20"/><circle class="d f-red" cx="44" cy="84" r="7"/><circle class="d d-thin" cx="76" cy="84" r="7" fill="none"/>'
+    '<path class="d d-thin d-soft" d="M100 30 q10 -8 14 0 M104 22 q14 -10 18 2"/></g></svg>'
+    '<svg class="sd sd-compass" viewBox="0 0 70 110"><g class="rough">'
+    '<rect class="d f-paper" x="8" y="6" width="54" height="96" rx="4"/><path class="d d-thin" d="M8 30 h54 M8 54 h54 M8 78 h54"/>'
+    '<circle class="d f-green" cx="52" cy="18" r="3"/><circle class="d f-green" cx="52" cy="42" r="3"/><circle class="d f-red" cx="52" cy="66" r="3"/><circle class="d f-y" cx="52" cy="90" r="3"/></g></svg>'
+    '<svg class="sd sd-pencil" viewBox="0 0 240 80"><g class="rough">'
+    '<rect class="d d-thin f-paper" x="10" y="6" width="220" height="68" rx="3"/>'
+    '<path class="d d-thin d-soft" d="M10 22 h220 M60 6 v68"/><path class="d d-red" d="M70 60 l20 -6 l14 -24 l14 30 l16 -14 h40"/>'
+    '<path class="d d-thin d-dash" d="M64 40 h160"/></g></svg>'
+    '</div>'
+)
+DESK_DOODLES = {True: SHEET_DOODLES, "architect": SHEET_DOODLES, "product": PRODUCT_DOODLES, "project": PROJECT_DOODLES, "ops": OPS_DOODLES}
 KEY = '''  <aside class="key" aria-label="Key to the signifiers on this page">
     <h3>Key</h3>
     <ul>
@@ -869,9 +1824,10 @@ KEY = '''  <aside class="key" aria-label="Key to the signifiers on this page">
 
 
 def foot(j=None):
-    what = (f"{j['book']} · vol. {j['vol']}" if j and j.get("book") else
-            f"Vol. {j['vol']} · a student's bullet journal on {j['short']}") if j else "a shelf of student bullet journals on software design"
-    return f'<footer class="foot"><span>Jef’s Notes · {what}</span><span>by {AUTHOR}</span></footer>'
+    what = (f"{j['book']} · vol. {j['vol']}" if j.get("book") else
+            f"Vol. {j['vol']} · a student's bullet journal on {j['short']}") if j and "vol" in j else "a shelf of student bullet journals on software design"
+    note = f'\n<p class="foot-note">{j["disclaimer"]}</p>' if j and j.get("disclaimer") else ""
+    return f'<footer class="foot"><span>Jef’s Notes · {what}</span><span>by {AUTHOR}</span></footer>{note}'
 
 
 def asset(name):
@@ -881,18 +1837,45 @@ def asset(name):
     return f"assets/{name}?v={digest}"
 
 
-def stamp_handmade(path):
-    """Hand-made notes link the assets directly; give them the same version tags."""
+def stamp_handmade(path, j=None):
+    """Hand-made notes link the assets directly; give them the same version tags. With the journal, also bring
+    them up to date like the generated notes: linked related notes, seen-at-Larder and cheat-sheet asides, and
+    the additions from content/<key>/revisions.py (extra quiz questions, try it, revised stamp). Every injected
+    block sits between <!-- gen:NAME --> markers, so a rebuild replaces it instead of adding it twice."""
     html = path.read_text(encoding="utf-8")
     new = re.sub(r'(href|src)="((?:\.\./)*)assets/(notebook\.css|bujo\.css|notebook\.js)(?:\?v=[0-9a-f]+)?"',
                  lambda m: f'{m.group(1)}="{m.group(2)}{asset(m.group(3))}"', html)
+    if j is not None:
+        slug = path.stem
+        rev = REVISIONS.get(j["key"], {}).get(slug, {})
+        new = re.sub(r"\n?<!-- gen:(\w+) -->.*?<!-- /gen:\1 -->", "", new, flags=re.S)
+
+        def block(name, text):
+            return f"\n<!-- gen:{name} -->{text}<!-- /gen:{name} -->" if text else ""
+        new = re.sub(r'(<ul class="related">)(.*?)(</ul>)', lambda m: m.group(1) + related_items(
+            j, slug, [re.sub(r"^\s*<li>|</li>\s*$", "", x) for x in re.findall(r"<li>.*?</li>", m.group(2), re.S)]) + m.group(3),
+            new, count=1, flags=re.S)
+        new = re.sub(r'(<p class="aside deeper">.*?</p>|</ul>(?=\s*<h2 id="quiz"))',
+                     lambda m: m.group(1) + block("links", extra_links(j, slug)), new, count=1, flags=re.S)
+        if rev.get("quiz_add"):
+            qs = "".join(f"\n    <details><summary>{sit_q(q)}</summary><p>{a}</p></details>" for q, a in rev["quiz_add"])
+            new = re.sub(r'(<div class="quiz">.*?)(\n  </div>)', lambda m: m.group(1) + block("quiz", qs) + m.group(2),
+                         new, count=1, flags=re.S)
+        if rev.get("try_it"):
+            t = f'\n  <div class="tryit">\n    <span class="tag">try it</span>\n    <p>{rev["try_it"]}</p>\n  </div>'
+            new = new.replace('\n  <div class="remember">', block("tryit", t) + '\n  <div class="remember">', 1)
+        if rev.get("revised"):
+            new = re.sub(r'(<div class="page-meta">.*?</div>)', lambda m: m.group(1) + block("revised", "\n" + revised_stamp(rev)),
+                         new, count=1, flags=re.S)
     if new != html:
         path.write_text(new, encoding="utf-8")
 
 
-def head(title, desc, depth, fonts=None):
-    """fonts: an optional extra Google Fonts family query for a journal's own heading font."""
+def head(title, desc, depth, fonts=None, css=()):
+    """fonts: an optional extra Google Fonts family query for a journal's own heading font. css: extra stylesheets
+    from assets/ loaded after the base ones (a journal's `css`, e.g. vendor.css)."""
     a = "../" * depth
+    more = "".join(f'\n<link rel="stylesheet" href="{a}{asset(c)}">' for c in css)
     extra = (f'\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={fonts}&display=swap">' if fonts else "")
     return f'''<!doctype html>
 <html lang="en">
@@ -904,7 +1887,7 @@ def head(title, desc, depth, fonts=None):
 <meta name="theme-color" content="#E6E3DC">
 {FONTS}{extra}
 <link rel="stylesheet" href="{a}{asset("notebook.css")}">
-<link rel="stylesheet" href="{a}{asset("bujo.css")}">
+<link rel="stylesheet" href="{a}{asset("bujo.css")}">{more}
 <link rel="icon" href="{a}assets/favicon.svg" type="image/svg+xml">
 <script src="{a}{asset("notebook.js")}" defer></script>
 </head>'''
@@ -1014,7 +1997,268 @@ def journal(key):
     return next(x for x in JOURNALS if x["key"] == key)
 
 
+def pmbok_tag(j, n):
+    """The PMBOK tag under a project note's title: domain tab(s), the five focus areas (the ones this note touches
+    filled in), the processes and principles it covers, and what older editions called it (note field `pmbok`)."""
+    t = n.get("pmbok")
+    if not t:
+        return ""
+    names = dict(PMBOK_DOMAINS)
+    doms = "".join(f'<span class="dom dom-{d}">{names.get(d, d.title())}</span>' for d in t.get("domains", []))
+    doms = doms or '<span class="dom dom-foundations">Foundations</span>'
+    on = t.get("focus", [])
+    focus = "".join(f'<li{" class=on" if f in on else ""}>{"monitoring &amp; controlling" if f == "monitoring" else f}</li>' for f in PMBOK_FOCUS)
+    rows = [("covers", t["covers"])] if t.get("covers") else []
+    if t.get("processes"):
+        rows.append(("process" if len(t["processes"]) == 1 else "processes", " · ".join(t["processes"])))
+    if t.get("principles"):
+        rows.append(("principle", " · ".join(t["principles"])))
+    if t.get("older"):
+        rows.append(("in older editions", t["older"]))
+    dl = "".join(f"<div><dt>{k}</dt><dd>{v}</dd></div>" for k, v in rows)
+    return (f'  <aside class="pmbok" aria-label="Where this note sits in the PMBOK Guide">\n'
+            f'    <p class="pmbok-top"><a class="pmbok-ed" href="../../pmbok/index.html">PMBOK 8 map</a>{doms}</p>\n'
+            f'    <ol class="focus" aria-label="Focus areas this note touches">{focus}</ol>\n'
+            f'    <dl>{dl}</dl>\n  </aside>')
+
+
+def itil_tag(j, n):
+    """The ITIL tag under an IT operations note's title: practice-group tab(s), the six value chain activities (the ones
+    this note touches filled in), the practices it covers, the SRE word for it, and older names (note field `itil`)."""
+    t = n.get("itil")
+    if not t:
+        return ""
+    names = dict(ITIL_GROUPS)
+    groups = "".join(f'<span class="dom dom-{g}">{names[g]}</span>' for g in t.get("groups", ["service"]))
+    on = t.get("chain", [])
+    chain = "".join(f'<li{" class=on" if k in on else ""}>{label}</li>' for k, label in ITIL_CHAIN)
+    rows = [("practice" if len(t["practices"]) == 1 else "practices", " · ".join(t["practices"]))]
+    if t.get("sre"):
+        rows.append(("in SRE words", t["sre"]))
+    if t.get("principles"):
+        rows.append(("principle", " · ".join(t["principles"])))
+    if t.get("older"):
+        rows.append(("older names", t["older"]))
+    dl = "".join(f"<div><dt>{k}</dt><dd>{v}</dd></div>" for k, v in rows)
+    return (f'  <aside class="pmbok itil" aria-label="Where this note sits in ITIL 4">\n'
+            f'    <p class="pmbok-top"><span class="pmbok-ed">ITIL 4</span>{groups}</p>\n'
+            f'    <ol class="focus" aria-label="Value chain activities this note touches">{chain}</ol>\n'
+            f'    <dl>{dl}</dl>\n  </aside>')
+
+
+LADDER_RUNGS = ("By hand", "Written down", "Scripted", "Automatic")
+
+
+def ladder_block(n):
+    """The maturity ladder: four rungs from by hand to automatic; `ladder_now` (0-3) marks where Larder ends up."""
+    now = n.get("ladder_now")
+    cols = ""
+    for i, (when, items) in enumerate(n["ladder"]):
+        here = ' <span class="rung-here">Larder now</span>' if i == now else ""
+        cols += (f'    <div class="rung rung-{i + 1}{" is-now" if i == now else ""}"><h3><span class="rung-n">{i + 1}</span>'
+                 f'{LADDER_RUNGS[i]}{here}</h3><p class="dial-when">{when}</p>{li(items)}</div>\n')
+    return f'  <div class="dial ladder">\n{cols}  </div>'
+
+
+def pager_block(n):
+    """The pager log: the page as it arrived, before the lesson (note field `pager` = dict(when=, lines=[(time, text)]))."""
+    p = n.get("pager")
+    if not p:
+        return ""
+    rows = "".join(f'<li><time>{t}</time><span>{x}</span></li>' for t, x in p["lines"])
+    return (f'  <aside class="pager-log" aria-label="Pager log">\n    <p class="pager-head"><span>pager log</span>'
+            f'<span>{p["when"]}</span></p>\n    <ol>{rows}</ol>\n  </aside>')
+
+
+def dial_block(n):
+    """Light / standard / heavy: how much of this practice a small, a typical and a heavy project needs."""
+    cols = "".join(f'    <div class="dial-{k}"><h3>{name}</h3><p class="dial-when">{when}</p>{li(items)}</div>\n'
+                   for k, (name, when, items) in zip(("light", "standard", "heavy"), n["dial"]))
+    return f'  <div class="dial">\n{cols}  </div>'
+
+
+def deep_dive_block(n):
+    """A deep dive: a longer chapter inside a key note. `deep_dive=dict(side=, intro=, parts=[(heading, html, [figs])])`."""
+    d = n.get("deep_dive")
+    if not d:
+        return ""
+    parts = "\n".join(f'  <h3 class="deep-h"><span>{i}</span>{t}</h3>\n{body}\n' + "\n".join(f.html() for f in figs)
+                      for i, (t, body, figs) in enumerate(d["parts"], 1))
+    return (f'  <section class="deep" id="deep" aria-label="Going deeper">\n'
+            f'  <h2><span class="num">＋</span>Going deeper <span class="side">{d.get("side", "for when you need more than the note")}</span></h2>\n'
+            f'  <p class="deep-intro">{d["intro"]}</p>\n{parts}\n  </section>')
+
+
+# ------------------------------------------------------------ cross-links between notes
+# “Related notes” are written as text (“<b>Load profiles</b> (this volume)”); the build turns each one it can
+# match to a note into a link. Series 2 notes that name a pattern also show up on that pattern's note as
+# “seen at Larder”. Notes listed in CARD_LINKS point at the cheat sheet that covers them.
+TITLES = {}          # normalised title -> [(journal, slug)]
+SEEN_AT_LARDER = {}  # (series-1 key, slug) -> [(journal, slug, title)]
+UNRESOLVED = []      # (journal key, slug, text): related entries with no matching note (printed by the build)
+CHEAT_TITLES = {}    # cheat sheet slug -> title
+CARD_LINKS = {
+    ("pipelines", "fact-table-types"): ["warehouse"], ("pipelines", "conformed-dimensions"): ["warehouse"],
+    ("pipelines", "slowly-changing-dimensions"): ["warehouse"], ("pipelines", "idempotent-loads"): ["warehouse"],
+    ("pipelines", "incremental-extract"): ["warehouse"], ("pipelines", "late-arriving-data"): ["warehouse"],
+    ("pipelines", "quality-checks"): ["warehouse"], ("pipelines", "aggregates-rollups"): ["warehouse"],
+    ("pipelines", "metrics-layer"): ["warehouse"], ("data", "star-schema"): ["warehouse", "sql"],
+    ("data", "indexing"): ["sql"], ("data", "keyset-pagination"): ["sql"], ("data", "n-plus-one"): ["sql"],
+    ("data", "optimistic-locking"): ["sql"], ("data", "materialized-views"): ["sql"],
+    ("cloud", "health-checks"): ["docker-kubernetes"], ("cloud", "autoscaling"): ["docker-kubernetes"],
+    ("cloud", "build-once"): ["docker-kubernetes", "git-flow"], ("cloud", "preview-environments"): ["git-flow"],
+    ("testing", "testcontainers"): ["docker-kubernetes"],
+    ("distributed", "service-discovery"): ["shell-network", "docker-kubernetes"],
+    ("architect-1", "nfr-checklist"): ["nfr-checklists"], ("architect-1", "quality-attribute-scenarios"): ["nfr-checklists"],
+    ("architect-5", "availability-maths"): ["nfr-checklists"], ("architect-5", "performance-budgets"): ["nfr-checklists"],
+    ("inside-app", "single-responsibility"): ["refactoring"], ("inside-app", "open-closed"): ["refactoring"],
+    ("inside-app", "transaction-script"): ["refactoring"], ("inside-app", "strategy-command"): ["refactoring"],
+    ("inside-app", "liskov-substitution"): ["refactoring"], ("ddd", "anemic-domain-model"): ["refactoring"],
+    ("ddd", "value-object"): ["refactoring"], ("testing", "characterization-tests"): ["refactoring"],
+}
+
+
+# Related entries that name a note by another name (normalised with norm_title on load).
+RELATED_ALIASES = {
+    "consumer-driven contracts": ("testing", "contract-testing"), "idempotency keys": ("distributed", "idempotent-consumer"),
+    "oauth 2.0 & openid connect": ("security", "oauth-pkce"), "retries with backoff": ("distributed", "retry-backoff"),
+    "api gateway / bff": ("distributed", "api-gateway"), "tech-debt talks": ("product-3", "tech-debt-talks"),
+    "user stories that aren't tasks": ("product-3", "user-stories"), "strategy on a page": ("product-2", "strategy-on-a-page"),
+    "quality assurance vs control": ("project-2", "quality-assurance"), "status reports that tell the truth": ("project-2", "status-reports"),
+    "phase gates and go / no-go": ("project-2", "phase-gates"), "lessons learned that get used": ("project-2", "lessons-learned"),
+}
+
+
+def norm_title(t):
+    t = re.sub(r"<[^>]+>", "", t).replace("&amp;", "&").lower()
+    t = re.sub(r"\(.*?\)", "", t).replace("&", " and ")
+    t = re.sub(r"[^a-z0-9+]+", " ", t).strip()
+    t = re.sub(r"^(the|a|an) ", "", t).replace(" vs ", " and ")
+    t = re.sub(r"is(e|ed|ing)\b", r"iz\1", t)                      # British and American spellings
+    return " ".join(w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w for w in t.split())
+
+
+def index_titles(loaded):
+    """Every note under its title, its title without the bracket, and the term in its “a.k.a.” kicker."""
+    for o in JOURNALS:
+        for num, slug, title, *_ in o["catalogue"]:
+            names = {norm_title(title), norm_title(title.split(" (")[0])}
+            n = loaded.get(o["key"], {}).get(slug)
+            aka = re.match(r"a\.k\.a\. “([^”]+)”", n.get("kicker", "")) if n else None
+            if aka:
+                names.add(norm_title(aka.group(1)))
+            for name in names:
+                if (o, slug) not in TITLES.setdefault(name, []):
+                    TITLES[name].append((o, slug))
+    for name, (key, slug) in RELATED_ALIASES.items():
+        TITLES.setdefault(norm_title(name), []).insert(0, (journal(key), slug))
+
+
+def resolve_related(j, item):
+    """(journal, slug) of the note a related entry names, or None. The text after the title narrows it down:
+    “(this volume)”, “(Vol. 3)”, “(patterns, Vol. 6)”, “(Grace, vol. 4)”."""
+    m = re.search(r"<b>(.*?)</b>", item)
+    if not m:
+        return None
+    name = norm_title(m.group(1))
+    cands = TITLES.get(name, []) or [c for t, cs in TITLES.items() if t.startswith(name + " ") for c in cs]
+    cands = list(dict.fromkeys((o["key"], s) for o, s in cands))
+    cands = [(journal(k), s) for k, s in cands]
+    ctx = re.sub(r"<[^>]+>", "", item[m.end():]).lower()
+    vol = re.search(r"vol\.?\s*(\d+)", ctx)
+    filters = []
+    who = [w for w in ("ana", "grace", "sanne", "mo") if re.search(rf"\b{w}\b", ctx)]
+    if who:
+        filters.append(lambda o: (o.get("narrator") or "").lower() in who)
+    if "patterns" in ctx or (j.get("series", 1) == 1 and not who):
+        filters.append(lambda o: o.get("series", 1) == 1)
+    elif j.get("series") in (2, 5) and not who:
+        filters.append(lambda o: o.get("series") == j["series"] and o.get("book_no", 1) == j.get("book_no", 1))
+    if vol:
+        filters.append(lambda o: o["vol"] == int(vol.group(1)))
+    if not vol and not who and "patterns" not in ctx:
+        filters.append(lambda o: o["key"] == j["key"])
+    for f in filters:
+        narrowed = [c for c in cands if f(c[0])]
+        if narrowed:
+            cands = narrowed
+    return cands[0] if len(cands) == 1 else None
+
+
+def note_href(j, o, slug):
+    """A link from a note page to another note. Always starts with ../ so the whole-journal page can rewrite it."""
+    return f"../notes/{slug}.html" if o["key"] == j["key"] else f"../../{o['key']}/notes/{slug}.html"
+
+
+def related_items(j, slug, items):
+    out = []
+    for r in items:
+        r = re.sub(r"</?a\b[^>]*>", "", r)
+        hit = resolve_related(j, r)
+        if hit and (hit[0]["key"], hit[1]) != (j["key"], slug):   # same slug in another volume is a real link
+            href = note_href(j, *hit)
+            r = re.sub(r"<b>(.*?)</b>", lambda m: f'<a href="{href}"><b>{m.group(1)}</b></a>', r, count=1)
+        elif not hit:
+            UNRESOLVED.append((j["key"], slug, re.sub(r"<[^>]+>", "", r)))
+        out.append(f"<li>{r}</li>")
+    return "".join(out)
+
+
+def find_seen_at_larder(loaded):
+    for j in JOURNALS:
+        if j.get("series") != 2:
+            continue
+        for slug, n in loaded[j["key"]].items():
+            for r in n.get("related", []):
+                hit = resolve_related(j, r)
+                if hit and hit[0].get("series", 1) == 1:
+                    title = entry(j, slug)[2]
+                    SEEN_AT_LARDER.setdefault((hit[0]["key"], hit[1]), []).append((j, slug, title))
+
+
+def extra_links(j, slug):
+    """Asides under the related notes: seen at Larder, and the cheat sheet that covers this note."""
+    out = []
+    seen = SEEN_AT_LARDER.get((j["key"], slug), [])
+    if seen:
+        links = " · ".join(f'<a href="{note_href(j, o, s)}">{esc(t)}</a> <small>({o["narrator"]}, vol. {o["vol"]})</small>'
+                           for o, s, t in seen)
+        out.append(f'  <p class="aside seen">seen at Larder → {links}</p>')
+    for cs in CARD_LINKS.get((j["key"], slug), []):
+        if cs in CHEAT_TITLES:
+            out.append(f'  <p class="aside deeper">on a card → <a href="../../cheatsheets/{cs}/index.html">{esc(CHEAT_TITLES[cs])}: the cheat sheet</a></p>')
+    return "\n".join(out)
+
+
+def revised_stamp(n):
+    """`revised=("Nov 2026", "what changed")`: a small stamp under the date of a note that was updated."""
+    r = n.get("revised")
+    if not r:
+        return ""
+    return f'  <p class="revised"><span class="tag">revised</span> {r[0]} · {r[1]}</p>'
+
+
+def then_now_block(n):
+    """`then_now=dict(src="Evans, 2003", then="…", now="…", verdict="core", take="…")`: what the original book said,
+    what changed since, and a verdict stamp (VERDICTS)."""
+    t = n.get("then_now")
+    if not t:
+        return ""
+    label, meaning = VERDICTS[t["verdict"]]
+    return f'''  <section class="thennow verdict-{t["verdict"]}" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="{esc(meaning)}">{label}</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>{t["src"]}</small></h3><p>{t["then"]}</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>{t["now"]}</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> {t["take"]}</p>
+  </section>'''
+
+
 def render_note(j, n, back=()):
+    if j.get("vendor"):
+        return vendor.render_note(j, n, back, globals())
     num, slug, title, ckey, summary = entry(j, n["slug"])
     cname = coll(j, ckey)[1]
     vocab = "\n".join(f"    <div><dt>{t}</dt><dd>{d}</dd></div>" for t, d in n["vocab"])
@@ -1022,13 +2266,13 @@ def render_note(j, n, back=()):
     steps = "\n".join(f"    <li><b>{t}</b><p>{d}</p></li>" for t, d in n["steps"])
     pits = "\n".join(f'    <li><h3>{t}</h3><p>{d} <span class="fix">Fix →</span> {f}</p></li>' for t, d, f in n["pitfalls"])
     quiz = "\n".join(f"    <details><summary>{q}</summary><p>{a}</p></details>" for q, a in n["quiz"])
-    related = "".join(f"<li>{r}</li>" for r in n["related"])
+    related = related_items(j, n["slug"], n["related"])
     chips = "".join(f"<li><b>{k}:</b> {v}</li>" for k, v in n["chips"])
     sources = "".join(f"<li>{s}</li>" for s in n["sources"])
     code = n["code"]
     figs = lambda key: "\n".join(f.html() for f in n.get(key, []))
     parts = [
-        head(f"{title} · Jef’s Notes", summary, 2, j.get("fonts")),
+        head(f"{title} · Jef’s Notes", summary, 2, j.get("fonts"), j.get("css", ())),
         body_open(j),
         '<a class="skip-link" href="#main">Skip to the notes</a>',
         bar(j, 2),
@@ -1038,13 +2282,16 @@ def render_note(j, n, back=()):
         f'  {ROUGH}',
         DESK_DOODLES.get(j.get("sheet_doodles"), "") if j.get("sheet_doodles") else "",
         f'  <div class="page-meta"><span class="day">{day_label(j, num)}</span><span class="topic">collection · <b>{cname.lower()}</b></span></div>',
+        revised_stamp(n),
         f'  <p class="kicker">{n["kicker"]}</p>',
         f'  <h1><span class="hl">{esc(title)}</span></h1>',
         f'  <div class="tldr">\n    <span class="tag">TL;DR</span>\n    <p>{n["tldr"]}</p>\n  </div>',
         f'  <ul class="chips" aria-label="At a glance">{chips}</ul>',
+        pmbok_tag(j, n),
+        itil_tag(j, n),
         KEY,
         h2(1, "problem", j.get("problem_h2", "The problem"), n.get("problem_side", "why do we even need this?")),
-        n["problem"], figs("problem_figs"), n.get("problem_after", ""), meanwhile_box(j, n, back),
+        n["problem"], pager_block(n), figs("problem_figs"), n.get("problem_after", ""), meanwhile_box(j, n, back),
         h2(2, "analogy", "Real-life analogy", n["analogy_side"]),
         n["analogy"], figs("analogy_figs"),
         f'''  <div class="table-scroll">
@@ -1067,8 +2314,10 @@ def render_note(j, n, back=()):
 <pre><code>{esc(code["src"].strip(chr(10))) if code.get("plain") else highlight(code["src"].strip(chr(10)))}</code></pre>
   </div>''',
         f'  <p class="aside">{n["tools"]}</p>' if n.get("tools") else "",
-        h2(4, "tradeoffs", "Gains vs losses", "nothing is free"),
-        f'''  <div class="tchart">
+        deep_dive_block(n),
+        then_now_block(n),
+        h2(4, "tradeoffs", "The maturity ladder", "where are we, and what is the next rung?") if n.get("ladder") else h2(4, "tradeoffs", "Light, standard, heavy", "how much of this do you need?") if n.get("dial") else h2(4, "tradeoffs", "Gains vs losses", "nothing is free"),
+        ladder_block(n) if n.get("ladder") else dial_block(n) if n.get("dial") else f'''  <div class="tchart">
     <div class="gain">
       <h3>What we gain</h3>
       {li(n["gains"])}
@@ -1095,6 +2344,8 @@ def render_note(j, n, back=()):
     </div>
   </div>''',
         f'  <h3>{j.get("related_h3", "Related patterns")}</h3>\n  <ul class="related">{related}</ul>',
+        deeper_link(j["key"], slug),
+        extra_links(j, slug),
         h2(8, "quiz", "Self-check quiz", ""),
         f'  <div class="quiz">\n{quiz}\n  </div>',
         f'  <div class="tryit">\n    <span class="tag">try it</span>\n    <p>{n["try_it"]}</p>\n  </div>' if n.get("try_it") else "",
@@ -1127,7 +2378,11 @@ def index_list(j, anchors=False):
             if ckey != key:
                 continue
             href = f"#{slug}" if anchors else f"notes/{slug}.html"
-            items.append(f'<li><a href="{href}"><span class="toc-n">{num:02d}</span><span class="toc-t">{esc(title)}'
+            deep = ' <em class="deep-tag">+ goes deeper</em>' if slug in j.get("deep_dives", ()) else ""
+            v = j.get("verdicts", {}).get(slug)
+            if v:
+                deep += f' <em class="verdict-tag verdict-{v}">{VERDICTS[v][0]}</em>'
+            items.append(f'<li><a href="{href}"><span class="toc-n">{num:02d}</span><span class="toc-t">{esc(title)}{deep}'
                          f'<small>{esc(summary)}</small></span><span class="toc-p">p. {num:02d}</span></a></li>')
         out.append(f'  <h3 class="toc-coll">{name} <span>{esc(blurb)}</span></h3>\n  <ol class="toc">{"".join(items)}</ol>')
     return "\n".join(out)
@@ -1141,13 +2396,26 @@ def attrs_block(j):
   <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained with the pattern</span><span><i class="dot lost"></i> lost with the pattern</span></div>'''
 
 
+def verdicts_block(j):
+    """The key to the then & now stamps, with how many notes got each one."""
+    if not j.get("then_now"):
+        return ""
+    got = list(j.get("verdicts", {}).values())
+    rows = "\n".join(f'    <div><dt><em class="verdict-tag verdict-{k}">{label}</em> <small>× {got.count(k)}</small></dt><dd>{meaning[0].upper() + meaning[1:]}.</dd></div>'
+                     for k, (label, meaning) in VERDICTS.items() if k in got)
+    return (f'  <h2 id="then-now"><span class="num">⟳</span>Then &amp; now <span class="side">is a twenty-year-old idea still worth it?</span></h2>\n'
+            f'  <p>Most ideas in this volume come from books written twenty or more years ago. Every note ends its “how” section with what the book said, what changed since, and one of these verdicts:</p>\n'
+            f'  <dl class="vocab verdicts">\n{rows}\n  </dl>')
+
+
 def story_box(j):
     """Series 2 books open with a short “story so far” that links to the Larder case file."""
     if not j.get("story"):
         return ""
     return (f'  <aside class="story" aria-label="The story so far">\n    <span class="tag">the story so far</span>\n'
-            f'    <p>{j["story"]}</p>\n    <p class="story-link"><a href="../larder/index.html">Meet Larder: the case file, the cast '
-            f'and the timeline →</a></p>\n  </aside>')
+            f'    <p>{j["story"]}</p>\n    <p class="story-link">' + (
+                '<a href="../darkside/index.html">MetroVolt from the inside: The Darkside of the Corporation →</a>' if j.get("vendor")
+                else '<a href="../larder/index.html">Meet Larder: the case file, the cast and the timeline →</a>') + '</p>\n  </aside>')
 
 
 def counts(j):
@@ -1155,8 +2423,8 @@ def counts(j):
 
 
 def render_index(j):
-    return "\n".join([
-        head(f"{j['title']} · Jef’s Notes", j["blurb"], 1, j.get("fonts")),
+    return "\n".join(x for x in [
+        head(f"{j['title']} · Jef’s Notes", j["blurb"], 1, j.get("fonts"), j.get("css", ())),
         body_open(j),
         '<a class="skip-link" href="#main">Skip to the index</a>',
         bar(j, 1, "index", print_button=False),
@@ -1166,7 +2434,12 @@ def render_index(j):
         f'  <p class="kicker">{j["kicker"]}</p>',
         f'  <h1 class="cover-title"><span class="hl">{esc(j["title"])}</span></h1>',
         f'  <p class="lead">{j["lead"].format(**counts(j))}</p>',
+        (f'  <p class="revised"><span class="tag">revised</span> {REVISION_NOTE[j["key"]][0]} · {REVISION_NOTE[j["key"]][1]}</p>'
+         if j["key"] in REVISION_NOTE else ""),
         story_box(j),
+        ('  <p class="map-link"><a href="../pmbok/index.html"><b>The PMBOK map</b>: every principle, domain and focus area of the guide, '
+         'and the note that covers it →</a><br><a href="../rotterdam/index.html"><b>The project file</b>: every page from '
+         'Sanne\'s binder, Rotterdam, Antwerp and the 2028 programme, in order →</a></p>') if j.get("pmbok") else "",
         KEY,
         '  <h2 id="index"><span class="num">✎</span>Index <span class="side">tap a note to open it</span></h2>',
         index_list(j),
@@ -1174,20 +2447,22 @@ def render_index(j):
         f'''  <ol class="how-to">
     <li><b>{j.get("problem_h2", "The problem")}</b>: {"a scene from the case study where it goes wrong" if j.get("book") else "what breaks without the pattern"}, with a doodle.</li>
     <li><b>Real-life analogy</b>: an everyday version, plus a “{j.get("map_caption", "translate to code").lower()}” table.</li>
-    <li><b>How it solves it</b>: diagrams, steps, vocabulary and a {"template" if j.get("book") else "code"} card.</li>
-    <li><b>Gains vs losses</b>: the trade-off spread.</li>
+    <li><b>How it solves it</b>: diagrams, steps, vocabulary and a {"template" if j.get("book") else "code"} card{". Key notes add a <b>going deeper</b> chapter here" if j.get("deep_dives") else ""}{". Then a <b>then &amp; now</b> box: what the original book said, what changed, and a verdict" if j.get("then_now") else ""}.</li>
+    <li>{"<b>Both sides of the table</b>, <b>what the contract says</b>, an <b>account health</b> dial (green, amber, red) and a <b>pressure gauge</b>: the same move seen by the client and the vendor, the clause that applies, and what it costs the team." if j.get("vendor") else "<b>The maturity ladder</b>: four rungs, from by hand to automatic, and where Larder stands." if j.get("ops") else "<b>Light, standard, heavy</b>: how much of it a small, a typical and a heavy project needs." if j.get("pmbok") else "<b>Gains vs losses</b>: the trade-off spread."}</li>
     <li><b>Ratings</b>: nine qualities, before → after.</li>
     <li><b>Common pitfalls</b>: each with its fix.</li>
     <li><b>When to use it</b>: and when to skip it.</li>
-    <li><b>Self-check quiz</b>: tap a question to see the answer.</li>
+    <li><b>Self-check quiz</b>: tap a question to see the answer.{" Then a <b>try it</b>, and <b>the 23:00 note</b>: Ines's own notebook at the end of the day." if j.get("vendor") else ""}</li>
   </ol>''',
         f'  <h2 id="ratings-key"><span class="num">★</span>{j["attrs_title"]} <span class="side">{j["attrs_side"]}</span></h2>',
-        '  <p>Every note scores the pattern from 1 (poor) to 5 (great) on the same nine things, comparing an app <b>without</b> the pattern to the same app <b>with</b> it.</p>',
+        ('  <p>Every note scores its main move from 1 (poor) to 5 (great) on the same nine things, comparing the situation <b>before</b> with the same situation <b>after</b> the move.</p>' if j.get("vendor") else
+         '  <p>Every note scores the pattern from 1 (poor) to 5 (great) on the same nine things, comparing an app <b>without</b> the pattern to the same app <b>with</b> it.</p>'),
         attrs_block(j),
+        verdicts_block(j),
         '''  <div class="remember">
     <span class="tag">first law</span>
-    <p>Everything in architecture is a trade-off. If you think you've found one that isn't, you haven't found the cost yet.</p>
-  </div>''',
+    <p>FIRSTLAW</p>
+  </div>'''.replace("FIRSTLAW", j.get("first_law", "Everything in architecture is a trade-off. If you think you've found one that isn't, you haven't found the cost yet.")),
         f'''  <div class="export no-print">
     <a class="btn" href="all.html?print">{DL}Export the whole journal as PDF</a>
     {"" if j.get("draft") else f'<a class="btn btn--ghost" href="pdf/{journal_pdf(j)}">Download ready-made PDF</a>'}
@@ -1200,13 +2475,13 @@ def render_index(j):
         '</body>',
         '</html>',
         '',
-    ])
+    ] if x is not None)
 
 
 def render_all(j):
     collect = " ".join(f"notes/{c[1]}.html" for c in j["catalogue"])
     return "\n".join([
-        head(f"{j['title']} · Whole journal", "Every note on one page, ready to export as PDF.", 1, j.get("fonts")),
+        head(f"{j['title']} · Whole journal", "Every note on one page, ready to export as PDF.", 1, j.get("fonts"), j.get("css", ())),
         body_open(j),
         '<a class="skip-link" href="#main">Skip to the notes</a>',
         bar(j, 1, "all", print_button=True, disabled=True),
@@ -1233,18 +2508,20 @@ def render_all(j):
     ])
 
 
-AUTHOR_NOTE = """  <h2 id="author"><span class="num">✎</span>A note from the author <span class="side">why I made these journals</span></h2>
+AUTHOR_NOTE = """  <h2 id="author"><span class="num">✎</span>A note from the author <span class="side">why this shelf exists</span></h2>
   <aside class="author-note" aria-labelledby="author">
     <p class="lead">Your AI agent can write a saga orchestrator in eleven seconds. It cannot tell you whether you needed one.</p>
-    <p>These notebooks are for that second part. They're for new developers learning what all the arrows mean, and for experienced ones who've been nodding along in design reviews since 2019. They're short on purpose. Read one on the train, in a tunnel with no signal, or while the progress bar says “Thinking…” for the fourth minute.</p>
-    <p>Each note gives you three things:</p>
+    <p>Everything on this shelf is for that second part.</p>
+    <p>The classic books on this subject are excellent, 600 pages long and currently holding up a monitor. I wanted the same ideas in a form people finish. So there are four shapes here, sorted by how much time you have before the next meeting.</p>
     <ul>
-      <li><b>Better questions for the code review.</b> When the agent says “Done! ✅”, you'll know to ask: <i>is this idempotent? Where's the timeout? What happens when it runs twice?</i> Ask before you tell your boss it's done. Not after.</li>
-      <li><b>Better prompts for the next ticket.</b> “Add retries” gets you a loop. “Add capped retries with jitter and an idempotency key, only on 5xx” gets you a pattern. Vocabulary is leverage.</li>
-      <li><b>A sense of the trade-offs.</b> Every pattern here has a “what we lose” column. The agent rarely volunteers that column. Somebody in the room should know it exists.</li>
+      <li><b>Ten minutes: <a href="#shelf">a pattern note</a>.</b> One problem, one silly analogy, one diagram, and the column the agent never volunteers: <i>what we lose</i>.</li>
+      <li><b>Thirty minutes: <a href="#deep-dives">a deep dive</a>.</b> The same pattern after it has met production. Failure drills, real numbers, and a checklist to take into a design review. There is a skim mode. I won't tell anyone.</li>
+      <li><b>A story: <a href="#series-2">the practitioner's notebooks</a>.</b> Ana the architect and Grace the product owner join the same grocery start-up in the same month and write down what happens. It is the non-code half of the job: decisions, trade-offs, stakeholders and saying no politely.</li>
+      <li><b>Thirty seconds: <a href="#cheatsheets">a cheat sheet</a>.</b> For the command you look up twice a week and will look up again on Thursday.</li>
     </ul>
+    <p>What you get from any of them: better questions in the code review (<i>is this idempotent? where's the timeout?</i>), better prompts for the next ticket, and a sense of what each choice costs.</p>
     <p>The honest origin story: I had usage left before my weekly limit reset, and wasting it felt worse than wasting snacks. So I asked the agent to help me write notes about what agents get wrong. It found this very relatable.</p>
-    <p class="author-sign">Read one note a day. Argue with the ratings. Doodle in the margins.<br><span>by Jefrey Romel Tagunicar</span></p>
+    <p class="author-sign">Read one a day. Argue with the ratings. Doodle in the margins.<br><span>by Jefrey Romel Tagunicar</span></p>
   </aside>"""
 
 
@@ -1265,6 +2542,56 @@ CASEFILE_ITEM = '''    <li class="book book--casefile">
     </li>'''
 
 
+PMBOK_ITEM = '''    <li class="book book--pmbok">
+      <a class="book-cover" href="pmbok/index.html" aria-label="Open the PMBOK map">
+        <span class="book-band" aria-hidden="true"></span>
+        <span class="book-label"><small>book 3 · find your way</small><b>The PMBOK Map</b><i>the guide on one page</i></span>
+      </a>
+      <div class="book-meta">
+        <p>The whole PMBOK Guide (eighth edition) on one page: six principles, seven domains, five focus areas, and the note that covers each.</p>
+        <p class="book-actions"><a class="btn" href="pmbok/index.html">Open the map</a><a class="btn btn--ghost" href="rotterdam/index.html">Project file</a></p>
+      </div>
+    </li>'''
+
+
+# Cover artwork for the pattern volumes (owner's choice, Nov 2026: “option C”): a round paper sticker with one
+# hand-drawn emblem, and the volume's own paper pattern pressed into the cloth in the band colour.
+COVER_ART = {
+    "distributed": ("server", "nodes"), "frontend": ("window", "grid"), "data": ("ledger", "rules"),
+    "testing": ("flask", "cross"), "security": ("lock", "hatch"), "cloud": ("cloud", "iso"),
+    "ddd": ("map", "contour"),
+    "inside-app": ("hexagon", "grid"),
+    "pipelines": ("copier", "greenbar"),
+}
+COVER_PATTERNS = {
+    "grid": '<pattern id="{id}" width="14" height="14" patternUnits="userSpaceOnUse"><path d="M14 0H0V14" fill="none" stroke-width="1"/></pattern>',
+    "rules": '<pattern id="{id}" width="20" height="12" patternUnits="userSpaceOnUse"><path d="M0 11.5H20" stroke-width="1"/></pattern>',
+    "cross": '<pattern id="{id}" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M9 5V13M5 9H13" stroke-width="1.4"/></pattern>',
+    "hatch": '<pattern id="{id}" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M0 10L10 0M-2 2L2 -2M8 12L12 8" stroke-width="1.2"/></pattern>',
+    "iso": '<pattern id="{id}" width="24" height="14" patternUnits="userSpaceOnUse"><path d="M0 7L12 0L24 7L12 14Z" fill="none" stroke-width="1"/></pattern>',
+    "greenbar": '<pattern id="{id}" width="24" height="36" patternUnits="userSpaceOnUse"><path d="M0 0H24V18H0Z" stroke="none" fill="#B7E4C0" fill-opacity=".5"/><path d="M0 18H24" stroke-width="1"/></pattern>',
+    "contour": '<pattern id="{id}" width="60" height="40" patternUnits="userSpaceOnUse"><path d="M0 20 q15 -12 30 0 t30 0 M0 32 q15 -10 30 0 t30 0 M0 8 q15 -10 30 0 t30 0" fill="none" stroke-width="1"/></pattern>',
+}
+
+
+def cover_art(key):
+    if key not in COVER_ART:
+        return ""
+    icon, motif = COVER_ART[key]
+    if motif == "nodes":
+        cloth = ('<svg class="cover-cloth" viewBox="0 0 120 160" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'
+                 '<path class="cloth-line" d="M14 26 L62 52 L108 22 M62 52 L40 112 L98 128 M62 52 L98 128 M14 26 L40 112 M40 112 L20 150"/>'
+                 '<g class="cloth-dot"><circle cx="14" cy="26" r="4"/><circle cx="62" cy="52" r="5"/><circle cx="108" cy="22" r="4"/>'
+                 '<circle cx="40" cy="112" r="4"/><circle cx="98" cy="128" r="5"/><circle cx="20" cy="150" r="3"/></g></svg>')
+    else:
+        pid = f"cloth-{key}"
+        cloth = (f'<svg class="cover-cloth" aria-hidden="true"><defs>{COVER_PATTERNS[motif].format(id=pid)}</defs>'
+                 f'<rect width="100%" height="100%" fill="url(#{pid})"/></svg>')
+    body = ICONS[icon].replace('class="F"', 'class="f-paper"')
+    sticker = f'<span class="sticker" aria-hidden="true"><svg viewBox="-6 -6 72 72"><g class="d">{body}</g></svg></span>'
+    return cloth + sticker
+
+
 def book_items(journals, planned, series=1, book=1, casefile=False):
     books = [CASEFILE_ITEM] if casefile else []
     for j in journals:
@@ -1275,7 +2602,7 @@ def book_items(journals, planned, series=1, book=1, casefile=False):
                  else f"{n} notes · {len(j['collections'])} collections")
         books.append(f'''    <li class="book book--{k}">
       <a class="book-cover" href="{k}/index.html" aria-label="Open {vol}: {esc(j['title'])}">
-        <span class="book-band" aria-hidden="true"></span>
+        {cover_art(k)}<span class="book-band" aria-hidden="true"></span>
         <span class="book-label"><small>{vol}</small><b>{esc(j['title'])}</b><i>{count}</i></span>
       </a>
       <div class="book-meta">
@@ -1290,6 +2617,82 @@ def book_items(journals, planned, series=1, book=1, casefile=False):
       <div class="book-meta"><p><b>{label[0].upper() + label[1:]} · {title}.</b> {blurb}</p></div>
     </li>''')
     return "\n".join(books)
+
+
+# Short titles for book spines on the landing page (the full title shows on the pulled-out cover).
+SPINE_TITLES = {
+    "casefile": "Meet Larder",
+    "architect-1": "Requirements", "architect-2": "Decisions", "architect-3": "Communicating",
+    "architect-4": "Integration", "architect-5": "Qualities", "architect-6": "Delivery",
+    "product-1": "Discovering", "product-2": "Deciding", "product-3": "Idea to Backlog",
+    "product-4": "Measuring", "product-5": "Stakeholders", "product-6": "Growing",
+    "pmbok": "PMBOK Map", "ops-1": "Lights On", "ops-2": "Things Break", "ops-3": "Safe Change", "ops-4": "Promises", "ops-5": "The Worst", "ops-6": "Reliability Team", "Changing Things Safely": "Safe Change", "Promises &amp; Measures": "Promises", "Ready for the Worst": "The Worst", "Building the Reliability Team": "Reliability Team", "project-1": "Lay of the Land", "project-2": "Start, Steer, Close", "project-3": "What, By When", "project-4": "Money and People", "project-5": "People Outside", "project-6": "Making It Yours",
+    "People Outside, and Surprises": "People &amp; Surprises",
+    "vendor-1": "Winning the Work", "vendor-2": "Signing &amp; Starting", "vendor-3": "The Legacy", "vendor-4": "Under Fire", "vendor-5": "Politics", "vendor-6": "The Ending", "Digging Up the Legacy": "The Legacy",
+    "Delivery Under Fire": "Under Fire", "Other People's Politics": "Politics", "The Cost and the Ending": "The Ending",
+    "Docker &amp; Kubernetes": "Docker &amp; K8s",   # cheat sheets are looked up by their full title
+    # the darkside Acts drop their article on the spine, so even the longest fits
+    "The Court of Whispers": "Court of Whispers",
+    "The Bestiary": "Bestiary",
+    "The Throne Room": "Throne Room",
+    "The Ascension": "Ascension",
+    "The Famine": "Famine",
+    "The Outer Realms": "Outer Realms",
+    "The New Plagues": "New Plagues",
+    "The Inner Sanctum": "Inner Sanctum",
+}
+
+
+def spine_shelf(items_html, name, label):
+    """Books stored spine-out: one row of spines, and the chosen volume pulled out underneath.
+    items_html is what book_items()/cheatsheet_items() return; name makes the ids unique."""
+    items = re.findall(r'<li class="book (book--[\w-]+)">(.*?)\n    </li>', items_html, flags=re.S)
+    spines, panels = [], []
+    for i, (cls, inner) in enumerate(items):
+        key = cls.replace("book--", "")
+        full = re.search(r"<b>(.*?)</b>", inner).group(1)
+        title = SPINE_TITLES.get(key) or SPINE_TITLES.get(full, full)
+        vol = "file" if key == "casefile" else "map" if key == "pmbok" else key.rsplit("-", 1)[1] if key.rsplit("-", 1)[-1].isdigit() else str(i + 1)
+        planned_vol = re.search(r"vol\. (\d+)", inner) if key == "planned" else None
+        vol = planned_vol.group(1) if planned_vol else vol
+        on = i == 0
+        spines.append(f'<button class="spine {cls}" type="button" role="tab" id="{name}-s{i}" aria-controls="{name}-p{i}" '
+                      f'aria-selected="{"true" if on else "false"}" tabindex="{0 if on else -1}">'
+                      f'<span class="spine-band" aria-hidden="true"></span><span class="spine-vol">{vol}</span>'
+                      f'<span class="spine-title">{title}</span></button>')
+        panels.append(f'    <div class="pulled book {cls}" role="tabpanel" id="{name}-p{i}" aria-labelledby="{name}-s{i}"'
+                      f'{"" if on else " hidden"}>{inner}\n    </div>')
+    return (f'  <div class="spine-shelf" data-spines>\n    <div class="spines" role="tablist" aria-label="{label}">'
+            + "".join(spines) + "</div>\n" + "\n".join(panels) + "\n  </div>")
+
+
+NUMBER_WORDS = ["none", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"]
+
+
+def darkside_items(acts):
+    """Series 4 on the landing page: one cover per live Act of The Darkside of the Corporation."""
+    out = []
+    for no, act in sorted(acts.items()):
+        href = f"darkside/act-{no}/index.html"
+        out.append(f'''    <li class="book book--darkside">
+      <a class="book-cover" href="{href}" aria-label="Open Act {grimoire.ROMAN[no]}: {esc(act['title'])}">
+        <span class="book-band" aria-hidden="true"></span>
+        <span class="book-label"><small>act {grimoire.ROMAN[no]}</small><b>{esc(act['title'])}</b><i>{len(act['entries'])} entries</i></span>
+      </a>
+      <div class="book-meta">
+        <p>{esc(act['sub'])}. {len(act['entries'])} entries, each with the counter-spells that work and the forbidden spells that backfire.</p>
+        <p class="book-actions"><a class="btn" href="{href}">Open the Act</a><a class="btn btn--ghost" href="darkside/index.html">All eight Acts</a></p>
+      </div>
+    </li>''')
+    return "\n".join(out)
+
+
+def darkside_shelf(acts):
+    """Series 4 stored spine-out like the notebooks: eight black grimoires with gold blackletter and a red ribbon.
+    Reuses spine_shelf(), then swaps the volume numbers for the Acts' Roman numerals."""
+    html = spine_shelf(darkside_items(acts), "darkside", "The eight Acts")
+    numerals = iter(grimoire.ROMAN[no] for no in sorted(acts))
+    return re.sub(r'<span class="spine-vol">\d+</span>', lambda m: f'<span class="spine-vol">{next(numerals)}</span>', html)
 
 
 def handbook_items(books):
@@ -1314,7 +2717,7 @@ def handbook_items(books):
     return "\n".join(items)
 
 
-def render_landing(sheets=(), books=()):
+def render_landing(sheets=(), dives=(), darkside=None, books=()):
     series1 = [j for j in shelf() if j.get("series", 1) == 1]
     series2 = [j for j in shelf() if j.get("series", 1) == 2]
     months = []
@@ -1322,46 +2725,65 @@ def render_landing(sheets=(), books=()):
         lis = "".join(f'<li><span class="sig">{s}</span> {t}</li>' for s, t in items)
         months.append(f'    <div class="month"><h3>{month}</h3><ul>{lis}</ul></div>')
     total = sum(len(j["catalogue"]) for j in shelf())
+    n1 = sum(len(j["catalogue"]) for j in series1)
     return "\n".join([
-        head("Jef’s Notes", "A shelf of student bullet journals on software design patterns and the work around the code, with doodles, analogies, trade-offs and ratings, plus long-form handbooks.", 0, "Architects+Daughter&family=Permanent+Marker&family=IBM+Plex+Sans+Condensed:wght@700&family=Archivo:wght@800"),
+        head("Jef’s Notes", "Software design in sizes that fit a working day: ten-minute pattern notes with doodles and trade-offs, thirty-minute deep dives, two practitioner notebooks that follow one start-up, and printable cheat sheets.", 0, "Architects+Daughter&family=Permanent+Marker&family=IBM+Plex+Sans+Condensed:wght@700&family=Pirata+One&family=IM+Fell+English+SC&family=Archivo:wght@800&family=Archivo+Narrow:wght@700"),
         body_open(),
         '<a class="skip-link" href="#main">Skip to the shelf</a>',
         bar(None, 0, "shelf"),
         '<main id="main" class="desk">',
         '<article class="sheet landing">',
         '  <div class="page-meta"><span class="day">The shelf · 2026</span><span class="topic">series · <b>software design</b></span></div>',
-        '  <p class="kicker">hand-written field journals, one subject per volume</p>',
+        '  <p class="kicker">pattern notes, deep dives, two notebooks and a stack of cheat sheets</p>',
         '  <h1 class="cover-title"><span class="hl">Jef’s Notes</span></h1>',
-        f'  <p class="lead">A student\'s bullet journals on software design patterns, and now on the work around the code: what problem each idea solves, an everyday analogy with doodles, how it works, what it costs, how it rates, and how people get it wrong. <b>{len(shelf())} volumes, {total} notes</b> in two series so far, more on the way.</p>',
-        '  <h2 id="shelf"><span class="num">✎</span>The shelf <span class="side">series 1 · design patterns</span></h2>',
-        f'  <ul class="shelf">\n{book_items(series1, PLANNED)}\n  </ul>',
-        '  <h2 id="series-2"><span class="num">✎</span>Series 2 · The Practitioner\'s Notebooks <span class="side">book 1 · the solution architect</span></h2>',
-        '  <p>The second series is about the work <b>around</b> the code. Book 1, <b>The Solution Architect\'s Notebook</b>, follows one company, <b>Larder</b>, a grocery delivery start-up growing from one city to six, from a vague business plan to a running architecture. Same eight sections, a template to copy in every note, and a <b>try it</b> exercise for your own project.</p>',
-        '  <h3 class="shelf-book">Book 1 · The Solution Architect\'s Notebook <span>narrated by Ana</span></h3>',
-        f'  <ul class="shelf shelf-series">\n{book_items([j for j in series2 if j.get("book_no", 1) == 1], PLANNED_2, series=2, book=1, casefile=True)}\n  </ul>',
-        '  <h3 class="shelf-book">Book 2 · The Product Owner\'s Notebook <span>narrated by Grace</span></h3>',
-        f'  <ul class="shelf shelf-series">\n{book_items([j for j in series2 if j.get("book_no", 1) == 2], PLANNED_PRODUCT, series=2, book=2)}\n  </ul>',
-        '  <h2 id="series-3"><span class="num">✎</span>Series 3 · Jef’s Handbooks <span class="side">long-form, chapter by chapter</span></h2>',
-        '  <p>Books, not notes: one big topic, taught from the ground up for readers who know a little and want to be <b>competent</b> by the end. Each chapter explains one idea at a time with precise diagrams, worked examples, a hands-on lab and questions to check yourself.</p>',
-        f'  <ul class="shelf shelf-series">\n{handbook_items(books)}\n  </ul>',
-        '  <h2 id="cheatsheets"><span class="num">⌘</span>Cheat sheets <span class="side">laminated reference cards</span></h2>',
-        '  <p>Short, dense, printable: the commands and decisions you look up twice a week, on a few A4 cards. Reads fine on a phone too.</p>',
-        f'  <ul class="shelf shelf-series">\n{cheatsheet_items(sheets)}\n  </ul>',
+        f'  <p class="lead">Software design, in sizes that fit a working day: <b>{n1} pattern notes, {len(dives)} deep dives, {total - n1} notes from four practitioners and {len(sheets)} cheat sheets</b>. More on the way.</p>',
         AUTHOR_NOTE,
+        '  <h2 id="shelf"><span class="num">✎</span>Pattern notes <span class="side">ten minutes each</span></h2>',
+        f'  <p class="hook">{len(series1)} notebooks, {n1} patterns. Each one fits in a coffee break and has a “what we lose” column, because something always is.</p>',
+        f'  <ul class="shelf">\n{book_items(series1, PLANNED)}\n  </ul>',
+        '  <h2 id="deep-dives"><span class="num">↓</span>Deep dives <span class="side">thirty minutes each</span></h2>',
+        f'  <p class="hook">The textbook chapter you were supposed to read, with someone else\'s pencil notes in the margin. {NUMBER_WORDS[len(dives)].capitalize()} so far, each one a pattern after it has met production, with a skim mode for the honest.</p>',
+        f'  <ul class="shelf shelf-series">\n{dive_items(dives)}\n  </ul>',
+        '  <h2 id="handbooks"><span class="num">❡</span>Handbooks <span class="side">a whole course each</span></h2>',
+        '  <p class="hook">One big topic taught from the ground up, for readers who know a little and want to be competent by the end. Chapters build on each other, with precise diagrams, worked examples from Larder, a hands-on lab and questions to check yourself.</p>',
+        f'  <ul class="shelf shelf-series">\n{handbook_items(books)}\n  </ul>',
+        '  <h2 id="series-2"><span class="num">✎</span>The Practitioner\'s Notebooks <span class="side">a story in three voices</span></h2>',
+        '  <noscript><style>.pulled[hidden] { display: grid !important; } .spines { display: none !important; }</style></noscript>',
+        '  <p class="hook">A soap opera about a grocery start-up, told by its architect, its product owner, its project manager and the engineer who keeps it running. Nobody dies. Several roadmaps do.</p>',
+        '  <p>The work <b>around</b> the code, following one company, <b>Larder</b>, as it grows from one city to six. Every note has a template to copy and a <b>try it</b> exercise for your own project. Tap a spine to pull a volume out; start with the case file.</p>',
+        '  <h3 class="shelf-book">Book 1 · The Solution Architect\'s Notebook <span>narrated by Ana</span></h3>',
+        spine_shelf(book_items([j for j in series2 if j.get("book_no", 1) == 1], PLANNED_2, series=2, book=1, casefile=True), "ana", "Book 1 volumes"),
+        '  <h3 class="shelf-book">Book 2 · The Product Owner\'s Notebook <span>narrated by Grace</span></h3>',
+        spine_shelf(book_items([j for j in series2 if j.get("book_no", 1) == 2], PLANNED_PRODUCT, series=2, book=2), "grace", "Book 2 volumes"),
+        '  <h3 class="shelf-book">Book 3 · The Project Manager\'s Notebook <span>narrated by Sanne · the PMBOK Guide in plain words</span></h3>',
+        spine_shelf(PMBOK_ITEM + "\n" + book_items([j for j in series2 if j.get("book_no", 1) == 3], PLANNED_PROJECT, series=2, book=3), "sanne", "Book 3 volumes"),
+        '  <h3 class="shelf-book">Book 5 · The IT Operations Notebook <span>narrated by Eli · ITIL 4 and SRE in plain words</span></h3>',
+        spine_shelf(book_items([j for j in series2 if j.get("book_no", 1) == 5], PLANNED_OPS, series=2, book=5), "eli", "Book 5 volumes"),
+        '  <h2 id="cheatsheets"><span class="num">⌘</span>Cheat sheets <span class="side">thirty seconds each</span></h2>',
+        '  <p class="hook">For when you know exactly what you want and have forgotten the flag.</p>',
+        '  <p>The commands and decisions you look up twice a week, on a few printable A4 cards. They read fine on a phone too.</p>',
+        spine_shelf(cheatsheet_items(sheets), "cheat", "Cheat sheets"),
+        *([
+            '  <h2 id="darkside"><span class="num">☾</span>The Darkside of the Corporation <span class="side">a survival grimoire</span></h2>',
+            '  <p class="hook">Office politics, difficult people, bad managers and layoffs, written up as a bestiary. Funny on the outside, real advice on the inside.</p>',
+            f'  <p>A survival grimoire for <b>MetroVolt Electric</b>, in {NUMBER_WORDS[len(darkside)]} Acts and {sum(len(a["entries"]) for a in darkside.values())} entries, each with a painted plate, its origin story, counter-spells, a mirror and a rehearsal. Tap a spine to pull an Act off the shelf, or <a href="darkside/index.html">open the whole grimoire</a>.</p>',
+            darkside_shelf(darkside),
+        ] if darkside else []),
+        '  <h2 id="vendor-side"><span class="num">⚑</span>On the Client\'s Floor <span class="side">notes from the vendor side</span></h2>',
+        '  <p class="hook">The same MetroVolt as the grimoire, seen through the glass by the people it hires. Visitor pass, fixed price, one rival who never leaves.</p>',
+        '  <p>A practitioner\'s notebook told by <b>Ines</b>, lead architect at <b>Wrenfield Digital</b>, an 80-person consultancy that wins MetroVolt\'s <b>Lodestar</b> programme: tenders, contracts, legacy systems, other vendors, office politics you can see but not touch, and the stress of a fixed price. Every note shows <b>both sides of the table</b>, the clause that applies, a template to copy and a <b>try it</b>. Complete in six volumes, from the tender in February 2027 to a closed door on floor 27 in June 2029.</p>',
+        spine_shelf(book_items([j for j in shelf() if j.get("series") == 5], PLANNED_VENDOR), "ines", "On the Client's Floor volumes"),
         '  <h2 id="future"><span class="num">→</span>Future log <span class="side">plans, not promises</span></h2>',
         '  <p>In a bullet journal the <b>future log</b> is where next months\' plans go. Here\'s what I\'m planning to write next.</p>',
-        '  <p class="aside">series 2 (★) has begun with the solution architect\'s notebook. Next come notebooks for product managers, project managers and anyone who manages clients. Same format: the problem, an analogy, how it works, trade-offs, pitfalls and a quiz.</p>',
+        '  <p class="aside">the architect\'s, product owner\'s, project manager\'s and IT operations notebooks are complete, six volumes each. Next (★): the client manager. The deep dives get a second season too.</p>',
         f'  <div class="future">\n{chr(10).join(months)}\n  </div>',
-        '  <h2 id="inside"><span class="num">?</span>What\'s inside every note <span class="side">same eight sections</span></h2>',
+        '  <h2 id="inside"><span class="num">?</span>What\'s inside <span class="side">five formats, same idea</span></h2>',
         '''  <ol class="how-to">
-    <li><b>The problem</b> the pattern solves, with a doodle.</li>
-    <li><b>A real-life analogy</b> and a “translate to code” table.</li>
-    <li><b>How it works</b>: diagrams, steps, vocabulary, a code card.</li>
-    <li><b>Gains vs losses</b>, side by side.</li>
-    <li><b>Nine ratings</b> picked for each journal's subject.</li>
-    <li><b>Common pitfalls</b> and their fixes.</li>
-    <li><b>When to use it</b>, and when not to.</li>
-    <li><b>A self-check quiz.</b></li>
+    <li><b>A pattern note</b> has eight sections: the problem, a real-life analogy, how it works, gains vs losses, nine ratings, common pitfalls, when to use it, and a self-check quiz.</li>
+    <li><b>A deep dive</b> has ten chapters: a recap of the notes, the real mechanism, failure drills, the hard problem, numbers, testing, running it, tools, a lab and a review checklist. Every chapter opens with its gist.</li>
+    <li><b>A practitioner's note</b> has the same eight sections as a pattern note, set inside the Larder story, plus a template to copy and a “try it” exercise.</li>
+    <li><b>A handbook</b> is a book in chapters: each opens with what you'll be able to do, teaches one idea at a time with diagrams and worked examples, and ends with a lab, common mistakes, a summary and questions with answers.</li>
+    <li><b>A cheat sheet</b> is a few A4 cards: a map on top, boxed panels below, and a PDF to print.</li>
   </ol>''',
         '  <p class="folio">✦</p>',
         '</article>',
@@ -1371,6 +2793,47 @@ def render_landing(sheets=(), books=()):
         '</html>',
         '',
     ])
+
+
+# ---------------------------------------------------------------- deep dives (series 3)
+# One long chaptered page per topic: content/deep-dives/<name>.py, rendered by scripts/dive.py.
+DIVES = ["saga", "reliable_messaging", "resilience_stack", "event_sourcing_cqrs", "caching", "zero_downtime_change", "sign_in", "replication_failover", "sharding_partitioning", "indexes_query_plans", "rendering_web", "app_db_to_warehouse", "history_warehouse", "one_number", "data_quality"]
+DEEPER = {}   # (journal key, note slug) -> (dive slug, title); filled by load_dive
+
+
+def load_dive(name):
+    spec = importlib.util.spec_from_file_location(f"dive_{name}", CONTENT / "deep-dives" / f"{name}.py")
+    mod = importlib.util.module_from_spec(spec)
+    mod.__dict__.update(dive.HELPERS)
+    spec.loader.exec_module(mod)
+    d = mod.DIVE
+    for key, slug in d.get("notes", []):
+        DEEPER[(key, slug)] = (d["slug"], d["title"])
+    return d
+
+
+def deeper_link(key, slug):
+    if (key, slug) not in DEEPER:
+        return ""
+    dslug, title = DEEPER[(key, slug)]
+    return f'  <p class="aside deeper">go deeper → <a href="../../deep-dives/{dslug}/index.html">{esc(title)}: the deep dive</a></p>'
+
+
+def dive_items(dives):
+    out = []
+    for d in dives:
+        href = f"deep-dives/{d['slug']}/index.html"
+        out.append(f'''    <li class="book book--dive">
+      <a class="book-cover" href="{href}" aria-label="Open the deep dive: {esc(d['title'])}">
+        <span class="book-band" aria-hidden="true"></span>
+        <span class="book-label"><small>deep dive {d['no']:02d}</small><b>{esc(d['title'])}</b><i>{len(d['chapters'])} chapters</i></span>
+      </a>
+      <div class="book-meta">
+        <p>{d['blurb']}</p>
+        <p class="book-actions"><a class="btn" href="{href}">Open deep dive</a><a class="btn btn--ghost" href="deep-dives/{d['slug']}/pdf/{dive.pdf_name(d)}">{DL}PDF</a></p>
+      </div>
+    </li>''')
+    return "\n".join(out)
 
 
 def load_casefile():
@@ -1436,11 +2899,11 @@ def render_casefile():
         c.KORENWOLF,
         '  <h2 id="cast"><span class="num">5</span>The cast <span class="side">who\'s who, and who tells the story</span></h2>',
         f'  <ul class="cast">\n{cast}\n  </ul>',
-        '  <h2 id="books"><span class="num">6</span>The books <span class="side">one company, four notebooks</span></h2>',
+        '  <h2 id="books"><span class="num">6</span>The books <span class="side">one company, five notebooks</span></h2>',
         c.two_books.html(),
         f'  <ul class="bookcards">\n{books}\n  </ul>',
         '  <h2 id="timeline"><span class="num">7</span>The story timeline <span class="side">every note, pinned to its date</span></h2>',
-        '  <p>Read one book from start to end, or follow the story in date order across books. <span class="sig-inline">★</span> story events · <span class="sig-inline">✎</span> Ana’s notebook · <span class="sig-inline sig-2">✎</span> Grace’s notebook.</p>',
+        '  <p>Read one book from start to end, or follow the story in date order across books. <span class="sig-inline">★</span> story events · <span class="sig-inline">✎</span> Ana’s notebook · <span class="sig-inline sig-2">✎</span> Grace’s notebook · <span class="sig-inline sig-3">✎</span> Sanne’s notebook · <span class="sig-inline sig-5">✎</span> Eli’s notebook.</p>',
         f'  <div class="future timeline">\n{chr(10).join(months)}\n  </div>',
         '  <p class="aside">the facts on this page are the source of truth for every note. If a note and this page disagree, this page wins (and the note gets fixed).</p>',
         '  <p class="folio">✦</p>',
@@ -1453,8 +2916,186 @@ def render_casefile():
     ])
 
 
+def load_pmbok_map():
+    f = CONTENT / "pmbok" / "map.py"
+    spec = importlib.util.spec_from_file_location("pmbok_map", f)
+    mod = importlib.util.module_from_spec(spec)
+    mod.__dict__["Doodle"] = Doodle
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def processes_block(m, link):
+    """Process tables on the PMBOK map, one per domain that has been written (PROCESSES in content/pmbok/map.py)."""
+    names = dict(PMBOK_DOMAINS)
+    out = []
+    for dom, rows in m.PROCESSES:
+        trs = "\n".join(f'      <tr><td>{name}</td><td>{fa}</td><td>{plain}</td><td>{"<br>".join(link(r) for r in refs)}</td></tr>'
+                        for name, fa, plain, refs in rows)
+        out.append(f'  <h3 class="toc-coll"><span class="dom dom-{dom}">{names[dom]}</span> <span>{len(rows)} processes</span></h3>\n'
+                   '  <div class="table-scroll"><table class="maptable">\n    <thead><tr><th scope="col">Process</th><th scope="col">Focus area</th>'
+                   '<th scope="col">In plain words</th><th scope="col">Notes</th></tr></thead>\n    <tbody>\n' + trs + '\n    </tbody>\n  </table></div>')
+    return "\n".join(out) + (f"\n{m.PROCESSES_NOTE}" if out else "")
+
+
+# The project file's projects: (card folder, anchor, heading, period). A card joins the file when its file starts with one.
+PROJECT_FILE_GROUPS = [
+    (("rotterdam/", "larder/"), "rotterdam", "Rotterdam", "Jan → May 2026 · vols. 1–4"),
+    (("antwerp/",), "antwerp", "Antwerp", "Oct 2026 → Oct 2027 · vol. 5"),
+    (("programme/",), "programme", "Eindhoven and the 2028 programme", "Sep 2027 → Sep 2028 · vol. 6"),
+]
+PROJECT_FILE_PREFIXES = tuple(p for g in PROJECT_FILE_GROUPS for p in g[0])
+
+
+def render_project_file(loaded):
+    """The project file: every template card whose file is under a project's folder (rotterdam/, antwerp/), in book order,
+    grouped by project. Served at /rotterdam/ (the first project's name; kept so older links still work)."""
+    pages = []
+    for j in JOURNALS:
+        if not j.get("pmbok"):
+            continue
+        for num, slug, title, ckey, summary in j["catalogue"]:
+            n = loaded[j["key"]].get(slug)
+            if n and n["code"]["file"].startswith(PROJECT_FILE_PREFIXES):
+                pages.append((j, num, slug, title, n["code"]))
+    toc = "".join(f'<li><a href="#p{i}"><span class="toc-n">{i:02d}</span><span class="toc-t">{esc(c["file"].split("/")[-1])}'
+                  f'<small>{esc(c["note"])}</small></span><span class="toc-p">vol. {j["vol"]} · {num:02d}</span></a></li>'
+                  for i, (j, num, slug, title, c) in enumerate(pages, 1))
+    def group(c):
+        return next(g for g in PROJECT_FILE_GROUPS if c["file"].startswith(g[0]))
+
+    def group_head(i, c):
+        g = group(c)
+        prev = pages[i - 2][4] if i > 1 else None
+        if prev is not None and group(prev) is g:
+            return ""
+        return f'  <h2 class="file-group" id="{g[1]}"><span class="num">▤</span>{g[2]} <span class="side">{g[3]}</span></h2>\n'
+
+    toc_groups = "".join(f'<li><a href="#{g[1]}"><b>{g[2]}</b> · {g[3]}</a></li>' for g in PROJECT_FILE_GROUPS
+                         if any(group(c) is g for *_, c in pages))
+    cards = "\n".join(
+        group_head(i, c) +
+        f'  <h3 class="file-h" id="p{i}"><span>{i:02d}</span>{esc(c["file"].split("/")[-1])} <small>explained in '
+        f'<a href="../{j["key"]}/notes/{slug}.html">{esc(title)}</a> (vol. {j["vol"]} · {num:02d})</small></h3>\n'
+        f'  <div class="card">\n    <div class="card-head"><span>{esc(c["file"])}</span><span>{esc(c["note"])}</span></div>\n'
+        f'<pre><code>{esc(c["src"].strip(chr(10)))}</code></pre>\n  </div>'
+        for i, (j, num, slug, title, c) in enumerate(pages, 1))
+    j = dict(theme="theme-project pmbokmap projectfile", disclaimer=PMI_NOTE)
+    return "\n".join([
+        head("The Project File · Jef’s Notes", "Every page from Sanne's binder: Rotterdam, Antwerp and the 2028 programme, complete, worked sets of project documents.", 1, "Patrick+Hand+SC"),
+        body_open(j),
+        '<a class="skip-link" href="#main">Skip to the project file</a>',
+        bar(None, 1),
+        '<main id="main" class="desk">',
+        '<article class="sheet">',
+        f'  {ROUGH}',
+        PROJECT_DOODLES,
+        '  <div class="page-meta"><span class="day">Rotterdam 2026 · Antwerp 2026–27 · programme 2028</span><span class="topic">book 3 · <b>the worked example</b></span></div>',
+        '  <p class="kicker">the project manager\'s notebook · Sanne\'s binder</p>',
+        '  <h1 class="cover-title"><span class="hl">The Project File</span></h1>',
+        f'  <p class="lead">Every note in <b>The Project Manager\'s Notebook</b> ends its “how” section with a page from Sanne\'s binder. Here they are together, in order: <b>{len(pages)} pages</b> so far, from two launches. <b>Rotterdam</b> (vols. 1–4) runs from its first week to its closing report; <b>Antwerp</b> (vol. 5), the first city abroad, adds the stakeholder and risk pages; <b>Eindhoven and the 2028 programme</b> (vol. 6) add the pages for tailoring, the playbook, programmes and growing. Within each project the numbers carry from page to page: the budget in the charter is the budget in the status report and in the closing report. Copy any page as a starting point; each links to the note that explains it.</p>',
+        f'  <ul class="drivers">{toc_groups}</ul>',
+        '  <p class="map-link"><a href="../pmbok/index.html"><b>The PMBOK map</b>: where each of these pages sits in the guide →</a></p>',
+        '  <h2 id="index"><span class="num">✎</span>Contents <span class="side">tap a page to jump to it</span></h2>',
+        f'  <ol class="toc">{toc}</ol>',
+        '  <h2 id="pages"><span class="num">§</span>The pages <span class="side">project by project, in the order Sanne wrote them</span></h2>',
+        cards,
+        '  <p class="aside">this file grows with the book: each new volume adds its pages.</p>',
+        '  <p class="folio">✦</p>',
+        '</article>',
+        foot(j),
+        '</main>',
+        '</body>',
+        '</html>',
+        '',
+    ])
+
+
+def render_pmbok_map(loaded):
+    """The PMBOK map: the whole guide on one page, each item linked to the note that covers it."""
+    m = load_pmbok_map()
+    books = [j for j in JOURNALS if j.get("pmbok")]
+
+    def link(ref):
+        if not ref:
+            return '<span class="todo">to come</span>'
+        key, slug = ref
+        o = journal(key)
+        num, _, title, *_ = entry(o, slug)
+        return f'<a href="../{key}/notes/{slug}.html">{esc(title)}</a> <small>vol. {o["vol"]} · {num:02d}</small>'
+
+    principles = "\n".join(f'    <li><h3>{name}</h3><p>{plain}</p><p class="where">{link(ref)}</p></li>' for name, plain, ref in m.PRINCIPLES)
+    focus = "\n".join(f'    <li><h3>{name}</h3><p>{plain}</p></li>' for name, plain in m.FOCUS)
+    domains = "\n".join(
+        f'      <tr><td><span class="dom dom-{k}">{name}</span></td><td>{q}</td><td class="n">{n}</td><td>{vol}</td></tr>'
+        for k, name, q, n, vol in m.DOMAINS)
+    total = sum(d[3] for d in m.DOMAINS)
+    foundations = "\n".join(f'    <li><b>{what}</b>: {link(ref)}</li>' for what, ref in m.FOUNDATIONS)
+    cross = "\n".join(f'      <tr><td>{a}</td><td>{b}</td><td>{c}</td><td>{d}</td></tr>' for a, b, c, d in m.CROSSWALK)
+    vols = []
+    for j in books:
+        rows = []
+        for num, slug, title, ckey, summary in j["catalogue"]:
+            t = loaded[j["key"]].get(slug, {}).get("pmbok", {})
+            names = dict(PMBOK_DOMAINS)
+            doms = "".join(f'<span class="dom dom-{d}">{names[d]}</span>' for d in t.get("domains", [])) or '<span class="dom dom-foundations">Foundations</span>'
+            deep = ' <em class="deep-tag">+ goes deeper</em>' if slug in j.get("deep_dives", ()) else ""
+            rows.append(f'      <tr><td class="n">{num:02d}</td><td><a href="../{j["key"]}/notes/{slug}.html">{esc(title)}</a>{deep}</td>'
+                        f'<td>{t.get("covers", "")}</td><td>{doms}</td></tr>')
+        vols.append(f'  <h3 class="toc-coll">Vol. {j["vol"]} · {esc(j["title"])} <span>{len(j["catalogue"])} notes</span></h3>\n'
+                    f'  <div class="table-scroll"><table class="maptable">\n    <thead><tr><th scope="col">#</th><th scope="col">The question</th>'
+                    f'<th scope="col">What it covers in the guide</th><th scope="col">Domain</th></tr></thead>\n    <tbody>\n'
+                    + "\n".join(rows) + '\n    </tbody>\n  </table></div>')
+    planned = "".join(f"<li><b>Vol. {v} · {t}.</b> {b}</li>" for v, t, b in PLANNED_PROJECT)
+    j = dict(theme="theme-project pmbokmap", disclaimer=PMI_NOTE)
+    return "\n".join([
+        head("The PMBOK Map · Jef’s Notes", "The PMBOK Guide, eighth edition, on one page: principles, domains, focus areas, and the note that covers each.", 1, "Patrick+Hand+SC"),
+        body_open(j),
+        '<a class="skip-link" href="#main">Skip to the map</a>',
+        bar(None, 1),
+        '<main id="main" class="desk">',
+        '<article class="sheet">',
+        f'  {ROUGH}',
+        PROJECT_DOODLES,
+        '  <div class="page-meta"><span class="day">PMBOK Guide · 8th edition</span><span class="topic">book 3 · <b>find your way</b></span></div>',
+        '  <p class="kicker">the project manager\'s notebook · the guide on one page</p>',
+        '  <h1 class="cover-title"><span class="hl">The PMBOK Map</span></h1>',
+        f'  <p class="lead">{m.LEAD}</p>',
+        '  <h2 id="shape"><span class="num">1</span>The shape of the guide <span class="side">6 · 7 · 5 · 40</span></h2>',
+        m.shape.html(),
+        m.SHAPE,
+        '  <h2 id="principles"><span class="num">2</span>Six principles <span class="side">what good project management rests on</span></h2>',
+        f'  <ol class="maplist">\n{principles}\n  </ol>',
+        '  <h2 id="domains"><span class="num">3</span>Seven performance domains <span class="side">what you watch, all the way through</span></h2>',
+        '  <div class="table-scroll"><table class="maptable">\n    <thead><tr><th scope="col">Domain</th><th scope="col">The question it answers</th>'
+        '<th scope="col">Processes</th><th scope="col">In this book</th></tr></thead>\n    <tbody>\n' + domains +
+        f'\n      <tr class="total"><td></td><td>all seven</td><td class="n">{total}</td><td></td></tr>\n    </tbody>\n  </table></div>',
+        m.DOMAINS_NOTE,
+        processes_block(m, link),
+        '  <h2 id="focus"><span class="num">4</span>Five focus areas <span class="side">what kind of attention the work needs now</span></h2>',
+        f'  <ol class="maplist maplist--focus">\n{focus}\n  </ol>',
+        '  <h2 id="foundations"><span class="num">5</span>The ground under it <span class="side">ideas the guide builds on</span></h2>',
+        f'  <ul class="drivers">\n{foundations}\n  </ul>',
+        '  <h2 id="notes"><span class="num">6</span>Every note, by volume <span class="side">the question, and what it covers</span></h2>',
+        "\n".join(vols),
+        f'  <p>Still to come:</p>\n  <ul class="drivers">{planned}</ul>' if planned else '',
+        '  <h2 id="editions"><span class="num">7</span>If you learned an older edition <span class="side">6th → 7th → 8th</span></h2>',
+        m.EDITIONS,
+        '  <div class="table-scroll"><table class="maptable">\n    <thead><tr><th scope="col"></th><th scope="col">6th (2017)</th><th scope="col">7th (2021)</th>'
+        '<th scope="col">8th (2025)</th></tr></thead>\n    <tbody>\n' + cross + '\n    </tbody>\n  </table></div>',
+        '  <p class="aside">this map grows with the book: each new volume fills in its domains.</p>',
+        '  <p class="folio">✦</p>',
+        '</article>',
+        foot(j),
+        '</main>',
+        '</body>',
+        '</html>',
+        '',
+    ])
+
+
 # ---------------------------------------------------------------- cheat sheets (laminated reference cards)
-CHEATSHEETS = ["git_flow"]
+CHEATSHEETS = ["git_flow", "docker_k8s", "sql", "nfr", "network", "refactoring", "warehouse"]
 CS_FONTS = "IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400"
 CS_LOGO = ('<svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="8" fill="#FFFFFF" fill-opacity=".1"/>'
            '<path d="M10 7v20" stroke="var(--b-main)" stroke-width="3" stroke-linecap="round" fill="none"/>'
@@ -1467,7 +3108,7 @@ def load_cheatsheet(name):
     f = CONTENT / "cheatsheets" / f"{name}.py"
     spec = importlib.util.spec_from_file_location(f"cheatsheet_{name}", f)
     mod = importlib.util.module_from_spec(spec)
-    mod.__dict__.update(Graph=cheatsheet.Graph, cmd=cheatsheet.cmd, box=cheatsheet.box)
+    mod.__dict__.update(Graph=cheatsheet.Graph, Diagram=cheatsheet.Diagram, cmd=cheatsheet.cmd, code=cheatsheet.code, box=cheatsheet.box)
     spec.loader.exec_module(mod)
     return mod
 
@@ -1488,7 +3129,7 @@ def render_cheatsheet(cs):
             body.append('<ul class="cs-legend">' + "".join(
                 f'<li><i style="--c:var(--b-{c})"></i><b>{esc(name)}</b> {esc(what)}</li>' for c, name, what in p["legend"]) + "</ul>")
         if p.get("strategies"):
-            body.append('<h3 class="cs-strat-h">Merge strategies: pick per target branch</h3>')
+            body.append(f'<h3 class="cs-strat-h">{p.get("strategies_title", "Merge strategies: pick per target branch")}</h3>')
             body.append('<div class="cs-strats">' + "".join(
                 f'<section class="cs-strat"><h3>{t} <code>{esc(flag)}</code></h3>{svg}<p>{what}</p><p>{use}</p></section>'
                 for t, flag, svg, what, use in p["strategies"]) + "</div>")
@@ -1499,7 +3140,7 @@ def render_cheatsheet(cs):
             r"(<dt>.*?</dt>\s*<dd>.*?</dd>)", r"<div>\1</div>", m.group(1), flags=re.S) + "</dl>", html, flags=re.S)
         pages.append(f'''<article class="cs-page" id="p{i}" aria-labelledby="p{i}-h">
 <header class="cs-head">
-  <div class="cs-logo">{CS_LOGO}<span>{esc(cs.TITLE)}<br>cheat sheet</span></div>
+  <div class="cs-logo">{getattr(cs, "LOGO", CS_LOGO)}<span>{esc(cs.TITLE)}<br>cheat sheet</span></div>
   <h2 id="p{i}-h">{p["title"]}<small>{p["kicker"]}</small></h2>
   <div class="cs-num"><b>{i}/{n}</b>card</div>
 </header>
@@ -1566,6 +3207,24 @@ def redirect(to):
             f'<body><p>This page moved to <a href="{to}">{to}</a>.</p></body></html>\n')
 
 
+REVISIONS = {}       # journal key -> {slug: changes} from content/<key>/revisions.py (also used for hand-made notes)
+REVISION_NOTE = {}   # journal key -> (month, what changed in this volume), shown on the index
+
+
+def sit_q(q):
+    """A situational question: tagged “what would you do?” above the question text."""
+    return f'<span class="q-body"><span class="q-sit">what would you do?</span>{q}</span>'
+
+
+def apply_revision(n, rev):
+    """Merge a note's later additions into it: `quiz_add` appends questions, every other field replaces."""
+    for k, v in rev.items():
+        if k == "quiz_add":
+            n["quiz"] = list(n["quiz"]) + [(sit_q(q), a) for q, a in v]
+        else:
+            n[k] = v
+
+
 def load_content(key):
     notes = {}
     for f in sorted((CONTENT / key).glob("*.py")):
@@ -1574,13 +3233,34 @@ def load_content(key):
         mod.__dict__["Doodle"] = Doodle
         spec.loader.exec_module(mod)
         for n in getattr(mod, "NOTES", []):
+            if n.get("quiz_sit"):   # situational questions, tagged “what would you do?” (notes written after Nov 2026)
+                n["quiz"] = list(n["quiz"]) + [(sit_q(q), a) for q, a in n["quiz_sit"]]
             notes[n["slug"]] = n
+        if hasattr(mod, "REVISIONS"):   # several files may add to the same note (revisions.py, deeper.py)
+            for slug, rev in mod.REVISIONS.items():
+                REVISIONS.setdefault(key, {}).setdefault(slug, {}).update(rev)
+            if hasattr(mod, "REVISION_NOTE"):
+                REVISION_NOTE[key] = mod.REVISION_NOTE
+    for slug, rev in REVISIONS.get(key, {}).items():
+        if slug in notes:
+            apply_revision(notes[slug], rev)
+            r = notes[slug].get("revised")
+            if rev.get("deep_dive") and r and "going-deeper" not in r[1]:
+                notes[slug]["revised"] = (r[0], r[1].replace(" and a try it", ", a try it") + " and a going-deeper chapter")
     return notes
 
 
 def main():
     listing = []
+    dives = [load_dive(name) for name in DIVES]   # first: notes link to their deep dive
+    sheets = [load_cheatsheet(name) for name in CHEATSHEETS]
+    CHEAT_TITLES.update((cs.SLUG, cs.TITLE) for cs in sheets)
     loaded = {j["key"]: load_content(j["key"]) for j in JOURNALS}
+    index_titles(loaded)
+    for j in JOURNALS:   # a note with a going-deeper chapter is tagged on the index, and so is its then & now verdict
+        j["deep_dives"] = set(j.get("deep_dives", ())) | {s for s, n in loaded[j["key"]].items() if n.get("deep_dive")}
+        j["verdicts"] = {s: n["then_now"]["verdict"] for s, n in loaded[j["key"]].items() if n.get("then_now")}
+    find_seen_at_larder(loaded)
     back = {}
     for j in JOURNALS:
         for slug, n in loaded[j["key"]].items():
@@ -1598,7 +3278,7 @@ def main():
         for slug, n in notes.items():
             (out / "notes" / f"{slug}.html").write_text(render_note(j, n, back.get((key, slug), [])), encoding="utf-8")
         for slug in j["handmade"]:
-            stamp_handmade(out / "notes" / f"{slug}.html")
+            stamp_handmade(out / "notes" / f"{slug}.html", j)
         print(f"[{key}] wrote {len(notes)} notes")
         (out / "index.html").write_text(render_index(j), encoding="utf-8")
         (out / "all.html").write_text(render_all(j), encoding="utf-8")
@@ -1611,7 +3291,10 @@ def main():
                                         pdf=f"{key}/pdf/{pdf_name(c[0], c[1])}") for c in ready]))
     (PUBLIC / "larder").mkdir(exist_ok=True)
     (PUBLIC / "larder" / "index.html").write_text(render_casefile(), encoding="utf-8")
-    sheets = [load_cheatsheet(name) for name in CHEATSHEETS]
+    (PUBLIC / "pmbok").mkdir(exist_ok=True)
+    (PUBLIC / "pmbok" / "index.html").write_text(render_pmbok_map(loaded), encoding="utf-8")
+    (PUBLIC / "rotterdam").mkdir(exist_ok=True)
+    (PUBLIC / "rotterdam" / "index.html").write_text(render_project_file(loaded), encoding="utf-8")
     for cs in sheets:
         out = PUBLIC / "cheatsheets" / cs.SLUG
         out.mkdir(parents=True, exist_ok=True)
@@ -1619,9 +3302,17 @@ def main():
         listing.append(dict(key=f"cheatsheets/{cs.SLUG}", title=f"{cs.TITLE} cheat sheet", all=f"cheatsheets/{cs.SLUG}/index.html",
                             pdf=f"cheatsheets/{cs.SLUG}/pdf/{cheatsheet_pdf(cs)}", notes=[]))
         print(f"[cheatsheets] wrote {cs.SLUG} ({len(cs.PAGES)} cards)")
+    for d in dives:
+        out = PUBLIC / "deep-dives" / d["slug"]
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "index.html").write_text(dive.render_dive(d, asset), encoding="utf-8")
+        listing.append(dict(key=f"deep-dives/{d['slug']}", title=f"{d['title']} deep dive", all=f"deep-dives/{d['slug']}/index.html",
+                            pdf=f"deep-dives/{d['slug']}/pdf/{dive.pdf_name(d)}", notes=[]))
+        print(f"[deep-dives] wrote {d['slug']} ({len(d['chapters'])} chapters)")
+    darkside = grimoire.build(asset)
     books, hb_listing = build_handbooks.build()
     listing.extend(hb_listing)
-    (PUBLIC / "index.html").write_text(render_landing(sheets, books), encoding="utf-8")
+    (PUBLIC / "index.html").write_text(render_landing(sheets, dives, darkside, books), encoding="utf-8")
     (PUBLIC / "journals.json").write_text(json.dumps(listing, indent=1), encoding="utf-8")
     # old links from before the shelf existed (everything was the distributed journal)
     old = PUBLIC / "notes"
@@ -1630,6 +3321,10 @@ def main():
         (old / f"{c[1]}.html").write_text(redirect(f"../distributed/notes/{c[1]}.html"), encoding="utf-8")
     (PUBLIC / "all.html").write_text(redirect("distributed/all.html"), encoding="utf-8")
     print("wrote landing page, journals.json and redirects")
+    if UNRESOLVED:
+        print(f"[links] {len(UNRESOLVED)} related entries name no note (left as text); first ten:")
+        for key, slug, text in UNRESOLVED[:10]:
+            print(f"    {key}/{slug}: {text}")
 
 
 if __name__ == "__main__":

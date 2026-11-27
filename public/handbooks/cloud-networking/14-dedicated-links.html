@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Hybrid connectivity II: dedicated connections · Networking in the Cloud</title>
+<meta name="description" content="Private circuits into the cloud: when they&#x27;re worth it, how to make them redundant, what they cost.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 1</a> · <a href="index.html">Networking in the Cloud</a></span><span>Part III · Chapter 14</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part III · Connecting networks</p>
+  <p class="chno">14</p>
+  <h1>Hybrid connectivity II: dedicated connections</h1>
+  <p class="promise">A VPN borrows the internet. A dedicated connection is your own private circuit into the provider's network: steady latency, many gigabits, cheaper data transfer, and a long list of things to order, cable and pay for. This chapter explains how Direct Connect and its equivalents are put together, how to make them resilient, and how to decide whether you need one at all.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain how a dedicated connection reaches the cloud, from your router to a VPC.</li>
+      <li>Choose between dedicated and hosted connections, and between virtual interface types.</li>
+      <li>Design for 99.9% and 99.99% availability.</li>
+      <li>Work out when a dedicated connection pays for itself.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>BGP and redundancy over VPN (<a href="13-vpn-bgp.html">Chapter 13</a>).</li>
+      <li>Transit gateways (<a href="11-connecting-vpcs.html">Chapter 11</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, AWS CLI and Python, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 14.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>After an investor dinner, Femke, Larder's CEO, asks Ana a pointed question: “A competitor told me they run their stores on private lines to the cloud. The internet feels fragile for something this important. Should we?” Ana asks Eli to work out what a private connection would cost Larder, what it would fix, and what it wouldn't.</p>
+  <p>Eli's answer, in section 14.6, is a short decision record. Getting to it needs the rest of the chapter.</p>
+</aside>
+
+<!-- ======================================================== 14.1 -->
+<h2 class="sec" id="s14-1"><span class="n">14.1</span>The big picture</h2>
+
+<p class="lead">A <span class="term">dedicated connection</span> is a physical circuit, usually fibre, from your network to a router owned by the cloud provider. It never touches the public internet. AWS calls it <strong>Direct Connect</strong>, Azure <strong>ExpressRoute</strong>, Google Cloud <strong>Cloud Interconnect</strong>. All three meet you in the same kind of place: a <strong>colocation facility</strong>, a building where carriers, providers and customers rent space and connect to each other with short fibre <strong>cross-connects</strong>.</p>
+
+<figure class="wide" id="fig14-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig14-1-t fig14-1-d">
+      <title id="fig14-1-t">How a dedicated connection reaches a VPC</title>
+      <desc id="fig14-1-d">Your router in your data centre connects over a carrier's private circuit to a Direct Connect location, a colocation building. There, a cross-connect joins your or your partner's router to an AWS router. From there, AWS's backbone carries traffic to a Direct Connect gateway and a transit gateway in the region, and on to your VPCs. A virtual interface, with its own VLAN and BGP session, runs over the physical connection.</desc>
+      <rect class="priv" x="12" y="50" width="150" height="120" rx="6"/>
+      <text class="t-small" x="24" y="70">your data centre</text>
+      <rect class="node" x="28" y="92" width="118" height="50" rx="4"/>
+      <text class="t-label" x="87" y="122" text-anchor="middle">your router</text>
+      <path class="wire" d="M146 117 H238"/>
+      <text class="t-small" x="192" y="108" text-anchor="middle">carrier</text>
+      <text class="t-small" x="192" y="136" text-anchor="middle">circuit</text>
+      <rect class="region" x="238" y="40" width="290" height="140" rx="8"/>
+      <text class="t-small" x="252" y="60">Direct Connect location (colocation)</text>
+      <rect class="node" x="254" y="92" width="110" height="50" rx="4"/>
+      <text class="t-label" x="309" y="114" text-anchor="middle">your / partner</text>
+      <text class="t-label" x="309" y="132" text-anchor="middle">router</text>
+      <rect class="node-accent" x="404" y="92" width="110" height="50" rx="4"/>
+      <text class="t-label on-accent" x="459" y="122" text-anchor="middle">AWS router</text>
+      <path class="wire-accent" d="M364 117 H404"/>
+      <text class="t-small t-accent" x="384" y="162" text-anchor="middle">cross-connect</text>
+      <path class="wire-accent" d="M514 117 H590"/>
+      <text class="t-small t-accent" x="552" y="94" text-anchor="middle">AWS</text>
+      <text class="t-small t-accent" x="552" y="108" text-anchor="middle">backbone</text>
+      <rect class="vpc" x="590" y="30" width="158" height="170" rx="8"/>
+      <text class="t-small" x="602" y="50">AWS region</text>
+      <rect class="node" x="604" y="62" width="130" height="36" rx="4"/>
+      <text class="t-label" x="669" y="85" text-anchor="middle">DX gateway</text>
+      <rect class="node-accent" x="604" y="110" width="130" height="36" rx="4"/>
+      <text class="t-label on-accent" x="669" y="133" text-anchor="middle">transit gateway</text>
+      <rect class="node" x="604" y="158" width="130" height="30" rx="4"/>
+      <text class="t-small" x="669" y="178" text-anchor="middle">VPCs</text>
+      <text class="t-small" x="20" y="222">Over the one physical connection runs a virtual interface: a VLAN tag plus a BGP session, here a “transit VIF” to the DX gateway.</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 14.1</b> The pieces of a Direct Connect path. The carrier circuit and the cross-connect are physical things that take weeks to order. Everything from the virtual interface onward is configuration.</figcaption>
+</figure>
+
+<p>What you get, compared with a VPN: <strong>steady latency</strong> (no internet congestion in between), <strong>high bandwidth</strong> (1 to 400 Gbps per connection), and <strong>lower data-transfer-out prices</strong>. What you don't get by default: <strong>encryption</strong>. The circuit is private, not encrypted (14.4).</p>
+
+<!-- ======================================================== 14.2 -->
+<h2 class="sec" id="s14-2"><span class="n">14.2</span>Getting a connection</h2>
+
+<p>There are two ways to buy one:</p>
+<div class="table-wrap">
+  <table>
+    <caption>Table 14.1 · Dedicated and hosted connections</caption>
+    <thead><tr><th></th><th>Dedicated connection</th><th>Hosted connection</th></tr></thead>
+    <tbody>
+      <tr><td>What it is</td><td>a physical port on an AWS router, yours alone</td><td>a slice of a partner's connection, set up by the partner</td></tr>
+      <tr><td>Speeds</td><td>1, 10, 100 or 400 Gbps</td><td>from 50 Mbps up to 25 Gbps</td></tr>
+      <tr><td>You need</td><td>equipment or a carrier at the Direct Connect location, and a cross-connect</td><td>a contract with an AWS Direct Connect partner who reaches your site</td></tr>
+      <tr><td>Lead time</td><td>weeks to months</td><td>days to weeks</td></tr>
+      <tr><td>Good for</td><td>large, constant traffic; MACsec encryption</td><td>most companies starting out</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>For a dedicated connection, AWS gives you a <strong>Letter of Authorization</strong> (LOA-CFA) that tells the colocation provider which port to connect your cross-connect to. Then the slow part begins: ordering the carrier circuit to your building, the cross-connect, and the router configuration. Plan for one to three months.</p>
+
+<!-- ======================================================== 14.3 -->
+<h2 class="sec" id="s14-3"><span class="n">14.3</span>Virtual interfaces and the DX gateway</h2>
+
+<p>A connection is just a pipe. To use it, you create one or more <span class="term">virtual interfaces</span> (VIFs) over it, each with its own VLAN tag and its own BGP session (<a href="13-vpn-bgp.html">Chapter 13</a> had BGP over tunnels; this is the same idea over a VLAN).</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 14.2 · Virtual interface types</caption>
+    <thead><tr><th>Type</th><th>Reaches</th><th>Through</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Private VIF</strong></td><td>VPCs, using private addresses</td><td>a virtual private gateway (one VPC), or a DX gateway to several VPCs' gateways</td></tr>
+      <tr><td><strong>Transit VIF</strong></td><td>everything on one or more transit gateways</td><td>a DX gateway associated with the TGWs</td></tr>
+      <tr><td><strong>Public VIF</strong></td><td>AWS public endpoints (S3, other public services) over the private circuit</td><td>AWS's public network; you need public addresses</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>A <span class="term">Direct Connect gateway</span> is a global object that links your virtual interfaces to gateways in any AWS region (outside China). One connection in Amsterdam can reach VPCs in Frankfurt and Ireland through it, using AWS's backbone between regions. With a transit gateway, the usual modern design is one transit VIF to a DX gateway, associated with each region's TGW, and the TGW's route tables decide who reaches what (<a href="11-connecting-vpcs.html">Chapter 11</a>).</p>
+
+<aside class="side"><b>BFD</b>BGP alone can take up to its hold time, often 90 seconds on physical links, to notice a dead path. Turn on <em>Bidirectional Forwarding Detection</em> on your router; AWS supports it on Direct Connect, and failover drops to under a second.</aside>
+
+<!-- ======================================================== 14.4 -->
+<h2 class="sec" id="s14-4"><span class="n">14.4</span>Resilience and encryption</h2>
+
+<p>One connection is one router, one cross-connect, one circuit, one building: four single points of failure. AWS publishes three recommended designs:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 14.3 · Direct Connect resiliency models</caption>
+    <thead><tr><th>Model</th><th>Design</th><th>Survives</th><th>Target</th></tr></thead>
+    <tbody>
+      <tr><td>Development and test</td><td>one connection at one location</td><td>nothing; add a VPN backup</td><td>non-critical</td></tr>
+      <tr><td>High resiliency</td><td>one connection at each of <strong>two</strong> locations</td><td>a device, circuit or whole-location failure</td><td>99.9%</td></tr>
+      <tr><td>Maximum resiliency</td><td>two connections, on separate devices, at each of two locations</td><td>a location failure <em>and</em> a device failure at the other</td><td>99.99%</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>A <strong>VPN as backup</strong> is a cheap middle ground: a site-to-site VPN to the same transit gateway, with BGP preferring Direct Connect while it's up. Remember the size difference, though: a VPN can't carry 10 Gbps of failover traffic, so decide in advance what's allowed to run slowly during a failure.</p>
+
+<h3>Encryption</h3>
+<p>Traffic on a dedicated connection is isolated but not encrypted. Three ways to add encryption:</p>
+<ul>
+  <li><strong>TLS end to end</strong> in your applications (<a href="06-http-tls.html">Chapter 6</a>). Usually there already, and enough for many companies.</li>
+  <li><strong>MACsec</strong>, link-layer encryption between your router and AWS's, on dedicated 10 and 100 Gbps connections at supported locations. Line-rate, no throughput cost.</li>
+  <li><strong>IPsec VPN over Direct Connect</strong>: a site-to-site VPN that runs over the private circuit instead of the internet. Encrypted, with the VPN's per-tunnel bandwidth limits.</li>
+</ul>
+
+<!-- ======================================================== 14.5 -->
+<h2 class="sec" id="s14-5"><span class="n">14.5</span>What it costs</h2>
+
+<p>A Direct Connect bill has several parts: an hourly charge per port (dedicated) or per hosted connection; <strong>data transfer out</strong> of AWS at a reduced rate (data in is free); and costs outside AWS: the carrier circuit, the cross-connect and rack space at the colocation, and possibly a partner's fee. At the time of writing, data out over Direct Connect in Europe costs around $0.02 per GB, against roughly $0.09 per GB to the internet for the first tiers.</p>
+
+<p>That price difference is where a dedicated connection pays for itself. A rough break-even:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 14.4 · An illustrative monthly comparison for a data centre pulling data from AWS</caption>
+    <thead><tr><th>Data out per month</th><th class="num">Internet (≈ $0.09/GB)</th><th class="num">Direct Connect (≈ $0.02/GB + ≈ $1,200 fixed)</th></tr></thead>
+    <tbody>
+      <tr><td>2 TB</td><td class="num">$180</td><td class="num">$1,240</td></tr>
+      <tr><td>20 TB</td><td class="num">$1,800</td><td class="num">$1,600</td></tr>
+      <tr><td>100 TB</td><td class="num">$9,000</td><td class="num">$3,200</td></tr>
+    </tbody>
+  </table>
+</div>
+<p>The fixed amount here assumes a 1 Gbps hosted connection, a circuit and colocation fees; your quotes will differ, often a lot. The shape won't: below a few tens of terabytes a month, cost alone rarely justifies a dedicated line.</p>
+
+<!-- ======================================================== 14.6 -->
+<h2 class="sec" id="s14-6"><span class="n">14.6</span>Do you need one?</h2>
+
+<p>Good reasons for a dedicated connection: <strong>large, steady traffic</strong> between a data centre and the cloud; <strong>latency-sensitive</strong> systems split across both, such as a factory's control software; <strong>regulation or policy</strong> that forbids the internet as a path; or a <strong>migration</strong> that must move hundreds of terabytes. Weak reasons: “the internet feels fragile” for sites that send little data, or many small sites that each would need their own circuit.</p>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Eli's decision record was one page. <em>Context:</em> Larder has no data centre. Its traffic to Frankfurt comes from dozens of small stores (a few GB a day each) and an office that mostly uses SaaS tools. <em>Options:</em> a Direct Connect from each store (dozens of circuits, months of lead time, thousands a month each); one Direct Connect into a carrier's network that also serves the stores (an MPLS-style network, a large contract); or keep VPN over fibre and 4G with BGP failover, which already survives a line failure in under a minute (<a href="13-vpn-bgp.html">Chapter 13</a>). <em>Decision:</em> keep VPNs. <em>Revisit when:</em> Larder runs a site with constant traffic above about 1 Gbps or 20 TB a month, such as an automated central warehouse, or a store system that can't tolerate the internet's occasional bad minute.</p>
+  <p>Femke's competitor, it turned out, has a large central warehouse with robots controlled from the cloud. For them, a private line is exactly right.</p>
+</aside>
+
+<!-- ======================================================== 14.7 -->
+<h2 class="sec" id="s14-7"><span class="n">14.7</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 14.5 · Dedicated connections at the big three</caption>
+    <thead><tr><th></th><th>AWS Direct Connect</th><th>Azure ExpressRoute</th><th>Google Cloud Interconnect</th></tr></thead>
+    <tbody>
+      <tr><td>Direct or through a partner</td><td>dedicated; hosted (partner)</td><td>ExpressRoute Direct; provider circuits</td><td>Dedicated Interconnect; Partner Interconnect</td></tr>
+      <tr><td>Logical links</td><td>private, transit and public VIFs</td><td>private peering; Microsoft peering</td><td>VLAN attachments</td></tr>
+      <tr><td>Routing</td><td>BGP per VIF</td><td>BGP per peering</td><td>BGP through Cloud Router</td></tr>
+      <tr><td>Built-in redundancy</td><td>none: design it (Table 14.3)</td><td>each circuit has two connections</td><td>none: 99.9% and 99.99% topologies documented</td></tr>
+      <tr><td>Reach many regions</td><td>Direct Connect gateway</td><td>ExpressRoute Premium; Global Reach links sites</td><td>global VPC routing</td></tr>
+      <tr><td>Link-layer encryption</td><td>MACsec</td><td>MACsec (Direct)</td><td>MACsec</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Google Cloud also offers <strong>Cross-Cloud Interconnect</strong>, a dedicated connection from Google Cloud straight to another provider, and colocation providers sell similar “cloud exchange” fabrics that join several providers in one building. They're the building blocks for running one system across two clouds.</p>
+
+<!-- ======================================================== 14.8 -->
+<h2 class="sec" id="s14-8"><span class="n">14.8</span>Lab: find the buildings and do the sums</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 14 · Locations, a resilient design and a break-even</p>
+  <p><strong>You'll</strong> list Direct Connect locations, sketch a 99.99% design for a made-up data centre, and compute the break-even for your own numbers. Nobody can order a circuit in a lab, so this one is about reading and deciding. <strong>You need</strong> the AWS CLI and Python. <strong>Cost:</strong> nothing; the CLI calls only read.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>List locations</strong> served from Frankfurt:
+<pre><code>aws directconnect describe-locations --region eu-central-1 \
+  --query 'locations[].[locationCode,locationName,availablePortSpeeds]' --output table</code></pre>
+  Pick two locations in different cities. Why would two buildings in the same city be weaker?</li>
+  <li><strong>Sketch maximum resiliency</strong> for a data centre in Rotterdam: two locations, two connections at each, on separate routers on your side too, a transit VIF on each connection to one DX gateway, associated with the Frankfurt TGW. Count the BGP sessions (one per VIF).</li>
+  <li><strong>Do the break-even</strong> for your own quote:
+<pre><code>fixed = 1200          <span class="c"># $/month: port or hosted fee + circuit + colocation (your quote)</span>
+dx, net = 0.02, 0.09  <span class="c"># $/GB out over Direct Connect and over the internet</span>
+print(<span class="s">"break-even: about"</span>, round(fixed / (net - dx) / 1000, 1), <span class="s">"TB a month"</span>)</code></pre>
+  With these numbers it's about 17 TB. Look up current prices for your region and redo it.</li>
+  <li><strong>Write the decision.</strong> For a company you know (or Larder), write a five-line decision record like Eli's: context, options, decision, and what would make you revisit it.</li>
+</ol>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s14-9"><span class="n">14.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>One connection, no backup</td><td>A cut fibre or router failure takes the site offline from the cloud.</td><td>Two locations, or at least a VPN backup.</td></tr>
+      <tr><td>Two connections in the same building</td><td>A power or fire event at the location takes both.</td><td>Two different Direct Connect locations.</td></tr>
+      <tr><td>Assuming “private” means encrypted</td><td>Sensitive data crosses carrier equipment in clear text.</td><td>TLS, MACsec or IPsec over the circuit.</td></tr>
+      <tr><td>A VPN backup sized for normal traffic only</td><td>Failover works but everything crawls.</td><td>Decide what may run slowly; size or shed accordingly.</td></tr>
+      <tr><td>BGP without BFD</td><td>A failed link takes a minute or more to fail over.</td><td>Turn on BFD.</td></tr>
+      <tr><td>Ordering late</td><td>The migration waits months for a circuit.</td><td>Start ordering as soon as the decision is made.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum14">
+  <h2 class="sec" id="sum14"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>A <strong>dedicated connection</strong> is a private circuit to the provider at a colocation facility: steady latency, high bandwidth, cheaper data out, not encrypted by default.</li>
+    <li><strong>Dedicated</strong> connections are your own port; <strong>hosted</strong> ones come from a partner, smaller and faster to get.</li>
+    <li><strong>Virtual interfaces</strong> (private, transit, public) each carry a VLAN and a BGP session; a <strong>DX gateway</strong> reaches many regions.</li>
+    <li>Resilience means <strong>two locations</strong>; 99.99% means two connections at each. Use BFD for fast failover.</li>
+    <li>Encrypt with TLS, MACsec or IPsec over the circuit.</li>
+    <li>It pays off with large, steady traffic or strict requirements, not for many small sites.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Dedicated connection</dt><dd>A physical private circuit into a cloud provider's network.</dd>
+    <dt>Colocation facility</dt><dd>A building where carriers, providers and customers interconnect.</dd>
+    <dt>Cross-connect</dt><dd>A short fibre between two parties' equipment in the same building.</dd>
+    <dt>Hosted connection</dt><dd>A share of a partner's Direct Connect capacity.</dd>
+    <dt>Virtual interface (VIF)</dt><dd>A VLAN with a BGP session over a Direct Connect connection.</dd>
+    <dt>Direct Connect gateway</dt><dd>A global object linking VIFs to gateways in many regions.</dd>
+    <dt>BFD</dt><dd>A fast liveness check that lets BGP fail over in under a second.</dd>
+    <dt>MACsec</dt><dd>Link-layer encryption between two directly connected routers.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Which virtual interface type would you use to reach VPCs in two regions through their transit gateways? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>A transit VIF to a Direct Connect gateway, with the DX gateway associated with each region's transit gateway.</p></details>
+    </li>
+    <li>
+      <p>Why is “two connections at one Direct Connect location” not the high-resiliency design? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Both share the building: a power failure, fire, flood or cut fibre into that location takes both down. High resiliency needs connections at two different locations.</p></details>
+    </li>
+    <li>
+      <p>Your company moves 5 TB a month from AWS to its office. A sales rep proposes Direct Connect to save money. Is it likely to? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Unlikely. At about $0.07 per GB saved, 5 TB saves roughly $350 a month, well below the fixed costs of a port or hosted connection, circuit and colocation. Other reasons (latency, policy) might still justify it, but cost alone doesn't.</p></details>
+    </li>
+    <li>
+      <p>A regulator requires encryption on all links carrying customer data. Your 10 Gbps dedicated connection runs at 7 Gbps. Which encryption option fits, and why not the others? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>MACsec, if your location supports it: line-rate encryption with no throughput loss. IPsec over Direct Connect would need many tunnels at about 1.25 Gbps each to carry 7 Gbps. TLS in every application is good practice but may not satisfy a rule about the link itself.</p></details>
+    </li>
+    <li>
+      <p>A Direct Connect link with a VPN backup fails over to the VPN, and everything slows to a crawl. What did the design miss? <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>The backup's capacity. A VPN's tunnels carry far less than a dedicated link, so the design needed either more VPN capacity (several connections with ECMP), a second Direct Connect, or an agreed list of what may be paused or slowed during failover.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/directconnect/latest/UserGuide/Welcome.html">What is AWS Direct Connect?</a> and the <a href="https://docs.aws.amazon.com/directconnect/latest/UserGuide/resiliency_toolkit.html">resiliency toolkit</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/expressroute/expressroute-introduction">What is ExpressRoute?</a></li>
+    <li>Google Cloud: <a href="https://cloud.google.com/network-connectivity/docs/interconnect/concepts/overview">Cloud Interconnect overview</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="13-vpn-bgp.html">13 · Site-to-site VPN and BGP</a></div>
+  <div><span>Next</span><a href="15-hybrid-dns.html">15 · DNS across clouds and data centres</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 1 · Networking in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

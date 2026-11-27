@@ -10,9 +10,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
 <link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
-<link rel="stylesheet" href="../../assets/bujo.css?v=ae512aa242">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
 <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
-<script src="../../assets/notebook.js?v=b632700836" defer></script>
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
 </head>
 <body class="bujo theme-security">
 <a class="skip-link" href="#main">Skip to the notes</a>
@@ -31,6 +31,7 @@
 <article class="sheet" id="envelope-encryption">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Thu · 19.11.26</span><span class="topic">collection · <b>secrets &amp; data</b></span></div>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “room safes and a master vault”</p>
   <h1><span class="hl">Envelope Encryption</span></h1>
   <div class="tldr">
@@ -121,6 +122,34 @@
 }</code></pre>
   </div>
   <p class="aside">tools: AWS KMS + Encryption SDK, Google Cloud KMS + Tink, Azure Key Vault, HashiCorp Vault Transit, cloud HSMs, database TDE and column encryption that use the same model.</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">how many keys, binding data to its owner, rotation in practice</span></h2>
+  <p class="deep-intro">The note shows the mechanism: a data key per object, wrapped by a master key in the KMS. Using it in a real system raises three questions: how many data keys to make and how to avoid calling the KMS for everything, how to stop encrypted data from being moved to the wrong owner, and what rotation and deletion actually require.</p>
+  <h3 class="deep-h"><span>1</span>How many data keys?</h3>
+  <p>A data key per object is the simplest rule and fine for files. For millions of small records it means millions of KMS calls, which cost money, hit rate limits, and add latency to every read. Choose the granularity:</p>
+  <div class="table-scroll"><table class="map"><thead><tr><th scope="col">One data key per…</th><th scope="col">Trade-off</th></tr></thead><tbody>
+    <tr><td><b>Object</b> (file, document)</td><td>Most isolation; one KMS call to read each object. Good for files and large records.</td></tr>
+    <tr><td><b>Tenant</b></td><td>One KMS call per tenant session; deleting the key shreds the whole tenant. Good for multi-tenant SaaS.</td></tr>
+    <tr><td><b>Time period</b> (per hour, per batch)</td><td>Good for logs and event streams written in bulk.</td></tr>
+  </tbody></table></div>
+  <p>Then <b>cache</b> unwrapped data keys in memory for a short time (minutes) and a limited number of uses, as the AWS Encryption SDK's caching does. Never write a plaintext data key to disk, a log or a cache shared between processes.</p>
+
+  <h3 class="deep-h"><span>2</span>Binding data to its owner</h3>
+  <p>Encryption hides the data, but by default it doesn't say <b>whose</b> data it is. If an attacker or a bug copies tenant 7's ciphertext and wrapped key into tenant 9's row, a plain decrypt works and tenant 9 sees tenant 7's document.</p>
+  <p>Fix it with an <b>encryption context</b>: non-secret key–value pairs (tenant id, record id, purpose) passed when the data key is created and required again, exactly, to unwrap it. The KMS refuses a decrypt with a different context and logs the attempt with the context, which also makes the audit log readable (“who decrypted tenant 7's files this week?”). For the data itself, AES-GCM's <b>associated data</b> does the same job: the record id goes in as AAD, and decryption fails if the ciphertext is moved.</p>
+  <p>You can also use the context in key policies: a service may only decrypt with <code>purpose=invoices</code>.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Binding ciphertext to its owner with an encryption context. Tenant 7&#x27;s document is encrypted with the context tenant equals 7. If someone copies the encrypted document and its wrapped key into tenant 9&#x27;s records, decryption is asked with context tenant equals 9 and fails, and the failed attempt is logged by the key service."><g class="rough"><rect class="d f-green" x="20" y="40" width="240" height="80" rx="10"/><path class="d d-red d-dash" d="M264 80 L336 80"/><path class="d d-red" d="M325.2 85.2 L336 80 L325.2 74.8"/><rect class="d f-pink d-red" x="340" y="40" width="240" height="80" rx="10"/><path class="d d-red" d="M584 80 L636 80"/><path class="d d-red" d="M625.2 85.2 L636 80 L625.2 74.8"/><rect class="d f-pink d-red" x="640" y="40" width="100" height="80" rx="10"/></g><text class="t-head" x="140" y="76" text-anchor="middle" font-size="17">tenant 7&#x27;s file</text><text class="t" x="140" y="100" text-anchor="middle" font-size="13">context: tenant=7</text><text class="t-s t-red" x="300" y="70" text-anchor="middle">copied</text><text class="t-head t-red" x="460" y="76" text-anchor="middle" font-size="17">into tenant 9&#x27;s rows</text><text class="t" x="460" y="100" text-anchor="middle" font-size="13">decrypt asks: tenant=9</text><text class="t-head t-red" x="690" y="76" text-anchor="middle" font-size="17">refused</text><text class="t" x="690" y="100" text-anchor="middle" font-size="13">and logged</text><text class="t-s t-pen" x="380" y="170" text-anchor="middle" font-size="16">for the data itself: AES-GCM associated data (AAD) with the record id</text><text class="t-s" x="380" y="204" text-anchor="middle" font-size="16">put the owner and the record id in the context, never secrets</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The context is checked at decrypt time: a copied ciphertext won't open somewhere else.</figcaption></figure>
+  <h3 class="deep-h"><span>3</span>Rotation and deletion in practice</h3>
+  <p><b>Routine rotation</b> of the master key is cheap: the KMS creates a new version and keeps the old ones to unwrap existing data keys, so nothing needs re-encrypting. New data keys are wrapped with the new version.</p>
+  <p><b>If you suspect the master key was misused</b>, re-wrap: unwrap each data key and wrap it again under a new master key. That touches only the small wrapped keys, not the data. Re-encrypt the data itself only if <b>data keys</b> may have leaked (a dump of process memory, a plaintext key in a log).</p>
+  <p><b>Crypto-shredding</b> (deleting a tenant's key to make their data unreadable) has three traps:</p>
+  <ul>
+    <li><b>Copies of the key:</b> cached data keys in running services, and key backups. Expire caches and check the key service's deletion waiting period.</li>
+    <li><b>Copies of the data in plaintext:</b> search indexes, analytics exports, logs, emails. Shredding only covers what was encrypted with that key.</li>
+    <li><b>Proof:</b> record when the key was scheduled for deletion and when it was destroyed; that record is what you show the customer or the regulator.</li>
+  </ul>
+
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">
@@ -170,13 +199,19 @@
     </div>
   </div>
   <h3>Related patterns</h3>
-  <ul class="related"><li><b>Secrets management</b></li><li><b>Least privilege</b></li><li><b>Multitenancy</b> (Vol. 3)</li><li><b>Audit logging</b></li></ul>
+  <ul class="related"><li><a href="../notes/secrets-management.html"><b>Secrets management</b></a></li><li><a href="../notes/least-privilege.html"><b>Least privilege</b></a></li><li><a href="../../data/notes/multitenancy.html"><b>Multitenancy</b></a> (Vol. 3)</li><li><a href="../notes/audit-logging.html"><b>Audit logging</b></a></li></ul>
+  <p class="aside seen">seen at Larder → <a href="../../architect-5/notes/data-classification.html">Data Classification &amp; Residency</a> <small>(Ana, vol. 5)</small></p>
   <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
   <div class="quiz">
     <details><summary>Why not store the encryption key next to the data?</summary><p>Whoever steals the data (server, backup) gets the key too.</p></details>
     <details><summary>What does the KMS return from GenerateDataKey?</summary><p>A plaintext data key to use now, and the same key encrypted under the master key to store.</p></details>
     <details><summary>Why is master-key rotation cheap?</summary><p>Only the small wrapped data keys need re-wrapping, not the data itself.</p></details>
     <details><summary>What is crypto-shredding?</summary><p>Making data unreadable by destroying the key that protects it.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A customer asks you to delete all their uploaded documents, but copies exist in backups you can't edit for 35 days. Their documents are encrypted with a per-customer data key. What can you do?</span></summary><p>Crypto-shredding: delete the customer's wrapped data key. The backed-up documents become unreadable ciphertext, and the backups expire later on their own schedule.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>With a local KMS emulator (LocalStack) or a key in a file standing in for one, encrypt three files with their own data keys, store the wrapped keys beside them, and decrypt one. Then rotate the master key and see which files you had to re-encrypt.</p>
   </div>
   <div class="remember">
     <span class="tag">remember!!</span>

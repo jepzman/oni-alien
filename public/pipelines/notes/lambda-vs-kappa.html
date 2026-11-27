@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lambda vs Kappa · Jef’s Notes</title>
+<meta name="description" content="Fresh numbers from a batch plus a speed layer, or from one stream you can replay.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-pipelines">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 9 · data pipelines &amp; analytics</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="lambda-vs-kappa">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 28.06.27</span><span class="topic">collection · <b>serving reports</b></span></div>
+  <p class="kicker">a.k.a. “batch plus speed, or one replayable stream”</p>
+  <h1><span class="hl">Lambda vs Kappa</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>To get <b>fresh</b> numbers without losing <b>correct</b> ones, <b>lambda</b> runs a batch layer (complete, recomputed) and a speed layer (recent, approximate) and merges them, at the cost of writing every rule twice. <b>Kappa</b> uses one stream job over a <b>replayable log</b>; to fix logic, replay the log through a new version. Today: one code path, stream only if minutes matter, and often a 5–15 minute micro-batch is enough.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> serving reports</li><li><b>Origin:</b> Nathan Marz (2011), Jay Kreps (2014)</li><li><b>Lives in:</b> Kafka, Flink, Spark, streaming warehouses</li><li><b>Pairs with:</b> late-arriving data, event sourcing</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">On promotion days the store managers want today's sales live. A streaming counter was added beside the nightly batch. All day it shows <b>€48,200</b>; next morning the batch says <span class="hl-pink">€46,900</span>. The stream counted retried events twice and missed late till uploads, and every rule exists twice: once in Java, once in SQL.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of two numbers for one promotion day. Store managers want today&#x27;s sales live, so a streaming counter was added beside the nightly batch. During the day it shows 48,200 euros; next morning the batch says 46,900 euros, because the stream counted duplicates and missed late events. The logic is written twice, in Java and in SQL."><g class="rough"><rect class="d f-blue" x="20" y="30" width="280" height="90" rx="10"/><rect class="d f-y" x="460" y="30" width="280" height="90" rx="10"/><path class="d d-red" d="M306 75 L454 75"/><path class="d d-red" d="M443.2 80.2 L454 75 L443.2 69.8"/><path class="d d-red" d="M316.8 69.8 L306 75 L316.8 80.2"/></g><text class="t-head" x="160" y="71" text-anchor="middle" font-size="20">stream counter</text><text class="t" x="160" y="95" text-anchor="middle" font-size="14">live · €48,200 · Java</text><text class="t-head" x="600" y="71" text-anchor="middle" font-size="20">nightly batch</text><text class="t" x="600" y="95" text-anchor="middle" font-size="14">next day · €46,900 · SQL</text><text class="t-s t-red" x="380" y="60" text-anchor="middle">≠</text><text class="t-s t-red" x="380" y="170" text-anchor="middle">duplicates counted live, late events missed</text><text class="t-s t-red" x="380" y="202" text-anchor="middle">every rule written twice, in two languages</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Live: €48,200. Next morning: €46,900. Two code paths, two answers.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">election night</span></h2>
+  <p>On election night, TV <b>projections</b> are fast and approximate, and the <b>official count</b> comes later and is final: two counts, by two teams. Another way: publish <b>one count</b> as ballots are counted, keep every ballot in the box, and if a counting rule was wrong, <b>recount from the box</b> with the corrected rule.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="Doodle of election night. Television projections are fast and approximate; the official count comes later and is final. That is lambda. Kappa is one count that is published as it goes, and can be recounted from the kept ballots if a counting rule was wrong."><g class="rough"><g transform="translate(40 40) scale(1.3)"><g class="d"><rect class="f-paper" x="0" y="10" width="70" height="46" rx="5"/><path d="M24 0 l11 10 l11 -10 M14 62 h42"/><path d="M10 20 h40 v28 h-40 z"/></g></g><g transform="translate(200 40) scale(1.3)"><g class="d"><rect class="f-y" x="4" y="0" width="52" height="60" rx="3"/><path d="M14 12 h32 M14 22 h32 M14 32 h32 M14 42 h22"/></g></g><g transform="translate(470 40) scale(1.4)"><g class="d"><path class="f-green" d="M4 18 l26 -12 l26 12 v32 l-26 12 l-26 -12 z"/><path d="M4 18 l26 12 l26 -12 M30 30 v32"/></g></g><path class="d" d="M560 80 L640 80"/><path class="d" d="M629.2 85.2 L640 80 L629.2 74.8"/><rect class="d f-green" x="646" y="50" width="100" height="60" rx="10"/></g><text class="t-s t-pen" x="80" y="150" text-anchor="middle">projection: fast</text><text class="t-s t-pen" x="240" y="150" text-anchor="middle">official: later</text><text class="t-s t-red" x="160" y="200" text-anchor="middle">lambda: two counts</text><text class="t-s t-pen" x="510" y="150" text-anchor="middle">kept ballots</text><text class="t-head" x="696" y="87" text-anchor="middle" font-size="20">count</text><text class="t-s t-green" x="600" y="200" text-anchor="middle">kappa: one count, redo from the box</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Election night: fast projections plus an official count, or one count you can redo from the ballots.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>TV projection</td><td>Lambda's speed layer</td></tr>
+      <tr><td>The official count</td><td>Lambda's batch layer</td></tr>
+      <tr><td>Two counting teams</td><td>Two codebases for the same rules</td></tr>
+      <tr><td>Ballots kept in the box</td><td>A replayable log (Kafka with long retention)</td></tr>
+      <tr><td>Recounting with the new rule</td><td>Kappa: replay the log through job v2</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">two paths, or one path you can replay</span></h2>
+  <p><b>Lambda</b>: the batch layer recomputes everything from the master data; the speed layer covers only what the batch hasn't processed yet; a serving layer merges them. Correct in the end, but two implementations that must agree.</p>
+  <p><b>Kappa</b>: all events go into a log that keeps them long enough to replay. One stream job uses event time, windows and watermarks, and writes idempotently. To change logic, start version 2 from the start of the log, let it catch up, switch readers, stop version 1.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Lambda and kappa side by side. Lambda: events go to a batch layer that recomputes everything nightly and a speed layer that covers today; a serving layer merges both. Kappa: events go into a replayable log; one stream job computes results continuously; to change logic, start version two of the job from the beginning of the log, let it catch up, then switch readers."><g class="rough"><rect class="d f-y" x="20" y="50" width="130" height="56" rx="10"/><rect class="d f-blue" x="190" y="40" width="160" height="40" rx="10"/><rect class="d f-blue" x="190" y="96" width="160" height="40" rx="10"/><rect class="d f-paper" x="390" y="60" width="110" height="56" rx="10"/><path class="d" d="M154 70 L186 60"/><path class="d" d="M177.2 68.2 L186 60 L174.1 58.2"/><path class="d" d="M154 86 L186 116"/><path class="d" d="M174.5 112.4 L186 116 L181.7 104.8"/><path class="d" d="M354 60 L386 80"/><path class="d" d="M374.1 78.7 L386 80 L379.6 69.8"/><path class="d" d="M354 116 L386 100"/><path class="d" d="M378.7 109.5 L386 100 L374.0 100.2"/><rect class="d f-y" x="20" y="210" width="130" height="56" rx="10"/><rect class="d f-green" x="190" y="210" width="160" height="56" rx="10"/><rect class="d f-green" x="390" y="210" width="150" height="56" rx="10"/><rect class="d f-paper d-dash" x="590" y="210" width="150" height="56" rx="10"/><path class="d" d="M154 238 L186 238"/><path class="d" d="M175.2 243.2 L186 238 L175.2 232.8"/><path class="d" d="M354 238 L386 238"/><path class="d" d="M375.2 243.2 L386 238 L375.2 232.8"/><path class="d d-dash" d="M270 270 Q460 300 640 270"/><path class="d" d="M630.2 276.9 L640 270 L628.5 266.6"/></g><text class="t-head" x="190" y="26" text-anchor="middle" font-size="22">lambda</text><text class="t-head" x="85" y="85" text-anchor="middle" font-size="19">events</text><text class="t-head" x="270" y="67" text-anchor="middle" font-size="17">batch layer</text><text class="t-head" x="270" y="123" text-anchor="middle" font-size="17">speed layer</text><text class="t-head" x="445" y="95" text-anchor="middle" font-size="18">merge</text><text class="t-head" x="190" y="186" text-anchor="middle" font-size="22">kappa</text><text class="t-head" x="85" y="245" text-anchor="middle" font-size="19">events</text><text class="t-head" x="270" y="245" text-anchor="middle" font-size="17">replayable log</text><text class="t-head" x="465" y="245" text-anchor="middle" font-size="17">stream job v1</text><text class="t-head" x="665" y="245" text-anchor="middle" font-size="17">job v2 replays</text><text class="t-s t-red" x="640" y="90" text-anchor="middle">two codebases</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Lambda: two paths merged. Kappa: one path, and replay the log to fix it.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Ask how fresh it must be</b><p>Seconds? Minutes? If 15 minutes is fine, micro-batch the normal pipeline.</p></li>
+    <li><b>Keep a replayable log</b><p>Kafka or similar with retention long enough to rebuild (or raw in the warehouse).</p></li>
+    <li><b>Write one job, in event time</b><p>Windows and watermarks; allowed lateness; idempotent sink.</p></li>
+    <li><b>Replay to change logic</b><p>Run v2 from the start beside v1, compare, switch readers.</p></li>
+    <li><b>Reconcile</b><p>Compare stream results with the warehouse daily; differences mean a bug.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Lambda architecture</dt><dd>Batch layer + speed layer + serving layer.</dd></div>
+    <div><dt>Kappa architecture</dt><dd>One stream processing path over a replayable log.</dd></div>
+    <div><dt>Speed layer</dt><dd>Approximate, recent results until the batch catches up.</dd></div>
+    <div><dt>Replay</dt><dd>Reprocessing a log from an earlier offset.</dd></div>
+    <div><dt>Exactly-once sink</dt><dd>Output that isn't duplicated after retries.</dd></div>
+    <div><dt>Micro-batch</dt><dd>Running a batch pipeline every few minutes.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>sales_live.sql</span><span>Flink SQL</span></div>
+<pre><code><span class="k">CREATE</span> <span class="k">TABLE</span> till_sales (
+  order_line_id BIGINT, shop_id INT, amount DECIMAL(12,2), sold_at TIMESTAMP(3),
+  WATERMARK <span class="k">FOR</span> sold_at <span class="k">AS</span> sold_at - INTERVAL <span class="s">'10'</span> MINUTE      <span class="c">-- allowed lateness</span>
+) <span class="k">WITH</span> (<span class="s">'connector'</span> = <span class="s">'kafka'</span>, <span class="s">'topic'</span> = <span class="s">'till-sales'</span>, <span class="s">'scan.startup.mode'</span> = <span class="s">'earliest-offset'</span>);
+
+<span class="c">-- one job: revenue per shop per 15 minutes, in event time</span>
+<span class="k">INSERT</span> <span class="k">INTO</span> shop_revenue_15m                                  <span class="c">-- upsert sink, keyed</span>
+<span class="k">SELECT</span> shop_id, window_start, SUM(amount) <span class="k">AS</span> revenue
+<span class="k">FROM</span> <span class="k">TABLE</span>(TUMBLE(<span class="k">TABLE</span> till_sales_dedup, DESCRIPTOR(sold_at), INTERVAL <span class="s">'15'</span> MINUTE))
+<span class="k">GROUP</span> <span class="k">BY</span> shop_id, window_start;
+
+<span class="c">-- till_sales_dedup: ROW_NUMBER() OVER (PARTITION BY order_line_id ORDER BY sold_at) = 1</span></code></pre>
+  </div>
+  <p class="aside">tools: Apache Kafka (long retention, tiered storage), Apache Flink and Spark Structured Streaming, Kafka Streams, streaming databases and incremental views (Materialize, RisingWave), Snowflake dynamic tables, BigQuery continuous queries, Databricks Delta Live Tables.</p>
+  <section class="thennow verdict-rethought" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="the idea holds, the way the book did it has changed">rethought</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Marz, 2011 · Kreps, 2014</small></h3><p>Nathan Marz proposed lambda because Hadoop batch jobs were the only way to be complete and correct, so a separate, approximate speed layer covered the hours they took. Jay Kreps answered with kappa: keep the log and reprocess it with one stream job instead.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>Stream processors now have event-time windows, watermarks and exactly-once sinks, so one path can be correct. Streaming warehouses and incremental views blur the line further. Many teams find that the normal batch pipeline every 5–15 minutes is all the freshness they need.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> One code path. Stream only if minutes matter, keep the data replayable, and reconcile against the warehouse.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Fresh numbers</b> during the day.</li><li><b>Kappa: one implementation</b> of every rule.</li><li><b>Replay</b> fixes logic for the whole history.</li><li><b>Lambda: batch remains the safety net</b>.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Lambda: rules written twice</b>, and they drift.</li><li><b>Kappa: long log retention</b> and replay time.</li><li><b>Streaming is harder to run</b>: state, checkpoints, lateness.</li><li><b>Often unnecessary</b>: micro-batches would do.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Pipeline ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>a nightly batch with a separate live counter (lambda)</b> to <b>one replayable stream job in event time (kappa)</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="2" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One path, though streaming concepts are new.</td></tr>
+      <tr data-before="5" data-after="5"><td>Freshness<small>how recent?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Both are fresh during the day.</td></tr>
+      <tr data-before="3" data-after="4"><td>Correctness<small>is the number right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One set of rules, event time, dedupe.</td></tr>
+      <tr data-before="4" data-after="4"><td>Replayability<small>safe to rerun?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Replay the log through a new version.</td></tr>
+      <tr data-before="3" data-after="4"><td>Scalability<small>10× the data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Stream processors scale out.</td></tr>
+      <tr data-before="2" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No duplicate codebase; streaming infra costs.</td></tr>
+      <tr data-before="3" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral: same outputs.</td></tr>
+      <tr data-before="2" data-after="3"><td>Observability<small>know when it's wrong?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Lag and watermarks to watch.</td></tr>
+      <tr data-before="2" data-after="4"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Change rules once, replay.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Streaming without need</h3><p>A Flink cluster for a dashboard people check twice a day. <span class="fix">Fix →</span> micro-batch the normal pipeline every 15 minutes first.</p></li>
+    <li><h3>Processing time windows</h3><p>Late till uploads land in the wrong window. <span class="fix">Fix →</span> window by event time with watermarks and allowed lateness.</p></li>
+    <li><h3>Log too short to replay</h3><p>Kafka keeps 7 days; the fix needs 90. <span class="fix">Fix →</span> keep raw events in the warehouse or tiered storage long enough to replay.</p></li>
+    <li><h3>No reconciliation</h3><p>Live and daily numbers differ by 3 % and nobody knows why. <span class="fix">Fix →</span> compare stream output with the warehouse every day.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Decisions that need numbers within minutes (stock, fraud, promotions).</li><li>Events already flowing through a log.</li><li>A team able to run stream processing.</li><li>Logic that must be identical live and historically.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Freshness of 15 minutes or more is enough: micro-batch.</li><li>Reports read once a day.</li><li>No replayable source of events.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/late-arriving-data.html"><b>Late-arriving data</b></a></li><li><a href="../../distributed/notes/event-sourcing.html"><b>Event sourcing</b></a> (Vol. 1)</li><li><a href="../../data/notes/change-data-capture.html"><b>Change data capture</b></a> (Vol. 3)</li><li><a href="../notes/idempotent-loads.html"><b>Idempotent loads</b></a></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What are lambda's three layers?</summary><p>A batch layer, a speed layer and a serving layer that merges them.</p></details>
+    <details><summary>How does kappa change logic for past data?</summary><p>By replaying the log from the start through a new version of the job, then switching readers.</p></details>
+    <details><summary>What is lambda's main cost?</summary><p>Every rule is implemented twice, and the two drift apart.</p></details>
+    <details><summary>When is neither needed?</summary><p>When a batch pipeline run every 5–15 minutes is fresh enough.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Store managers want stock levels “live” on promotion days. Your batch pipeline is idempotent and runs hourly. What do you try first?</span></summary><p>Run the same pipeline every 10–15 minutes for the stock tables (micro-batch), and show “as of” on the dashboard. Only if minutes still matter, move the stock calculation to one stream job over the CDC log, with event-time windows and daily reconciliation against the warehouse.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Write down, for your three most important dashboards, how old the data can be before a decision changes. If every answer is “an hour” or more, schedule the batch more often and stop there.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>One <span class="hl">count</span>, kept <span class="hl">ballots</span>. Recount when the rule changes.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/17-lambda-vs-kappa.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Nathan Marz and James Warren, <i>Big Data</i> (2015).</li><li>Jay Kreps, “Questioning the Lambda Architecture” (O'Reilly, 2014).</li><li>Tyler Akidau et al., <i>Streaming Systems</i> (2018).</li><li>Apache Flink documentation, “Windowing TVF” and “Deduplication”.</li></ul>
+  </div>
+  <p class="folio">17</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="aggregates-rollups.html"><small>← previous note</small>16 · Aggregates &amp; Rollups</a>
+  <a href="embedded-reporting.html"><small>Next note →</small>18 · Multi-tenant &amp; Embedded Reporting</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 9 · a student's bullet journal on data pipelines &amp; analytics</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

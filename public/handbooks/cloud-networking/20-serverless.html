@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Serverless and managed services in your network · Networking in the Cloud</title>
+<meta name="description" content="Functions, managed databases and queues: which ones live in your VPC, and what that means.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=ca41a78db7">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 1</a> · <a href="index.html">Networking in the Cloud</a></span><span>Part V · Chapter 20</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part V · Networking for modern workloads</p>
+  <p class="chno">20</p>
+  <h1>Serverless and managed services in your network</h1>
+  <p class="promise">Functions, managed databases, queues and container services all promise that you don't have to think about servers. You still have to think about networks: each of these services lives somewhere relative to your VPC, and that decides what it can reach, what can reach it, and what breaks when you move it. This chapter maps where managed services sit and how to connect them safely.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Say where a managed service lives: outside your VPC, inside it, or in a provider's network joined to it.</li>
+      <li>Attach functions to a VPC without losing internet access by surprise.</li>
+      <li>Connect to managed databases by name, through the right subnets and security groups.</li>
+      <li>Avoid connection storms from serverless code to databases.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Private subnets and NAT (<a href="08-inside-a-vpc.html">Chapter 8</a>), security groups (<a href="09-firewalls.html">Chapter 9</a>).</li>
+      <li>Interface endpoints (<a href="12-private-access.html">Chapter 12</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, AWS, free tier</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 20.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Larder's warehouse system sends stock changes as webhooks, and a small Lambda function receives them and calls WMS B's API back for details. It worked perfectly until the team decided the function should also write straight to Postgres, which lives in the isolated data subnets. Ben's team attached the function to the VPC, in the <em>public</em> subnets “so it keeps its internet access”. Every invocation now ends in a timeout calling WMS B, and the database writes never happen because they come after that call.</p>
+  <p>Putting a function in a public subnet seems like it should give it the internet. It doesn't. Section 20.2 explains why.</p>
+</aside>
+
+<!-- ======================================================== 20.1 -->
+<h2 class="sec" id="s20-1"><span class="n">20.1</span>The big picture</h2>
+
+<p class="lead">Every managed service sits in one of three places relative to your network, and the place decides how you connect to it.</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 20.1 · Where managed services live</caption>
+    <thead><tr><th>Where</th><th>Examples (AWS)</th><th>How you reach it</th><th>What it can reach</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Outside your VPC</strong>, on public endpoints</td><td>S3, DynamoDB, SQS, SNS, Lambda (by default), API Gateway</td><td>public endpoints, or privately through gateway and interface endpoints (<a href="12-private-access.html">Chapter 12</a>)</td><td>the internet and public AWS endpoints, not your private resources</td></tr>
+      <tr><td><strong>Inside your VPC</strong>, with interfaces in your subnets</td><td>RDS, ElastiCache, MSK, OpenSearch in a VPC, Lambda attached to a VPC, ECS and Fargate tasks</td><td>private addresses in your subnets; your security groups</td><td>whatever your subnet's routes and security groups allow</td></tr>
+      <tr><td><strong>In the provider's network, joined to yours</strong></td><td>(AWS mostly uses interfaces in your subnets instead)</td><td>peering-style links or private endpoints</td><td>limited; defined by the service</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">A service that puts interfaces in your subnets follows your subnets' rules: their routes, their security groups, their address limits. “Managed” doesn't change that.</p>
+</div>
+
+<!-- ======================================================== 20.2 -->
+<h2 class="sec" id="s20-2"><span class="n">20.2</span>Functions and VPCs</h2>
+
+<p>By default, a Lambda function runs in a network AWS manages. It can reach the internet and public AWS endpoints, and nothing in your VPC. To reach private resources, such as a database in your data subnets, you <strong>attach the function to your VPC</strong>: choose subnets and security groups, and Lambda creates network interfaces there (shared between functions with the same subnet and security group combination). From then on, all of the function's traffic leaves through those interfaces and follows your subnets' route tables.</p>
+
+<figure class="wide" id="fig20-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 240" role="img" aria-labelledby="fig20-1-t fig20-1-d">
+      <title id="fig20-1-t">A function outside and inside a VPC</title>
+      <desc id="fig20-1-d">Left: a function not attached to a VPC reaches the internet and public endpoints, but not the database in the data subnet. Right: a function attached to a private app subnet sends all traffic through its network interface. It reaches the database through the local route, and the internet through the NAT gateway. A function attached to a public subnet gets no public address, so its traffic to the internet goes nowhere.</desc>
+      <defs><marker id="c20ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker>
+      <marker id="c20ahw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <text class="t-label" x="20" y="24">Not attached (default)</text>
+      <rect class="node" x="20" y="40" width="130" height="50" rx="4"/>
+      <text class="t-label" x="85" y="70" text-anchor="middle">function</text>
+      <rect class="ext" x="200" y="40" width="120" height="50" rx="25"/>
+      <text class="t-small" x="260" y="70" text-anchor="middle">internet, S3, SQS</text>
+      <path class="wire-accent" d="M152 65 H196" marker-end="url(#c20ah)"/>
+      <rect class="priv" x="20" y="130" width="300" height="60" rx="4"/>
+      <text class="t-small" x="34" y="150">your VPC · data subnet</text>
+      <text class="t-label" x="170" y="176" text-anchor="middle">Postgres ✗ unreachable</text>
+      <path class="wire-dash" d="M85 92 V128"/>
+
+      <text class="t-label" x="380" y="24">Attached to a private subnet</text>
+      <rect class="vpc" x="380" y="36" width="368" height="190" rx="8"/>
+      <rect class="priv" x="394" y="50" width="160" height="80" rx="4"/>
+      <text class="t-small" x="404" y="68">app subnet (private)</text>
+      <rect class="node-accent" x="408" y="78" width="132" height="40" rx="4"/>
+      <text class="t-label on-accent" x="474" y="103" text-anchor="middle">function ENI</text>
+      <rect class="priv" x="394" y="150" width="160" height="60" rx="4"/>
+      <text class="t-small" x="404" y="168">data subnet</text>
+      <text class="t-label" x="474" y="194" text-anchor="middle">Postgres</text>
+      <path class="wire-accent" d="M474 120 V150" marker-end="url(#c20ah)"/>
+      <rect class="pub" x="580" y="50" width="150" height="80" rx="4"/>
+      <text class="t-small" x="590" y="68">public subnet</text>
+      <rect class="node" x="594" y="78" width="122" height="40" rx="4"/>
+      <text class="t-label" x="655" y="103" text-anchor="middle">NAT gateway</text>
+      <path class="wire-accent" d="M542 98 H590" marker-end="url(#c20ah)"/>
+      <text class="t-small" x="580" y="160">→ internet (WMS B)</text>
+      <text class="t-small" x="580" y="186">0.0.0.0/0 → NAT in the</text>
+      <text class="t-small" x="580" y="202">function's subnet table</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 20.1</b> Attaching a function to a VPC trades the default internet access for reach into your network. To have both, attach it to private subnets with a route to a NAT gateway, and use endpoints for AWS services.</figcaption>
+</figure>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>Lambda's network interfaces never get public IP addresses, even in a public subnet. A public subnet's default route goes to the internet gateway, which only translates for interfaces with public addresses (<a href="08-inside-a-vpc.html">Chapter 8</a>, 8.5), so the function's packets to WMS B had nowhere to go. Eli moved the function to the private app subnets, whose route tables send <code>0.0.0.0/0</code> to the NAT gateway in the same zone, and added a security group that allows it to reach Postgres. WMS B calls worked again. Secrets Manager calls went through the existing interface endpoint (<a href="12-private-access.html">Chapter 12</a>), so they never touched the NAT gateway.</p>
+</aside>
+
+<p>Three more rules for VPC-attached functions:</p>
+<ul>
+  <li><strong>Use at least two subnets in different zones</strong>, so the function keeps working if one zone fails.</li>
+  <li><strong>Leave room for interfaces.</strong> Interfaces are shared and few, but they still take addresses and need free space in the subnet to be created.</li>
+  <li><strong>The execution role</strong> needs permission to manage network interfaces (AWS's <code>AWSLambdaVPCAccessExecutionRole</code> policy).</li>
+</ul>
+
+<!-- ======================================================== 20.3 -->
+<h2 class="sec" id="s20-3"><span class="n">20.3</span>Containers without servers</h2>
+
+<p>ECS tasks on Fargate use the <code>awsvpc</code> network mode: every task gets its own network interface, private address and security groups. That's the same VPC-native model as Kubernetes pods on EKS (<a href="19-kubernetes.html">Chapter 19</a>), with the same consequences: each running task uses an address in its subnet, and deploys briefly double the count. Tasks in public subnets can be given public IPs; tasks in private subnets go out through NAT and endpoints, like everything else. Load balancers register tasks by IP.</p>
+
+<!-- ======================================================== 20.4 -->
+<h2 class="sec" id="s20-4"><span class="n">20.4</span>Managed databases in your VPC</h2>
+
+<p>RDS, Aurora, ElastiCache and similar services place their instances in subnets you choose through a <strong>subnet group</strong>: a list of subnets in at least two zones. The provider decides which subnet each instance lands in, and moves them during failover. Four rules follow:</p>
+
+<ol class="steps">
+  <li><strong>Use the endpoint name, never an address.</strong> On failover, the standby takes over and the endpoint's DNS record changes to its address (<a href="05-dns.html">Chapter 5</a>). Clients that cached the old address, or connect by IP, keep talking to the old one. Keep DNS caching in clients short.</li>
+  <li><strong>Put the subnet group in the data tier</strong>: isolated subnets with no internet route (<a href="08-inside-a-vpc.html">Chapter 8</a>).</li>
+  <li><strong>Allow clients by security group</strong>: “5432 from <code>sg-app</code>” on the database's group (<a href="09-firewalls.html">Chapter 9</a>).</li>
+  <li><strong>Count connections.</strong> Every database has a connection limit, and each connection uses memory.</li>
+</ol>
+
+<h3>Connection storms</h3>
+<p>The fourth rule bites hardest with serverless code. A busy function may run hundreds of copies at once, each opening its own database connection, and copies come and go faster than connections time out. The result is a database refusing new connections at the worst moment. A <strong>connection pooler</strong> between functions and the database fixes it: <strong>RDS Proxy</strong> on AWS keeps a small pool of database connections and shares them among many client connections, and also makes failovers faster for clients. Self-managed poolers like PgBouncer do the same for long-running services.</p>
+
+<!-- ======================================================== 20.5 -->
+<h2 class="sec" id="s20-5"><span class="n">20.5</span>Calling serverless things privately</h2>
+
+<p>The other direction: how do your private servers call managed services that live outside your VPC?</p>
+<ul>
+  <li><strong>Queues, topics, storage, functions' APIs</strong>: through gateway and interface endpoints (<a href="12-private-access.html">Chapter 12</a>), with endpoint policies.</li>
+  <li><strong>Your own APIs on API Gateway</strong>: a <em>private</em> API is reachable only through an <code>execute-api</code> interface endpoint in your VPC, with a resource policy that names the endpoints allowed to call it.</li>
+  <li><strong>Functions behind a load balancer</strong>: an internal ALB with a Lambda target group (<a href="16-load-balancers.html">Chapter 16</a>'s lab, made internal) gives a private HTTP address for a function.</li>
+</ul>
+
+<!-- ======================================================== 20.6 -->
+<h2 class="sec" id="s20-6"><span class="n">20.6</span>Worked example: the webhook receiver, end to end</h2>
+
+<p>Here is the design Larder settled on for WMS B's webhooks, with each network decision and the chapter it comes from:</p>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 20.2 · Larder's webhook path</caption>
+    <thead><tr><th>Step</th><th>Component</th><th>Network decision</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>API Gateway (regional, public)</td><td>Only WMS B's published addresses allowed in the resource policy; mTLS for the client (<a href="06-http-tls.html">Ch. 6</a>)</td></tr>
+      <tr><td>2</td><td>Lambda function</td><td>Attached to the private app subnets in three zones; its own security group</td></tr>
+      <tr><td>3</td><td>Secrets Manager</td><td>Through the hub's interface endpoint (<a href="12-private-access.html">Ch. 12</a>)</td></tr>
+      <tr><td>4</td><td>Call back to WMS B</td><td>Through the NAT gateway in the same zone, and the egress allow-list (<a href="18-egress.html">Ch. 18</a>)</td></tr>
+      <tr><td>5</td><td>RDS Proxy → Postgres</td><td>Proxy in the data subnets; allows 5432 from the function's group; database allows only the proxy</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 20.7 -->
+<h2 class="sec" id="s20-7"><span class="n">20.7</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 20.3 · Serverless and managed services in private networks</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Functions reaching private resources</td><td>Lambda attached to VPC subnets</td><td>Functions <strong>VNet integration</strong> (outbound, on a delegated subnet)</td><td>Cloud Run and functions: <strong>Direct VPC egress</strong> or a Serverless VPC Access connector</td></tr>
+      <tr><td>Making functions private inbound</td><td>private API Gateway; internal ALB</td><td>private endpoints for the function app</td><td>ingress set to internal; internal load balancer</td></tr>
+      <tr><td>Managed PostgreSQL in your network</td><td>RDS/Aurora subnet groups</td><td>Flexible Server with <strong>VNet injection</strong> (delegated subnet) or private endpoint</td><td>Cloud SQL private IP (<strong>private services access</strong> peering) or Private Service Connect</td></tr>
+      <tr><td>Connection pooling</td><td>RDS Proxy</td><td>built-in PgBouncer on Flexible Server</td><td>managed connection pooling (Cloud SQL Enterprise Plus); PgBouncer</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure and Google Cloud</p>
+  <p>Two ideas don't exist on AWS in the same form. Azure <strong>delegated subnets</strong> hand a whole subnet to one service, which places its own resources there; you can't put anything else in it. Google Cloud's <strong>private services access</strong> peers your VPC with a Google-managed one where services like Cloud SQL live; you reserve an address range for it from your plan (<a href="10-ip-planning.html">Chapter 10</a>), and it can't overlap anything you'll ever connect.</p>
+</div>
+
+<!-- ======================================================== 20.8 -->
+<h2 class="sec" id="s20-8"><span class="n">20.8</span>Lab: a function loses the internet</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 20 · Not attached, then attached to a VPC with no NAT</p>
+  <p><strong>You'll</strong> deploy a function that fetches its own public IP address, run it outside a VPC, then attach it to private subnets with no NAT and watch it time out. <strong>You need</strong> the AWS CLI and Terraform. <strong>Cost:</strong> within Lambda's free tier; the VPC parts are free.</p>
+</div>
+
+<p class="code-title"><span>main.tf</span><span>Terraform ≥ 1.5, AWS provider 5.x, archive provider</span></p>
+<pre><code><span class="k">provider</span> <span class="s">"aws"</span> { region = <span class="s">"eu-central-1"</span> }
+
+<span class="k">variable</span> <span class="s">"in_vpc"</span> { default = false }
+
+<span class="k">data</span> <span class="s">"aws_availability_zones"</span> <span class="s">"z"</span> { state = <span class="s">"available"</span> }
+<span class="k">resource</span> <span class="s">"aws_vpc"</span> <span class="s">"lab"</span> { cidr_block = <span class="s">"10.90.0.0/16"</span> }
+<span class="k">resource</span> <span class="s">"aws_subnet"</span> <span class="s">"private"</span> {
+  count             = 2
+  vpc_id            = aws_vpc.lab.id
+  cidr_block        = cidrsubnet(aws_vpc.lab.cidr_block, 8, count.index)
+  availability_zone = data.aws_availability_zones.z.names[count.index]
+}
+<span class="k">resource</span> <span class="s">"aws_security_group"</span> <span class="s">"fn"</span> { vpc_id = aws_vpc.lab.id }
+<span class="k">resource</span> <span class="s">"aws_vpc_security_group_egress_rule"</span> <span class="s">"fn"</span> {
+  security_group_id = aws_security_group.fn.id
+  cidr_ipv4         = <span class="s">"0.0.0.0/0"</span>
+  ip_protocol       = <span class="s">"-1"</span>
+}
+
+<span class="k">data</span> <span class="s">"archive_file"</span> <span class="s">"fn"</span> {
+  type        = <span class="s">"zip"</span>
+  output_path = <span class="s">"fn.zip"</span>
+  source {
+    filename = <span class="s">"index.py"</span>
+    content  = &lt;&lt;-EOT
+      import urllib.request
+      def handler(event, context):
+          ip = urllib.request.urlopen("https://checkip.amazonaws.com", timeout=5).read()
+          return {"my_public_ip": ip.decode().strip()}
+    EOT
+  }
+}
+<span class="k">resource</span> <span class="s">"aws_iam_role"</span> <span class="s">"fn"</span> {
+  name = <span class="s">"handbook-lab20-fn"</span>
+  assume_role_policy = jsonencode({
+    Version   = <span class="s">"2012-10-17"</span>
+    Statement = [{ Effect = <span class="s">"Allow"</span>, Action = <span class="s">"sts:AssumeRole"</span>,
+                   Principal = { Service = <span class="s">"lambda.amazonaws.com"</span> } }]
+  })
+}
+<span class="k">resource</span> <span class="s">"aws_iam_role_policy_attachment"</span> <span class="s">"vpc"</span> {
+  role       = aws_iam_role.fn.name
+  policy_arn = <span class="s">"arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"</span>
+}
+<span class="k">resource</span> <span class="s">"aws_lambda_function"</span> <span class="s">"fn"</span> {
+  function_name    = <span class="s">"handbook-lab20"</span>
+  role             = aws_iam_role.fn.arn
+  runtime          = <span class="s">"python3.12"</span>
+  handler          = <span class="s">"index.handler"</span>
+  timeout          = 10
+  filename         = data.archive_file.fn.output_path
+  source_code_hash = data.archive_file.fn.output_base64sha256
+
+  <span class="c"># 20.2 · attach to the VPC only when in_vpc = true</span>
+  <span class="k">dynamic</span> <span class="s">"vpc_config"</span> {
+    for_each = var.in_vpc ? [1] : []
+    content {
+      subnet_ids         = aws_subnet.private[*].id
+      security_group_ids = [aws_security_group.fn.id]
+    }
+  }
+  depends_on = [aws_iam_role_policy_attachment.vpc]
+}</code></pre>
+
+<ol class="steps">
+  <li><strong>Outside the VPC.</strong> <code>terraform init</code>, <code>terraform apply</code>, then <code>aws lambda invoke --function-name handbook-lab20 out.json &amp;&amp; cat out.json</code>. You get a public IP address: one of AWS's, shared and changing.</li>
+  <li><strong>Attach it.</strong> <code>terraform apply -var in_vpc=true</code>, invoke again. After 5 seconds: a timeout. The subnets have no route to the internet at all.</li>
+  <li><strong>Find its interface.</strong> In the EC2 console, under <em>Network interfaces</em>, filter on the VPC. The interface described as an AWS Lambda VPC interface is the function's way into your network. It has no public address, and never will.</li>
+  <li><strong>Think it through.</strong> What would you add for the function to reach the internet again, and what would it cost per hour? (Chapter 8's answer: a NAT gateway in a public subnet and a route to it from these subnets.)</li>
+  <li><strong>Clean up</strong> with <code>terraform destroy</code>. Removing a function's VPC interfaces can take several minutes; let it finish.</li>
+</ol>
+
+<p><strong>Stretch goal.</strong> Add a public subnet, an internet gateway and a NAT gateway (as in Lab 8), route the private subnets to it, invoke again, and compare the returned address with the NAT gateway's Elastic IP. Then destroy promptly: the NAT gateway bills by the hour.</p>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s20-9"><span class="n">20.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Attaching a function to public subnets for internet access</td><td>Timeouts to everything outside the VPC.</td><td>Private subnets with a NAT route; endpoints for AWS services.</td></tr>
+      <tr><td>Attaching a function to a VPC it doesn't need</td><td>Lost internet access, extra NAT costs, address use.</td><td>Attach only functions that need private resources.</td></tr>
+      <tr><td>One subnet for functions or databases</td><td>A zone failure stops them.</td><td>At least two zones in every subnet group and function config.</td></tr>
+      <tr><td>Connecting to a database by IP</td><td>After failover, clients keep calling the old primary.</td><td>Endpoint names; short client DNS caching.</td></tr>
+      <tr><td>Hundreds of function copies, each with its own connection</td><td>The database refuses connections at peak.</td><td>RDS Proxy or another pooler.</td></tr>
+      <tr><td>Overlapping ranges reserved for managed services</td><td>Peering-based services clash with later networks.</td><td>Reserve their ranges in the address plan.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum20">
+  <h2 class="sec" id="sum20"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Managed services live outside your VPC, inside it with interfaces in your subnets, or in a provider network joined to yours.</li>
+    <li>Services inside your VPC follow your subnets' routes, security groups and address limits.</li>
+    <li>A VPC-attached function loses default internet access and never gets a public IP: use private subnets with NAT, plus endpoints.</li>
+    <li>Fargate tasks are VPC-native: one interface and address per task.</li>
+    <li>Use managed databases through subnet groups, endpoint names and security group references; pool connections from serverless code.</li>
+    <li>Call managed services privately through endpoints and private APIs.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>VPC-attached function</dt><dd>A function whose traffic goes through interfaces in your subnets.</dd>
+    <dt>awsvpc mode</dt><dd>ECS networking where each task has its own interface and address.</dd>
+    <dt>Subnet group</dt><dd>The subnets a managed database may place instances in.</dd>
+    <dt>Database endpoint</dt><dd>The DNS name that points at the current primary or reader.</dd>
+    <dt>Connection pooler</dt><dd>Shares a few database connections among many clients.</dd>
+    <dt>Private API</dt><dd>An API Gateway API reachable only through an interface endpoint.</dd>
+    <dt>Delegated subnet</dt><dd>An Azure subnet handed to one service for its resources.</dd>
+    <dt>Private services access</dt><dd>Google Cloud's peering link to the network where some managed services run.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Why does a VPC-attached Lambda function in a public subnet fail to reach the internet? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Its interfaces never get public addresses, and an internet gateway only translates for interfaces with public addresses. Its packets have a route but no way to be translated, so they go nowhere.</p></details>
+    </li>
+    <li>
+      <p>A function reads from S3 and writes to a private Postgres database. Design its network access with no NAT gateway. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Attach it to private subnets in two zones; add an S3 gateway endpoint to those subnets' route tables (and interface endpoints for any other AWS services it calls); allow 5432 from the function's security group on the database's (or RDS Proxy's) group. No internet route is needed.</p></details>
+    </li>
+    <li>
+      <p>After a database failover, half the app servers keep failing for ten minutes. What's the likely cause? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Those servers cached the endpoint's old address, through a long DNS cache in the runtime or connection pools holding connections to the old primary. Use endpoint names, keep client DNS caching short, and validate or recycle pooled connections on errors.</p></details>
+    </li>
+    <li>
+      <p>Why does serverless code need a connection pooler more than a fleet of long-running servers does? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>Concurrency scales to hundreds of short-lived copies, each opening its own connection, faster than old connections close. Long-running servers keep a small, steady pool each. A pooler like RDS Proxy shares a few database connections among all those copies.</p></details>
+    </li>
+    <li>
+      <p>On Google Cloud, you reserve <code>10.20.0.0/16</code> for private services access. What's the risk? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>That range is peered into your VPC for managed services, so it can't overlap any network you'll connect later. Larder's production VPC uses <code>10.20.0.0/16</code>, so connecting the two clouds would be impossible. Reserve it from the address plan like any other block.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html">Giving Lambda functions access to resources in a VPC</a> and <a href="https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy.html">RDS Proxy</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/azure-functions/functions-networking-options">Azure Functions networking options</a>.</li>
+    <li>Google Cloud: <a href="https://cloud.google.com/run/docs/configuring/vpc-direct-vpc">Direct VPC egress for Cloud Run</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="19-kubernetes.html">19 · Containers and Kubernetes networking</a></div>
+  <div><span>Next</span><a href="21-zero-trust.html">21 · Service mesh and zero-trust networking</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 1 · Networking in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

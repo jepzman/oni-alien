@@ -10,9 +10,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
 <link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
-<link rel="stylesheet" href="../../assets/bujo.css?v=ae512aa242">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
 <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
-<script src="../../assets/notebook.js?v=b632700836" defer></script>
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
 </head>
 <body class="bujo">
 <a class="skip-link" href="#main">Skip to the notes</a>
@@ -31,6 +31,7 @@
 <article class="sheet" id="api-gateway">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Mon · 28.09.26</span><span class="topic">collection · <b>communication</b></span></div>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “one front door”</p>
   <h1><span class="hl">API Gateway</span></h1>
   <div class="tldr">
@@ -125,6 +126,34 @@
       - GET http:<span class="c">//orders.internal/recent?limit=3</span></code></pre>
   </div>
   <p class="aside">products: Kong, NGINX, Envoy Gateway, Traefik, AWS API Gateway, Azure API Management, Google Apigee, Spring Cloud Gateway, YARP (.NET). GraphQL federation is a popular aggregation flavour.</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">budgets and partial answers, staying up, who owns it</span></h2>
+  <p class="deep-intro">The note lists the gateway's jobs. This chapter is about running one: how timeouts work when one request fans out to several services, how to keep the front door from becoming the single thing that takes everything down, and how to share it between teams without it becoming one team's bottleneck.</p>
+  <h3 class="deep-h"><span>1</span>Timeout budgets and partial answers</h3>
+  <p>A request that enters the gateway has a <b>budget</b>: how long the client will wait. Every call the gateway makes on its behalf spends from it. If the mobile app gives up after 1.5 seconds, a backend timeout of 5 seconds is pointless: the gateway would still be waiting long after nobody is listening.</p>
+  <p>So set timeouts from the outside in. Client budget 1.5 s; the gateway's own limit a little below that; each backend call a fraction of it, based on that backend's normal p99 (Reviews normally answers in 120 ms, so 300 ms is generous). Pass the remaining budget along in a header so services deeper down can give up early too.</p>
+  <p>When the gateway combines several calls into one response, decide in advance which parts are <b>required</b> and which are <b>optional</b>. Product and price are required: without them the page is useless, so fail the request. Reviews and recommendations are optional: return the page without them, with a field that says so (<code>"reviews": {"status": "unavailable"}</code>), and let the client show a placeholder.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="A product page request fans out from the gateway to three services, with a 1.5 second budget. Product and Prices answer in 80 and 120 milliseconds. Reviews is slow and hits its 300 millisecond timeout. The gateway returns the page with product and price and an empty reviews section marked as unavailable, in 310 milliseconds, instead of waiting or failing the whole page."><g class="rough"><rect class="d f-paper" x="20" y="110" width="130" height="70" rx="10"/><path class="d" d="M154 145 L226 145"/><path class="d" d="M215.2 150.2 L226 145 L215.2 139.8"/><rect class="d f-y" x="230" y="100" width="150" height="90" rx="10"/><path class="d" d="M384 145 L496 52"/><path class="d" d="M491.0 62.9 L496 52 L484.4 54.9"/><rect class="d f-green" x="500" y="20" width="240" height="64" rx="10"/><path class="d" d="M384 145 L496 144"/><path class="d" d="M485.2 149.3 L496 144 L485.1 138.9"/><rect class="d f-green" x="500" y="112" width="240" height="64" rx="10"/><path class="d d-red d-dash" d="M384 145 L496 236"/><path class="d d-red" d="M484.3 233.2 L496 236 L490.9 225.1"/><rect class="d f-pink d-red" x="500" y="204" width="240" height="64" rx="10"/></g><text class="t-head" x="85" y="141" text-anchor="middle" font-size="18">client</text><text class="t" x="85" y="165" text-anchor="middle" font-size="14">budget 1.5 s</text><text class="t-head" x="305" y="141" text-anchor="middle" font-size="19">gateway</text><text class="t" x="305" y="165" text-anchor="middle" font-size="14">per-call timeouts</text><text class="t-head" x="620" y="48" text-anchor="middle" font-size="17">Product</text><text class="t" x="620" y="72" text-anchor="middle" font-size="14">80 ms ✓</text><text class="t-head" x="620" y="140" text-anchor="middle" font-size="17">Prices</text><text class="t" x="620" y="164" text-anchor="middle" font-size="14">120 ms ✓</text><text class="t-head t-red" x="620" y="232" text-anchor="middle" font-size="17">Reviews</text><text class="t" x="620" y="256" text-anchor="middle" font-size="14">timeout at 300 ms</text><text class="t-s" x="300" y="236" text-anchor="middle" font-size="17">answer in 310 ms:</text><text class="t-s t-green" x="300" y="262" text-anchor="middle" font-size="17">product + price + “reviews unavailable”</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One slow backend costs one section of the page, not the page.</figcaption></figure>
+  <h3 class="deep-h"><span>2</span>The front door must not fall over</h3>
+  <p>Every request passes through the gateway, so its availability caps everyone else's. A few rules keep it boring:</p>
+  <ul>
+    <li><b>Keep it stateless.</b> No sessions, no local caches that matter. Then any instance can serve any request and you can add or replace instances freely.</li>
+    <li><b>At least two instances in at least two zones,</b> behind the cloud load balancer, with health checks. Three if a deploy takes one out.</li>
+    <li><b>Shared counters for shared limits.</b> A limit of 100 requests a minute per client, counted locally on 4 instances, really allows 400. Keep the counters in Redis, or divide the limit by the instance count and accept the rough edge.</li>
+    <li><b>Config is code.</b> Routes and policies live in git, are tested in CI, and roll out like a deploy: to one instance first. A bad route rule is the most common way a gateway takes everything down.</li>
+    <li><b>Protect the backends from the gateway.</b> A breaker per backend route, so one failing service doesn't tie up the gateway's connections for the rest.</li>
+  </ul>
+
+  <h3 class="deep-h"><span>3</span>Sharing it between teams</h3>
+  <p>A gateway owned and edited by one team turns every new endpoint into a ticket in that team's queue. A gateway everyone edits freely turns into a pile of special cases. The usual answer splits ownership:</p>
+  <ul>
+    <li>The <b>platform team</b> runs the gateway itself: instances, TLS certificates, authentication, default limits, logging.</li>
+    <li>Each <b>product team</b> owns the routes for its own paths, in its own repository, reviewed by its own people. Kubernetes' Gateway API is built this way: one Gateway, many HTTPRoute objects owned by different teams.</li>
+    <li>Clients with very different needs (the mobile app) get their own <b>backend for frontend</b>, owned by the client team, behind the shared gateway.</li>
+  </ul>
+  <p>Add guardrails the platform team checks automatically: no team may claim another team's path prefix, every route must have a timeout, and anything beyond routing (reshaping responses, business rules) goes in a service, not in gateway config.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="Ownership of a shared gateway. A platform team runs the gateway itself: instances, TLS, authentication and default limits. Each product team owns the route file for its own paths in its own repository, reviewed by that team, for example orders routes and search routes. The mobile team owns its own backend for frontend behind the gateway."><g class="rough"><rect class="d f-y" x="240" y="20" width="280" height="80" rx="10"/><rect class="d f-blue" x="20" y="170" width="220" height="70" rx="10"/><path class="d d-dash" d="M130 166 L380 104"/><path class="d" d="M370.8 111.7 L380 104 L368.3 101.5"/><rect class="d f-blue" x="270" y="170" width="220" height="70" rx="10"/><path class="d d-dash" d="M380 166 L380 104"/><path class="d" d="M385.2 114.8 L380 104 L374.8 114.8"/><rect class="d f-green" x="520" y="170" width="220" height="70" rx="10"/><path class="d d-dash" d="M630 166 L380 104"/><path class="d" d="M391.7 101.5 L380 104 L389.2 111.7"/></g><text class="t-head" x="380" y="56" text-anchor="middle" font-size="17">gateway (platform team)</text><text class="t" x="380" y="80" text-anchor="middle" font-size="14">instances · TLS · auth · default limits</text><text class="t-head" x="130" y="201" text-anchor="middle" font-size="17">orders routes</text><text class="t" x="130" y="225" text-anchor="middle" font-size="14">Orders team repo</text><text class="t-head" x="380" y="201" text-anchor="middle" font-size="17">search routes</text><text class="t" x="380" y="225" text-anchor="middle" font-size="14">Search team repo</text><text class="t-head" x="630" y="201" text-anchor="middle" font-size="17">mobile BFF</text><text class="t" x="630" y="225" text-anchor="middle" font-size="14">Mobile team</text><text class="t-s t-pen" x="380" y="268" text-anchor="middle" font-size="17">a change to orders routes needs only the Orders team</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The platform team runs the gateway; each team owns its own routes.</figcaption></figure>
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">
@@ -175,13 +204,19 @@
     </div>
   </div>
   <h3>Related patterns</h3>
-  <ul class="related"><li><b>Backends for Frontends</b></li><li><b>Rate limiter</b></li><li><b>Service discovery</b></li><li><b>Sidecar &amp; service mesh</b></li><li><b>Strangler fig</b> · migrate behind it</li></ul>
+  <ul class="related"><li><a href="../../architect-4/notes/backend-for-frontend.html"><b>Backends for Frontends</b></a></li><li><a href="../notes/rate-limiter.html"><b>Rate limiter</b></a></li><li><a href="../notes/service-discovery.html"><b>Service discovery</b></a></li><li><a href="../notes/sidecar.html"><b>Sidecar &amp; service mesh</b></a></li><li><a href="../notes/strangler-fig.html"><b>Strangler fig</b></a> · migrate behind it</li></ul>
+  <p class="aside seen">seen at Larder → <a href="../../architect-4/notes/backend-for-frontend.html">Backend for Frontend</a> <small>(Ana, vol. 4)</small></p>
   <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
   <div class="quiz">
     <details><summary>Name three cross-cutting concerns a gateway typically handles.</summary><p>Any three of: TLS termination, authentication, rate limiting, logging/metrics/tracing, CORS, caching, request size limits.</p></details>
     <details><summary>What's a BFF and why use one?</summary><p>A Backend for Frontend: a gateway per client type, owned by that frontend team and shaped for its screens, so one shared gateway doesn't become a bottleneck.</p></details>
     <details><summary>How do you stop the gateway being a single point of failure?</summary><p>Run multiple instances across zones behind a load balancer, keep it stateless, and add timeouts and breakers to backend calls.</p></details>
     <details><summary>Gateway vs service mesh: which handles north–south traffic?</summary><p>The gateway handles north–south (clients ↔ system); the mesh handles east–west (service ↔ service).</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Three teams keep adding special cases to the gateway: response reshaping for mobile, a discount rule, a feature flag. Releases of the gateway now need all three teams. What has gone wrong, and what do you do?</span></summary><p>Business logic crept into the gateway. Keep it to shared plumbing (routing, TLS, authentication, rate limits), move the discount rule back into its service, and give the mobile app its own backend for frontend owned by the mobile team.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Run two toy services and put a local gateway (Nginx, Envoy or Kong) in front of them. Route /orders and /users, add one API-key check and one rate limit in gateway config only, and confirm the services didn't change.</p>
   </div>
   <div class="remember">
     <span class="tag">remember!!</span>

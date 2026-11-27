@@ -10,9 +10,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
 <link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
-<link rel="stylesheet" href="../../assets/bujo.css?v=ae512aa242">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
 <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
-<script src="../../assets/notebook.js?v=b632700836" defer></script>
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
 </head>
 <body class="bujo theme-testing">
 <a class="skip-link" href="#main">Skip to the notes</a>
@@ -31,6 +31,7 @@
 <article class="sheet" id="property-based">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Tue · 01.12.26</span><span class="topic">collection · <b>smarter techniques</b></span></div>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “the furniture lab”</p>
   <h1><span class="hl">Property-Based Testing</span></h1>
   <div class="tldr">
@@ -120,6 +121,39 @@ it(<span class="s">"never loses or creates a cent"</span>, () =&gt; {
 <span class="c">// on failure: "Counterexample: [10, 3]  Shrunk 6 time(s)  seed: 1593201"</span></code></pre>
   </div>
   <p class="aside">tools: fast-check (JS/TS), Hypothesis (Python), jqwik (Java), FsCheck (.NET), proptest (Rust), QuickCheck (Haskell, Erlang). Stateful/model-based testing modes can test whole APIs.</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">finding properties, generators that find bugs, testing sequences</span></h2>
+  <p class="deep-intro">The note shows what a property is and why shrinking is so useful. The hard part in practice is finding properties in ordinary application code, writing generators that reach the inputs where bugs live, and testing things that have state. This chapter covers the three.</p>
+  <h3 class="deep-h"><span>1</span>Finding properties in ordinary code</h3>
+  <p>Most code has properties hiding in it. Five shapes cover most of them:</p>
+  <div class="table-scroll"><table class="map"><thead><tr><th scope="col">Shape</th><th scope="col">Example from a typical app</th></tr></thead><tbody>
+    <tr><td><b>Round trip</b></td><td><code>parse(format(order)) == order</code>; save then load from the repository; encode then decode a cursor.</td></tr>
+    <tr><td><b>Invariant</b></td><td>A filtered list only contains matching items; a paginated list never shows an item twice.</td></tr>
+    <tr><td><b>Conservation</b></td><td>Splitting a bill: the parts add up to the total. Moving stock: the total across warehouses doesn't change.</td></tr>
+    <tr><td><b>Idempotence</b></td><td><code>normalise(normalise(x)) == normalise(x)</code>; applying the same event twice gives the same state.</td></tr>
+    <tr><td><b>Metamorphic</b></td><td>Adding an item never lowers the cart total; a longer search query never returns more results.</td></tr>
+  </tbody></table></div>
+  <p>Metamorphic properties are useful when you can't say what the right answer is, only how it should change. And when you have a slow but obviously right version (a simple loop), compare the fast version against it: that's the <b>oracle</b> property.</p>
+
+  <h3 class="deep-h"><span>2</span>Generators that find bugs</h3>
+  <p>A property is only as good as its inputs. Random integers from the full range rarely hit the cases that break code: zero, one, the boundary of a discount, an empty list, a name with an apostrophe, a date on 29 February.</p>
+  <ul>
+    <li><b>Build valid domain objects</b> with generators that compose (an order is a customer, one to twenty lines, a currency), instead of generating junk and filtering most of it away; heavy filtering makes runs slow and hides cases.</li>
+    <li><b>Mix in the edges.</b> Good libraries already bias toward small and boundary values; add your own (amounts just under and over €50, the free-shipping line).</li>
+    <li><b>Check what you generate.</b> Collect statistics on a run (how many empty carts, how many with discounts). A generator that never produces an empty list will never find the empty-list bug.</li>
+  </ul>
+  <p>When it fails, the shrunk case is the bug report. Copy it into a normal example test so it stays fixed, and keep the seed in the CI log so any run can be replayed.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Shrinking a failing case. The random input that first broke the split function was 73.41 euros split between 9 people. The tool tries smaller inputs that still fail: 73.41 euros between 3 people, then 1 euro between 3, then 1 cent between 2. The final example, 1 cent between 2 people, is the clearest possible bug report: the parts add up to 2 cents."><g class="rough"><rect class="d f-pink" x="14" y="50" width="170" height="76" rx="10"/><rect class="d f-y" x="200" y="50" width="170" height="76" rx="10"/><path class="d" d="M186 88 L198 88"/><path class="d" d="M187.2 93.2 L198 88 L187.2 82.8"/><rect class="d f-y" x="386" y="50" width="170" height="76" rx="10"/><path class="d" d="M372 88 L384 88"/><path class="d" d="M373.2 93.2 L384 88 L373.2 82.8"/><rect class="d f-green" x="572" y="50" width="170" height="76" rx="10"/><path class="d" d="M558 88 L570 88"/><path class="d" d="M559.2 93.2 L570 88 L559.2 82.8"/></g><text class="t-head" x="99" y="84" text-anchor="middle" font-size="17">€73.41 ÷ 9</text><text class="t" x="99" y="108" text-anchor="middle" font-size="13">first failure</text><text class="t-head" x="285" y="84" text-anchor="middle" font-size="17">€73.41 ÷ 3</text><text class="t" x="285" y="108" text-anchor="middle" font-size="13">still fails</text><text class="t-head" x="471" y="84" text-anchor="middle" font-size="17">€1.00 ÷ 3</text><text class="t" x="471" y="108" text-anchor="middle" font-size="13">still fails</text><text class="t-head" x="657" y="84" text-anchor="middle" font-size="17">€0.01 ÷ 2</text><text class="t" x="657" y="108" text-anchor="middle" font-size="13">smallest</text><text class="t-s t-red" x="380" y="176" text-anchor="middle" font-size="18">parts: 1 + 1 = 2 cents ≠ 1 cent</text><text class="t-s t-pen" x="380" y="214" text-anchor="middle" font-size="16">keep it as a normal example test, and record the seed</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The tool keeps the failure and throws away everything else.</figcaption></figure>
+  <h3 class="deep-h"><span>3</span>Testing sequences of actions</h3>
+  <p>Many bugs only appear after a particular order of actions: add, remove, add again, apply a coupon, change the quantity to zero. <b>Stateful (model-based) property testing</b> generates sequences of commands and runs them against two things at once: the real system and a simple model of it.</p>
+  <ol>
+    <li>Write a <b>model</b>: a plain object that represents what the cart should contain (a map of SKU to quantity).</li>
+    <li>Write <b>commands</b>: each one says when it's allowed, how it changes the model, and how to run it on the real cart (an API call or a function).</li>
+    <li>After each command, <b>compare</b> the real system with the model.</li>
+  </ol>
+  <p>The tool generates hundreds of sequences and, on failure, shrinks the sequence too: “add A, add A, remove A” instead of forty steps. fast-check (<code>fc.commands</code>) and Hypothesis (rule-based state machines) both support this. It's the most effective way to test caches, collections, and anything with an undo button.</p>
+
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">
@@ -169,13 +203,18 @@ it(<span class="s">"never loses or creates a cent"</span>, () =&gt; {
     </div>
   </div>
   <h3>Related patterns</h3>
-  <ul class="related"><li><b>Test data builders</b></li><li><b>Mutation testing</b></li><li><b>Controlled time &amp; randomness</b></li><li><b>State machines</b> (Vol. 2)</li></ul>
+  <ul class="related"><li><a href="../notes/test-data-builders.html"><b>Test data builders</b></a></li><li><a href="../notes/mutation-testing.html"><b>Mutation testing</b></a></li><li><a href="../notes/deterministic-tests.html"><b>Controlled time &amp; randomness</b></a></li><li><a href="../../frontend/notes/state-machines.html"><b>State machines</b></a> (Vol. 2)</li></ul>
   <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
   <div class="quiz">
     <details><summary>What is a property?</summary><p>A rule that must hold for every valid input, such as “the parts add up to the total”.</p></details>
     <details><summary>What does shrinking do?</summary><p>Reduces a failing input to the smallest, simplest example that still fails.</p></details>
     <details><summary>Name three common property shapes.</summary><p>Round-trip, invariant, conservation (also idempotence and comparing to a reference model).</p></details>
     <details><summary>How do you reproduce a failing random run?</summary><p>Re-run with the reported seed, then add the shrunk case as an example test.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A bill-splitting function has 12 example tests and still produced a total one cent short for a customer splitting €100 three ways. Which property would have caught it?</span></summary><p>“The parts always add up to the total”, checked for random amounts and numbers of people. The tool would have found and shrunk a failing case such as €100 / 3 quickly.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Pick a pure function you own (sorting, splitting, formatting, encoding). Write one property for it with fast-check or Hypothesis, such as a round trip or an invariant. Introduce an off-by-one bug and read the shrunk counterexample.</p>
   </div>
   <div class="remember">
     <span class="tag">remember!!</span>

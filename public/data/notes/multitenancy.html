@@ -10,9 +10,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
 <link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
-<link rel="stylesheet" href="../../assets/bujo.css?v=ae512aa242">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
 <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
-<script src="../../assets/notebook.js?v=b632700836" defer></script>
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
 </head>
 <body class="bujo theme-data">
 <a class="skip-link" href="#main">Skip to the notes</a>
@@ -31,6 +31,7 @@
 <article class="sheet" id="multitenancy">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Mon · 19.10.26</span><span class="topic">collection · <b>growing</b></span></div>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “the apartment block”</p>
   <h1><span class="hl">Multitenancy</span></h1>
   <div class="tldr">
@@ -116,6 +117,49 @@
 <span class="k">COMMIT</span>;</code></pre>
   </div>
   <p class="aside">tools: PostgreSQL row-level security, Citus (shard by tenant_id), Supabase RLS, Rails <code>acts_as_tenant</code>, Django <code>django-tenants</code> (schema per tenant), AWS SaaS Factory guidance, Nile and Neon for database-per-tenant.</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">choosing a model, noisy neighbours, moving a tenant, testing isolation</span></h2>
+  <p class="deep-intro">The note picks shared tables with row-level security as the usual start. This chapter is about living with that choice: when to pick another model, what to do when one tenant slows everyone down, how to move a big customer to its own database without downtime, and how to test that one tenant can never see another's data.</p>
+  <h3 class="deep-h"><span>1</span>Choosing a model with numbers</h3>
+  <p>The three models trade cost and operations against isolation. Count before you choose:</p>
+  <ul>
+    <li><b>Pool</b> (shared tables): one database to run and one migration per change. Isolation depends on every query having the tenant filter, which row-level security enforces. Fits thousands of small tenants.</li>
+    <li><b>Bridge</b> (schema per tenant): stronger separation and easy per-tenant export. But a migration runs once per tenant: at 10,000 tenants and 2 seconds each, that is over five hours per change, and some will fail halfway.</li>
+    <li><b>Silo</b> (database per tenant): full isolation, per-tenant backup, restore and data location (a customer that must stay in Germany). Costs the most, and you need automation to run hundreds of databases.</li>
+  </ul>
+  <p>Most products end up <b>mixed</b>: the pool for almost everyone, a silo for the few customers who pay for it or are required to have it. Design for that from day one: tenant id in every table and every key, and a catalog of where each tenant lives.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Three tenancy models side by side. Pool: all tenants share tables with a tenant id column; cheapest, one migration, weakest isolation. Bridge: a schema per tenant in one database; medium isolation, migrations run once per tenant. Silo: a database per tenant; strongest isolation and per-tenant backup and location, highest cost, many databases to run."><g class="rough"><rect class="d f-green" x="14" y="24" width="228" height="70" rx="10"/><rect class="d f-y" x="266" y="24" width="228" height="70" rx="10"/><rect class="d f-blue" x="518" y="24" width="228" height="70" rx="10"/></g><text class="t-head" x="128" y="55" text-anchor="middle" font-size="20">pool</text><text class="t" x="128" y="79" text-anchor="middle" font-size="15">shared tables</text><text class="t-head" x="380" y="55" text-anchor="middle" font-size="20">bridge</text><text class="t" x="380" y="79" text-anchor="middle" font-size="15">schema per tenant</text><text class="t-head" x="632" y="55" text-anchor="middle" font-size="20">silo</text><text class="t" x="632" y="79" text-anchor="middle" font-size="15">database per tenant</text><text class="t" x="136" y="128" text-anchor="middle" font-size="16">€ per tenant: lowest</text><text class="t" x="136" y="162" text-anchor="middle" font-size="16">1 migration</text><text class="t" x="136" y="196" text-anchor="middle" font-size="16">isolation: RLS</text><text class="t" x="136" y="230" text-anchor="middle" font-size="16">10,000 tenants: fine</text><text class="t" x="404" y="128" text-anchor="middle" font-size="16">€ per tenant: low</text><text class="t" x="404" y="162" text-anchor="middle" font-size="16">1 migration × tenants</text><text class="t" x="404" y="196" text-anchor="middle" font-size="16">isolation: schema</text><text class="t" x="404" y="230" text-anchor="middle" font-size="16">10,000 tenants: slow</text><text class="t" x="672" y="128" text-anchor="middle" font-size="16">€ per tenant: high</text><text class="t" x="672" y="162" text-anchor="middle" font-size="16">1 migration × tenants</text><text class="t" x="672" y="196" text-anchor="middle" font-size="16">isolation: full</text><text class="t" x="672" y="230" text-anchor="middle" font-size="16">own backup and region</text><text class="t-s t-pen" x="380" y="282" text-anchor="middle">typical: pool for most, silo for the few who need it</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Same app, three ways to keep tenants apart. Most products mix them.</figcaption></figure>
+  <h3 class="deep-h"><span>2</span>Noisy neighbours</h3>
+  <p>In the pool, one tenant's month-end report can take the CPU everyone else needs. You first need to <b>see</b> it: tag every query with the tenant (in <code>application_name</code> or a SQL comment) so slow-query logs and <code>pg_stat_statements</code> can be grouped by tenant. Then limit it:</p>
+  <ul>
+    <li><b>Rate limits per tenant</b> at the API, not just per user.</li>
+    <li><b>Time limits</b>: a <code>statement_timeout</code> for interactive requests, and longer ones only for jobs.</li>
+    <li><b>Separate heavy work</b>: run reports and exports on a read replica or a warehouse, and queue large jobs with a per-tenant concurrency limit.</li>
+    <li><b>Fair queues</b>: if jobs share workers, take turns between tenants, so one tenant's 50,000 jobs don't wait in front of everyone else's 5.</li>
+  </ul>
+  <p>If a tenant still needs more than its share every day, that is a sign it belongs in its own database, which is the next part.</p>
+
+  <h3 class="deep-h"><span>3</span>Moving a big tenant out</h3>
+  <p>Because every row has a tenant id and the app finds tenants through a catalog, moving one is a data job, not a rewrite:</p>
+  <ol>
+    <li>Create the new database with the same schema (same migrations).</li>
+    <li>Copy the tenant's rows: a filtered dump for a small tenant, or logical replication or CDC filtered on <code>tenant_id</code> for a large one, so the copy keeps up while it runs.</li>
+    <li>Verify: row counts and checksums per table, then run read-only traffic against the copy and compare answers.</li>
+    <li>Switch: pause the tenant's writes for seconds, let the copy catch up, and change its row in the catalog. New requests go to the new database.</li>
+    <li>Keep the old rows for a week in case you must move back, then delete them.</li>
+  </ol>
+  <p>The hard parts are global ids and shared tables (users that belong to several tenants, global sequences). Use keys that are unique across all databases (UUIDs, or tenant id plus a local id) so copied rows never collide.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="Routing by tenant. Each request carries a tenant id. The app looks it up in a small catalog table that says which database holds that tenant. Most tenants point to the shared pool. Tenant 42, the biggest customer, points to its own database after it was moved; moving it only changed its row in the catalog."><g class="rough"><rect class="d f-paper" x="20" y="100" width="140" height="70" rx="10"/><path class="d" d="M164 135 L236 135"/><path class="d" d="M225.2 140.2 L236 135 L225.2 129.8"/><rect class="d d-thin f-paper" x="240" y="60" width="200" height="136" rx="4"/><path class="d d-thin f-y" d="M240 64 a4 4 0 0 1 4 -4 h192 a4 4 0 0 1 4 4 v28 h-200 z"/><path class="d d-thin d-soft" d="M246 118 h188"/><path class="d d-thin d-soft" d="M246 144 h188"/><rect class="f-hl" x="243" y="146" width="194" height="22" rx="2" style="stroke:none"/><path class="d d-thin d-soft" d="M246 170 h188"/><path class="d d-green" d="M444 150 L556 196"/><path class="d d-green" d="M544.0 196.7 L556 196 L548.0 187.1"/><path class="d d-dash" d="M444 110 L556 70"/><path class="d" d="M547.6 78.5 L556 70 L544.1 68.7"/><path class="d d-thin f-paper" d="M575 40 v40 a45 9 0 0 0 90 0 v-40"/><ellipse class="d d-thin f-paper" cx="620" cy="40" rx="45" ry="9"/><path class="d d-thin f-green" d="M575 170 v40 a45 9 0 0 0 90 0 v-40"/><ellipse class="d d-thin f-green" cx="620" cy="170" rx="45" ry="9"/></g><text class="t-head" x="90" y="131" text-anchor="middle" font-size="18">request</text><text class="t" x="90" y="155" text-anchor="middle" font-size="17">tenant = 42</text><text class="t-head" x="340" y="83" text-anchor="middle" font-size="17">tenant catalog</text><text class="t" x="250" y="111" font-size="16">7 → pool-1</text><text class="t" x="250" y="137" font-size="16">19 → pool-1</text><text class="t" x="250" y="163" font-size="16">42 → silo-42</text><text class="t" x="250" y="189" font-size="16">63 → pool-2</text><text class="t t-soft" x="620" y="110" text-anchor="middle" font-size="16">pool-1 (shared)</text><text class="t t-soft" x="620" y="240" text-anchor="middle" font-size="16">silo-42</text><text class="t-s t-pen" x="340" y="262" text-anchor="middle" font-size="17">move = copy rows · verify · flip one catalog row</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A catalog of where each tenant lives makes moving one a data copy and a one-row switch.</figcaption></figure>
+  <h3 class="deep-h"><span>4</span>Testing that isolation holds</h3>
+  <p>A data leak between tenants is the worst bug a SaaS product can have, so test isolation on purpose, not just features:</p>
+  <ul>
+    <li><b>A two-tenant test</b>: seed tenants A and B with similar data, run every API endpoint as A, and fail if any response contains an id of B's.</li>
+    <li><b>A schema check in CI</b>: every table with a <code>tenant_id</code> column must have row-level security turned on and forced. Query <code>pg_class</code> for <code>relrowsecurity</code> and <code>relforcerowsecurity</code> and fail on any gap.</li>
+    <li><b>The right database role</b>: the app must connect as a role that does <b>not</b> bypass RLS. Owners and superusers skip policies unless forced.</li>
+    <li><b>Background jobs</b>: jobs and scripts run outside a request, so they often forget <code>SET LOCAL app.tenant_id</code>. With RLS forced, a forgotten setting returns no rows (or an error) instead of everyone's rows. Test that it fails closed.</li>
+  </ul>
+
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">
@@ -165,13 +209,18 @@
     </div>
   </div>
   <h3>Related patterns</h3>
-  <ul class="related"><li><b>Table partitioning</b></li><li><b>Connection pooling</b></li><li><b>Surrogate keys</b></li><li><b>Sharding</b> (Vol. 1)</li></ul>
+  <ul class="related"><li><a href="../notes/partitioning.html"><b>Table partitioning</b></a></li><li><a href="../notes/connection-pooling.html"><b>Connection pooling</b></a></li><li><a href="../notes/surrogate-keys.html"><b>Surrogate keys</b></a></li><li><a href="../../distributed/notes/sharding.html"><b>Sharding</b></a> (Vol. 1)</li></ul>
   <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
   <div class="quiz">
     <details><summary>Name the three classic multitenancy models.</summary><p>Shared tables with a tenant_id, schema per tenant, and database per tenant.</p></details>
     <details><summary>What does row-level security add?</summary><p>The database filters rows by tenant automatically, so a query that forgets WHERE tenant_id can't see other tenants' data.</p></details>
     <details><summary>Why SET LOCAL rather than SET with a connection pooler?</summary><p>SET LOCAL lasts only for the transaction, so the setting can't leak to the next request that reuses the connection.</p></details>
     <details><summary>Why put tenant_id first in indexes?</summary><p>Queries always filter by tenant, so a tenant-first index jumps straight to that tenant's rows.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>In a shared-table SaaS app, a developer forgot WHERE tenant_id = … in one new report, and customer A saw customer B's invoices. How do you make the next forgotten filter harmless?</span></summary><p>Turn on row-level security with a policy on tenant_id = current_setting('app.tenant_id'), set that value per transaction (SET LOCAL), and make sure the app's database role doesn't bypass RLS. A missing WHERE then returns only the tenant's own rows.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Create an invoices table with tenant_id, enable row-level security with a policy, and query it as two tenants using SET LOCAL in a transaction. Then run a query with no WHERE clause and confirm it only returns the current tenant's rows.</p>
   </div>
   <div class="remember">
     <span class="tag">remember!!</span>

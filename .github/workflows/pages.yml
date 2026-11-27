@@ -1,12 +1,17 @@
 name: Deploy to GitHub Pages
 
-# Every push to main rebuilds the PDFs and publishes public/ to GitHub Pages
-# and (when the Cloudflare secrets exist) to the Cloudflare Worker mirror.
+# Every push to main builds the PDFs that changed (the rest come from the PDF cache) and publishes public/ to
+# GitHub Pages and (when the Cloudflare secrets exist) to the Cloudflare Worker mirror.
 on:
   push:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      rebuild_pdfs:
+        description: "Render every PDF again, ignoring the PDF cache"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -41,13 +46,33 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ hashFiles('package-lock.json') }}
 
+      # PDFs from the last deploy, with a fingerprint of the page each was made from (scripts/build-pdf.mjs).
+      # Restores the newest cache; a PDF is rendered again only when its page, the stylesheets or the script changed.
+      - name: Restore the PDF cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .pdf-cache
+          key: pdfs-${{ github.sha }}
+          restore-keys: pdfs-
+
+      # pdf-build.json can narrow this further: "rebuild" lists PDFs to always render, and "only_listed": true
+      # renders nothing else (other PDFs come from the cache even if their page changed; the log lists them).
       # The runner image already has the system libraries Chromium needs, so we skip
       # `--with-deps` (it pulls ~100 apt packages and fails when Ubuntu mirrors are flaky).
-      - name: Build the ready-made PDFs
-        timeout-minutes: 15
+      - name: Build the ready-made PDFs (only the ones that changed)
+        timeout-minutes: 30
+        env:
+          PDF_FORCE: ${{ inputs.rebuild_pdfs && '1' || '' }}
         run: |
           npx playwright install chromium
           npm run pdf
+
+      # Saved under the fingerprints' hash, so a deploy that changed no PDF adds no new cache entry.
+      - name: Save the PDF cache
+        uses: actions/cache/save@v4
+        with:
+          path: .pdf-cache
+          key: pdfs-${{ hashFiles('.pdf-cache/manifest.json') }}
 
       - name: Make sure every page and PDF exists
         run: |

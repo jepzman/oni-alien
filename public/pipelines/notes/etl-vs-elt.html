@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ETL vs ELT · Jef’s Notes</title>
+<meta name="description" content="Transform before loading, or load raw data and transform it inside the warehouse.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-pipelines">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 9 · data pipelines &amp; analytics</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="etl-vs-elt">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 03.05.27</span><span class="topic">collection · <b>getting data in</b></span></div>
+  <p class="kicker">a.k.a. “load first, transform later”</p>
+  <h1><span class="hl">ETL vs ELT</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p><b>ETL</b> transforms data on its way to the warehouse and stores only the result. <b>ELT</b> copies the source data into the warehouse <b>unchanged</b>, then transforms it there with SQL. Cheap columnar storage made ELT the default: keep the raw data, and any transform can be fixed and <b>rerun over the whole history</b>. Transform before loading only what must never be stored, such as card numbers.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> getting data in</li><li><b>Origin:</b> ETL tools of the 1990s; ELT with cloud warehouses, 2012+</li><li><b>Lives in:</b> dbt, SQLMesh, Fivetran, Airbyte</li><li><b>Pairs with:</b> layered zones, idempotent loads</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Since 2019 the shop's nightly job reads orders, applies tax rules and the category mapping in a Python script, and writes <b>daily totals by category</b> to the warehouse. Fourteen months later finance finds that refunds were taxed twice. The raw orders were <span class="hl-pink">never stored in the warehouse</span>, and the app has changed since, so the past cannot be recomputed.</p>
+  <ul>
+    <li><b>Logic in the extract</b>: business rules live in a script on a server nobody owns, untested and unversioned.</li>
+    <li><b>Only the answer is kept</b>: “revenue by hour” or “by customer segment” needs a new job, and has no history.</li>
+    <li><b>A bug is permanent</b>: the input is gone, so the output can never be corrected.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="Doodle of the shop&#x27;s old nightly ETL job. It reads orders from the app database, applies tax rules and category mapping in a Python script on a separate server, and writes only daily totals by category into the warehouse. Fourteen months later a tax bug is found. The raw orders were never kept in the warehouse, and the source has changed since, so the old totals cannot be recomputed."><g class="rough"><path class="d d-thin f-paper" d="M25 90 v40 a45 9 0 0 0 90 0 v-40"/><ellipse class="d d-thin f-paper" cx="70" cy="90" rx="45" ry="9"/><path class="d" d="M124 110 L214 110"/><path class="d" d="M203.2 115.2 L214 110 L203.2 104.8"/><rect class="d f-blue" x="220" y="60" width="210" height="100" rx="10"/><path class="d" d="M436 110 L520 110"/><path class="d" d="M509.2 115.2 L520 110 L509.2 104.8"/><rect class="d d-thin f-paper" x="526" y="60" width="200" height="84" rx="4"/><path class="d d-thin f-y" d="M526 64 a4 4 0 0 1 4 -4 h192 a4 4 0 0 1 4 4 v28 h-200 z"/><path class="d d-thin d-soft" d="M532 118 h188"/></g><text class="t t-soft" x="70" y="160" text-anchor="middle" font-size="16">app database</text><text class="t-head" x="325" y="106" text-anchor="middle" font-size="19">nightly script</text><text class="t" x="325" y="130" text-anchor="middle" font-size="15">tax rules · categories</text><text class="t-head" x="626" y="83" text-anchor="middle" font-size="17">daily_totals</text><text class="t" x="536" y="111" font-size="16">day · category</text><text class="t" x="536" y="137" font-size="16">revenue</text><text class="t-s t-red" x="325" y="210" text-anchor="middle">tax bug found: 14 months wrong</text><text class="t-s t-red" x="625" y="170" text-anchor="middle">raw orders: never kept</text><text class="t-s t-pen" x="380" y="250" text-anchor="middle">“recompute it?” “from what?”</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Transform first, keep only the result: when the rule turns out wrong, the past can't be fixed.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">meal kit vs pantry</span></h2>
+  <p>A <b>meal kit</b> arrives cut and portioned for one recipe. Convenient, but if the recipe was wrong, the vegetables are already diced. A <b>pantry</b> of whole groceries takes more room, and you cook any recipe from it later, or cook it again.</p>
+  <ul>
+    <li>Pantries were expensive when shelf space was. Cloud warehouses made shelf space cheap.</li>
+    <li>Some things you still prepare before they come in: you don't store what you're not allowed to keep.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle comparing a meal kit and a full pantry. A meal kit arrives pre-cut for one recipe: if the recipe was wrong, the ingredients are already cut. A pantry stocked with whole groceries lets you cook any recipe later, and cook it again if the first attempt was wrong."><g class="rough"><rect class="d f-pink" x="20" y="40" width="300" height="120" rx="10"/><g transform="translate(420 40) scale(1.4)"><g class="d"><rect class="f-green" x="6" y="0" width="44" height="64" rx="5"/><path d="M6 24 h44 M14 8 v10 M14 30 v14"/></g></g><path class="d" d="M520 90 L600 60"/><path class="d" d="M591.7 68.7 L600 60 L588.0 58.9"/><path class="d" d="M520 110 L600 110"/><path class="d" d="M589.2 115.2 L600 110 L589.2 104.8"/><path class="d" d="M520 130 L600 160"/><path class="d" d="M588.0 161.1 L600 160 L591.7 151.3"/></g><text class="t-head" x="170" y="96" text-anchor="middle" font-size="21">meal kit</text><text class="t" x="170" y="120" text-anchor="middle" font-size="16">pre-cut for one recipe</text><text class="t-s t-red" x="170" y="190" text-anchor="middle">ETL: shaped before it arrives</text><text class="t-s t-green" x="610" y="66" text-anchor="start">soup</text><text class="t-s t-green" x="610" y="116" text-anchor="start">curry</text><text class="t-s t-green" x="610" y="166" text-anchor="start">soup, again</text><text class="t-s t-green" x="540" y="230" text-anchor="middle">ELT: keep it whole, cook later</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A meal kit is cut for one recipe. A full pantry lets you cook anything, and cook it again.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Meal kit, pre-cut</td><td>ETL: transformed in flight, only the result stored</td></tr>
+      <tr><td>Whole groceries in the pantry</td><td>Raw tables, copied unchanged</td></tr>
+      <tr><td>The recipe</td><td>SQL models (staging, marts) run in the warehouse</td></tr>
+      <tr><td>Cooking again after a mistake</td><td>Fix the model, rerun over all history</td></tr>
+      <tr><td>Not storing what you mustn't</td><td>Masking card numbers or health data before loading</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">extract, load, then transform in SQL</span></h2>
+  <p>The <b>extract and load</b> step is a copy and nothing more: tables land in a <code>raw</code> schema as they were in the source, with a load timestamp. The <b>transform</b> step is a set of SQL models in git that build staging tables and then marts. They run inside the warehouse, so they scale with it, and they can be tested and reviewed like any other code.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="ELT. Extract and load copy the app database&#x27;s tables as they are into raw tables in the warehouse. Transformations are SQL models that run inside the warehouse: staging cleans the raw tables, marts shape them into facts and dimensions. Because raw is kept, every model can be changed and rerun over the whole history."><g class="rough"><path class="d d-thin f-paper" d="M17 100 v40 a43 9 0 0 0 86 0 v-40"/><ellipse class="d d-thin f-paper" cx="60" cy="100" rx="43" ry="9"/><path class="d" d="M110 120 L170 120"/><path class="d" d="M159.2 125.2 L170 120 L159.2 114.8"/><rect class="d f-y" x="176" y="80" width="150" height="80" rx="10"/><path class="d" d="M332 120 L392 120"/><path class="d" d="M381.2 125.2 L392 120 L381.2 114.8"/><rect class="d f-blue" x="398" y="80" width="150" height="80" rx="10"/><path class="d" d="M554 120 L604 120"/><path class="d" d="M593.2 125.2 L604 120 L593.2 114.8"/><rect class="d f-green" x="610" y="80" width="130" height="80" rx="10"/><path class="d d-dash" d="M180 214 H736"/><path class="d d-dash" d="M660 166 Q460 210 260 166"/><path class="d" d="M271.7 163.2 L260 166 L269.4 173.4"/></g><text class="t t-soft" x="60" y="170" text-anchor="middle" font-size="16">app database</text><text class="t-s" x="140" y="100" text-anchor="middle">E + L</text><text class="t-head" x="251" y="116" text-anchor="middle" font-size="21">raw</text><text class="t" x="251" y="140" text-anchor="middle" font-size="15">as it came</text><text class="t-s" x="362" y="100" text-anchor="middle">T</text><text class="t-head" x="473" y="116" text-anchor="middle" font-size="21">staging</text><text class="t" x="473" y="140" text-anchor="middle" font-size="15">clean, typed</text><text class="t-s" x="579" y="100" text-anchor="middle">T</text><text class="t-head" x="675" y="116" text-anchor="middle" font-size="21">marts</text><text class="t" x="675" y="140" text-anchor="middle" font-size="15">facts + dims</text><text class="t-s t-pen" x="458" y="240" text-anchor="middle">all inside the warehouse · SQL in git · rerun over all history</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Copy first, unchanged. Transform with SQL inside the warehouse, as often as you like.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Copy, don't change</b><p>A connector (Fivetran, Airbyte, Debezium or your own) lands source tables in raw, unchanged.</p></li>
+    <li><b>Mask only what must be</b><p>Drop or hash card numbers and secrets before landing; nothing else happens in flight.</p></li>
+    <li><b>Write transforms as SQL models</b><p>One file per table: staging models clean, mart models shape. Versioned in git.</p></li>
+    <li><b>Test and review them</b><p>Unique keys, not-null columns, accepted values, run in CI and on every load.</p></li>
+    <li><b>Rerun freely</b><p>A changed rule means change the model and rebuild; the raw data is still there.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>ETL</dt><dd>Extract, transform, load: shape the data before it reaches the warehouse.</dd></div>
+    <div><dt>ELT</dt><dd>Extract, load, transform: land raw data, shape it inside the warehouse.</dd></div>
+    <div><dt>Raw</dt><dd>Source data stored as it arrived, never edited.</dd></div>
+    <div><dt>Model</dt><dd>One SQL SELECT that builds one table or view (dbt's word).</dd></div>
+    <div><dt>Connector</dt><dd>The tool that copies data from a source into the warehouse.</dd></div>
+    <div><dt>Reverse ETL</dt><dd>Copying warehouse results back into apps such as a CRM.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>models/marts/fct_daily_revenue.sql</span><span>dbt · any warehouse</span></div>
+<pre><code><span class="c">-- the rule lives here, in git, and can be rerun over all history</span>
+select
+    s.order_date,
+    p.category,
+    sum(s.amount_net)                  as revenue_net,
+    sum(s.amount_net * s.tax_rate)     as tax
+<span class="k">from</span> {{ ref(<span class="s">'fct_sales'</span>) }}   s
+join {{ ref(<span class="s">'dim_product'</span>) }} p using (product_key)
+where not s.is_refund_tax_line          <span class="c">-- the 2019 bug, fixed once, for every year</span>
+group by 1, 2</code></pre>
+  </div>
+  <p class="aside">tools: loaders Fivetran, Airbyte, Stitch, Debezium, cloud DMS; transforms dbt, SQLMesh, Dataform; classic ETL suites Informatica, SSIS, Talend (still common for masking and mainframe sources).</p>
+  <section class="thennow verdict-rethought" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="the idea holds, the way the book did it has changed">rethought</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Kimball &amp; Caserta, 2004</small></h3><p><i>The Data Warehouse ETL Toolkit</i> describes a separate ETL server that cleans, conforms and loads data, because warehouse disk and CPU were expensive. Only the finished, conformed tables were stored; the staging area was temporary.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>Columnar cloud warehouses split storage from compute, and keeping raw data costs little. Transforms became SQL in git, tested and reviewed (dbt, from 2016). ETL survives where data must be masked before landing, and inside streaming jobs that enrich events in flight.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> Load first and keep raw; transform in the warehouse. Transform before loading only what must never be stored.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>History can be fixed</b>: change a rule and rebuild every year from raw.</li><li><b>New questions are cheap</b>: the detail is there, not just yesterday's totals.</li><li><b>Logic is code</b>: SQL in git, reviewed, tested, with lineage.</li><li><b>One engine</b>: transforms scale with the warehouse, not a side server.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>More storage</b>: raw and every layer are kept.</li><li><b>Sensitive data lands</b> unless you mask it in flight on purpose.</li><li><b>Warehouse compute bills</b> grow with every rebuild.</li><li><b>SQL sprawl</b>: hundreds of models need naming rules and ownership.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Pipeline ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>a nightly script that stores only daily totals</b> to <b>raw tables plus SQL models in the warehouse</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="2" data-after="4"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One copy step, logic in readable SQL.</td></tr>
+      <tr data-before="3" data-after="3"><td>Freshness<small>how recent?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral: both run on a schedule.</td></tr>
+      <tr data-before="2" data-after="4"><td>Correctness<small>is the number right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Bugs can be fixed for every past day.</td></tr>
+      <tr data-before="1" data-after="5"><td>Replayability<small>safe to rerun?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Any model can be rebuilt from raw.</td></tr>
+      <tr data-before="2" data-after="4"><td>Scalability<small>10× the data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Transforms scale with the warehouse.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Raw storage and rebuilds cost money.</td></tr>
+      <tr data-before="1" data-after="5"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Every column of every row is there to ask about.</td></tr>
+      <tr data-before="2" data-after="4"><td>Observability<small>know when it's wrong?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Tests and lineage come with the models.</td></tr>
+      <tr data-before="2" data-after="5"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A new column is a new line of SQL.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Transforming in the loader</h3><p>Business rules creep into connector settings and scripts again. <span class="fix">Fix →</span> keep the load a plain copy; every rule is a model.</p></li>
+    <li><h3>Raw that isn't raw</h3><p>Someone “cleans up” raw in place, and the original is gone. <span class="fix">Fix →</span> make raw append-only and read-only for everyone but the loader.</p></li>
+    <li><h3>Personal data landed by accident</h3><p>A new source column with card numbers lands in raw and is queryable. <span class="fix">Fix →</span> mask or drop listed columns in flight, and scan raw for patterns.</p></li>
+    <li><h3>Rebuild everything, every hour</h3><p>Full rebuilds of large models eat the compute budget. <span class="fix">Fix →</span> build big models incrementally (idempotent loads); rebuild fully only after a logic change.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>A warehouse with cheap storage and SQL compute.</li><li>Rules that change and need to apply to the past.</li><li>Analysts who ask new questions every week.</li><li>Several sources that have to be combined.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Data that must be masked or dropped before it may be stored: do that part in flight.</li><li>Streams that must be enriched in milliseconds; transform in the stream processor.</li><li>A tiny report from one table, where a view on a read replica is enough.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/layered-zones.html"><b>Layered zones</b></a></li><li><a href="../notes/idempotent-loads.html"><b>Idempotent loads</b></a></li><li><a href="../../data/notes/star-schema.html"><b>Star schema</b></a> (Vol. 3)</li><li><a href="../../data/notes/change-data-capture.html"><b>Change data capture</b></a> (Vol. 3)</li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What does ELT change compared with ETL?</summary><p>The data is loaded unchanged first, and transformed inside the warehouse with SQL, so raw data is kept.</p></details>
+    <details><summary>Why can an ELT pipeline fix last year's numbers?</summary><p>Raw data is still stored; change the model and rebuild it over all history.</p></details>
+    <details><summary>When should you still transform before loading?</summary><p>For data that must never be stored, such as card numbers: mask or drop it in flight.</p></details>
+    <details><summary>What is a model in dbt?</summary><p>A SQL SELECT in a file that builds one table or view, referencing other models.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Finance finds that a discount was counted twice in revenue since January. Your pipeline stores only monthly totals. What do you change, beyond fixing the formula?</span></summary><p>Start landing the order lines unchanged in raw and build revenue as a SQL model from them. Then the fix is a change to one model and a rebuild; for January to now, reload the order lines from the source (or a backup) once.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Take one report built by a script. Land its source tables unchanged in a <code>raw</code> schema (DuckDB is enough), rewrite the logic as two SQL views (staging, then the report), and change one rule. Rebuild and compare last year's numbers before and after.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Keep the <span class="hl">groceries</span>, not just the meal. Transform in the warehouse, and you can always cook it again.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/01-etl-vs-elt.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Ralph Kimball and Joe Caserta, <i>The Data Warehouse ETL Toolkit</i> (2004).</li><li>Joe Reis and Matt Housley, <i>Fundamentals of Data Engineering</i> (2022), chapter 8.</li><li>dbt Labs, “What is ELT?” and the dbt documentation on models.</li><li>Tristan Handy, “The Analytics Engineer” (2019).</li></ul>
+  </div>
+  <p class="folio">01</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="../index.html"><small>← back to</small>Index</a>
+  <a href="incremental-extract.html"><small>Next note →</small>02 · Incremental Extract</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 9 · a student's bullet journal on data pipelines &amp; analytics</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

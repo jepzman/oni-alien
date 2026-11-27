@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>History in the Warehouse · Deep dive · Jef’s Notes</title>
+<meta name="description" content="A deep dive on dimension history in a warehouse: type 2 mechanics, six failure drills, as it was, as it is and as it was reported, four variants compared, growth numbers, testing history, running it, tools, a lab and a checklist.">
+<meta name="theme-color" content="#E4E1D9">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,700;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/dive.css?v=2b16c30ec1">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/dive.js?v=03c39c00d2" defer></script>
+</head>
+<body class="dive">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah" d="M0 0 L10 4 L0 8z"/></marker><marker id="ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah-r" d="M0 0 L10 4 L0 8z"/></marker></defs></svg>
+<a class="skip-link" href="#main">Skip to the text</a>
+<header class="site" id="top">
+  <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>deep dive 13</small></a>
+  <a class="site-link" href="../../index.html#deep-dives">Shelf</a>
+</header>
+<div class="strip" data-strip>
+  <div class="strip-in">
+    <nav aria-label="Chapters"><a href="#recap" data-ch="0"><b>1</b> Recap</a><a href="#mechanism" data-ch="1"><b>2</b> Mechanism</a><a href="#drills" data-ch="2"><b>3</b> Failure drills</a><a href="#three-pasts" data-ch="3"><b>4</b> Three pasts</a><a href="#variants" data-ch="4"><b>5</b> Variants</a><a href="#numbers" data-ch="5"><b>6</b> Numbers</a><a href="#testing" data-ch="6"><b>7</b> Testing</a><a href="#running" data-ch="7"><b>8</b> Running it</a><a href="#tools" data-ch="8"><b>9</b> Tools</a><a href="#lab" data-ch="9"><b>10</b> Lab</a></nav>
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+  </div>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+</div>
+
+<main id="main" class="wrap"><article class="page"><div class="col">
+<p class="eyebrow">Deep dive 13 · builds on Vol. 3, notes 04 and 17 · Vol. 9, notes 05 and 06</p>
+<h1><span>History in the Warehouse</span></h1>
+<p class="sub">Three changes followed through a year: a recategorised kettle, a customer whose move was recorded late, and a shop that changed region. Which past each report means, and how to keep all three.</p>
+<ul class="facts"><li><b>Full read</b> about 29 min</li><li><b>Skim</b> about 13 min: yellow boxes, tables and drill rules</li><li><b>Example</b> the kettle on 12 May, customer 77's move, Delft's new region</li></ul>
+<nav class="toc" aria-label="Contents">
+  <h2 class="toc-h">In this deep dive</h2>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Four notes in sixty seconds</span><span class="m">2 min</span></a></li><li><a href="#mechanism" data-ch="1"><span class="n">2</span><span class="t">The real mechanism: versions and keys</span><span class="m">3 min</span></a></li><li><a href="#drills" data-ch="2"><span class="n">3</span><span class="t">Failure drills</span><span class="m">6 min</span></a></li><li><a href="#three-pasts" data-ch="3"><span class="n">4</span><span class="t">The hard problem: three pasts</span><span class="m">3 min</span></a></li><li><a href="#variants" data-ch="4"><span class="n">5</span><span class="t">Four ways to keep history</span><span class="m">3 min</span></a></li><li><a href="#numbers" data-ch="5"><span class="n">6</span><span class="t">History in numbers</span><span class="m">3 min</span></a></li><li><a href="#testing" data-ch="6"><span class="n">7</span><span class="t">Testing history</span><span class="m">3 min</span></a></li><li><a href="#running" data-ch="7"><span class="n">8</span><span class="t">Running it</span><span class="m">2 min</span></a></li><li><a href="#tools" data-ch="8"><span class="n">9</span><span class="t">Tools</span><span class="m">3 min</span></a></li><li><a href="#lab" data-ch="9"><span class="n">10</span><span class="t">A lab and the checklist</span><span class="m">3 min</span></a></li></ol>
+  <p class="toc-src">Read first: <a href="../../data/notes/history-tables.html">History Tables</a><a href="../../data/notes/bitemporal-data.html">Bitemporal Data</a><a href="../../pipelines/notes/slowly-changing-dimensions.html">Slowly Changing Dimensions</a><a href="../../pipelines/notes/late-arriving-data.html">Late-Arriving Data</a></p>
+</nav>
+<section id="recap" data-title="Recap">
+<p class="ch">chapter 1 <span>· 2 min</span></p>
+<h2>Four notes in sixty seconds</h2>
+<div class="gist"><p><b>Gist</b> History tables keep past versions, bitemporal data adds when you knew, slowly changing dimensions decide per column, and late-arriving data files events by when they happened. In a warehouse they meet in one question: which version of the past does this report mean?</p></div>
+
+<p>Four notes deal with the past. In a warehouse they meet, because every report about last year has to decide which version of the world to use.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Note</th><th scope="col">In one line</th></tr></thead><tbody><tr><td>History Tables (Vol. 3)</td><td>keep every past version of a row, with when it was valid</td></tr><tr><td>Bitemporal Data (Vol. 3)</td><td>record when a fact was true <i>and</i> when you knew it</td></tr><tr><td>Slowly Changing Dimensions (Vol. 9)</td><td>per column, overwrite (type 1) or add a dated version with a new key (type 2)</td></tr><tr><td>Late-Arriving Data (Vol. 9)</td><td>file each event in the period it happened, even when it reaches you late</td></tr></tbody></table></div><figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="This year&#x27;s three changes on a timeline. Customer 77 moves from Utrecht to Rotterdam on 1 February, and the CRM learns about it on 20 February. On 12 May the kettle moves from Kitchen to Small appliances. On 1 July the Delft shop moves from region North to region South.">
+  <path class="ln" d="M20 200 H740" marker-end="url(#a)"/>
+  <text class="soft" x="60" y="226" text-anchor="middle">1 Feb</text><text class="soft" x="150" y="226" text-anchor="middle">20 Feb</text>
+  <text class="soft" x="330" y="226" text-anchor="middle">12 May</text><text class="soft" x="520" y="226" text-anchor="middle">1 Jul</text>
+  <path class="ln-d" d="M60 40 V196"/><path class="ln-d" d="M150 40 V196"/><path class="ln-d" d="M330 40 V196"/><path class="ln-d" d="M520 40 V196"/>
+  <rect class="bx-y" x="158" y="50" width="166" height="50" rx="8"/><text class="lbl" x="241" y="72" text-anchor="middle">customer 77 moves</text><text class="soft" x="241" y="92" text-anchor="middle">CRM learns 20 Feb</text>
+  <rect class="bx" x="340" y="110" width="170" height="50" rx="8"/><text class="lbl" x="425" y="132" text-anchor="middle">kettle recategorised</text><text class="soft" x="425" y="152" text-anchor="middle">Kitchen → Small appl.</text>
+  <rect class="bx-g" x="530" y="50" width="200" height="50" rx="8"/><text class="lbl" x="630" y="72" text-anchor="middle">Delft changes region</text><text class="soft" x="630" y="92" text-anchor="middle">North → South</text>
+</svg></div><figcaption>Three changes, three kinds of trouble: one recorded late, one that rewrites categories, one that rewrites the map.</figcaption></figure><aside class="mn">The SCD note covers types 1 to 6 on one product. This dive is about running them for years.</aside>
+<p class="full">The notes describe each idea on one row. The warehouse holds thousands of changing rows, facts that point at them, and people asking for the past in three different ways without saying which. This dive follows three changes at the shop through one year and answers the questions they cause: why March changed, why the same customer counts twice, and what the report said on 15 July.</p>
+<h3>Three people, three questions about last year</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Who</th><th scope="col">Asks</th><th scope="col">Which past they mean</th></tr></thead><tbody><tr><td>finance</td><td>“What was Kitchen's revenue in March?”</td><td>as it was: the category when it was sold</td></tr><tr><td>regional managers</td><td>“How did the South region do this year?”</td><td>as it is: today's regions, applied to the whole year</td></tr><tr><td>the auditor</td><td>“What did your report say on 15 July?”</td><td>as it was reported: what the warehouse knew that day</td></tr></tbody></table></div>
+<p class="full">All three are fair, and each needs a different mechanism. Most warehouse history bugs are one of these answered with the machinery of another.</p>
+
+
+<a class="next" href="#mechanism"><small>next · chapter 2</small>The real mechanism: versions and keys →</a>
+</section>
+<section id="mechanism" data-title="Mechanism">
+<p class="ch">chapter 2 <span>· 3 min</span></p>
+<h2>The real mechanism: versions and keys</h2>
+<div class="gist"><p><b>Gist</b> A type 2 dimension keeps one row per version, with a surrogate key, the natural key, a half-open validity range and a hash of the tracked columns. Each load closes changed versions and inserts new ones. Facts find their version by event time once, at load, and store its key.</p></div>
+
+<p>A type 2 dimension is a history table with two extra promises: each version has its own <b>surrogate key</b>, and facts store that key, so they keep the version they were loaded with.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 245" role="img" aria-label="The product dimension for the kettle. Two rows share natural key K-100. Row with surrogate key 812 is Kitchen, valid from 1 September 2025 to 12 May 2026, not current. Row 977 is Small appliances, valid from 12 May 2026 to 31 December 9999, current. The validity range includes its start and excludes its end.">
+  <rect class="bx-y" x="10" y="20" width="740" height="40" rx="6"/>
+  <text class="lbl" x="24" y="46">key</text><text class="lbl" x="110" y="46">sku</text><text class="lbl" x="200" y="46">category</text>
+  <text class="lbl" x="400" y="46">valid_from</text><text class="lbl" x="540" y="46">valid_to</text><text class="lbl" x="670" y="46">current</text>
+  <rect class="bx" x="10" y="66" width="740" height="40" rx="6"/>
+  <text class="soft" x="24" y="92">812</text><text class="soft" x="110" y="92">K-100</text><text class="soft" x="200" y="92">Kitchen</text>
+  <text class="soft" x="400" y="92">2025-09-01</text><text class="soft" x="540" y="92">2026-05-12</text><text class="soft" x="670" y="92">no</text>
+  <rect class="bx-g" x="10" y="112" width="740" height="40" rx="6"/>
+  <text class="soft" x="24" y="138">977</text><text class="soft" x="110" y="138">K-100</text><text class="soft" x="200" y="138">Small appliances</text>
+  <text class="soft" x="400" y="138">2026-05-12</text><text class="soft" x="540" y="138">9999-12-31</text><text class="soft" x="670" y="138">yes</text>
+  <path class="ln-d" d="M540 160 V176"/><text class="soft" x="540" y="196" text-anchor="middle">exclusive: [from, to)</text>
+  <path class="ln-d" d="M110 160 V176"/><text class="soft" x="110" y="196" text-anchor="middle">natural key: same for both</text>
+  <path class="ln-d" d="M24 160 V216"/><text class="soft" x="34" y="232">surrogate key: one per version, stored on facts</text>
+</svg></div><figcaption>Two versions of one kettle. The end date of one is the start date of the next, and belongs to the next.</figcaption></figure>
+<h3>The columns, and why each exists</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Column</th><th scope="col">Purpose</th></tr></thead><tbody><tr><td><code>product_key</code></td><td>surrogate key per version; facts store it, so joins are one equality</td></tr><tr><td><code>sku</code></td><td>natural key from the source; ties all versions together</td></tr><tr><td>tracked columns</td><td>category, brand: a change here creates a version</td></tr><tr><td>type 1 columns</td><td>description, spelling: a change here updates every version</td></tr><tr><td><code>valid_from</code>, <code>valid_to</code></td><td>half-open range in business time: <code>&gt;= from AND &lt; to</code></td></tr><tr><td><code>is_current</code></td><td>a convenience for “as it is” joins; derivable from <code>valid_to</code></td></tr><tr><td><code>hashdiff</code></td><td>hash of the tracked columns, to detect a change cheaply</td></tr><tr><td><code>loaded_at</code></td><td>when the warehouse wrote the row (the other clock, chapter 4)</td></tr></tbody></table></div><aside class="mn">Use a far-future date such as 9999-12-31 for the open end, not NULL. Range joins and BETWEEN-style checks stay simple.</aside><div class="full">
+<h3>One load, step by step</h3>
+<p>Each run compares today's source rows with the current dimension rows. Three outcomes per natural key: new (insert a first version), changed in a tracked column (close the current version, insert a new one), changed only in type 1 columns (update all versions in place).</p>
+<div class="card"><div class="card-head"><span>dim_product_load.sql</span><span>two statements, one transaction</span></div><pre><code><span class="k">BEGIN</span>;
+<span class="c">-- 1 · close current versions whose tracked columns changed</span>
+<span class="k">UPDATE</span> dim_product d
+<span class="k">SET</span>    valid_to = s.effective_from, is_current = <span class="k">false</span>
+<span class="k">FROM</span>   stg_products s
+<span class="k">WHERE</span>  d.sku = s.sku <span class="k">AND</span> d.is_current <span class="k">AND</span> d.hashdiff &lt;&gt; s.hashdiff;
+
+<span class="c">-- 2 · insert new versions (changed keys) and first versions (new keys)</span>
+<span class="k">INSERT</span> <span class="k">INTO</span> dim_product (sku, name, category, brand, valid_from, valid_to, is_current, hashdiff, loaded_at)
+<span class="k">SELECT</span> s.sku, s.name, s.category, s.brand,
+       coalesce(s.effective_from, DATE <span class="s">'1900-01-01'</span>), DATE <span class="s">'9999-12-31'</span>, <span class="k">true</span>, s.hashdiff, now()
+<span class="k">FROM</span>   stg_products s
+<span class="k">LEFT</span> <span class="k">JOIN</span> dim_product d <span class="k">ON</span> d.sku = s.sku <span class="k">AND</span> d.is_current
+<span class="k">WHERE</span>  d.sku <span class="k">IS</span> <span class="k">NULL</span>;           <span class="c">-- no current row: new key, or just closed above</span>
+<span class="k">COMMIT</span>;</code></pre></div><p>Where does <code>effective_from</code> come from? Ideally from the source: the date the category change takes effect. If the source has none, the load date is used, which is the origin of drill 3.</p>
+<h3>Facts pick their version once</h3>
+<p>The fact load joins on the natural key and the event time, finds exactly one version, and stores its surrogate key. After that, every report joins facts to dimensions on one integer column, and the past never moves.</p>
+<div class="card"><div class="card-head"><span>fact_lookup.sql</span><span>point-in-time lookup, at load time</span></div><pre><code><span class="k">SELECT</span> s.order_line_id, p.product_key, s.amount
+<span class="k">FROM</span>   stg_order_lines s
+<span class="k">JOIN</span>   dim_product p
+  <span class="k">ON</span>   p.sku = s.sku
+ <span class="k">AND</span>   s.sold_at &gt;= p.valid_from
+ <span class="k">AND</span>   s.sold_at &lt;  p.valid_to;</code></pre></div><p>Order 9001's kettle, sold on 31 March, gets key 812 and will say <i>Kitchen</i> forever. A kettle sold on 20 May gets 977.</p>
+<h3>When a member disappears</h3>
+<p>Products are discontinued and customers close accounts. Deleting the dimension row would break every fact that points at it, so a delete in the source becomes a <b>closed version</b>: set <code>valid_to</code> to the deletion time, <code>is_current</code> to false, and insert nothing. The natural key then has no current version, which is exactly right: “current products” no longer includes it, and last year's sales still join. If the same SKU comes back later, the load sees a new key and inserts a fresh first version; the gap between the two versions is real and the no-gaps test (chapter 7) should allow it for keys that were deleted. Personal data is different: a customer who asks to be forgotten is anonymised in every version (chapter 8), not closed.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why use a far-future date instead of NULL for the open end?</summary><p>Range conditions stay simple and index-friendly; no special case for the current version.</p></details><details><summary>When does a fact find its dimension version?</summary><p>Once, at load time, by matching the natural key and the event time to a validity range; then it stores the surrogate key.</p></details></div>
+<a class="next" href="#drills"><small>next · chapter 3</small>Failure drills →</a>
+</section>
+<section id="drills" data-title="Failure drills">
+<p class="ch">chapter 3 <span>· 6 min</span></p>
+<h2>Failure drills</h2>
+<div class="gist"><p><b>Gist</b> Six ways history goes wrong: a natural-key join that doubles sales, a midnight boundary that belongs to two versions, a backdated move dated by load time, a fact dropped before its customer arrived, a fast-changing column that explodes the dimension, and changes between snapshots that were never seen.</p></div>
+<aside class="mn">Each drill is a report that looked fine until someone compared it with something else.</aside>
+<ul class="drill-index" aria-label="The six drills">
+  <li><a href="#drill-1">1 · sold twice</a></li><li><a href="#drill-2">2 · midnight</a></li><li><a href="#drill-3">3 · backdated</a></li>
+  <li><a href="#drill-4">4 · no version yet</a></li><li><a href="#drill-5">5 · 700 million rows</a></li><li><a href="#drill-6">6 · lost change</a></li>
+</ul>
+<div class="drill" id="drill-1"><header><span>Drill 1</span><h3>The kettle that sold twice</h3></header><dl><dt>Timeline</dt><dd>An analyst writes a quick report joining <code>fact_sales</code> to <code>dim_product</code> on <code>sku</code>, because the fact table also has the SKU. Since 12 May the kettle has two versions. Every kettle sale now joins to both rows, and kettle revenue for the year doubles.</dd><dt class="full">Why</dt><dd class="full">The natural key identifies the product, not the version. Joining on it matches every version. The error appears only after the first type 2 change, so it passes every test written before that.</dd><dt>What saves you</dt><dd>Join facts on the surrogate key, always. If a natural key must be on the fact (for debugging), name it so nobody joins on it by accident, and add a test that the join on the surrogate key and the sum of facts give the same total. Grant analysts a view that has only the safe join.</dd></dl><p class="rule">Rule: facts join dimensions on the surrogate key. A natural-key join multiplies rows the day history begins.</p></div><figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 180" role="img" aria-label="Drill 1. The kettle sale from 31 March, with SKU K-100 and 39 euros, joined on SKU alone, matches both versions of the kettle, 812 Kitchen and 977 Small appliances. One sale becomes two rows and 78 euros.">
+  <rect class="bx-y" x="20" y="40" width="230" height="56" rx="8"/><text class="lbl" x="135" y="64" text-anchor="middle">fact: kettle, 31 Mar</text><text class="soft" x="135" y="84" text-anchor="middle">sku K-100 · €39</text>
+  <rect class="bx" x="460" y="20" width="270" height="44" rx="8"/><text class="soft" x="595" y="48" text-anchor="middle">812 · K-100 · Kitchen</text>
+  <rect class="bx" x="460" y="76" width="270" height="44" rx="8"/><text class="soft" x="595" y="104" text-anchor="middle">977 · K-100 · Small appliances</text>
+  <path class="ln-r" d="M252 60 L456 42" marker-end="url(#ar)"/><path class="ln-r" d="M252 76 L456 98" marker-end="url(#ar)"/>
+  <text class="bad" x="380" y="160" text-anchor="middle" font-size="18">join on sku only: one sale, two rows, €78</text>
+</svg></div><figcaption>One sale, two versions, double the revenue.</figcaption></figure><div class="drill" id="drill-2"><header><span>Drill 2</span><h3>The sale at midnight</h3></header><dl><dt>Timeline</dt><dd>The kettle's category change is stored with <code>valid_to = 2026-05-12 00:00</code> on the old row and <code>valid_from = 2026-05-12 00:00</code> on the new one. The lookup uses <code>BETWEEN valid_from AND valid_to</code>. A sale at exactly 00:00:00 on 12 May matches both versions; one in the web shop's time zone at 23:30 UTC on 11 May matches the wrong one.</dd><dt class="full">Why</dt><dd class="full"><code>BETWEEN</code> includes both ends, so a shared boundary belongs to two versions. And the change was dated in local time while sales were in UTC.</dd><dt>What saves you</dt><dd>Half-open ranges everywhere (<code>&gt;= from AND &lt; to</code>) and one time zone for every validity column and every event time, converted once in staging. Add a test that every fact matches exactly one version.</dd></dl><p class="rule">Rule: half-open ranges, one time zone. A boundary belongs to the next version only.</p></div><div class="drill" id="drill-3"><header><span>Drill 3</span><h3>Customer 77 moved before we knew</h3></header><dl><dt>Timeline</dt><dd>Customer 77 moves to Rotterdam on 1 February and tells the shop on 20 February. The CRM changes the city that day. The dimension load dates the new version from 20 February, the day it saw the change. Three orders between 1 and 20 February stay in Utrecht in the regional report forever.</dd><dt class="full">Why</dt><dd class="full">The pipeline used load time as business time. The CRM knew the move date (the customer gave it), but the extract only copied the current city.</dd><dt>What saves you</dt><dd>Extract the effective date when the source has one (<code>moved_on</code>), and date versions by it. Then decide what to do with facts already loaded: re-key the three February orders to the Rotterdam version (as was, corrected), or leave them and record the correction (as reported). Both are valid; the choice must be made, written down and applied the same way every time (chapter 4).</dd></dl><p class="rule">Rule: date versions by when the change took effect, not when you saw it, and decide how corrections reach old facts.</p></div><div class="drill" id="drill-4"><header><span>Drill 4</span><h3>The order that arrived before its customer</h3></header><dl><dt>Timeline</dt><dd>A new customer signs up and orders within a minute. Orders arrive by CDC every 15 minutes; customers arrive from the CRM nightly. At 00:15 the order's lookup finds no customer version. The inner join drops it, and the day is €55 short until someone reloads it.</dd><dt class="full">Why</dt><dd class="full">Facts and dimensions come from different sources on different schedules. “No version yet” was treated as “no customer”.</dd><dt>What saves you</dt><dd>Never drop a fact for a missing version. Insert an <b>inferred member</b>: a version for the natural key with placeholder attributes, flagged as inferred, valid from the beginning of time. The nightly load then <i>updates</i> that inferred version in place (it never had real attributes to preserve) rather than adding a new one. Monitor how many facts point at inferred members.</dd></dl><p class="rule">Rule: facts always load; a missing version becomes an inferred member, filled in when the dimension arrives.</p></div><div class="drill" id="drill-5"><header><span>Drill 5</span><h3>Seven hundred million customers</h3></header><dl><dt>Timeline</dt><dd><code>last_login_at</code> is on the CRM's customer table, and the snapshot tracks every column. Each day about 1.9 million of the 2 million customers log in or are touched. After a year <code>dim_customer</code> has 700 million rows, the fact lookup takes an hour, and “customers by city” needs a de-duplication nobody understands.</dd><dt class="full">Why</dt><dd class="full">Type 2 on a fast-changing column turns a slowly changing dimension into a daily snapshot. Every version is a copy of every other column.</dd><dt>What saves you</dt><dd>Track type 2 only on columns people group or filter by (city, segment, tier). Exclude fast-changing columns from change detection, or move them out: last login becomes an activity fact, and banded values (age band, spend band) go in a small <b>mini-dimension</b> referenced from the fact.</dd></dl><p class="rule">Rule: type 2 is for slow, meaningful changes. Fast-changing columns belong in facts or mini-dimensions.</p></div><div class="drill" id="drill-6"><header><span>Drill 6</span><h3>The change that never happened</h3></header><dl><dt>Timeline</dt><dd>The kettle's brand is changed by mistake at 10:00 and changed back at 15:00. The nightly snapshot sees no difference and records nothing. That is fine. But the price team made a real change at 09:00 and another at 16:00 on the same day, and only the 16:00 value was recorded. A report on promotions that ran that afternoon uses the wrong price.</dd><dt class="full">Why</dt><dd class="full">A periodic snapshot (dbt snapshots run nightly, or any daily compare) sees only the state at each run. Changes between runs are lost, and short-lived values never existed as far as the warehouse knows.</dd><dt>What saves you</dt><dd>Decide the resolution history needs. For most dimensions, daily is fine and losing a five-hour typo is a feature. Where intra-day changes matter (prices, stock), build history from the change log (CDC events, with their commit times) instead of from snapshots, or from the source's own history table.</dd></dl><p class="rule">Rule: a snapshot only knows what it saw. If changes between runs matter, build history from the change log.</p></div><div class="full">
+<h3>What the six drills add up to</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Habit</th><th scope="col">Drill</th></tr></thead><tbody><tr><td>facts store and join on the surrogate key</td><td>1</td></tr><tr><td>half-open ranges, one time zone</td><td>2</td></tr><tr><td>version by effective date; a written rule for corrections</td><td>3</td></tr><tr><td>inferred members, never dropped facts</td><td>4</td></tr><tr><td>type 2 only for slow, meaningful columns; mini-dimensions for the rest</td><td>5</td></tr><tr><td>history from the change log when intra-day changes matter</td><td>6</td></tr></tbody></table></div>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Kettle revenue doubled after 12 May. First thing to check?</summary><p>Whether a report joins facts to the dimension on the natural key instead of the surrogate key.</p></details><details><summary>Why not track last_login_at as type 2?</summary><p>It changes daily for most customers, turning the dimension into a daily copy; it belongs in a fact.</p></details></div>
+<a class="next" href="#three-pasts"><small>next · chapter 4</small>The hard problem: three pasts →</a>
+</section>
+<section id="three-pasts" data-title="Three pasts">
+<p class="ch">chapter 4 <span>· 3 min</span></p>
+<h2>The hard problem: three pasts</h2>
+<div class="gist"><p><b>Gist</b> People mean three things by “last year”: as it was (type 2 in valid time), as it is (current attributes applied to the past), and as it was reported (what the warehouse knew on a date). Keep valid and recorded time apart, and write down one rule for corrections that reach into the past.</p></div>
+
+<p>Customer 77's move has two dates: it <b>happened</b> on 1 February and it was <b>recorded</b> on 20 February. A report about February asked on 10 February and the same report asked on 1 March should give different answers, and both answers were right when given. Holding both is what the bitemporal note is about, and it is the hard problem of warehouse history.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 265" role="img" aria-label="Two time axes for customer 77. Horizontally, valid time: when the city was true. Vertically, recorded time: when the warehouse knew. Before 1 February the city is Utrecht. From 1 February it is Rotterdam, but for anything recorded before 20 February the warehouse still said Utrecht; from 20 February on it knows Rotterdam.">
+  <path class="ln" d="M60 230 H730" marker-end="url(#a)"/><path class="ln" d="M60 230 V20" marker-end="url(#a)"/>
+  <text class="soft" x="730" y="256" text-anchor="end">valid time: when it was true →</text>
+  <text class="soft" x="70" y="22">recorded time: when we knew ↑</text>
+  <path class="ln-d" d="M200 226 V30"/><text class="soft" x="200" y="250" text-anchor="middle">1 Feb</text>
+  <path class="ln-d" d="M64 140 H730"/><text class="soft" x="56" y="144" text-anchor="end">20 Feb</text>
+  <rect class="bx-r" x="200" y="142" width="530" height="84" rx="4"/><text class="lbl" x="465" y="190" text-anchor="middle">we still said Utrecht</text>
+  <rect class="bx-g" x="200" y="40" width="530" height="96" rx="4"/><text class="lbl" x="465" y="94" text-anchor="middle">we know: Rotterdam</text>
+  <rect class="bx" x="64" y="40" width="132" height="186" rx="4"/><text class="lbl" x="130" y="138" text-anchor="middle">Utrecht</text>
+</svg></div><figcaption>Valid time runs left to right, recorded time bottom to top. The red block is what we believed before we knew.</figcaption></figure>
+<h3>Three questions, three mechanisms</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Question</th><th scope="col">Called</th><th scope="col">Answered by</th></tr></thead><tbody><tr><td>“Kitchen revenue in March”</td><td>as it was</td><td>type 2 versions in valid time; facts keep their surrogate key</td></tr><tr><td>“This year by today's regions”</td><td>as it is</td><td>type 1 columns, or the current attributes copied onto every version (type 6), or a join through the natural key to the current row</td></tr><tr class=hot><td>“What did the report say on 15 July?”</td><td>as it was reported</td><td>versions also stamped with recorded time (bitemporal), or a filed snapshot of the report itself</td></tr></tbody></table></div><aside class="mn">If nobody will ever ask the third question, don't build for it. Regulated businesses will be asked.</aside><div class="full">
+<h3>Answering “as it is” without breaking “as it was”</h3>
+<p>Type 6 adds <code>current_region</code> to every version of every shop, updated in place whenever the shop changes. A report groups by <code>region</code> for as it was and by <code>current_region</code> for as it is, from the same facts and the same join. The cost: every change touches every old version of that shop, which is cheap for 30 shops and expensive for 2 million customers. For large dimensions, join from the version to its current row through the natural key instead:</p>
+<div class="card"><div class="card-head"><span>as_is.sql</span><span>today&#x27;s region for the whole year</span></div><pre><code><span class="k">SELECT</span> cur.region <span class="k">AS</span> region_today, sum(f.amount) <span class="k">AS</span> revenue
+<span class="k">FROM</span>   fact_sales f
+<span class="k">JOIN</span>   dim_shop  v   <span class="k">ON</span> v.shop_key = f.shop_key                 <span class="c">-- the version sold under</span>
+<span class="k">JOIN</span>   dim_shop  cur <span class="k">ON</span> cur.shop_code = v.shop_code <span class="k">AND</span> cur.is_current
+<span class="k">WHERE</span>  f.order_date &gt;= DATE <span class="s">'2026-01-01'</span>
+<span class="k">GROUP</span>  <span class="k">BY</span> 1;</code></pre></div><h3>Answering “as it was reported”</h3>
+<p>Add recorded time to the dimension: <code>recorded_from</code> and <code>recorded_to</code>. A correction never updates a row; it closes the old row's recorded range and inserts new rows. To see what the warehouse believed on 15 July, filter versions by <code>recorded_from &lt;= '2026-07-15' AND recorded_to &gt; '2026-07-15'</code> and then join by valid time as usual. Facts need the same treatment if they are corrected, which is why the cheaper answer is often to <b>snapshot the report</b> at filing time (chapter 8): store the numbers that were sent, with the date.</p>
+<h3>Corrections: the rule you must write down</h3>
+<p>Drill 3 forces a choice whenever a change arrives with an effective date in the past:</p>
+<div class="tbl"><table><thead><tr><th scope="col">Rule</th><th scope="col">Old facts</th><th scope="col">Good for</th></tr></thead><tbody><tr><td><b>Correct the past</b></td><td>re-keyed to the corrected version</td><td>analysis: the truth as best known now</td></tr><tr><td><b>Keep what was loaded</b></td><td>unchanged; the version starts at the load date</td><td>operational reports that must not move</td></tr><tr><td><b>Both (bitemporal)</b></td><td>corrected in valid time, old belief kept in recorded time</td><td>audit and regulated reporting</td></tr></tbody></table></div><p>Most shops pick the first for analysis and file a snapshot of each closed month for audit. That covers all three questions with one type 2 dimension and a folder of filed reports.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Which mechanism answers “this year by today's regions”?</summary><p>Current attributes on every version (type 6) or a join through the natural key to the current row.</p></details><details><summary>What's the cheapest way to answer “what did the report say on 15 July”?</summary><p>Store the filed report's numbers when it is sent, with the date.</p></details></div>
+<a class="next" href="#variants"><small>next · chapter 5</small>Four ways to keep history →</a>
+</section>
+<section id="variants" data-title="Variants">
+<p class="ch">chapter 5 <span>· 3 min</span></p>
+<h2>Four ways to keep history</h2>
+<div class="gist"><p><b>Gist</b> Type 2 with keys on facts makes as-it-was joins cheap. Type 6 adds as-it-is columns for small dimensions. A history table with point-in-time joins at query time makes corrections free but every query pays. Daily snapshots are simple and honest about what you knew, and costly in size.</p></div>
+
+<p>Four common ways to keep dimension history, with the drills and the three questions run against each.</p>
+<div class="tbl"><table><thead><tr><th scope="col"></th><th scope="col">A · type 2 + surrogate keys on facts</th><th scope="col">B · type 6 (A plus current columns)</th><th scope="col">C · history table, point-in-time join at query time</th><th scope="col">D · daily full snapshot of the dimension</th></tr></thead><tbody><tr><td>how</td><td>versions with keys; facts store the key</td><td>as A, plus <code>current_*</code> columns updated in place</td><td>versions with valid dates; facts keep natural key and event time</td><td>a copy of the whole dimension per day</td></tr><tr><td>as it was</td><td>an equality join</td><td>an equality join</td><td>a range join on every query</td><td>join on natural key and date</td></tr><tr><td>as it is</td><td>join through the natural key</td><td>a column</td><td>join to the current version</td><td>join to today's copy</td></tr><tr><td>as it was reported</td><td>no (add recorded time)</td><td>no (add recorded time)</td><td>no (add recorded time)</td><td>partly: snapshots are what you knew each day</td></tr><tr class=hot><td>drill 1 (fan-out)</td><td>avoided by the key</td><td>avoided by the key</td><td><b>risk on every query</b></td><td>risk without the date in the join</td></tr><tr class=hot><td>drill 3 (backdated)</td><td>re-key facts to correct</td><td>re-key facts to correct</td><td><b>free</b>: re-date the version, queries follow</td><td>copies before 20 Feb keep Utrecht</td></tr><tr><td>drill 5 (fast columns)</td><td>explodes</td><td>explodes</td><td>explodes</td><td><b>size is fixed</b>: rows × days</td></tr><tr><td>size, 2 M customers, 1 yr</td><td>≈ 2.2 M rows</td><td>≈ 2.2 M rows</td><td>≈ 2.2 M rows</td><td>≈ 730 M rows</td></tr></tbody></table></div><aside class="mn">Variant C is how many lakehouses work now: cheap compute makes range joins affordable, and backdating gets easy.</aside><div class="full">
+<p>Variant A is the classic and still the default for facts that are queried many times: the range join happens once, at load time. Variant B adds as-is reporting for small dimensions. Variant C moves the range join to query time, which costs every query but makes corrections trivial: change a version's dates and every report follows, no fact reloads. It needs a view or metrics layer that always writes the date condition, or drill 1 returns. Variant D is the simplest to build (copy the table daily) and the most honest about what you knew each day, but it costs a full copy per day and loses intra-day changes.</p>
+<h3>Choosing per dimension</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Dimension</th><th scope="col">Rows</th><th scope="col">Changes</th><th scope="col">Pick</th></tr></thead><tbody><tr><td><code>dim_shop</code></td><td>31</td><td>a few a year, re-orgs</td><td>B: regions both as was and as is</td></tr><tr><td><code>dim_product</code></td><td>40,000</td><td>category and brand changes weekly</td><td>A, with type 1 for descriptions</td></tr><tr><td><code>dim_customer</code></td><td>2 million</td><td>moves, segment changes; backdated often</td><td>A for city and segment, mini-dimension for bands; or C if corrections are frequent</td></tr><tr><td><code>dim_date</code></td><td>a few thousand</td><td>never</td><td>no history needed</td></tr></tbody></table></div><h3>Making variant C safe</h3>
+<p>The danger of query-time joins is drill 1 on every report someone writes. Give analysts a view that already contains the date condition, and grant them only the view:</p>
+<div class="card"><div class="card-head"><span>sales_as_it_was.sql</span><span>variant C, the only way analysts reach products</span></div><pre><code><span class="k">CREATE</span> <span class="k">VIEW</span> sales_as_it_was <span class="k">AS</span>
+<span class="k">SELECT</span> f.*, p.category, p.brand
+<span class="k">FROM</span>   fact_sales f
+<span class="k">JOIN</span>   product_history p
+  <span class="k">ON</span>   p.sku = f.sku
+ <span class="k">AND</span>   f.sold_at &gt;= p.valid_from
+ <span class="k">AND</span>   f.sold_at &lt;  p.valid_to;</code></pre></div><p>Mixing them is normal. What must be consistent is the rule for corrections (chapter 4) and the habit of joining on keys or always writing the date condition.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Which variant makes backdated corrections easiest?</summary><p>A history table joined at query time: re-date the version and every report follows, without re-keying facts.</p></details><details><summary>Why is type 6 costly on large dimensions?</summary><p>Every change to a current attribute updates every version of that member.</p></details></div>
+<a class="next" href="#numbers"><small>next · chapter 6</small>History in numbers →</a>
+</section>
+<section id="numbers" data-title="Numbers">
+<p class="ch">chapter 6 <span>· 3 min</span></p>
+<h2>History in numbers</h2>
+<div class="gist"><p><b>Gist</b> Products grow from 40,000 to 160,000 versions a year; customers from 2 to 2.5 million; tracking last login would make 700 million. Range joins cost seconds once at load, or on every query at query time. A daily snapshot of customers is 146 GB a year compressed.</p></div>
+
+<p>The shop's dimensions are small next to its facts: 60 million order lines a year against a few million dimension rows. The numbers that matter are growth rates and join costs.</p>
+<h3>How fast dimensions grow</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Dimension</th><th scope="col">Base rows</th><th scope="col">Tracked changes a year</th><th scope="col">Rows after 1 year</th><th scope="col">After 5 years</th></tr></thead><tbody><tr><td>products</td><td>40,000</td><td>~3 per product</td><td>160,000</td><td>640,000</td></tr><tr><td>customers (city, segment)</td><td>2,000,000</td><td>~10 % move, ~15 % change segment</td><td>2,500,000</td><td>4,500,000</td></tr><tr><td>customers (every column, drill 5)</td><td>2,000,000</td><td>~1.9 M touched a day</td><td>~700,000,000</td><td>billions</td></tr><tr><td>shops</td><td>31</td><td>~2 re-orgs</td><td>~90</td><td>~350</td></tr></tbody></table></div><aside class="mn">A dimension that grows faster than its fact table is a sign that something which should be a fact was modelled as an attribute.</aside><div class="full">
+<h3>Where the range join is paid</h3>
+<p>Variant A pays the point-in-time lookup once per fact row, at load: about 160,000 new order lines a day joined to 160,000 product versions, which takes seconds. Every report afterwards joins on an integer. Variant C pays it on every query: a year of sales, 60 million lines, range-joined to 160,000 versions. Modern warehouses do this in a few seconds for one report; a dashboard opened 300 times on a Monday pays it 300 times. Pre-join in an aggregate (by day, category as it was) and the difference disappears for the common reports.</p>
+<h3>The cost of type 6</h3>
+<p>Every change to a current attribute updates all versions of that member. For 31 shops a re-org touches a few hundred rows. For 2 million customers, a nightly segment recalculation that changes 300,000 customers' current segment updates every version of each of them, about 400,000 rows, every night. Fine in a columnar warehouse, but it makes the dimension a full rewrite target; prefer the join through the natural key for large dimensions.</p>
+<h3>Sizing a mini-dimension</h3>
+<p>Drill 5's fix moves fast-changing attributes into bands. Customers get an age band (6 values), a spend band over the last 12 months (5), a loyalty tier (4) and a newsletter flag (2). Every combination is one row: 6 × 5 × 4 × 2 = 240 rows, whatever the number of customers. Each fact stores both <code>customer_key</code> and <code>customer_profile_key</code>, looked up at load time, so “sales by spend band at the time” is a plain join. The bands change every month for many customers; the mini-dimension never grows. Keep bands coarse: if the combinations go past a few hundred thousand, it is a fact table in disguise.</p>
+<h3>Daily snapshots, priced</h3>
+<p>A daily copy of 2 million customers with 40 columns is about 400 MB compressed per day, 146 GB a year. Storage is cheap; scanning it is not. Point-in-time queries on snapshots must always filter by date first, or they scan the year. Partition by snapshot date and keep, for example, daily copies for 90 days and month-end copies after that.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>A dimension grows faster than its fact table. What does that suggest?</summary><p>A fast-changing value is modelled as an attribute instead of as a fact.</p></details><details><summary>Where does variant A pay for the range join?</summary><p>Once per fact row, at load time; reports join on integer keys afterwards.</p></details></div>
+<a class="next" href="#testing"><small>next · chapter 7</small>Testing history →</a>
+</section>
+<section id="testing" data-title="Testing">
+<p class="ch">chapter 7 <span>· 3 min</span></p>
+<h2>Testing history</h2>
+<div class="gist"><p><b>Gist</b> Test the shape of history on every load: one current version per key, no overlaps, no gaps, every fact inside its version, and joins that don't multiply. Unit test the load with the drills as cases, and rebuild filed reports to check they don't move.</p></div>
+
+<p>History bugs don't fail loudly: a report is a little off, and only for periods after a change. Tests must check the shape of the history itself, on every load.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Test</th><th scope="col">Checks</th><th scope="col">Catches</th></tr></thead><tbody><tr><td><b>one current version</b></td><td>exactly one <code>is_current</code> row per natural key</td><td>half-applied loads</td></tr><tr class=hot><td><b>no overlaps</b></td><td>no two versions of a key share a moment</td><td>drill 2, double matches</td></tr><tr><td><b>no gaps</b></td><td>each version's <code>valid_to</code> equals the next one's <code>valid_from</code></td><td>facts that match no version</td></tr><tr><td><b>facts match their version</b></td><td>each fact's event time is inside its version's range</td><td>re-keying bugs, drill 3</td></tr><tr><td><b>joins don't multiply</b></td><td>sum of facts equals sum after joining every dimension</td><td>drill 1</td></tr><tr><td><b>version growth</b></td><td>new versions per day within the usual band</td><td>drill 5 before it costs a fortune</td></tr></tbody></table></div><aside class="mn">The overlap test is the one to write first. Almost every history bug ends in two versions claiming the same moment.</aside><div class="full">
+<div class="card"><div class="card-head"><span>test_no_overlap.sql</span><span>returns the offending pairs; must return none</span></div><pre><code><span class="k">SELECT</span> a.sku, a.product_key, b.product_key
+<span class="k">FROM</span>   dim_product a
+<span class="k">JOIN</span>   dim_product b
+  <span class="k">ON</span>   a.sku = b.sku
+ <span class="k">AND</span>   a.product_key &lt; b.product_key
+ <span class="k">AND</span>   a.valid_from &lt; b.valid_to
+ <span class="k">AND</span>   b.valid_from &lt; a.valid_to;</code></pre></div><h3>Facts that point at the wrong version</h3>
+<p>After any re-keying (chapter 8) or a change to the lookup, check that each fact's event time lies inside the version it stores. It is a join on the key and a range check, cheap enough to run on the last 60 days every night.</p>
+<div class="card"><div class="card-head"><span>test_fact_in_version.sql</span><span>must return no rows</span></div><pre><code><span class="k">SELECT</span> f.order_line_id, f.sold_at, p.product_key, p.valid_from, p.valid_to
+<span class="k">FROM</span>   fact_sales f
+<span class="k">JOIN</span>   dim_product p <span class="k">ON</span> p.product_key = f.product_key
+<span class="k">WHERE</span>  f.order_date &gt;= current_date - 60
+  <span class="k">AND</span>  <span class="k">NOT</span> (f.sold_at &gt;= p.valid_from <span class="k">AND</span> f.sold_at &lt; p.valid_to);</code></pre></div><h3>Unit tests for the load</h3>
+<p>Feed the dimension load small, hand-made sequences and assert the resulting versions. The useful cases are exactly the drills:</p>
+<ul>
+<li>A change, then nothing: one closed version, one current.</li>
+<li>A change and its undo within one run: no new version (or two, if history is built from the log; test whichever you chose).</li>
+<li>A backdated change: the new version starts at the effective date, and the old one ends there.</li>
+<li>A type 1 change: no new version, every version updated.</li>
+<li>An inferred member followed by the real one: one version, updated, still the same key.</li>
+<li>The same batch loaded twice: no change (idempotent).</li>
+</ul>
+<h3>Testing the three pasts</h3>
+<p>Write one small fixture with all three of this year's changes in it: the kettle sold in March and in June, customer 77's February orders, and a Delft sale in May and one in August. Then assert one answer per question. March Kitchen revenue includes the March kettle and not the June one (as it was). The whole year by today's regions puts both Delft sales in South (as it is). The February regional report rebuilt with the correction puts customer 77 in Rotterdam, and the filed February report still says Utrecht (as it was reported). Three questions, five rows of data, and every later change to the dimension load is checked against them in seconds.</p>
+<h3>Report tests across a change</h3>
+<p>Pick a filed report, say March by category, and keep its numbers as a fixture. After any change to the dimension load, rebuild and compare: March must not move unless a deliberate correction says so.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Which single test catches most history bugs?</summary><p>No overlapping versions per natural key.</p></details><details><summary>How do you check a load change didn't rewrite the past?</summary><p>Rebuild a filed report from the warehouse and compare it with the kept numbers.</p></details></div>
+<a class="next" href="#running"><small>next · chapter 8</small>Running it →</a>
+</section>
+<section id="running" data-title="Running it">
+<p class="ch">chapter 8 <span>· 2 min</span></p>
+<h2>Running it</h2>
+<div class="gist"><p><b>Gist</b> Watch new versions per day, unfilled inferred members and backdated changes. Keep a runbook for bulk-update explosions, backdated corrections, rebuilding from raw, erasure across every version, and re-organisations. File reports that leave the team.</p></div>
+
+<p>History is a slow-moving thing to operate. Most of the work is noticing the unusual day and handling corrections with a rule rather than a script.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Metric</th><th scope="col">Means</th><th scope="col">Alert when</th></tr></thead><tbody><tr><td><b>new versions per day</b>, per dimension</td><td>how fast history grows</td><td>more than 3× the usual (a bulk update or a new tracked column)</td></tr><tr><td><b>inferred members</b> still unfilled</td><td>facts waiting for their dimension</td><td>older than 2 days, or over 1 % of yesterday's facts</td></tr><tr><td><b>backdated changes</b> per day</td><td>corrections reaching into closed periods</td><td>any into a filed month</td></tr></tbody></table></div><aside class="mn">A spike in new versions is nearly always one script upstream that touched every row.</aside><div class="full">
+<h3>The runbook</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Situation</th><th scope="col">Do</th></tr></thead><tbody><tr><td>a bulk update created a version for every row</td><td>delete the versions created by that run (by <code>loaded_at</code>), reopen the previous ones, exclude the touched column from change detection, rerun</td></tr><tr><td>a backdated change arrives for a filed month</td><td>apply the written rule (chapter 4): re-key facts for analysis; the filed report snapshot stays as filed; log the correction</td></tr><tr><td>the dimension load had a bug for weeks</td><td>rebuild the dimension from raw (all change events or daily copies are still there), then re-key facts for the affected period</td></tr><tr><td>a customer asks to be forgotten</td><td>erase or anonymise the personal columns in every version, in raw and in snapshots; keep keys so facts still add up</td></tr><tr><td>regions are reorganised</td><td>a new version per shop with the new region from the effective date; <code>current_region</code> updated; publish both views to managers</td></tr></tbody></table></div><h3>Re-keying facts after a correction</h3>
+<p>When customer 77's move is backdated to 1 February, the three February orders still point at the Utrecht version. If the written rule is “correct the past”, re-key them in one idempotent statement, restricted to the affected key and dates, and log what changed:</p>
+<div class="card"><div class="card-head"><span>rekey_customer_77.sql</span><span>only the facts the correction touches</span></div><pre><code><span class="k">UPDATE</span> fact_sales f
+<span class="k">SET</span>    customer_key = c.customer_key
+<span class="k">FROM</span>   dim_customer c
+<span class="k">WHERE</span>  c.customer_no = :customer_no
+  <span class="k">AND</span>  f.customer_no = c.customer_no
+  <span class="k">AND</span>  f.sold_at &gt;= c.valid_from <span class="k">AND</span> f.sold_at &lt; c.valid_to
+  <span class="k">AND</span>  f.customer_key &lt;&gt; c.customer_key
+  <span class="k">AND</span>  f.order_date &gt;= :effective_from;   <span class="c">-- the corrected range only</span></code></pre></div><p>Run it after the dimension load, inside the same write–audit–publish cycle, so aggregates and reports are rebuilt for the touched days before anyone sees a half-corrected February.</p>
+<h3>Filing reports</h3>
+<p>For anything sent outside the analytics team (month-end to finance, quarterly to the board, anything to a regulator), store what was sent: the numbers, the date, the version of the definitions. A table of filed results is cheaper and clearer than a bitemporal warehouse, and it answers the auditor's question exactly.</p>
+<div class="card"><div class="card-head"><span>filed_reports.sql</span><span>keep what you sent</span></div><pre><code><span class="k">INSERT</span> <span class="k">INTO</span> filed_report_lines (report, period, filed_on, dimension_value, measure, value)
+<span class="k">SELECT</span> <span class="s">'monthly_revenue_by_category'</span>, <span class="s">'2026-03'</span>, current_date, category, <span class="s">'revenue'</span>, revenue
+<span class="k">FROM</span>   rpt_revenue_by_category
+<span class="k">WHERE</span>  month = <span class="s">'2026-03'</span>;</code></pre></div>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>New versions per day jump 50×. Likely cause?</summary><p>A bulk update upstream touched every row, or a fast-changing column started being tracked.</p></details><details><summary>A customer asks to be forgotten. Where must you act?</summary><p>Every version in the dimension, plus raw and any snapshots; keep keys so facts still add up.</p></details></div>
+<a class="next" href="#tools"><small>next · chapter 9</small>Tools →</a>
+</section>
+<section id="tools" data-title="Tools">
+<p class="ch">chapter 9 <span>· 3 min</span></p>
+<h2>Tools</h2>
+<div class="gist"><p><b>Gist</b> dbt snapshots build type 2 tables, temporal tables keep system-time history, the SQL:2011 period extensions add both clocks, and lakehouse time travel shows past table states. Each gives one clock well; effective dates, resolution and the corrections rule stay yours.</p></div>
+
+<p>Many tools build history for you. Each gives one of the two clocks well and leaves the other, and the corrections rule, to you.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Tool</th><th scope="col">Gives you</th><th scope="col">Clock</th><th scope="col">Leaves to you</th></tr></thead><tbody><tr><td>dbt snapshots</td><td>type 2 tables from any source, by timestamp or by comparing columns; hard deletes as closed versions</td><td>recorded (snapshot run time) unless you feed an effective date</td><td>which columns to track; resolution is one run</td></tr><tr><td>SQL Server temporal tables, MariaDB system versioning</td><td>every update keeps the old row automatically, queryable with <code>FOR SYSTEM_TIME AS OF</code></td><td>recorded (system) time</td><td>business-time validity; schema changes</td></tr><tr><td>PostgreSQL: <code>periods</code>, <code>temporal_tables</code> extensions; SQL:2011 <code>PERIOD</code></td><td>application-time and system-time periods, overlap constraints</td><td>either or both</td><td>tool support varies by version</td></tr><tr><td>Delta Lake change data feed, Iceberg snapshots</td><td>every version of the table, and time travel to past states</td><td>recorded (commit) time</td><td>retention: time travel is not an archive</td></tr><tr><td>Snowflake time travel</td><td>the table as of up to 90 days ago</td><td>recorded</td><td>it is for recovery, not reporting</td></tr><tr><td>AutomateDV, data vault satellites</td><td>insert-only history per source, point-in-time tables</td><td>recorded (load date), plus effective dates if modelled</td><td>building stars on top</td></tr></tbody></table></div><aside class="mn">Time travel answers “what did the table look like on 15 July”, briefly. It is not a substitute for modelling history.</aside><div class="full">
+<h3>What the tools map to</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Chapter</th><th scope="col">Tool feature</th></tr></thead><tbody><tr><td>2 · the load</td><td>dbt snapshots (<code>check</code> strategy with <code>check_cols</code>), MERGE</td></tr><tr><td>3 · drill 4</td><td>dbt incremental models upserting inferred members</td></tr><tr><td>3 · drill 6</td><td>CDC (Debezium) into raw, history built from events</td></tr><tr><td>4 · as it was reported</td><td>system-versioned tables, filed report tables</td></tr><tr><td>7 · tests</td><td>dbt tests, <code>dbt_utils.mutually_exclusive_ranges</code> for overlaps and gaps</td></tr><tr><td>8 · erasure</td><td>the warehouse's delete or update across snapshot tables, plus raw retention</td></tr></tbody></table></div><h3>Choosing the resolution</h3>
+<p>Every snapshot-based tool records history at the frequency it runs. Run the customer snapshot nightly and a customer who changes segment twice in a day appears to have changed once. That is usually right for dimensions: reports group by the state that lasted, not by an hour-long typo. For the few attributes where every change matters (prices during a promotion, stock levels), take history from the change stream instead, where each event carries its own commit time, and keep the snapshot for everything else.</p>
+<h3>The shop's snapshot, configured</h3>
+<div class="card"><div class="card-head"><span>snapshots/customers.sql</span><span>dbt: tracked columns only, effective date from the source</span></div><pre><code>{% snapshot customers_snapshot %}
+{{ config(unique_key=<span class="s">'customer_no'</span>,
+          strategy=<span class="s">'check'</span>,
+          check_cols=[<span class="s">'city'</span>, <span class="s">'segment'</span>],     <span class="c">-- not last_login_at (drill 5)</span>
+          hard_deletes=<span class="s">'invalidate'</span>) }}
+select customer_no, city, segment, moved_on,  <span class="c">-- effective date travels along</span>
+       name, email                             <span class="c">-- type 1: fixed up in the dimension model</span>
+<span class="k">from</span> {{ ref(<span class="s">'stg_customers'</span>) }}
+{% endsnapshot %}</code></pre></div><p>The snapshot dates versions by its run time. The dimension model on top of it then uses <code>moved_on</code>, when present, as <code>valid_from</code>, which handles drill 3 without hand-written version logic.</p>
+<p>dbt snapshots are the most common starting point. Feed them an effective date column where the source has one, track only the columns that matter, and you have variant A or C with very little code.</p>
+</div>
+
+<a class="next" href="#lab"><small>next · chapter 10</small>A lab and the checklist →</a>
+</section>
+<section id="lab" data-title="Lab">
+<p class="ch">chapter 10 <span>· 3 min</span></p>
+<h2>A lab and the checklist</h2>
+<div class="gist"><p><b>Gist</b> The lab reorganises regions mid-year: finance wants the filed half-year, managers want the year in new regions, the auditor wants proof June didn't move, and a franchisee wants their shop's whole history. The checklist turns the dive into review questions.</p></div>
+
+<p><b>The lab.</b> On 1 July the shop reorganises: regions North and South become North, South and Coast, and the Delft shop moves from North to South. Franchisees join the same month and will see their own shops' history. Three requests arrive the same week:</p>
+<ol>
+<li>Finance: “The half-year report by region, exactly as we filed it on 5 July.”</li>
+<li>The new regional managers: “The whole of this year by the new regions, so we have a baseline.”</li>
+<li>The auditor: “Show that the June figures in the filed report haven't changed since.”</li>
+<li>A franchisee who bought the Delft shop: “My shop's sales since 1 January, by month.”</li>
+<li>Someone proposes making region type 1, “so everything is in the new regions and simple”. What do you answer?</li>
+</ol>
+<div class="check quiz"><h3>model answer</h3>
+<details><summary>1 · As filed</summary><p>From the filed report table: the half-year numbers stored on 5 July. Not recomputed: the point is that they don't change.</p></details>
+<details><summary>2 · As it is</summary><p><code>dim_shop</code> as type 6: each shop has a new version from 1 July with the new region, and <code>current_region</code> on every version. The managers' report groups by <code>current_region</code> over the whole year.</p></details>
+<details><summary>3 · Unchanged since</summary><p>Rebuild June by region as it was (type 2 versions) and compare with the filed table. If a backdated correction has touched June since, the difference is listed in the corrections log with its date and reason.</p></details>
+<details><summary>4 · The franchisee</summary><p>Join through the natural key (the shop code), not the version, so all of Delft's history counts, whatever region it was in. Row-level security on the shop code keeps other shops out (Vol. 9, embedded reporting).</p></details>
+<details><summary>5 · Type 1 region</summary><p>No. It would silently rewrite the filed half-year report and every past regional comparison. Type 6 gives the managers the “everything in new regions” view with one column, without changing the past.</p></details>
+</div>
+<h3>The review checklist</h3>
+<div class="checklist"><div class="cl"><h3>Design</h3><ul><li>Every column is classified: type 0, 1 or 2</li><li>Fast-changing attributes are facts or mini-dimensions</li><li>Validity is half-open, in one time zone</li><li>The open end is a far-future date</li></ul></div><div class="cl"><h3>Loading</h3><ul><li>Versions are dated by effective date where the source has one</li><li>Change detection uses a hash of tracked columns only</li><li>Missing versions become inferred members</li><li>Loads are idempotent</li></ul></div><div class="cl"><h3>Facts</h3><ul><li>Facts store the surrogate key, found by event time</li><li>Nobody joins facts on the natural key</li><li>Re-keying after corrections follows a written rule</li></ul></div><div class="cl"><h3>Three questions</h3><ul><li>As it was: type 2 joins</li><li>As it is: type 6 or a join through the natural key</li><li>As reported: filed report snapshots, or recorded time</li></ul></div><div class="cl"><h3>Tests</h3><ul><li>One current version per key</li><li>No overlaps, no gaps</li><li>Every fact inside its version's range</li><li>Filed reports rebuilt and compared after load changes</li></ul></div><div class="cl"><h3>Operations</h3><ul><li>New versions per day monitored</li><li>Unfilled inferred members alerted</li><li>Erasure covers every version, raw and snapshots</li></ul></div></div>
+
+<a class="next" href="#top"><small>the end</small>Back to the top ↑</a>
+</section>
+<p class="sources"><b>Sources.</b> Ralph Kimball and Margy Ross, <i>The Data Warehouse Toolkit</i>, 3rd ed. (2013), chapter 5 (types 0–7, mini-dimensions, inferred members). Richard Snodgrass, <i>Developing Time-Oriented Database Applications in SQL</i> (1999). Tom Johnston, <i>Bitemporal Data</i> (2014). The SQL:2011 temporal features. dbt documentation, “Snapshots”. Microsoft documentation, “Temporal tables”.</p>
+</div></article>
+<footer class="foot"><span>Jef’s Notes · deep dive 13 · History in the Warehouse</span></footer>
+</main>
+
+<div class="dock" data-dock>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+  <div class="dock-in">
+    <a class="dock-arrow" data-prev href="#top" aria-label="Previous chapter">‹</a>
+    <button class="dock-mid" type="button" data-open aria-haspopup="dialog" aria-expanded="false">
+      <small data-count>1 / 10</small><span data-current>Recap</span><i aria-hidden="true">☰</i>
+    </button>
+    <a class="dock-arrow" data-next href="#mechanism" aria-label="Next chapter">›</a>
+  </div>
+</div>
+<div class="sheet-back" data-close hidden></div>
+<div class="sheet" data-sheet role="dialog" aria-modal="true" aria-label="Chapters" hidden>
+  <div class="sheet-head"><b>Chapters</b><button type="button" data-close aria-label="Close">×</button></div>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Four notes in sixty seconds</span><span class="m">2 min</span></a></li><li><a href="#mechanism" data-ch="1"><span class="n">2</span><span class="t">The real mechanism: versions and keys</span><span class="m">3 min</span></a></li><li><a href="#drills" data-ch="2"><span class="n">3</span><span class="t">Failure drills</span><span class="m">6 min</span></a></li><li><a href="#three-pasts" data-ch="3"><span class="n">4</span><span class="t">The hard problem: three pasts</span><span class="m">3 min</span></a></li><li><a href="#variants" data-ch="4"><span class="n">5</span><span class="t">Four ways to keep history</span><span class="m">3 min</span></a></li><li><a href="#numbers" data-ch="5"><span class="n">6</span><span class="t">History in numbers</span><span class="m">3 min</span></a></li><li><a href="#testing" data-ch="6"><span class="n">7</span><span class="t">Testing history</span><span class="m">3 min</span></a></li><li><a href="#running" data-ch="7"><span class="n">8</span><span class="t">Running it</span><span class="m">2 min</span></a></li><li><a href="#tools" data-ch="8"><span class="n">9</span><span class="t">Tools</span><span class="m">3 min</span></a></li><li><a href="#lab" data-ch="9"><span class="n">10</span><span class="t">A lab and the checklist</span><span class="m">3 min</span></a></li></ol>
+  <div class="sheet-foot">
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+    <a href="#top" data-close>Top of page ↑</a>
+  </div>
+</div>
+</body>
+</html>

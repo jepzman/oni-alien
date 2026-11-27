@@ -4,8 +4,6 @@
 Each book lives in content/handbooks/<key>/:
   - book.py defines BOOK (metadata, parts → chapters, appendices, and which chapters are written)
   - <nn>-<slug>.html is a written chapter's body (plain HTML using the classes in public/assets/book.css)
-  - appendix-<letter>.html is a written appendix's body (same rules); it gets a page, a contents link and a place
-    at the end of all.html
 Output: public/handbooks/<key>/index.html (title page + contents), all.html (every written chapter, for the PDF)
 and one page per written chapter.
 
@@ -94,48 +92,117 @@ def written(book):
     return out
 
 
-def written_appendices(book):
-    """Appendix letter → file, for every appendix-<letter>.html in the book's content folder."""
-    letters = [a[0] for a in book["appendices"]]
-    return {a: f"appendix-{a.lower()}.html" for a in letters if (CONTENT / book["key"] / f"appendix-{a.lower()}.html").exists()}
-
-
 def link_chapters(html, book):
-    done, apps = written(book), written_appendices(book)
+    done = written(book)
 
     def repl(m):
         n = int(m.group(1))
         return f'href="{page_name(book, n)}"' if n in done else f'href="index.html#ch{n}"'
-
-    def repl_app(m):
-        a = m.group(1)
-        return f'href="{apps[a]}"' if a in apps else f'href="index.html#app{a}"'
     html = re.sub(r'href="#ch(\d+)"', repl, html)
-    return re.sub(r'href="#app([A-Z])"', repl_app, html)
+    apps = {a["letter"]: a for a in appendices(book) if a["available"]}
+
+    def arepl(m):
+        a = apps.get(m.group(1))
+        return f'href="{a["page"]}"' if a else f'href="index.html#app{m.group(1)}"'
+    return re.sub(r'href="#app([A-Z])"', arepl, html)
+
+
+# ---------------------------------------------------------------- appendices
+def appendices(book):
+    """Each appendix: written by hand (content/…/appendix-<x>-<slug>.html) or generated from the chapters."""
+    out = []
+    for letter, slug, title, desc in book["appendices"]:
+        page = f"appendix-{letter.lower()}-{slug}.html"
+        hand = CONTENT / book["key"] / page
+        gen = GENERATED.get(slug)
+        out.append(dict(letter=letter, slug=slug, title=title, desc=desc, page=page,
+                        available=hand.exists() or gen is not None, hand=hand if hand.exists() else None, gen=gen))
+    return out
+
+
+def _strip_tags(html):
+    return re.sub(r"<[^>]+>", "", html)
+
+
+def appendix_opener(letter, title, promise):
+    return (f'<header class="opener">\n  <p class="eyebrow">Appendix</p>\n  <p class="chno">{letter}</p>\n'
+            f'  <h1>{esc(title)}</h1>\n  <p class="promise">{promise}</p>\n</header>')
+
+
+def glossary_body(book):
+    """Appendix D: every key term from every written chapter, alphabetically, with the chapter it's defined in."""
+    seen, rows = set(), []
+    for num, f in written(book).items():
+        text = (CONTENT / book["key"] / f).read_text(encoding="utf-8")
+        for dl in re.findall(r'<dl class="terms">(.*?)</dl>', text, flags=re.S):
+            for dt, dd in re.findall(r"<dt>(.*?)</dt><dd>(.*?)</dd>", dl, flags=re.S):
+                key = _strip_tags(dt).strip().lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append((_strip_tags(dt).strip(), dt, dd, num))
+    rows.sort(key=lambda r: re.sub(r"[^a-z0-9]", "", r[0].lower()))
+    groups = {}
+    for plain, dt, dd, num in rows:
+        first = plain[0].upper()
+        groups.setdefault(first if first.isalpha() else "#", []).append((dt, dd, num))
+    parts = [appendix_opener("D", "Glossary", f"All {len(rows)} key terms from the book's chapters, in one place. Each entry links to the chapter that explains it properly.")]
+    nav = " · ".join(f'<a href="#gloss-{g}">{g}</a>' for g in groups)
+    parts.append(f'<p class="glossary-nav">{nav}</p>')
+    for g, items in groups.items():
+        lis = "".join(f'<dt>{dt}</dt><dd>{dd} <a class="ref" href="#ch{num}">Ch. {num}</a></dd>' for dt, dd, num in items)
+        parts.append(f'<h2 class="sec" id="gloss-{g}"><span class="n"></span>{g}</h2>\n<dl class="terms">{lis}</dl>')
+    return "\n".join(parts)
+
+
+def answers_body(book):
+    """Appendix E: every 'check your understanding' question with its answer, chapter by chapter."""
+    titles = {c[0]: c[2] for _, c in chapters(book)}
+    parts = [appendix_opener("E", "Answers to the exercises", "Every “check your understanding” question in the book, with its worked answer. Try each question in its chapter first; come here to check.")]
+    for num, f in written(book).items():
+        text = (CONTENT / book["key"] / f).read_text(encoding="utf-8")
+        quiz = re.search(r'<ol class="quiz">(.*?)</ol>', text, flags=re.S)
+        if not quiz:
+            continue
+        items = []
+        for li in re.findall(r"<li>(.*?)</li>", quiz.group(1), flags=re.S):
+            q = re.search(r"<p>(.*?)</p>", li, flags=re.S).group(1)
+            q = re.sub(r'\s*<span class="lvl">.*?</span>', "", q)
+            a = re.search(r"<details><summary>.*?</summary>(.*?)</details>", li, flags=re.S)
+            items.append(f'<li><p class="q">{q}</p>{a.group(1) if a else ""}</li>')
+        parts.append(f'<h2 class="sec" id="ans{num}"><span class="n">{num}</span><a href="#ch{num}">{esc(titles[num])}</a></h2>\n'
+                     f'<ol class="answers">{"".join(items)}</ol>')
+    return "\n".join(parts)
+
+
+GENERATED = {"glossary": glossary_body, "answers": answers_body}
+
+
+def appendix_body(book, a):
+    if a["hand"]:
+        body = a["hand"].read_text(encoding="utf-8")
+        body = re.sub(r"^<!--.*?-->\s*", "", body, flags=re.S)
+    else:
+        body = a["gen"](book)
+    return link_chapters(body, book)
+
+
+def render_appendix(book, a, css_href, home):
+    return "\n".join([
+        head(f"Appendix {a['letter']}: {a['title']} · {book['title']}", a["desc"], css_href, 2),
+        runhead(book, f"Appendix {a['letter']}", home),
+        '<main class="page">',
+        appendix_body(book, a),
+        f'<nav class="next" aria-label="Chapters"><div><span>Contents</span><a href="index.html">{esc(book["title"])}</a></div></nav>',
+        '</main>',
+        colophon(book),
+        '</body>', '</html>', ''])
 
 
 def chapter_body(book, num):
     body = (CONTENT / book["key"] / written(book)[num]).read_text(encoding="utf-8")
     body = re.sub(r"^<!--.*?-->\s*", "", body, flags=re.S)
     return link_chapters(body, book)
-
-
-def appendix_body(book, letter):
-    body = (CONTENT / book["key"] / written_appendices(book)[letter]).read_text(encoding="utf-8")
-    body = re.sub(r"^<!--.*?-->\s*", "", body, flags=re.S)
-    return link_chapters(body, book)
-
-
-def render_appendix(book, letter, css_href, home):
-    title, desc = next((t, d) for a, t, d in book["appendices"] if a == letter)
-    return "\n".join([
-        head(f"Appendix {letter}: {title} · {book['title']}", desc, css_href, 2),
-        runhead(book, f"Appendix {letter}", home),
-        '<main class="page">',
-        appendix_body(book, letter),
-        '</main>',
-        colophon(book),
-        '</body>', '</html>', ''])
 
 
 def render_chapter(book, num, css_href, home):
@@ -155,14 +222,16 @@ def render_all(book, css_href, home):
     arts = []
     for num in written(book):
         body = chapter_body(book, num)
+        body = re.sub(r'href="(\d\d-[a-z0-9-]+)\.html"', r'href="#chapter-\1"', body)
+        body = re.sub(r'href="(appendix-[a-z]-[a-z0-9-]+)\.html"', r'href="#\1"', body)
         body = re.sub(r'<nav class="next".*?</nav>', "", body, flags=re.S)
         arts.append(f'<article class="sheet chapter" id="chapter-{page_name(book, num)[:-5]}">\n{body}\n</article>')
-    for letter, fname in written_appendices(book).items():
-        body = appendix_body(book, letter)
-        body = re.sub(r'<nav class="next".*?</nav>', "", body, flags=re.S)
-        arts.append(f'<article class="sheet chapter" id="chapter-{fname[:-5]}">\n{body}\n</article>')
-    local = r'href="(\d\d-[a-z0-9-]+|appendix-[a-z])\.html"'
-    arts = [re.sub(local, r'href="#chapter-\1"', a) for a in arts]
+    for a in appendices(book):
+        if a["available"]:
+            body = appendix_body(book, a)
+            body = re.sub(r'href="(\d\d-[a-z0-9-]+)\.html"', r'href="#chapter-\1"', body)
+            body = re.sub(r'href="(appendix-[a-z]-[a-z0-9-]+)\.html"', r'href="#\1"', body)
+            arts.append(f'<article class="sheet chapter" id="{a["page"][:-5]}">\n{body}\n</article>')
     return "\n".join([
         head(f"{book['title']} · the whole book", book["promise"], css_href, 2),
         runhead(book, "the whole book", home),
@@ -184,8 +253,6 @@ def render_index(book, css_href, home):
         for num, slug, title, summary, covers in part["chapters"]:
             if num in done:
                 t, cls = f'<a href="{page_name(book, num)}">{esc(title)}</a>', ""
-            elif num == book.get("next"):
-                t, cls = f'{esc(title)}<span class="badge badge--soon">next up</span>', ' class="planned"'
             else:
                 t, cls = f'{esc(title)}<span class="badge badge--soon">coming</span>', ' class="planned"'
             items.append(f'''      <li id="ch{num}"{cls}><span class="cn">{num}</span><div>
@@ -199,24 +266,18 @@ def render_index(book, css_href, home):
 {chr(10).join(items)}
     </ol>
   </section>''')
-    done_apps = written_appendices(book)
     apps = "\n".join(
-        f'      <li id="app{a}"><span class="cn">{a}</span><div><h3><a href="{done_apps[a]}">{esc(t)}</a></h3><p>{esc(d)}</p></div></li>'
-        if a in done_apps else
-        f'      <li id="app{a}" class="planned"><span class="cn">{a}</span><div><h3>{esc(t)}<span class="badge badge--soon">coming</span></h3><p>{esc(d)}</p></div></li>'
-        for a, t, d in book["appendices"])
+        (f'      <li id="app{a["letter"]}"><span class="cn">{a["letter"]}</span><div><h3><a href="{a["page"]}">{esc(a["title"])}</a></h3><p>{esc(a["desc"])}</p></div></li>'
+         if a["available"] else
+         f'      <li id="app{a["letter"]}" class="planned"><span class="cn">{a["letter"]}</span><div><h3>{esc(a["title"])}<span class="badge badge--soon">coming</span></h3><p>{esc(a["desc"])}</p></div></li>')
+        for a in appendices(book))
+    first = page_name(book, min(done))
+    n_apps = sum(1 for a in appendices(book) if a["available"])
+    complete = len(done) == n_ch and n_apps == len(book["appendices"])
     pdf = f'pdf/{book["key"]}-handbook.pdf'
-    if done:
-        start = (f'<p>Start at <a href="{page_name(book, min(done))}">Chapter {min(done)}</a>, or <a href="all.html">read every '
-                 f'written chapter on one page</a> (also as a <a href="{pdf}">PDF</a>). Chapters marked “coming” are planned; '
-                 f'the topics they\'ll cover are listed.</p>')
-    else:
-        nxt = f' The first to be written is <a href="#ch{book["next"]}">Chapter {book["next"]}</a>.' if book.get("next") else ""
-        start = (f'<p>This book is being written. No chapters are finished yet; the contents below show every planned '
-                 f'chapter and the topics it will cover.{nxt}</p>')
     return "\n".join([
         head(f"{book['title']} · {book['series']}", book["promise"], css_href, 2),
-        runhead(book, f"{len(done)} of {n_ch} chapters written", home),
+        runhead(book, f"{n_ch} chapters · {n_apps} appendices" if complete else f"{len(done)} of {n_ch} chapters written", home),
         '<main class="page">',
         f'''<header class="opener">
   <p class="eyebrow">{esc(book['series'])} · Handbook {book['no']}</p>
@@ -228,7 +289,7 @@ def render_index(book, css_href, home):
   <div><h2>How it's built</h2><p>{esc(book['promise'])}</p></div>
   <div><h2>The running example</h2><p>{book['example']}</p></div>
 </section>
-{start}
+<p>Start at <a href="{first}">Chapter {min(done)}</a>, or <a href="all.html">read {"the whole book" if complete else "every written chapter"} on one page</a> (also as a <a href="{pdf}">PDF</a>).{"" if complete else " Chapters marked “coming” are planned; the topics they'll cover are listed."}</p>
 <h2 class="sec" id="contents"><span class="n">§</span>Contents</h2>''',
         "\n".join(parts_html),
         f'''  <section class="toc-part" aria-labelledby="appendices">
@@ -252,25 +313,22 @@ def build(out_root=None, css_href=None, home="../../index.html"):
         out.mkdir(parents=True, exist_ok=True)
         css = css_href or default_css_href(2)
         (out / "index.html").write_text(render_index(book, css, home), encoding="utf-8")
-        if done:  # an unstarted book has only its contents page: no whole-book page or PDF yet
-            (out / "all.html").write_text(render_all(book, css, home), encoding="utf-8")
+        (out / "all.html").write_text(render_all(book, css, home), encoding="utf-8")
         for num in done:
             (out / page_name(book, num)).write_text(render_chapter(book, num, css, home), encoding="utf-8")
-        apps = written_appendices(book)
-        for letter, fname in apps.items():
-            (out / fname).write_text(render_appendix(book, letter, css, home), encoding="utf-8")
-        print(f"[handbooks/{key}] index + {len(done)} chapter(s)" + (f" + {len(apps)} appendix(es)" if apps else ""))
-        books.append(dict(book, written=done, n_chapters=sum(1 for _ in chapters(book))))
-        if not done:
-            continue
+        apps = [a for a in appendices(book) if a["available"]]
+        for a in apps:
+            (out / a["page"]).write_text(render_appendix(book, a, css, home), encoding="utf-8")
+        print(f"[handbooks/{key}] index + {len(done)} chapter(s) + {len(apps)} appendices")
         base = f"handbooks/{key}"
         listing.append(dict(key=base, title=book["title"], all=f"{base}/all.html", pdf=f"{base}/pdf/{key}-handbook.pdf",
                             notes=[dict(num=n, slug=page_name(book, n)[3:-5], title=next(c[2] for _, c in chapters(book) if c[0] == n),
                                         page=f"{base}/{page_name(book, n)}", pdf=f"{base}/pdf/{page_name(book, n)[:-5]}.pdf")
                                    for n in done]
-                                  + [dict(num=a, slug=f[:-5], title=f"Appendix {a}: " + next(t for x, t, _ in book["appendices"] if x == a),
-                                          page=f"{base}/{f}", pdf=f"{base}/pdf/{f[:-5]}.pdf")
-                                     for a, f in apps.items()]))
+                                  + [dict(num=100 + i, slug=a["page"][:-5], title=f"Appendix {a['letter']}: {a['title']}",
+                                          page=f"{base}/{a['page']}", pdf=f"{base}/pdf/{a['page'][:-5]}.pdf")
+                                     for i, a in enumerate(apps)]))
+        books.append(dict(book, written=done, n_chapters=sum(1 for _ in chapters(book))))
     return books, listing
 
 

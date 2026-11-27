@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Multi-tenant &amp; Embedded Reporting · Jef’s Notes</title>
+<meta name="description" content="Show each customer or shop only their own numbers, without slowing the app down.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-pipelines">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 9 · data pipelines &amp; analytics</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="embedded-reporting">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 01.07.27</span><span class="topic">collection · <b>serving reports</b></span></div>
+  <p class="kicker">a.k.a. “row-level security for reports”</p>
+  <h1><span class="hl">Multi-tenant &amp; Embedded Reporting</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>When customers, shops or franchisees see reports inside your product, each must see <b>only their own rows</b>, and their dashboards mustn't slow the app down. Take the tenant from a <b>signed token</b> issued by your backend, never from the URL; enforce it with <b>row-level security</b> in the data layer, not only in the dashboard; and serve from the <b>warehouse or a serving store</b> with per-tenant aggregates and caching, not from production.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> serving reports</li><li><b>Also called:</b> customer-facing analytics, embedded BI</li><li><b>Lives in:</b> row access policies, signed embedding, Cube</li><li><b>Pairs with:</b> multitenancy (Vol. 3), least privilege (Vol. 5)</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Each shop manager gets a “my shop” dashboard that filters on <code>?shop=12</code> in the address. The Delft manager changes it to <code>13</code> and <span class="hl-pink">sees Leiden's revenue</span>. The same dashboards query the production database, and on Saturdays checkout slows down.</p>
+  <ul>
+    <li>Tenant filters in the browser are suggestions, not security.</li>
+    <li>Every new report must remember to filter, and one will forget.</li>
+    <li>Reporting load competes with customers paying.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of a leaking shop dashboard. Each shop manager gets a my-shop dashboard that filters on a shop id in the web address. The Delft manager changes shop=12 to shop=13 and sees Leiden&#x27;s revenue. The same dashboards query the production database and slow down checkout on Saturdays."><g class="rough"><rect class="d f-blue" x="20" y="40" width="340" height="60" rx="10"/><path class="d d-red" d="M366 70 L414 70"/><path class="d d-red" d="M403.2 75.2 L414 70 L403.2 64.8"/><rect class="d f-pink d-red" x="420" y="40" width="320" height="60" rx="10"/><path class="d d-thin f-paper" d="M145 160 v40 a45 9 0 0 0 90 0 v-40"/><ellipse class="d d-thin f-paper" cx="190" cy="160" rx="45" ry="9"/></g><text class="t-head" x="190" y="77" text-anchor="middle" font-size="19">…/dashboard?shop=12</text><text class="t-head t-red" x="580" y="77" text-anchor="middle" font-size="19">…/dashboard?shop=13</text><text class="t-s t-red" x="580" y="130" text-anchor="middle">Leiden&#x27;s revenue, seen from Delft</text><text class="t t-soft" x="190" y="230" text-anchor="middle" font-size="16">production database</text><text class="t-s t-red" x="500" y="200" text-anchor="middle">and every view queries production:</text><text class="t-s t-red" x="500" y="226" text-anchor="middle">checkout slows on Saturdays</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Change shop=12 to shop=13 in the address bar, and you're reading another shop's revenue.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">apartment mailboxes</span></h2>
+  <p>An apartment building has <b>one wall of mailboxes</b>. The postman sorts mail into them, and <b>each resident's key opens only their own box</b>. Nobody is handed the whole sack and trusted to take only their own letters.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="Doodle of apartment mailboxes. One building, one wall of boxes. The postman sorts mail into the boxes; each resident&#x27;s key opens only their own box. Nobody is handed the whole sack and asked to take only their own letters."><g class="rough"><rect class="d f-y" x="40" y="50" width="80" height="60" rx="10"/><rect class="d f-green" x="130" y="50" width="80" height="60" rx="10"/><rect class="d f-y" x="220" y="50" width="80" height="60" rx="10"/><rect class="d f-y" x="310" y="50" width="80" height="60" rx="10"/><g transform="translate(150 140) scale(0.8)"><g class="d"><circle class="f-paper" cx="14" cy="30" r="11"/><path d="M25 30 h32 M48 30 v9 M55 30 v6"/></g></g><g transform="translate(540 50) scale(1.4)"><g class="d d-red"><path class="f-paper" d="M6 18 h48 l-6 38 h-36 z"/><path d="M6 18 q24 -22 48 0"/><circle class="f-paper" cx="22" cy="34" r="5"/><circle class="f-paper" cx="36" cy="40" r="5"/><circle class="f-paper" cx="28" cy="46" r="5"/></g></g></g><text class="t-head" x="80" y="87" text-anchor="middle" font-size="20">1</text><text class="t-head" x="170" y="87" text-anchor="middle" font-size="20">2</text><text class="t-head" x="260" y="87" text-anchor="middle" font-size="20">3</text><text class="t-head" x="350" y="87" text-anchor="middle" font-size="20">4</text><text class="t-s t-green" x="200" y="220" text-anchor="middle">your key, your box</text><text class="t-s t-red" x="590" y="170" text-anchor="middle">“take your own from the sack”</text><text class="t-s t-red" x="590" y="200" text-anchor="middle">never</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>One wall of mailboxes: each key opens one box. Nobody gets the whole sack.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The wall of boxes</td><td>One shared reporting table, all tenants</td></tr>
+      <tr><td>Your key</td><td>A signed token with your tenant id</td></tr>
+      <tr><td>The lock on each box</td><td>A row-level security policy</td></tr>
+      <tr><td>The postman sorting mail</td><td>Per-tenant aggregates built by the pipeline</td></tr>
+      <tr><td>“Take yours from the sack”</td><td>Filtering in the browser: never</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">tenant from a token, enforced on every row</span></h2>
+  <p>Your backend, which knows who signed in, issues a <b>short-lived signed token</b> (a JWT) with the tenant id and the reports allowed. The embedded dashboard passes it to the reporting layer, which sets the tenant for the session. A <b>row-level security policy</b> on the tables then adds the tenant condition to every query, including ones a careless report author writes.</p>
+  <p>Serve from the warehouse or a fast serving store, with aggregates per tenant and a cache. Give big tenants their own extracts or limits so one franchisee's export can't slow the others.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Safe embedded reporting. The shop manager signs in to the portal. The portal&#x27;s backend issues a short-lived signed embed token that says shop 12. The reporting layer reads the shop from the token, never from the address, and applies a row-level security policy so every query only sees shop 12&#x27;s rows. Queries run on the warehouse or a serving store with per-tenant aggregates and caching, not on production."><g class="rough"><rect class="d f-blue" x="20" y="30" width="170" height="70" rx="10"/><path class="d" d="M196 65 L250 65"/><path class="d" d="M239.2 70.2 L250 65 L239.2 59.8"/><rect class="d f-y" x="256" y="30" width="200" height="70" rx="10"/><path class="d" d="M462 65 L516 65"/><path class="d" d="M505.2 70.2 L516 65 L505.2 59.8"/><rect class="d f-green" x="522" y="30" width="220" height="70" rx="10"/><path class="d" d="M632 106 L632 160"/><path class="d" d="M626.8 149.2 L632 160 L637.2 149.2"/><rect class="d f-green" x="470" y="166" width="270" height="80" rx="10"/></g><text class="t-head" x="105" y="61" text-anchor="middle" font-size="20">manager</text><text class="t" x="105" y="85" text-anchor="middle" font-size="14">signs in</text><text class="t-head" x="356" y="61" text-anchor="middle" font-size="19">portal backend</text><text class="t" x="356" y="85" text-anchor="middle" font-size="14">token: shop = 12</text><text class="t-head" x="632" y="61" text-anchor="middle" font-size="19">reporting layer</text><text class="t" x="632" y="85" text-anchor="middle" font-size="14">reads shop from token</text><text class="t-head" x="605" y="202" text-anchor="middle" font-size="19">row-level security</text><text class="t" x="605" y="226" text-anchor="middle" font-size="14">WHERE shop = token.shop</text><text class="t-s t-pen" x="220" y="180" text-anchor="middle">warehouse or serving store,</text><text class="t-s t-pen" x="220" y="206" text-anchor="middle">per-shop aggregates, cached</text><text class="t-s t-red" x="220" y="240" text-anchor="middle">never production</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The tenant comes from a signed token, and the database enforces it on every row.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Put tenant ids on every row</b><p>Shop, franchisee or customer id on facts and aggregates.</p></li>
+    <li><b>Issue signed embed tokens</b><p>From your backend, with tenant id, allowed reports and a short expiry.</p></li>
+    <li><b>Enforce row-level security</b><p>A policy in the warehouse or semantic layer that reads the tenant from the session.</p></li>
+    <li><b>Serve away from production</b><p>Warehouse or serving store; per-tenant aggregates; cache; per-tenant query limits.</p></li>
+    <li><b>Test the boundary</b><p>An automated test that signs in as shop 12 and tries to read shop 13.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Tenant</dt><dd>A customer, shop or franchisee whose data must stay separate.</dd></div>
+    <div><dt>Row-level security</dt><dd>A database rule limiting which rows a session can see.</dd></div>
+    <div><dt>Signed embedding</dt><dd>Embedding a report with a token your backend signs.</dd></div>
+    <div><dt>Security context</dt><dd>The tenant and roles attached to a query.</dd></div>
+    <div><dt>Serving store</dt><dd>A fast store for app-facing analytics (ClickHouse, Pinot, Druid).</dd></div>
+    <div><dt>Noisy neighbour</dt><dd>One tenant's heavy use slowing others.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>row_access.sql + embed.ts</span><span>Snowflake-style policy · TypeScript</span></div>
+<pre><code><span class="c">-- the database enforces the tenant on every query</span>
+<span class="k">CREATE</span> <span class="k">ROW</span> ACCESS <span class="k">POLICY</span> shop_only <span class="k">AS</span> (shop_id INT) RETURNS BOOLEAN -&gt;
+  shop_id = TRY_TO_NUMBER(CURRENT_SESSION_CONTEXT(<span class="s">'shop_id'</span>))   <span class="c">-- set from the token</span>
+  <span class="k">OR</span> IS_ROLE_IN_SESSION(<span class="s">'HEAD_OFFICE'</span>);
+<span class="k">ALTER</span> <span class="k">TABLE</span> agg_sales_daily <span class="k">ADD</span> <span class="k">ROW</span> ACCESS <span class="k">POLICY</span> shop_only <span class="k">ON</span> (shop_id);
+
+<span class="c">// the portal backend: the tenant comes from the signed-in user, never the URL</span>
+app.get(<span class="s">"/reports/embed"</span>, requireLogin, (req, res) =&gt; {
+  <span class="k">const</span> token = jwt.sign(
+    { shop_id: req.user.shopId, reports: [<span class="s">"my-shop"</span>], exp: nowSeconds() + 600 },
+    process.env.EMBED_SECRET,
+  );
+  res.json({ url: <span class="s">`${REPORTS_URL}/embed/my-shop#token=${token}`</span> });
+});</code></pre>
+  </div>
+  <p class="aside">tools: Snowflake row access policies, BigQuery row-level security, PostgreSQL RLS, Cube security context, signed embedding in Metabase, Looker, Power BI Embedded and Superset guest tokens; serving stores ClickHouse, Apache Pinot, Druid.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Tenants see only their own data</b>, whatever the URL says.</li><li><b>Enforced once</b>, in the data layer, for every report.</li><li><b>App stays fast</b>: reports never touch production.</li><li><b>New reports are safe by default</b>.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Token plumbing</b> between app, BI tool and warehouse.</li><li><b>Policies to test</b> on every table and aggregate.</li><li><b>Serving costs</b> for app-facing query volumes.</li><li><b>Cross-tenant questions</b> need a separate, privileged role.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Pipeline ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>dashboards on production filtered by a URL parameter</b> to <b>signed tokens, row-level security and a separate serving layer</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">One policy instead of a filter in every report.</td></tr>
+      <tr data-before="2" data-after="3"><td>Freshness<small>how recent?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Warehouse freshness instead of live production.</td></tr>
+      <tr data-before="1" data-after="5"><td>Correctness<small>is the number right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No tenant can read another's rows.</td></tr>
+      <tr data-before="3" data-after="3"><td>Replayability<small>safe to rerun?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="1" data-after="4"><td>Scalability<small>10× the data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Report load leaves production; aggregates per tenant.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Serving costs, but no slow checkouts.</td></tr>
+      <tr data-before="3" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral within a tenant.</td></tr>
+      <tr data-before="2" data-after="4"><td>Observability<small>know when it's wrong?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Access is logged per tenant and token.</td></tr>
+      <tr data-before="2" data-after="4"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New reports inherit the policy.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Tenant from the URL or the browser</h3><p>Anyone can edit it. <span class="fix">Fix →</span> tenant only from a token your backend signs.</p></li>
+    <li><h3>Filters in each report</h3><p>One new report forgets the WHERE and shows everyone's numbers. <span class="fix">Fix →</span> row-level security on the tables, so forgetting is impossible.</p></li>
+    <li><h3>Long-lived tokens</h3><p>A token copied into an email works for months. <span class="fix">Fix →</span> expire tokens in minutes and re-issue on page load.</p></li>
+    <li><h3>Shared caches across tenants</h3><p>A cached result for shop 12 is served to shop 13. <span class="fix">Fix →</span> include the tenant in every cache key.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Reports shown inside your product to customers or partners.</li><li>Internal dashboards where managers must see only their area.</li><li>Many tenants on shared tables.</li><li>Reporting load that must not touch production.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Head office reporting where everyone may see everything.</li><li>A tiny number of tenants with separate databases already.</li><li>Data so sensitive it should be physically separate per tenant.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../../data/notes/multitenancy.html"><b>Multitenancy</b></a> (Vol. 3)</li><li><a href="../../security/notes/least-privilege.html"><b>Least privilege</b></a> (Vol. 5)</li><li><a href="../notes/aggregates-rollups.html"><b>Aggregates and rollups</b></a></li><li><a href="../notes/metrics-layer.html"><b>Metrics layer</b></a></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Where must the tenant id come from?</summary><p>From a token signed by your backend for the signed-in user, never from the URL or browser.</p></details>
+    <details><summary>Why enforce tenancy with row-level security rather than report filters?</summary><p>So every query is filtered, including reports that forget, and nobody can bypass it.</p></details>
+    <details><summary>Why not serve embedded reports from production?</summary><p>Report queries compete with the app and slow it down; serve from the warehouse or a serving store.</p></details>
+    <details><summary>What must cache keys include?</summary><p>The tenant, so one tenant's cached results are never served to another.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A franchisee asks for a CSV export of “all their sales ever” every morning, and it slows other franchisees' dashboards. What do you do?</span></summary><p>Give heavy exports their own path: a nightly per-tenant extract written to storage, or a query queue with per-tenant limits. Dashboards keep using aggregates; the export never competes with them. Row-level security still applies to the export query.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Open one of your dashboards and look for where the tenant comes from. Try changing it in the address or the request. Then add a test that signs in as one tenant and tries to read another's data, and keep it in CI.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Your <span class="hl">key</span>, your <span class="hl">box</span>. Never hand out the sack.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/18-embedded-reporting.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Snowflake documentation, “Understanding row access policies”.</li><li>PostgreSQL documentation, “Row security policies”.</li><li>Cube documentation, “Security context” and “Multitenancy”.</li><li>OWASP, “Broken Object Level Authorization” (API Security Top 10).</li></ul>
+  </div>
+  <p class="folio">18</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="lambda-vs-kappa.html"><small>← previous note</small>17 · Lambda vs Kappa</a>
+  <a href="../index.html"><small>back to →</small>Index</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 9 · a student's bullet journal on data pipelines &amp; analytics</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

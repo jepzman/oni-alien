@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Indexes &amp; Query Plans · Deep dive · Jef’s Notes</title>
+<meta name="description" content="A deep dive on indexes and query plans: how the planner estimates, reading EXPLAIN ANALYZE, six failure drills, indexing a workload, B-tree numbers and the cost of writes, batch loading and keyset paging, monitoring plans, and testing query performance.">
+<meta name="theme-color" content="#E4E1D9">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,700;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/dive.css?v=2b16c30ec1">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/dive.js?v=03c39c00d2" defer></script>
+</head>
+<body class="dive">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah" d="M0 0 L10 4 L0 8z"/></marker><marker id="ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah-r" d="M0 0 L10 4 L0 8z"/></marker></defs></svg>
+<a class="skip-link" href="#main">Skip to the text</a>
+<header class="site" id="top">
+  <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>deep dive 10</small></a>
+  <a class="site-link" href="../../index.html#deep-dives">Shelf</a>
+</header>
+<div class="strip" data-strip>
+  <div class="strip-in">
+    <nav aria-label="Chapters"><a href="#recap" data-ch="0"><b>1</b> Recap</a><a href="#planner" data-ch="1"><b>2</b> The planner</a><a href="#plans" data-ch="2"><b>3</b> Reading plans</a><a href="#drills" data-ch="3"><b>4</b> Failure drills</a><a href="#workload" data-ch="4"><b>5</b> Workload</a><a href="#numbers" data-ch="5"><b>6</b> Numbers</a><a href="#access" data-ch="6"><b>7</b> Access patterns</a><a href="#running" data-ch="7"><b>8</b> Running it</a><a href="#testing" data-ch="8"><b>9</b> Testing</a><a href="#tools" data-ch="9"><b>10</b> Tools &amp; lab</a></nav>
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+  </div>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+</div>
+
+<main id="main" class="wrap"><article class="page"><div class="col">
+<p class="eyebrow">Deep dive 10 · builds on Vol. 3, notes 05, 06 and 07</p>
+<h1><span>Indexes &amp; Query Plans</span></h1>
+<p class="sub">Why a query was fast yesterday and slow today: how the planner decides, how to read what it decided, and how to index a whole workload.</p>
+<ul class="facts"><li><b>Full read</b> about 28 min</li><li><b>Skim</b> about 12 min: yellow boxes, tables and drill rules</li><li><b>Example</b> customer 42's “my orders” page on a 10-million-row table</li></ul>
+<nav class="toc" aria-label="Contents">
+  <h2 class="toc-h">In this deep dive</h2>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Three notes in sixty seconds</span><span class="m">1 min</span></a></li><li><a href="#planner" data-ch="1"><span class="n">2</span><span class="t">How the planner decides</span><span class="m">3 min</span></a></li><li><a href="#plans" data-ch="2"><span class="n">3</span><span class="t">Reading a real plan</span><span class="m">3 min</span></a></li><li><a href="#drills" data-ch="3"><span class="n">4</span><span class="t">Failure drills</span><span class="m">5 min</span></a></li><li><a href="#workload" data-ch="4"><span class="n">5</span><span class="t">Indexing a workload: the hard problem</span><span class="m">3 min</span></a></li><li><a href="#numbers" data-ch="5"><span class="n">6</span><span class="t">Indexes in numbers</span><span class="m">2 min</span></a></li><li><a href="#access" data-ch="6"><span class="n">7</span><span class="t">Batching, paging and asking less</span><span class="m">3 min</span></a></li><li><a href="#running" data-ch="7"><span class="n">8</span><span class="t">Running it: watching plans change</span><span class="m">3 min</span></a></li><li><a href="#testing" data-ch="8"><span class="n">9</span><span class="t">Testing query performance</span><span class="m">2 min</span></a></li><li><a href="#tools" data-ch="9"><span class="n">10</span><span class="t">Tools, a lab and the checklist</span><span class="m">3 min</span></a></li></ol>
+  <p class="toc-src">Read first: <a href="../../data/notes/indexing.html">Indexing</a><a href="../../data/notes/n-plus-one.html">Batch Loading (Fixing N+1)</a><a href="../../data/notes/keyset-pagination.html">Keyset Pagination</a></p>
+</nav>
+<section id="recap" data-title="Recap">
+<p class="ch">chapter 1 <span>· 1 min</span></p>
+<h2>Three notes in sixty seconds</h2>
+<div class="gist"><p><b>Gist</b> An index lets a query jump to its rows, batch loading replaces one query per row with one query per set, and keyset pagination keeps deep pages fast. Behind all three sits the planner, which chooses how to run each query from statistics. This deep dive is about that planner and the workload it serves.</p></div>
+
+<p>The orders table has 10 million rows. Customer 42 opens “my orders”, which asks for their 20 newest orders. Without the right index the database reads all 10 million rows to find 312. Three notes from the data volume deal with making reads like this fast.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Note</th><th scope="col">In one line</th></tr></thead><tbody><tr><td>Indexing</td><td>a sorted copy of some columns with pointers to the rows, so a query jumps instead of scanning</td></tr><tr><td>Batch Loading (Fixing N+1)</td><td>fetch related rows in one query, not one query per row</td></tr><tr><td>Keyset Pagination</td><td>ask for rows after the last one shown, not for page 5,000</td></tr></tbody></table></div><figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 215" role="img" aria-label="The life of one query. The SQL text says what you want. It is parsed, then the planner picks the cheapest way to answer it, using statistics that are guesses from samples of the data. The executor then reads pages and returns rows. EXPLAIN ANALYZE shows the planner&#x27;s choice and what the executor actually did.">
+  <rect class="bx" x="10" y="60" width="120" height="56" rx="8"/><text class="lbl" x="70" y="86" text-anchor="middle">SQL text</text><text class="soft" x="70" y="106" text-anchor="middle">what you want</text>
+  <rect class="bx" x="170" y="60" width="110" height="56" rx="8"/><text class="lbl" x="225" y="93" text-anchor="middle">parse</text>
+  <rect class="bx-y" x="320" y="60" width="130" height="56" rx="8"/><text class="lbl" x="385" y="86" text-anchor="middle">planner</text><text class="soft" x="385" y="106" text-anchor="middle">picks the cheapest</text>
+  <rect class="bx" x="490" y="60" width="120" height="56" rx="8"/><text class="lbl" x="550" y="86" text-anchor="middle">executor</text><text class="soft" x="550" y="106" text-anchor="middle">reads pages</text>
+  <rect class="bx" x="650" y="60" width="100" height="56" rx="8"/><text class="lbl" x="700" y="93" text-anchor="middle">rows</text>
+  <path class="ln" d="M130 88 H168" marker-end="url(#a)"/><path class="ln" d="M280 88 H318" marker-end="url(#a)"/><path class="ln" d="M450 88 H488" marker-end="url(#a)"/><path class="ln" d="M610 88 H648" marker-end="url(#a)"/>
+  <rect class="bx-g" x="300" y="160" width="170" height="44" rx="8"/><text class="lbl" x="385" y="187" text-anchor="middle">statistics</text>
+  <path class="ln" d="M385 158 V118" marker-end="url(#a)"/><text class="soft" x="480" y="146">guesses from samples</text>
+  <path class="ln-d" d="M320 36 H610"/><text class="soft" x="465" y="26" text-anchor="middle">EXPLAIN ANALYZE shows this part</text>
+</svg></div><figcaption>You write what you want. The planner decides how, from guesses. Most slow queries are a bad guess or a missing option.</figcaption></figure><aside class="mn">The indexing note's going-deeper chapter covers reading a plan in four lines and choosing column order. This dive starts there.</aside>
+<p class="full">The notes teach the tools. This deep dive is about the system that uses them: a planner that decides from statistics, which can be wrong; a table that serves many queries at once, so indexes are chosen for a workload, not a query; and a plan that can change overnight with no deploy. The goal is to be able to answer the most common question in database work: “this was fast yesterday, why is it slow today?”</p>
+
+
+<a class="next" href="#planner"><small>next · chapter 2</small>How the planner decides →</a>
+</section>
+<section id="planner" data-title="The planner">
+<p class="ch">chapter 2 <span>· 3 min</span></p>
+<h2>How the planner decides</h2>
+<div class="gist"><p><b>Gist</b> The planner estimates how many rows each step returns from sampled statistics, prices the page reads, and picks the cheapest plan. A full scan is right when a query wants a large share of the table. Plans go wrong when statistics are stale, columns are correlated, or costs are set for old disks.</p></div>
+
+<p>SQL says what you want, never how to get it. For the “my orders” query the planner could read the whole table and sort, or walk an index on <code>customer_id</code>, or walk an index on <code>placed_at</code> backwards until it has found 20 rows for customer 42. It estimates the cost of each option and picks the cheapest.</p>
+<h3>Where the estimates come from</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Statistic</th><th scope="col">Kept per column</th><th scope="col">Used to guess</th></tr></thead><tbody><tr><td>number of distinct values</td><td>about 9 million customers… or 4 statuses</td><td>how many rows <code>= x</code> matches</td></tr><tr><td>most common values and how common</td><td><code>DELIVERED</code> 90 %, <code>PENDING</code> 0.1 %</td><td>matches for frequent values</td></tr><tr><td>a histogram of the rest</td><td>placed_at spread over five years</td><td>matches for ranges such as “last week”</td></tr><tr><td>correlation with physical order</td><td>placed_at follows insert order closely</td><td>whether index reads are scattered or sequential</td></tr></tbody></table></div><aside class="mn">Statistics are a sample, refreshed by ANALYZE. Until then, the planner plans for the table as it was.</aside>
+<p>From these, the planner estimates how many rows each step returns, multiplies by the cost of reading pages, and adds up. The costs are in arbitrary units: reading a page in sequence costs 1, reading a page at random costs 4 by default.</p>
+<div class="full">
+<h3>When a full scan is the right answer</h3>
+<p>An index lookup reads a few index pages and then one table page per matching row, at random. A full scan reads every page, but in sequence. If a query wants a large share of the table, the scan wins.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Query matches</th><th scope="col">Likely plan</th><th scope="col">Why</th></tr></thead><tbody><tr><td>312 rows of 10 million</td><td>index scan</td><td>a few hundred random reads beat 125,000 sequential ones</td></tr><tr><td>5 % of the table</td><td>it depends</td><td>500,000 random reads is close to reading everything</td></tr><tr><td>40 % of the table</td><td>full scan</td><td>the index would visit most pages anyway, out of order</td></tr></tbody></table></div><p>“The planner ignored my index” is often the planner being right. Check the actual row count before arguing with it.</p>
+<h3>Three ways the guesses go wrong</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Cause</th><th scope="col">Example</th><th scope="col">Fix</th></tr></thead><tbody><tr><td><b>stale statistics</b></td><td>2 million rows loaded an hour ago; the planner thinks the table is small (drill 3)</td><td><code>ANALYZE</code> after bulk loads</td></tr><tr><td><b>correlated columns</b></td><td><code>city = 'Rotterdam' AND country = 'NL'</code>: the planner multiplies two probabilities as if unrelated and expects 50 times too few rows</td><td>extended statistics: <code>CREATE STATISTICS … (dependencies)</code></td></tr><tr><td><b>costs set for old disks</b></td><td>random reads priced at 4 on an SSD where they cost about the same as sequential ones</td><td>lower <code>random_page_cost</code> to about 1.1 on SSDs</td></tr></tbody></table></div><p>The third row is worth checking on every database you run. With the default setting on fast storage, the planner will prefer full scans in many places where an index would be quicker.</p>
+<h3>Asking for the plan safely</h3>
+<p><code>EXPLAIN</code> on its own shows the plan the planner would choose and its estimates, without running anything. <code>EXPLAIN ANALYZE</code> runs the query and adds what really happened, which is what you need to compare estimates with reality. Two cautions. It really runs: an <code>UPDATE</code> or <code>DELETE</code> under <code>EXPLAIN ANALYZE</code> changes data, so wrap it in a transaction and roll back. And it runs with the values you typed; to see the plan the application gets, use the same parameter values, and for prepared statements, the same way of sending them (drill 4).</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>A query matches 40 % of the table and uses a full scan. Is the planner wrong?</summary><p>Probably not. Reading every page in order is cheaper than visiting most of them at random through an index.</p></details><details><summary>Why lower random_page_cost on SSDs?</summary><p>The default assumes random reads cost four times sequential ones, which is true for spinning disks. On SSDs it makes the planner avoid indexes it should use.</p></details></div>
+<a class="next" href="#plans"><small>next · chapter 3</small>Reading a real plan →</a>
+</section>
+<section id="plans" data-title="Reading plans">
+<p class="ch">chapter 3 <span>· 3 min</span></p>
+<h2>Reading a real plan</h2>
+<div class="gist"><p><b>Gist</b> Read EXPLAIN ANALYZE from the most indented line up. Look at the scan type, rows removed by filter, estimated against actual rows, any Sort node and the pages read. In joins, figures on an inner line are per loop. Compare plans by pages read, not milliseconds.</p></div>
+
+<p>Here is the “my orders” query before and after the index from the note, as <code>EXPLAIN (ANALYZE, BUFFERS)</code> prints it. Read from the most indented line upward: it runs first.</p>
+<div class="card"><div class="card-head"><span>before.txt</span><span>no suitable index: 1.9 seconds</span></div><pre><code>Limit  (actual time=1912.4..1912.4 rows=20 loops=1)
+  Buffers: shared hit=2113 read=121887
+  -&gt;  Sort  (actual time=1912.4..1912.4 rows=20 loops=1)
+        Sort Key: placed_at DESC
+        Sort Method: top-N heapsort  Memory: 27kB
+        -&gt;  Seq Scan on orders  (cost=0.00..248000.00 rows=290 width=72)
+                                (actual time=0.9..1911.8 rows=312 loops=1)
+              Filter: (customer_id = 42)
+              Rows Removed by Filter: 9999688
+Execution Time: 1912.6 ms</code></pre></div><div class="card"><div class="card-head"><span>after.txt</span><span>index on (customer_id, placed_at DESC): 0.1 ms</span></div><pre><code>Limit  (actual time=0.041..0.088 rows=20 loops=1)
+  Buffers: shared hit=24
+  -&gt;  Index Scan using orders_customer_placed on orders  (cost=0.43..92.10 rows=290 width=72)
+                                                         (actual time=0.040..0.084 rows=20 loops=1)
+        Index Cond: (customer_id = 42)
+Execution Time: 0.11 ms</code></pre></div><div class="tbl"><table><thead><tr><th scope="col">Line</th><th scope="col">Before</th><th scope="col">After</th><th scope="col">What it tells you</th></tr></thead><tbody><tr><td>bottom node</td><td>Seq Scan</td><td>Index Scan</td><td>how rows are found</td></tr><tr><td>Rows Removed by Filter</td><td>9,999,688</td><td>none</td><td>work the index should have done</td></tr><tr><td>estimated vs actual rows</td><td>290 vs 312</td><td>290 vs 20 (stopped early)</td><td>estimates are fine; this is a missing index, not bad statistics</td></tr><tr><td>Sort node</td><td>yes</td><td>no</td><td>the index returns rows already in order, so the database stops after 20</td></tr><tr><td>Buffers</td><td>124,000 pages</td><td>24 pages</td><td>the steadiest number to compare plans by</td></tr></tbody></table></div><aside class="mn">Compare plans by pages read, not by milliseconds. Time depends on what else the server was doing.</aside>
+<h3>Plans with joins</h3>
+<p>The page also shows each order's lines. The join adds a node with two children, and a new number to watch: <code>loops</code>.</p>
+<div class="card"><div class="card-head"><span>join.txt</span><span>the inner side runs once per outer row</span></div><pre><code>Nested Loop  (actual time=0.06..0.41 rows=46 loops=1)
+  -&gt;  Index Scan using orders_customer_placed on orders o  (actual rows=20 loops=1)
+        Index Cond: (customer_id = 42)
+  -&gt;  Index Scan using order_lines_order_id on order_lines l  (actual rows=2 loops=20)
+        Index Cond: (order_id = o.id)</code></pre></div><div class="full">
+<p>The inner scan ran 20 times, once for each order, returning about 2 rows each time. The figures on a looped line are per loop: multiply by <code>loops</code> for the total. A nested loop with <code>loops=200000</code> and a slow inner side is the most common shape of a join gone wrong.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Join method</th><th scope="col">How</th><th scope="col">Good when</th></tr></thead><tbody><tr><td><b>Nested loop</b></td><td>for each outer row, look up matching inner rows</td><td>the outer side is small and the inner side has an index on the join column</td></tr><tr><td><b>Hash join</b></td><td>build a hash table of one side, stream the other through it</td><td>both sides are large, equality join, no useful order</td></tr><tr><td><b>Merge join</b></td><td>walk two inputs already sorted on the join key</td><td>both sides come sorted, often from indexes</td></tr></tbody></table></div><p>None is good or bad by itself. A nested loop is perfect for 20 orders and a disaster for 2 million, which is what happens when the planner expected 20 (drill 3).</p>
+<h3>Two more scan types</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Scan</th><th scope="col">What it does</th><th scope="col">When you see it</th></tr></thead><tbody><tr><td><b>Bitmap Index Scan + Bitmap Heap Scan</b></td><td>collects every matching row's position from the index first, sorts them by page, then reads each table page once</td><td>medium result sizes, or when two indexes are combined with AND or OR</td></tr><tr><td><b>Index Only Scan</b></td><td>answers from the index without visiting the table</td><td>every column the query needs is in the index, and the table is recently vacuumed</td></tr></tbody></table></div><p>An Index Only Scan line also reports <code>Heap Fetches</code>: rows it had to check in the table after all, because the page was not yet marked as fully visible. A high number there means vacuum is behind, and the index-only scan is quietly doing the table reads it was meant to avoid.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Estimated rows 200, actual 2,000,000, nested loop. What happened, and the first step?</summary><p>The planner expected few rows and chose a per-row lookup. Run ANALYZE and check the estimate again.</p></details><details><summary>An inner Index Scan shows rows=2 loops=20. How many rows did it return in total?</summary><p>40: the figures are per loop.</p></details></div>
+<a class="next" href="#drills"><small>next · chapter 4</small>Failure drills →</a>
+</section>
+<section id="drills" data-title="Failure drills">
+<p class="ch">chapter 4 <span>· 5 min</span></p>
+<h2>Failure drills</h2>
+<div class="gist"><p><b>Gist</b> Six queries that used to be fast: a function on an indexed column, a parameter of the wrong type, statistics that lag behind a bulk load, a generic plan for a skewed value, a page that makes sixty-one queries, and a table so heavily indexed that every write is slow.</p></div>
+<aside class="mn">Each of these is a query that “used to be fast”. Guess the cause before reading it.</aside>
+<ul class="drill-index" aria-label="The six drills">
+  <li><a href="#drill-1">1 · lower()</a></li><li><a href="#drill-2">2 · wrong type</a></li><li><a href="#drill-3">3 · after the import</a></li>
+  <li><a href="#drill-4">4 · the rare status</a></li><li><a href="#drill-5">5 · 61 queries</a></li><li><a href="#drill-6">6 · fourteen indexes</a></li>
+</ul>
+<div class="drill" id="drill-1"><header><span>Drill 1</span><h3>The index on email that never gets used</h3></header><dl><dt>Timeline</dt><dd>Sign-in looks up <code>WHERE lower(email) = lower($1)</code>, so that capital letters do not matter. There is an index on <code>email</code>. The plan is a full scan of 9 million customers.</dd><dt class="full">Why</dt><dd class="full">The index is sorted by <code>email</code>, not by <code>lower(email)</code>. A function on the column means the database must compute it for every row before comparing.</dd><dt>What saves you</dt><dd>Index the expression the query uses: <code>CREATE INDEX ON customers (lower(email))</code>. Or store emails lowercase in the first place, or use a case-insensitive type. The same applies to <code>date(placed_at)</code>, <code>col + 1</code> and anything else that wraps the column.</dd></dl><p class="rule">Rule: an index helps only when the query compares the indexed value itself. Wrap the column, lose the index.</p></div><div class="drill" id="drill-2"><header><span>Drill 2</span><h3>The id that arrived as the wrong type</h3></header><dl><dt>Timeline</dt><dd>After an ORM upgrade, order lookups by customer go from 1 ms to 2 seconds. The SQL text looks the same. The plan shows <code>Filter: ((customer_id)::numeric = '42'::numeric)</code>.</dd><dt class="full">Why</dt><dd class="full">The new driver sends the parameter as a decimal number. To compare a whole-number column with a decimal, the database converts the column, on every row, which is drill 1 in disguise.</dd><dt>What saves you</dt><dd>Make parameter types match column types: declare them in the query or the mapping. Read the plan's filter line after any driver or ORM upgrade: a <code>::</code> cast on the column side is the sign. MySQL has the same trap with text columns compared to numbers.</dd></dl><p class="rule">Rule: a type mismatch converts the column, and a converted column cannot use its index.</p></div><div class="drill" id="drill-3"><header><span>Drill 3</span><h3>The plan changed after the nightly import</h3></header><dl><dt>Timeline</dt><dd>At 02:00 a job loads 2 million order lines from a partner. At 02:05 the reconciliation report starts. Yesterday it took 40 seconds. Today it is still running at 06:00.</dd><dt class="full">What you see</dt><dd class="full">The plan expects 200 rows from the new lines and chooses a nested loop with an index lookup per row. There are 2 million. Statistics are from yesterday, because the automatic analyse had not run yet.</dd><dt>What saves you</dt><dd>Run <code>ANALYZE</code> at the end of every bulk load, as part of the job. Log the plans of slow queries automatically (chapter 8), so a plan change is visible the next morning, not in a 4-hour incident.</dd></dl><p class="rule">Rule: after a bulk change, refresh the statistics before anything queries the new data.</p></div><div class="drill" id="drill-4"><header><span>Drill 4</span><h3>Fast for one status, slow for another</h3></header><dl><dt>Timeline</dt><dd>The warehouse screen runs <code>WHERE status = $1 ORDER BY placed_at</code>, as a prepared statement. For <code>PENDING</code>, 0.1 % of rows, it is instant. After a few calls it becomes slow for <code>PENDING</code> too.</dd><dt class="full">Why</dt><dd class="full">After five executions PostgreSQL may switch a prepared statement to a generic plan, one made without looking at the value. That plan is chosen for an average status, which is <code>DELIVERED</code> at 90 %: a full scan.</dd><dt>What saves you</dt><dd>Give the rare value its own index and query: a partial index <code>ON orders (placed_at) WHERE status = 'PENDING'</code> serves the warehouse screen exactly and stays tiny. Where a value-dependent plan is essential, the statement can be told to plan for each value (<code>plan_cache_mode</code>).</dd></dl><p class="rule">Rule: skewed data needs value-aware plans. Rare values deserve their own partial index.</p></div><div class="drill" id="drill-5"><header><span>Drill 5</span><h3>Sixty-one queries for one page</h3></header><dl><dt>Timeline</dt><dd>The order history page shows 20 orders, each with its lines and each line's product name. Every query is under a millisecond. The page takes 900 ms.</dd><dt class="full">What you see</dt><dd class="full">One query for the orders, 20 for the lines, 40 for the products: 61 round trips. Each is fast; the waiting between them is not. With a slow network to the database it is 3 seconds.</dd><dt>What saves you</dt><dd>Batch loading, from the note: one query for the orders, one for all their lines (<code>WHERE order_id = ANY($1)</code>), one for all their products. Three round trips, whatever the page size. Add a test that counts queries per request (chapter 9), because N+1 returns every time someone adds a field.</dd></dl><p class="rule">Rule: count queries per request. A page should make a fixed number, not one per row.</p></div><div class="drill" id="drill-6"><header><span>Drill 6</span><h3>Fourteen indexes on one table</h3></header><dl><dt>Timeline</dt><dd>Over three years each new screen added an index to <code>orders</code>. There are now fourteen. Checkout has slowed down by 40 %, and the write-ahead log has tripled.</dd><dt class="full">Why</dt><dd class="full">Every insert writes the row and fourteen index entries. Every update to an indexed column, and <code>updated_at</code> is indexed, writes new entries in every index, because PostgreSQL can only skip index updates when no indexed column changed.</dd><dt>What saves you</dt><dd>Find indexes that are never used and drop them: nine of the fourteen had no scans in a month, on the leader <i>and</i> on every replica. Merge indexes that share leading columns. Do not index columns that change on every update unless a frequent query needs them.</dd></dl><p class="rule">Rule: every index is paid for on every write. Keep only the ones a real query uses.</p></div><div class="full">
+<h3>What the six drills add up to</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Habit</th><th scope="col">Drill</th></tr></thead><tbody><tr><td>index the expression the query uses, never a wrapped column</td><td>1</td></tr><tr><td>parameter types match column types; read the filter line after upgrades</td><td>2</td></tr><tr><td>ANALYZE after bulk loads; log slow plans automatically</td><td>3</td></tr><tr><td>rare values get partial indexes; watch generic plans on skewed data</td><td>4</td></tr><tr><td>a fixed number of queries per request, tested</td><td>5</td></tr><tr><td>unused and overlapping indexes are found and dropped</td><td>6</td></tr></tbody></table></div>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>The plan shows Filter: ((customer_id)::numeric = 42). Why is the index unused?</summary><p>The column is being converted to numeric for every row, because the parameter arrived as a decimal. Make the types match.</p></details><details><summary>Only the warehouse's PENDING screen got slow, and only after a few calls. Likely cause?</summary><p>A prepared statement switched to a generic plan chosen for the common status. A partial index for PENDING fixes it.</p></details></div>
+<a class="next" href="#workload"><small>next · chapter 5</small>Indexing a workload: the hard problem →</a>
+</section>
+<section id="workload" data-title="Workload">
+<p class="ch">chapter 5 <span>· 3 min</span></p>
+<h2>Indexing a workload: the hard problem</h2>
+<div class="gist"><p><b>Gist</b> Rank queries by total time, then find the smallest set of indexes that serves the important ones: shared leading columns let one index serve several queries, partial indexes serve rare subsets cheaply, and reports go elsewhere. Drop indexes nobody uses, after checking every replica.</p></div>
+
+<p>Indexing one query is easy: put its equality columns first, then its sort, then its ranges. The hard problem is that a table serves many queries, every index costs every write, and the best set is the smallest one that serves the queries that matter.</p>
+<h3>Start from where the time goes</h3>
+<p>Rank queries by <b>total</b> time, calls × average time. A 2-second report run twice a day matters less than a 4 ms query run 3,000 times a second.</p>
+<div class="tbl"><table><thead><tr><th scope="col">#</th><th scope="col">Query on orders (from pg_stat_statements)</th><th scope="col">Calls / s</th><th scope="col">Avg</th><th scope="col">Share of total time</th></tr></thead><tbody><tr class=hot><td>Q1</td><td><code>customer_id = ? ORDER BY placed_at DESC LIMIT 20</code></td><td>900</td><td>1.9 s</td><td>most of it</td></tr><tr class=hot><td>Q2</td><td><code>status = 'PENDING' ORDER BY placed_at</code></td><td>40</td><td>300 ms</td><td>a lot</td></tr><tr class=hot><td>Q3</td><td><code>customer_id = ? AND placed_at &gt; ?</code></td><td>120</td><td>1.1 s</td><td>a lot</td></tr><tr><td>Q4</td><td><code>id = ?</code></td><td>3,000</td><td>0.05 ms</td><td>little: the primary key serves it</td></tr><tr><td>Q5</td><td>monthly revenue by country</td><td>0.001</td><td>40 s</td><td>little, but it hurts when it runs</td></tr></tbody></table></div>
+<h3>The smallest set that serves them</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Index</th><th scope="col">Serves</th><th scope="col">Note</th></tr></thead><tbody><tr><td><code>(customer_id, placed_at DESC)</code></td><td>Q1 and Q3</td><td>one index, two queries: they share the leading column</td></tr><tr><td><code>(placed_at) WHERE status = 'PENDING'</code></td><td>Q2</td><td>partial: holds 0.1 % of rows, so it is tiny and cheap to keep</td></tr><tr><td>primary key on <code>id</code></td><td>Q4</td><td>already there</td></tr><tr><td>none</td><td>Q5</td><td>runs on a read copy or the warehouse, where a scan is fine</td></tr></tbody></table></div><aside class="mn">Three questions for every new index: which query, how often, and which existing index could serve it instead?</aside><div class="full">
+<h3>Shapes worth knowing</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Shape</th><th scope="col">Example</th><th scope="col">Use when</th></tr></thead><tbody><tr><td><b>composite</b></td><td><code>(customer_id, placed_at)</code></td><td>queries filter on one column and sort or range on another</td></tr><tr><td><b>covering</b></td><td><code>(customer_id, placed_at) INCLUDE (total, status)</code></td><td>a hot query needs a few extra columns; the database answers from the index alone (Index Only Scan)</td></tr><tr><td><b>partial</b></td><td><code>… WHERE status = 'PENDING'</code></td><td>queries always target a small, well-defined subset</td></tr><tr><td><b>expression</b></td><td><code>(lower(email))</code></td><td>queries compare a computed value (drill 1)</td></tr><tr><td><b>GIN</b></td><td>on a JSONB column or a text search vector</td><td>queries look inside documents, arrays or words</td></tr><tr><td><b>BRIN</b></td><td>on <code>placed_at</code> of a huge append-only table</td><td>rows are stored roughly in the column's order; tiny, but coarse</td></tr></tbody></table></div><h3>One composite index or two single ones?</h3>
+<p>With separate indexes on <code>customer_id</code> and on <code>placed_at</code>, the planner can combine them with a bitmap AND. It works, but it has to read every entry for customer 42 and every entry in the date range, intersect them, and then sort, because a bitmap loses the index order. The composite index <code>(customer_id, placed_at DESC)</code> walks straight to customer 42's newest orders and stops after 20. Combining single-column indexes is a reasonable fallback for rare ad-hoc filters, such as an admin screen with ten optional fields. For the queries that carry the product, give them the composite index they need.</p>
+<h3>Finding what to drop</h3>
+<div class="card"><div class="card-head"><span>unused-indexes.sql</span><span>never scanned since statistics were last reset</span></div><pre><code><span class="k">SELECT</span> relname <span class="k">AS</span> table_name, indexrelname <span class="k">AS</span> index_name, idx_scan,
+       pg_size_pretty(pg_relation_size(indexrelid)) <span class="k">AS</span> size
+<span class="k">FROM</span> pg_stat_user_indexes
+<span class="k">WHERE</span> idx_scan = 0
+<span class="k">ORDER</span> <span class="k">BY</span> pg_relation_size(indexrelid) <span class="k">DESC</span>;</code></pre></div><p>Three cautions before dropping anything. The counts are per server, so check every replica: a report may use an index only there. Unique indexes enforce a rule even if no query ever scans them. And a monthly job will look unused if statistics were reset two weeks ago. When in doubt, mark the index invisible first where the database supports it, or drop it in a quiet week with its <code>CREATE</code> statement at hand.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>A 40-second monthly report and a 4 ms query run 900 times a second. Which matters more?</summary><p>The 4 ms query: about 3.6 seconds of database time every second, against 40 seconds a month.</p></details><details><summary>An index shows zero scans on the leader. Why not drop it at once?</summary><p>A replica may use it, it may enforce uniqueness, or a monthly job may need it since statistics were last reset.</p></details></div>
+<a class="next" href="#numbers"><small>next · chapter 6</small>Indexes in numbers →</a>
+</section>
+<section id="numbers" data-title="Numbers">
+<p class="ch">chapter 6 <span>· 2 min</span></p>
+<h2>Indexes in numbers</h2>
+<div class="gist"><p><b>Gist</b> A B-tree on 10 million rows is three levels deep, so a lookup reads three index pages and then one page per row. Depth grows very slowly with size. Every index adds a write to every insert and competes for memory. Keyset pages read the same 20 rows however deep you go.</p></div>
+
+<p>A few numbers make index behaviour predictable instead of mysterious.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="A B-tree index on 10 million orders. One root page points to a few hundred pages on the second level, which point to about 30,000 leaf pages. Finding customer 42 reads the root, one second-level page and one leaf, which lists customer 42&#x27;s entries in order; then the matching table rows are read.">
+  <rect class="bx-y" x="320" y="16" width="120" height="38" rx="6"/><text class="lbl" x="380" y="41" text-anchor="middle">root</text>
+  <rect class="bx" x="90" y="88" width="130" height="38" rx="6"/><text x="155" y="113" text-anchor="middle">1 – 3,000,000</text>
+  <rect class="bx-y" x="315" y="88" width="130" height="38" rx="6"/><text x="380" y="113" text-anchor="middle">… – 6,000,000</text>
+  <rect class="bx" x="540" y="88" width="130" height="38" rx="6"/><text x="605" y="113" text-anchor="middle">… – 9,000,000</text>
+  <path class="ln" d="M350 54 L170 86"/><path class="ln" d="M380 54 V86" marker-end="url(#a)"/><path class="ln" d="M410 54 L590 86"/>
+  <rect class="bx" x="200" y="160" width="110" height="34" rx="6"/><rect class="bx-y" x="325" y="160" width="110" height="34" rx="6"/><rect class="bx" x="450" y="160" width="110" height="34" rx="6"/>
+  <text class="soft" x="380" y="182" text-anchor="middle">42, 42, 42 …</text>
+  <path class="ln" d="M360 126 L260 158"/><path class="ln" d="M380 126 V158" marker-end="url(#a)"/><path class="ln" d="M400 126 L500 158"/>
+  <rect class="bx-g" x="320" y="226" width="120" height="34" rx="6"/><text x="380" y="248" text-anchor="middle">20 table rows</text>
+  <path class="ln" d="M380 194 V224" marker-end="url(#a)"/>
+  <text class="soft" x="600" y="36">level 1: 1 page</text><text class="soft" x="690" y="113">level 2</text><text class="soft" x="600" y="182">leaves: 30,000 pages</text>
+  <text class="soft" x="470" y="248">then the rows themselves</text>
+</svg></div><figcaption>Three page reads to find customer 42 among 10 million rows, then one read per row returned.</figcaption></figure><div class="tbl"><table><thead><tr><th scope="col">Quantity</th><th scope="col">Reasoning</th><th scope="col">Value</th></tr></thead><tbody><tr><td>entries per index page</td><td>8 KB page, about 30 bytes per entry for two columns and a pointer</td><td>about 250</td></tr><tr><td>levels for 10 million rows</td><td>250 × 250 = 62,500 leaves can hold 15 million entries</td><td>3</td></tr><tr><td>levels for 10 billion rows</td><td>250 × 250 × 250 × 250</td><td>5</td></tr><tr><td>index size</td><td>10 million × 30 bytes, plus room in pages</td><td>about 400 MB</td></tr><tr><td>table size</td><td>10 million rows × about 100 bytes</td><td>about 1 GB, 125,000 pages</td></tr><tr><td>full scan</td><td>125,000 pages, sequential</td><td>1–2 s from disk</td></tr><tr><td>index lookup for 20 rows</td><td>3 index pages + 20 table pages</td><td>under 1 ms, mostly from memory</td></tr></tbody></table></div><aside class="mn">Depth grows with the logarithm: a thousand times more rows adds two levels. That is why indexes keep working as tables grow.</aside><div class="full">
+<h3>What indexes cost</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Cost</th><th scope="col">For the orders table</th></tr></thead><tbody><tr><td>each insert</td><td>1 table write + 1 write per index; with 3 indexes, 4 page changes, with 14, 15</td></tr><tr><td>each update of an indexed column</td><td>a new entry in every index (drill 6)</td></tr><tr><td>memory</td><td>the hot parts of every index want to stay in memory; 14 indexes of 400 MB compete for it</td></tr><tr><td>vacuum and replication</td><td>more index pages to clean and more log to ship</td></tr></tbody></table></div><h3>OFFSET against keyset, in pages</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Page of 20</th><th scope="col">OFFSET reads</th><th scope="col">Keyset reads</th></tr></thead><tbody><tr><td>1</td><td>20 rows</td><td>20 rows</td></tr><tr><td>50</td><td>1,000 rows</td><td>20 rows</td></tr><tr class=hot><td>5,000</td><td>100,000 rows</td><td>20 rows</td></tr></tbody></table></div><p>An export that walks all 500,000 orders of a big customer with OFFSET reads 6 billion rows in total; with keyset it reads 500,000. The keyset pagination note explains the query; the index from chapter 5, with <code>id</code> added as a final tie-breaker, makes it work.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Roughly how many levels for 10 billion rows?</summary><p>About five, with around 250 entries per page.</p></details><details><summary>Why does an export with OFFSET get slower page by page?</summary><p>Each page re-reads every row before it, so the work grows with the page number; keyset reads only the page itself.</p></details></div>
+<a class="next" href="#access"><small>next · chapter 7</small>Batching, paging and asking less →</a>
+</section>
+<section id="access" data-title="Access patterns">
+<p class="ch">chapter 7 <span>· 3 min</span></p>
+<h2>Batching, paging and asking less</h2>
+<div class="gist"><p><b>Gist</b> Load related rows in one query per set, page by the last key shown with a unique tie-breaker, select only the columns you show, and avoid exact counts on big lists. Put equality columns before the range in an index, because a range ends the useful part.</p></div>
+
+<p>Many slow pages are not one bad query but a bad pattern of queries. Three patterns account for most of them.</p>
+<h3>1 · Batch the related rows</h3>
+<div class="card"><div class="card-head"><span>order-history.ts</span><span>three queries, whatever the page size</span></div><pre><code><span class="k">const</span> orders = <span class="k">await</span> db.many(
+  `<span class="k">SELECT</span> id, placed_at, total <span class="k">FROM</span> orders
+   <span class="k">WHERE</span> customer_id = $1 <span class="k">ORDER</span> <span class="k">BY</span> placed_at <span class="k">DESC</span>, id <span class="k">DESC</span> <span class="k">LIMIT</span> 20`, [customerId]);
+
+<span class="k">const</span> lines = <span class="k">await</span> db.many(
+  <span class="s">`SELECT order_id, product_id, qty FROM order_lines WHERE order_id = ANY($1)`</span>,
+  [orders.map((o) =&gt; o.id)]);
+
+<span class="k">const</span> products = <span class="k">await</span> db.many(
+  <span class="s">`SELECT id, name FROM products WHERE id = ANY($1)`</span>,
+  [[...<span class="k">new</span> Set(lines.map((l) =&gt; l.product_id))]]);</code></pre></div>
+<p>Each <code>ANY</code> query needs an index on the column it looks up: <code>order_lines(order_id)</code> and the primary key of products. A JOIN would also work; the point is the fixed number of round trips. ORMs offer the same thing as eager loading, and GraphQL servers as a DataLoader.</p>
+<h3>2 · Page by key</h3>
+<div class="card"><div class="card-head"><span>next-page.sql</span><span>keyset: the last row shown is the bookmark</span></div><pre><code><span class="k">SELECT</span> id, placed_at, total
+<span class="k">FROM</span> orders
+<span class="k">WHERE</span> customer_id = $1
+  <span class="k">AND</span> (placed_at, id) &lt; ($2, $3)      <span class="c">-- the last row of the previous page</span>
+<span class="k">ORDER</span> <span class="k">BY</span> placed_at <span class="k">DESC</span>, id <span class="k">DESC</span>
+<span class="k">LIMIT</span> 20;
+<span class="c">-- served by an index on (customer_id, placed_at DESC, id DESC)</span></code></pre></div><aside class="mn">The index order must match the ORDER BY exactly, tie-breaker included, or the database sorts again.</aside><div class="full">
+<h3>3 · Ask only for what you show</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Habit</th><th scope="col">Why it matters for plans</th></tr></thead><tbody><tr><td>select named columns, not <code>*</code></td><td>a covering index can answer the query alone; <code>*</code> always visits the table</td></tr><tr><td>avoid exact <code>count(*)</code> on big lists</td><td>counting 2 million rows reads them all; show “more than 1,000” or an estimate</td></tr><tr><td>filter in SQL, not in code</td><td>fetching 10,000 rows to keep 20 moves the full scan into your application</td></tr><tr><td>one query per screen region, not per item</td><td>the same rule as batch loading, applied to the whole page</td></tr></tbody></table></div><h3>OR, IN and optional filters</h3>
+<p>Search screens with optional fields tend to produce one query with many <code>OR</code>s: <code>(status = $1 OR $1 IS NULL) AND (placed_at &gt; $2 OR $2 IS NULL)</code>. It looks tidy and plans badly, because the planner must choose one plan that works whether or not each filter is set, and that is usually a full scan. Build the <code>WHERE</code> clause from the filters actually given, so each combination gets its own plan. A list of values, <code>status = ANY($1)</code>, is fine: an index handles it as several lookups.</p>
+<h3>Ranges and the column order</h3>
+<p>The indexing note's rule, equality columns first, then sort, then ranges, has one consequence that surprises people. In an index on <code>(customer_id, placed_at, status)</code>, a query with a range on <code>placed_at</code> can only <i>filter</i> by status, not jump to it: the range ends the useful part. If status is often an equality condition, put it before the range: <code>(customer_id, status, placed_at)</code>.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why does SELECT * prevent an index-only scan?</summary><p>The index holds only some columns, so the database must visit the table for the rest.</p></details><details><summary>Index (customer_id, placed_at, status), query with a range on placed_at and status = 'PENDING'. What happens to status?</summary><p>It can only be filtered row by row; the range on placed_at ends the part of the index that can be searched.</p></details></div>
+<a class="next" href="#running"><small>next · chapter 8</small>Running it: watching plans change →</a>
+</section>
+<section id="running" data-title="Running it">
+<p class="ch">chapter 8 <span>· 3 min</span></p>
+<h2>Running it: watching plans change</h2>
+<div class="gist"><p><b>Gist</b> Keep pg_stat_statements on and review the top queries by total time. Log the plans of slow queries automatically. Watch rows read per row returned and calls per request. When a query slows overnight, compare plans, refresh statistics, then look for casts, functions and generic plans.</p></div>
+
+<p>Plans change without deploys: data grows, statistics refresh, values shift. Running a database well means seeing those changes before customers do.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Tool</th><th scope="col">Shows</th><th scope="col">Setting for the shop</th></tr></thead><tbody><tr><td><b>pg_stat_statements</b></td><td>every query shape with calls, total time, rows and pages</td><td>always on; review the top 10 by total time weekly</td></tr><tr><td><b>auto_explain</b></td><td>the actual plan of any query slower than a threshold, in the log</td><td>log plans slower than 500 ms, with timing for a sample</td></tr><tr><td><b>slow query log</b></td><td>the text of slow queries</td><td>on, at 500 ms</td></tr><tr><td><b>pg_stat_user_tables</b></td><td>sequential scans per table, last analyse time</td><td>alert on a table with many large scans that used to have none</td></tr></tbody></table></div><aside class="mn">Rank by total time, not by slowest. The worst query is usually a fast one called very often.</aside>
+<h3>Graphs per query shape</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Graph</th><th scope="col">Means trouble when</th></tr></thead><tbody><tr><td>slow-case response time</td><td>it jumps on a day without a deploy: a plan changed</td></tr><tr><td>rows read per row returned</td><td>it climbs: the query is filtering more and more; an index stopped fitting</td></tr><tr><td>calls per request</td><td>it grows with page size: N+1</td></tr><tr><td>pages read from disk, not memory</td><td>it rises for an index-heavy query: the working set no longer fits in memory</td></tr></tbody></table></div><div class="full">
+<h3>Runbook: “this query was fast yesterday”</h3>
+<ol>
+  <li><b>Get today's plan</b> from auto_explain, and yesterday's if you logged it. Compare the bottom nodes and the estimated against actual rows.</li>
+  <li><b>Estimates far off?</b> Run <code>ANALYZE</code> on the tables involved and look again (drill 3). If they are still off, look for correlated columns.</li>
+  <li><b>Estimates fine, plan still bad?</b> Look for a cast on a column (drill 2), a function on a column (drill 1), or a generic plan for a skewed value (drill 4).</li>
+  <li><b>Same plan, more time?</b> More data, or less memory: compare pages read from disk. The fix is usually an index that fits, or partitioning old rows away (the Sharding & Partitioning dive).</li>
+  <li><b>Did an index disappear?</b> Check recent migrations. A dropped “unused” index that a monthly job needed shows up exactly like this.</li>
+</ol>
+<h3>Does the working set fit in memory?</h3>
+<p>An index lookup of three pages is fast when those pages are in memory and much slower when each is a disk read. The pages that matter are the hot ones: the upper levels of every index (always in memory, they are small) and the leaves and table pages for recent data. Watch the share of pages served from memory per query shape. When it falls for an index-heavy query, the hot data has outgrown memory: more memory, fewer or smaller indexes, or partitioning old rows away will help; a new index will not.</p>
+<h3>Changing indexes on a live table</h3>
+<p>Build indexes with <code>CREATE INDEX CONCURRENTLY</code> so writes continue, give the statement a lock timeout, and check afterwards that it finished valid. The Zero-Downtime Change dive has the details; the short version is that an ordinary <code>CREATE INDEX</code> on a busy table blocks every write until it is done.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Rows read per row returned for a query climbs from 1 to 400 over a month. What does it suggest?</summary><p>The query increasingly filters instead of seeking: an index no longer fits the query, or the data shifted under it.</p></details><details><summary>Why build indexes CONCURRENTLY on live tables?</summary><p>An ordinary CREATE INDEX blocks writes to the table until it finishes.</p></details></div>
+<a class="next" href="#testing"><small>next · chapter 9</small>Testing query performance →</a>
+</section>
+<section id="testing" data-title="Testing">
+<p class="ch">chapter 9 <span>· 2 min</span></p>
+<h2>Testing query performance</h2>
+<div class="gist"><p><b>Gist</b> Assert a maximum number of queries per request to stop N+1. Check the plans of key queries on seeded data with realistic volume and skew. Lint migrations for unsafe or excessive indexes, try indexes hypothetically before building them, and keep expected plans for core queries in the repository.</p></div>
+
+<p>Query performance is hard to test because it depends on data size and shape, which test databases rarely have. A few kinds of test still catch most regressions.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Test</th><th scope="col">How</th><th scope="col">Catches</th></tr></thead><tbody><tr><td><b>Query count per request</b></td><td>a test helper counts queries while a request runs and fails above a fixed number</td><td>N+1 (drill 5), every time it returns</td></tr><tr><td><b>Plan check on realistic data</b></td><td>seed a test database with production-like volume and skew; assert key queries use the expected index</td><td>missing indexes, casts, functions on columns</td></tr><tr><td><b>Migration lint</b></td><td>fail a migration that creates an index without CONCURRENTLY, or adds a 15th index to a hot table</td><td>locks and write amplification</td></tr><tr><td><b>Hypothetical index</b></td><td>try an index without building it (HypoPG) and read the plan</td><td>whether an index would be used, before paying for it</td></tr><tr><td><b>Load test with real distributions</b></td><td>replay a sample of production query shapes and values</td><td>skew problems (drill 4) that uniform test data hides</td></tr></tbody></table></div><aside class="mn">Test data with every customer having 5 orders hides every problem in this dive. Real customers have 3 or 30,000.</aside><div class="card"><div class="card-head"><span>order-history.test.ts</span><span>two guards in one test</span></div><pre><code>test(<span class="s">"order history: fixed query count, uses the index"</span>, <span class="k">async</span> () =&gt; {
+  <span class="k">const</span> counter = db.countQueries();
+  <span class="k">await</span> request(app).get(<span class="s">"/customers/42/orders"</span>).expect(200);
+  expect(counter.total()).toBeLessThanOrEqual(3);            <span class="c">// orders, lines, products</span>
+
+  <span class="k">const</span> plan = <span class="k">await</span> db.explain(
+    <span class="s">"SELECT id FROM orders WHERE customer_id = 42 ORDER BY placed_at DESC, id DESC LIMIT 20"</span>);
+  expect(plan).toContain(<span class="s">"Index Scan using orders_customer_placed"</span>);
+  expect(plan).not.toContain(<span class="s">"Seq Scan on orders"</span>);
+});</code></pre></div><div class="full">
+<p>The plan check only means something on a table big enough that the planner would choose differently. A few hundred thousand rows with a realistic spread usually suffice; the seed script is worth more than any individual test, because every query test uses it.</p>
+<h3>Seed data with the right shape</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Real shape</th><th scope="col">Seed it as</th></tr></thead><tbody><tr><td>most customers have a few orders, a few have thousands</td><td>order counts drawn from a long-tailed distribution, plus a handful of giant customers</td></tr><tr><td>90 % of orders are DELIVERED, 0.1 % PENDING</td><td>the same proportions, not one row of each</td></tr><tr><td>five years of history, most reads on the last month</td><td>dates spread over five years, with recent months fuller</td></tr><tr><td>emails with mixed case, product names in many languages</td><td>real-looking text, so expression indexes and collations are exercised</td></tr></tbody></table></div>
+<h3>Review plans like code</h3>
+<p>For the few queries that carry the product, keep their expected plan shape in the repository next to the query: which index, which join method, roughly how many pages. When a change makes the plan test fail, the pull request shows the old and new plans side by side, and a person decides whether the new one is better. That turns “the database got slow” from a mystery into a diff.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why does a plan test on a 1,000-row table prove little?</summary><p>At that size the planner may scan everything whatever the indexes are; plans only match production on realistic volume and skew.</p></details><details><summary>What does a query-count test catch that a plan test does not?</summary><p>N+1: each query has a good plan, but the page makes one per row.</p></details></div>
+<a class="next" href="#tools"><small>next · chapter 10</small>Tools, a lab and the checklist →</a>
+</section>
+<section id="tools" data-title="Tools &amp; lab">
+<p class="ch">chapter 10 <span>· 3 min</span></p>
+<h2>Tools, a lab and the checklist</h2>
+<div class="gist"><p><b>Gist</b> pg_stat_statements finds the expensive queries, auto_explain records their plans, visualisers help read them and HypoPG tries indexes for free; other databases have equivalents. The lab designs indexes for a support search screen, and the checklist turns the deep dive into review questions.</p></div>
+
+<h3>Tools</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Need</th><th scope="col">PostgreSQL</th><th scope="col">Elsewhere</th></tr></thead><tbody><tr><td>find expensive query shapes</td><td>pg_stat_statements</td><td>MySQL performance_schema; SQL Server Query Store</td></tr><tr><td>see real plans of slow queries</td><td>auto_explain</td><td>MySQL slow log with EXPLAIN ANALYZE; Query Store</td></tr><tr><td>read a plan visually</td><td>explain.dalibo.com, PEV2, pgMustard</td><td>MySQL Workbench visual explain</td></tr><tr><td>try an index without building it</td><td>HypoPG</td><td>invisible indexes in MySQL and Oracle</td></tr><tr><td>continuous advice</td><td>pganalyze, Datadog and other database monitoring</td><td>the cloud provider's performance insights</td></tr></tbody></table></div><aside class="mn">Tools find the slow query. Reading its plan is still the skill.</aside>
+<h3>Lab</h3>
+<p>Support gets a new screen: find orders by customer email, optionally by status, within a date range, newest first, 50 per page. Most searches cover the last 30 days. <code>PENDING</code> is 0.1 % of orders; <code>DELIVERED</code> is 90 %.</p>
+<ol class="keep">
+  <li>Emails are stored as typed by customers. How does the search find the customer?</li>
+  <li>Which index serves “this customer's orders in a date range, newest first”? Can an existing one be reused?</li>
+  <li>“All PENDING orders this week” with no customer: what serves it?</li>
+  <li>How is paging done, and what index does it need?</li>
+  <li>Support also wants “total orders found”. What do you show?</li>
+</ol>
+<div class="check quiz"><h3>model answer</h3>
+<details><summary>1 · The email</summary><p>An expression index on <code>lower(email)</code> in customers, and the query compares <code>lower(email) = lower($1)</code> (drill 1). That gives the customer id in one index lookup.</p></details>
+<details><summary>2 · Date range</summary><p>The existing <code>(customer_id, placed_at DESC)</code> already serves it: equality on the customer, then a range and sort on the date. Adding <code>id DESC</code> at the end makes it serve keyset paging too. No new index.</p></details>
+<details><summary>3 · Pending this week</summary><p>The partial index <code>(placed_at) WHERE status = 'PENDING'</code> from chapter 5. It is tiny, and the query is a short range scan of it. A filter on <code>DELIVERED</code> without a customer would match most of the table and should be refused or sent to the warehouse.</p></details>
+<details><summary>4 · Paging</summary><p>Keyset on <code>(placed_at, id)</code>, with the index ordered the same way, tie-breaker included. No OFFSET: support staff do page deep into busy customers.</p></details>
+<details><summary>5 · The total</summary><p>An exact count can read millions of rows. Count up to 1,000 with a limited subquery and show “1,000 or more”, or show the planner's estimate labelled as approximate.</p></details>
+</div>
+<h3>The review checklist</h3>
+<div class="checklist"><div class="cl"><h3>Finding the work</h3><ul><li>pg_stat_statements is on and reviewed by total time</li><li>Slow plans are logged automatically with auto_explain</li><li>Every index has a named query it serves</li></ul></div><div class="cl"><h3>Designing indexes</h3><ul><li>Equality columns first, then sort, then range</li><li>One index serves several queries where they share leading columns</li><li>Rare values use partial indexes; computed comparisons use expression indexes</li><li>Hot queries that need a few extra columns use covering indexes</li><li>Frequently updated columns are indexed only when needed</li></ul></div><div class="cl"><h3>Queries</h3><ul><li>No functions or casts on indexed columns in WHERE</li><li>Parameter types match column types</li><li>Pages make a fixed number of queries; related rows are batched</li><li>Lists page by key with a unique tie-breaker, never deep OFFSET</li><li>Big counts are capped or estimated</li></ul></div><div class="cl"><h3>Statistics and plans</h3><ul><li>ANALYZE runs after every bulk load</li><li>random_page_cost suits the storage</li><li>Correlated columns have extended statistics</li><li>Skewed values are checked against generic plans</li></ul></div><div class="cl"><h3>Change and cleanup</h3><ul><li>Indexes are built concurrently, with a lock timeout</li><li>Unused indexes are checked on every replica before dropping</li><li>Index count on hot tables is reviewed in migration lint</li></ul></div><div class="cl"><h3>Tests</h3><ul><li>Request tests assert a maximum query count</li><li>Key queries are plan-checked on realistic, skewed data</li><li>Expected plans for core queries are kept in the repository</li></ul></div></div>
+
+<a class="next" href="#top"><small>the end</small>Back to the top ↑</a>
+</section>
+<p class="sources"><b>Sources.</b> The PostgreSQL documentation: “Using EXPLAIN”, “Planner Statistics”, “Indexes” and “Planner Method Configuration”. Markus Winand, <i>SQL Performance Explained</i> and use-the-index-luke.com. Hironobu Suzuki, <i>The Internals of PostgreSQL</i>. Laurenz Albe and the Cybertec blog on generic plans and plan_cache_mode. The HypoPG and auto_explain documentation.</p>
+</div></article>
+<footer class="foot"><span>Jef’s Notes · deep dive 10 · Indexes &amp; Query Plans</span></footer>
+</main>
+
+<div class="dock" data-dock>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+  <div class="dock-in">
+    <a class="dock-arrow" data-prev href="#top" aria-label="Previous chapter">‹</a>
+    <button class="dock-mid" type="button" data-open aria-haspopup="dialog" aria-expanded="false">
+      <small data-count>1 / 10</small><span data-current>Recap</span><i aria-hidden="true">☰</i>
+    </button>
+    <a class="dock-arrow" data-next href="#planner" aria-label="Next chapter">›</a>
+  </div>
+</div>
+<div class="sheet-back" data-close hidden></div>
+<div class="sheet" data-sheet role="dialog" aria-modal="true" aria-label="Chapters" hidden>
+  <div class="sheet-head"><b>Chapters</b><button type="button" data-close aria-label="Close">×</button></div>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Three notes in sixty seconds</span><span class="m">1 min</span></a></li><li><a href="#planner" data-ch="1"><span class="n">2</span><span class="t">How the planner decides</span><span class="m">3 min</span></a></li><li><a href="#plans" data-ch="2"><span class="n">3</span><span class="t">Reading a real plan</span><span class="m">3 min</span></a></li><li><a href="#drills" data-ch="3"><span class="n">4</span><span class="t">Failure drills</span><span class="m">5 min</span></a></li><li><a href="#workload" data-ch="4"><span class="n">5</span><span class="t">Indexing a workload: the hard problem</span><span class="m">3 min</span></a></li><li><a href="#numbers" data-ch="5"><span class="n">6</span><span class="t">Indexes in numbers</span><span class="m">2 min</span></a></li><li><a href="#access" data-ch="6"><span class="n">7</span><span class="t">Batching, paging and asking less</span><span class="m">3 min</span></a></li><li><a href="#running" data-ch="7"><span class="n">8</span><span class="t">Running it: watching plans change</span><span class="m">3 min</span></a></li><li><a href="#testing" data-ch="8"><span class="n">9</span><span class="t">Testing query performance</span><span class="m">2 min</span></a></li><li><a href="#tools" data-ch="9"><span class="n">10</span><span class="t">Tools, a lab and the checklist</span><span class="m">3 min</span></a></li></ol>
+  <div class="sheet-foot">
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+    <a href="#top" data-close>Top of page ↑</a>
+  </div>
+</div>
+</body>
+</html>

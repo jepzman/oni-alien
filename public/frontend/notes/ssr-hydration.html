@@ -10,9 +10,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
 <link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
-<link rel="stylesheet" href="../../assets/bujo.css?v=ae512aa242">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
 <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
-<script src="../../assets/notebook.js?v=b632700836" defer></script>
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
 </head>
 <body class="bujo theme-frontend">
 <a class="skip-link" href="#main">Skip to the notes</a>
@@ -31,6 +31,7 @@
 <article class="sheet" id="ssr-hydration">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Tue · 06.10.26</span><span class="topic">collection · <b>rendering &amp; performance</b></span></div>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “send the page, then wake it up”</p>
   <h1><span class="hl">SSR &amp; Hydration</span></h1>
   <div class="tldr">
@@ -123,6 +124,35 @@
 }</code></pre>
   </div>
   <p class="aside">frameworks: Next.js, React Router v7 (Remix), Nuxt, SvelteKit, SolidStart, Angular SSR, Astro; measure with Lighthouse, WebPageTest and the Chrome UX Report.</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">reading the timeline, streaming, caching rendered pages</span></h2>
+  <p class="deep-intro">The note explains render, embed and hydrate. This chapter is about making it fast in practice: how to read a page load so you know which gap to close, how streaming stops one slow query from holding up a whole page, and how to cache server-rendered pages without serving one user's page to another.</p>
+  <h3 class="deep-h"><span>1</span>Reading the timeline</h3>
+  <p>Record a page load in the browser's performance panel with the CPU slowed four times and a slow network, which is closer to a typical phone than your laptop is. Then find five moments:</p>
+  <ul>
+    <li><b>First byte (TTFB):</b> how long the server took. Slow here means slow data or slow rendering on the server.</li>
+    <li><b>First content (FCP) and largest content (LCP):</b> when the user sees something, and when they see the main thing. SSR is what makes these early.</li>
+    <li><b>Hydration done:</b> the long JavaScript tasks after the content appears. Until they finish, clicks wait.</li>
+    <li><b>Interaction to next paint (INP):</b> how quickly the page responds to taps once it is running.</li>
+  </ul>
+  <p>The usual SSR problem is the gap between the second and third: the page <b>looks</b> ready for seconds before it <b>is</b>. Close it by shipping less JavaScript (server components, code splitting), hydrating what is visible first, and leaving static parts as plain HTML (see Islands, the next pattern).</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 270" role="img" aria-label="A page load timeline on a mid-range phone. The first byte arrives at 0.4 seconds, the content paints at 0.9 seconds, the largest image at 1.6 seconds. JavaScript downloads and hydrates until 3.8 seconds. Between 0.9 and 3.8 seconds the page looks ready but taps do nothing: the uncanny valley."><g class="rough"><path class="d" d="M20 150 L744 150"/><path class="d" d="M733.2 155.2 L744 150 L733.2 144.8"/><path class="d" d="M70 140 V160"/><path class="d" d="M150 140 V160"/><path class="d" d="M250 140 V160"/><path class="d" d="M600 140 V160"/><rect class="d f-pink d-red" x="150" y="40" width="450" height="60" rx="10"/></g><text class="t-s" x="744" y="176" text-anchor="end" font-size="16">seconds →</text><text class="t-head" x="70" y="132" text-anchor="middle" font-size="16">0.4</text><text class="t-s" x="70" y="186" text-anchor="middle" font-size="15">first byte</text><text class="t-head" x="150" y="132" text-anchor="middle" font-size="16">0.9</text><text class="t-s" x="150" y="208" text-anchor="middle" font-size="15">content (FCP)</text><text class="t-head" x="250" y="132" text-anchor="middle" font-size="16">1.6</text><text class="t-s" x="250" y="186" text-anchor="middle" font-size="15">largest image</text><text class="t-head" x="600" y="132" text-anchor="middle" font-size="16">3.8</text><text class="t-s" x="600" y="208" text-anchor="middle" font-size="15">hydrated</text><text class="t-head t-red" x="375" y="66" text-anchor="middle" font-size="18">looks ready, isn&#x27;t</text><text class="t" x="375" y="90" text-anchor="middle" font-size="14">taps do nothing · JS downloading and hydrating</text><text class="t-s t-pen" x="380" y="240" text-anchor="middle" font-size="17">shrink it: less JS · hydrate what&#x27;s visible first · leave static parts static</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The gap between “looks ready” and “is ready” is where users tap and nothing happens.</figcaption></figure>
+  <h3 class="deep-h"><span>2</span>Streaming: don't wait for the slowest part</h3>
+  <p>Without streaming, the server waits for every query on the page before sending a byte. One slow call (reviews, 900 ms) delays the whole page.</p>
+  <p>With <b>streaming</b>, the server sends the HTML it has right away (layout, header, product details) with placeholders for slow parts, keeps the connection open, and sends each slow part when its data arrives. In React this is a <code>&lt;Suspense&gt;</code> boundary with a fallback; Next.js, Remix, SvelteKit and Nuxt all support it.</p>
+  <p>Two things to watch. Start slow requests <b>in parallel</b>, not one after another: three 300 ms calls in sequence are 900 ms even with streaming. And put the placeholder in a box of the final size, so content arriving later doesn't push the page around (layout shift).</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="Streaming a product page. The server sends the header and product details at once. The price arrives 120 milliseconds later and the reviews, which are slow, 900 milliseconds later, each replacing a placeholder. Without streaming, the whole page would wait 900 milliseconds for the reviews."><g class="rough"><rect class="d f-green" x="40" y="20" width="300" height="60" rx="10"/><rect class="d f-y" x="40" y="96" width="300" height="60" rx="10"/><rect class="d f-blue" x="40" y="172" width="300" height="60" rx="10"/><rect class="d f-paper" x="430" y="20" width="300" height="212" rx="10"/><rect class="d f-green" x="450" y="64" width="260" height="42" rx="10"/><rect class="d f-y" x="450" y="118" width="260" height="42" rx="10"/><rect class="d f-blue" x="450" y="172" width="260" height="42" rx="10"/><path class="d" d="M344 50 L446 85"/><path class="d" d="M434.1 86.4 L446 85 L437.5 76.6"/><path class="d d-dash" d="M344 126 L446 139"/><path class="d" d="M434.6 142.8 L446 139 L435.9 132.5"/><path class="d d-dash" d="M344 202 L446 193"/><path class="d" d="M435.7 199.1 L446 193 L434.8 188.8"/></g><text class="t-head" x="190" y="46" text-anchor="middle" font-size="17">header + product</text><text class="t" x="190" y="70" text-anchor="middle" font-size="14">sent at 0 ms</text><text class="t-head" x="190" y="122" text-anchor="middle" font-size="17">price</text><text class="t" x="190" y="146" text-anchor="middle" font-size="14">streamed at 120 ms</text><text class="t-head" x="190" y="198" text-anchor="middle" font-size="17">reviews</text><text class="t" x="190" y="222" text-anchor="middle" font-size="14">streamed at 900 ms</text><text class="t-head" x="580" y="48" text-anchor="middle" font-size="18">the browser</text><text class="t-head" x="580" y="92" text-anchor="middle" font-size="15">header + product</text><text class="t-head" x="580" y="146" text-anchor="middle" font-size="15">price</text><text class="t-head" x="580" y="200" text-anchor="middle" font-size="15">reviews</text><text class="t-s t-red" x="380" y="266" text-anchor="middle" font-size="17">without streaming: everyone waits 900 ms for the reviews</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Send what's ready, stream the rest into placeholders.</figcaption></figure>
+  <h3 class="deep-h"><span>3</span>Caching rendered pages</h3>
+  <p>Rendering on every request costs server time. Much of it can be cached, but only if you are careful about what is personal.</p>
+  <div class="table-scroll"><table class="map"><thead><tr><th scope="col">Page</th><th scope="col">How to render and cache</th></tr></thead><tbody>
+    <tr><td>Same for everyone, rarely changes (about, docs)</td><td>Render at build time (static). Serve from a CDN.</td></tr>
+    <tr><td>Same for everyone, changes sometimes (product page)</td><td>Render on the server, cache at the CDN for a few minutes, revalidate in the background (stale-while-revalidate, or incremental static regeneration).</td></tr>
+    <tr><td>Different per user (cart, account)</td><td>Render per request, <code>Cache-Control: private, no-store</code>. Never in a shared cache.</td></tr>
+    <tr><td>Mostly shared, a little personal (product page with “hi Ana” and a cart count)</td><td>Cache the shared page; fetch the personal bits in the browser after load, or render them in a separate uncached fragment.</td></tr>
+  </tbody></table></div>
+  <p>The classic incident is a personal page cached by a CDN and shown to the next visitor. Make the default for server-rendered responses <b>private</b>, and opt pages into shared caching one by one.</p>
+
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">
@@ -172,13 +202,19 @@
     </div>
   </div>
   <h3>Related patterns</h3>
-  <ul class="related"><li><b>Islands architecture</b></li><li><b>Code splitting</b></li><li><b>Server-state cache</b></li><li><b>Container &amp; presentational</b> (server vs client)</li></ul>
+  <ul class="related"><li><a href="../notes/islands.html"><b>Islands architecture</b></a></li><li><a href="../notes/code-splitting.html"><b>Code splitting</b></a></li><li><a href="../notes/server-state-cache.html"><b>Server-state cache</b></a></li><li><a href="../notes/container-presentational.html"><b>Container &amp; presentational</b></a> (server vs client)</li></ul>
+  <p class="aside deeper">go deeper → <a href="../../deep-dives/rendering-web/index.html">Rendering on the Web: the deep dive</a></p>
   <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
   <div class="quiz">
     <details><summary>What does hydration do?</summary><p>It runs the components in the browser and attaches event handlers and state to the server-rendered HTML instead of rebuilding the DOM.</p></details>
     <details><summary>What causes a hydration mismatch?</summary><p>The client's first render differs from the server HTML, e.g. using dates, random values or window-only checks during render.</p></details>
     <details><summary>Does SSR reduce the JavaScript users download?</summary><p>Not by itself; the same components still hydrate. Server components, islands and code splitting reduce it.</p></details>
     <details><summary>What is the “uncanny valley” of SSR?</summary><p>The time when content is visible but not yet interactive because JS hasn't hydrated.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A server-rendered dashboard shows content in 0.8 s, but buttons do nothing until 4 s on mid-range phones. Users tap and think it's broken. What do you look at first?</span></summary><p>The JavaScript that must download and hydrate before the page responds: the bundle size and the components that hydrate. Move non-interactive parts to server components, lazy-load heavy widgets, and hydrate below-the-fold parts later. SSR made it visible early, not usable early.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Render one page with SSR, then throttle the CPU four times and the network to “Fast 3G” in devtools. Record when the content appears and when a button first responds. Put a Date.now() in the render to trigger a hydration mismatch and read the warning.</p>
   </div>
   <div class="remember">
     <span class="tag">remember!!</span>

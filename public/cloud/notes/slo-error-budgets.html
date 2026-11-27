@@ -10,9 +10,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
 <link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
-<link rel="stylesheet" href="../../assets/bujo.css?v=ae512aa242">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
 <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
-<script src="../../assets/notebook.js?v=b632700836" defer></script>
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
 </head>
 <body class="bujo theme-cloud">
 <a class="skip-link" href="#main">Skip to the notes</a>
@@ -31,6 +31,7 @@
 <article class="sheet" id="slo-error-budgets">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Fri · 11.12.26</span><span class="topic">collection · <b>running &amp; observing</b></span></div>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “the monthly data allowance”</p>
   <h1><span class="hl">SLOs &amp; Error Budgets</span></h1>
   <div class="tldr">
@@ -117,6 +118,40 @@ spec:
 <span class="c"># ticket: burning 1× over 3 days</span></code></pre>
   </div>
   <p class="aside">tools: Prometheus + Sloth / Pyrra, Grafana SLO, Datadog / New Relic / Honeycomb SLOs, Google Cloud Service Monitoring, Nobl9, OpenSLO specification.</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">the numbers, choosing SLIs, a policy that bites</span></h2>
+  <p class="deep-intro">The note defines SLIs, SLOs and the error budget. This chapter does the arithmetic (how big the budget is, how burn-rate alerts are set), shows how to pick an SLI that matches what users feel, and how to write the budget policy so it changes decisions instead of decorating a dashboard.</p>
+  <h3 class="deep-h"><span>1</span>Doing the numbers</h3>
+  <p>An SLO of 99.9% over 28 days allows 0.1% bad: <b>about 40 minutes</b> of full outage, or for a service with 10 million requests in the window, <b>10,000 failed or slow requests</b>. Request-based budgets are usually fairer: a slow hour at night costs less than a slow hour at lunch.</p>
+  <p>The <b>burn rate</b> says how fast you are spending: rate 1 uses the budget exactly over the window; rate 2 uses it in half the window. Alerts look at the burn rate over two windows (a long one to be sure, a short one to know it's still happening). Common settings for a 28-day window:</p>
+  <div class="table-scroll"><table class="map"><thead><tr><th scope="col">Spends</th><th scope="col">Alert</th></tr></thead><tbody>
+    <tr><td>2% of the budget in 1 hour (rate ≈ 13)</td><td>Page now. Check the last 5 minutes too.</td></tr>
+    <tr><td>5% in 6 hours (rate ≈ 5.6)</td><td>Page. Check the last 30 minutes too.</td></tr>
+    <tr><td>10% in 3 days (rate ≈ 1)</td><td>Ticket for working hours.</td></tr>
+  </tbody></table></div>
+  <p>This replaces a dozen threshold alerts (“error rate above 1% for 5 minutes”) with a few that fire only when users are really losing out.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="Budget burn over a 28-day window for a 99.9 percent SLO. At burn rate 1 the budget runs out exactly at day 28. A slow leak at burn rate 2 runs out on day 14 and should open a ticket. An outage at burn rate 13 uses 2 percent of the budget in an hour and should page someone."><g class="rough"><path class="d d-thin" d="M70 30 V240 H730"/><path class="d d-green" d="M70 34 L730 236"/><path class="d d-pen d-dash" d="M70 34 L400 236"/><path class="d d-red" d="M70 34 L100 236"/></g><text class="t-s" x="60" y="40" text-anchor="end" font-size="14">100%</text><text class="t-s" x="60" y="244" text-anchor="end" font-size="14">0%</text><text class="t-s" x="90" y="20" text-anchor="start" font-size="14">budget left ↓</text><text class="t-s" x="730" y="264" text-anchor="end" font-size="14">day 28</text><text class="t-s" x="400" y="264" text-anchor="middle" font-size="14">day 14</text><text class="t-s t-green" x="560" y="150" text-anchor="start" font-size="15">rate 1: on budget</text><text class="t-s t-pen" x="232" y="116" text-anchor="start" font-size="15">rate 2: ticket</text><text class="t-s t-red" x="112" y="214" text-anchor="start" font-size="15">rate 13+: page now</text><text class="t-s" x="380" y="284" text-anchor="middle" font-size="15">SLO 99.9% on 10 million requests: 10,000 may fail in the window</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Burn rate = how many times faster than “exactly on budget” you are spending it.</figcaption></figure>
+  <h3 class="deep-h"><span>2</span>Choosing an SLI users would agree with</h3>
+  <p>An SLI is good events divided by valid events. Each word needs a decision:</p>
+  <ul>
+    <li><b>Where you measure.</b> The closer to the user, the truer: the load balancer sees failures your service never logs; real-user monitoring sees slow networks too. Server metrics alone miss requests that never arrived.</li>
+    <li><b>What “good” means.</b> Success <i>and</i> fast enough: “checkout requests that return 2xx in under 800 ms”. Use a threshold from what users notice, not the current p99.</li>
+    <li><b>What's valid.</b> Leave out traffic that says nothing about your service: health checks, synthetic probes, and client errors such as 400 and 404. Count 429 (you refused them) and 5xx.</li>
+    <li><b>A journey, not a server.</b> “Search returns results” across three services is one SLI; three per-service SLIs at 99.9% each give the user about 99.7%.</li>
+  </ul>
+  <p>Start with three to five SLIs for the journeys that matter. A dashboard of forty SLOs gets the same attention as none.</p>
+
+  <h3 class="deep-h"><span>3</span>A budget policy that changes decisions</h3>
+  <p>The budget only matters if everyone agreed in advance what happens when it runs low. Write it down, have product and engineering leads sign it, and keep it short:</p>
+  <ul>
+    <li><b>Budget left:</b> ship as normal; planned risky work (migrations, experiments) is fine.</li>
+    <li><b>Under 25% left:</b> risky changes need a second reviewer and a rollback plan; the team looks at what is burning.</li>
+    <li><b>Budget spent:</b> freeze non-urgent releases for that service; the top two causes of burn become the team's next work until the burn rate is below 1.</li>
+    <li><b>Exceptions</b> (security fixes, legal deadlines) are decided by a named person, and written down.</li>
+  </ul>
+  <p>Review SLOs every quarter. If the budget is never touched, the SLO may be too loose to guide anything, or the team is spending effort on reliability users don't need. If it's always spent, the target or the system has to change.</p>
+
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">
@@ -166,13 +201,19 @@ spec:
     </div>
   </div>
   <h3>Related patterns</h3>
-  <ul class="related"><li><b>Logs, metrics &amp; traces</b></li><li><b>Canary releases</b></li><li><b>Incident response &amp; postmortems</b></li><li><b>Circuit breaker</b> (Vol. 1)</li></ul>
+  <ul class="related"><li><a href="../notes/observability.html"><b>Logs, metrics &amp; traces</b></a></li><li><a href="../notes/canary.html"><b>Canary releases</b></a></li><li><a href="../notes/postmortems.html"><b>Incident response &amp; postmortems</b></a></li><li><a href="../../distributed/notes/circuit-breaker.html"><b>Circuit breaker</b></a> (Vol. 1)</li></ul>
+  <p class="aside seen">seen at Larder → <a href="../../architect-5/notes/availability-maths.html">Availability Maths</a> <small>(Ana, vol. 5)</small> · <a href="../../architect-6/notes/golden-paths.html">Golden Paths</a> <small>(Ana, vol. 6)</small> · <a href="../../ops-1/notes/alert-hygiene.html">Which Alerts Deserve a Human?</a> <small>(Eli, vol. 1)</small> · <a href="../../ops-4/notes/slis.html">What Do Users Count as Working?</a> <small>(Eli, vol. 4)</small> · <a href="../../ops-4/notes/error-budgets.html">When Do We Stop Shipping Features?</a> <small>(Eli, vol. 4)</small></p>
   <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
   <div class="quiz">
     <details><summary>What's the difference between an SLO and an SLA?</summary><p>An SLO is an internal target; an SLA is a contract with consequences, usually set looser than the SLO.</p></details>
     <details><summary>How do you calculate the error budget?</summary><p>100% minus the SLO, e.g. 0.1% of requests for a 99.9% SLO.</p></details>
     <details><summary>Why alert on burn rate?</summary><p>It pages when user-facing reliability is actually at risk, not on every blip.</p></details>
     <details><summary>Why not aim for 100%?</summary><p>It's unreachable and stops all change; users can't tell the difference beyond a point.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>The checkout SLO is 99.9% over 28 days. By day 10 you have used 80% of the error budget, and two big features are due next week. What do you do?</span></summary><p>Slow down risky change: freeze or gate non-urgent releases, spend the time on the reliability problems that used the budget, and agree this with product. That is what the budget is for. Ship the features once the burn rate is back to normal.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Pick one user journey and define its SLI from data you already have (share of requests under 500 ms without errors). Set an SLO, calculate the error budget in minutes for 28 days, and write a burn-rate alert for 2% of the budget used in one hour.</p>
   </div>
   <div class="remember">
     <span class="tag">remember!!</span>

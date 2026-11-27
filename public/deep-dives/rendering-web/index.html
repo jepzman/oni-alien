@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rendering on the Web · Deep dive · Jef’s Notes</title>
+<meta name="description" content="A deep dive on rendering web pages: Core Web Vitals, one page built client-only, server-rendered, static and as islands, six failure drills, the cost of hydration and how to cut it, loading less JavaScript, performance budgets, caching and streaming HTML, testing and monitoring.">
+<meta name="theme-color" content="#E4E1D9">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,700;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/dive.css?v=2b16c30ec1">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/dive.js?v=03c39c00d2" defer></script>
+</head>
+<body class="dive">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah" d="M0 0 L10 4 L0 8z"/></marker><marker id="ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah-r" d="M0 0 L10 4 L0 8z"/></marker></defs></svg>
+<a class="skip-link" href="#main">Skip to the text</a>
+<header class="site" id="top">
+  <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>deep dive 11</small></a>
+  <a class="site-link" href="../../index.html#deep-dives">Shelf</a>
+</header>
+<div class="strip" data-strip>
+  <div class="strip-in">
+    <nav aria-label="Chapters"><a href="#recap" data-ch="0"><b>1</b> Recap</a><a href="#fast" data-ch="1"><b>2</b> What fast means</a><a href="#fourways" data-ch="2"><b>3</b> Four ways</a><a href="#drills" data-ch="3"><b>4</b> Failure drills</a><a href="#hydration" data-ch="4"><b>5</b> Hydration</a><a href="#lessjs" data-ch="5"><b>6</b> Less JavaScript</a><a href="#budgets" data-ch="6"><b>7</b> Budgets</a><a href="#edge" data-ch="7"><b>8</b> Cache &amp; stream</a><a href="#running" data-ch="8"><b>9</b> Running it</a><a href="#tools" data-ch="9"><b>10</b> Tools &amp; lab</a></nav>
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+  </div>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+</div>
+
+<main id="main" class="wrap"><article class="page"><div class="col">
+<p class="eyebrow">Deep dive 11 · builds on Vol. 2, notes 09, 10 and 11</p>
+<h1><span>Rendering on the Web</span></h1>
+<p class="sub">One product page built four ways and measured on the phone your customers actually own: when the mug appears, and when the button works.</p>
+<ul class="facts"><li><b>Full read</b> about 29 min</li><li><b>Skim</b> about 14 min: yellow boxes, tables and drill rules</li><li><b>Example</b> the product page for product 42, on a mid-range phone</li></ul>
+<nav class="toc" aria-label="Contents">
+  <h2 class="toc-h">In this deep dive</h2>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Three notes in sixty seconds</span><span class="m">1 min</span></a></li><li><a href="#fast" data-ch="1"><span class="n">2</span><span class="t">What “fast” means</span><span class="m">2 min</span></a></li><li><a href="#fourways" data-ch="2"><span class="n">3</span><span class="t">One page, four ways</span><span class="m">2 min</span></a></li><li><a href="#drills" data-ch="3"><span class="n">4</span><span class="t">Failure drills</span><span class="m">5 min</span></a></li><li><a href="#hydration" data-ch="4"><span class="n">5</span><span class="t">The cost of hydration: the hard problem</span><span class="m">3 min</span></a></li><li><a href="#lessjs" data-ch="5"><span class="n">6</span><span class="t">Loading less JavaScript</span><span class="m">3 min</span></a></li><li><a href="#budgets" data-ch="6"><span class="n">7</span><span class="t">Budgets, worked out</span><span class="m">3 min</span></a></li><li><a href="#edge" data-ch="7"><span class="n">8</span><span class="t">Caching and streaming HTML</span><span class="m">3 min</span></a></li><li><a href="#running" data-ch="8"><span class="n">9</span><span class="t">Testing it and running it</span><span class="m">2 min</span></a></li><li><a href="#tools" data-ch="9"><span class="n">10</span><span class="t">Tools, a lab and the checklist</span><span class="m">3 min</span></a></li></ol>
+  <p class="toc-src">Read first: <a href="../../frontend/notes/ssr-hydration.html">SSR & Hydration</a><a href="../../frontend/notes/islands.html">Islands Architecture</a><a href="../../frontend/notes/code-splitting.html">Code Splitting & Lazy Loading</a></p>
+</nav>
+<section id="recap" data-title="Recap">
+<p class="ch">chapter 1 <span>· 1 min</span></p>
+<h2>Three notes in sixty seconds</h2>
+<div class="gist"><p><b>Gist</b> Server rendering sends HTML early and hydrates it, islands hydrate only the interactive parts, and code splitting loads code when it is needed. They sit on one line: how much of the page's work happens in the shopper's browser. The decision is which point on that line suits each page, measured on a mid-range phone.</p></div>
+
+<p>The Caching deep dive followed the product page for product 42 through five layers of copies. This one follows the same page into the browser: how its HTML gets there, how much JavaScript comes with it, and when a shopper on a mid-range phone can see the mug and tap “Add to basket”. Three notes from the frontend volume set out the tools.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Note</th><th scope="col">In one line</th></tr></thead><tbody><tr><td>SSR & Hydration</td><td>render HTML on the server for a fast first view, then run the same code in the browser to make it interactive</td></tr><tr><td>Islands Architecture</td><td>ship static HTML and hydrate only the small interactive parts</td></tr><tr><td>Code Splitting & Lazy Loading</td><td>load only the code a screen needs now, fetch the rest when needed</td></tr></tbody></table></div><figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 165" role="img" aria-label="A spectrum of rendering approaches from left to right: static HTML built once; islands with a little JavaScript; server components with JavaScript only where needed; server rendering with full hydration, which sends all the JavaScript but early HTML; and client-only rendering, all JavaScript and late HTML. The left end suits documents such as articles and product pages; the right end suits apps such as editors and dashboards.">
+  <path class="ln" d="M20 120 H740"/>
+  <rect class="bx-g" x="20" y="60" width="128" height="50" rx="8"/><text class="lbl" x="84" y="84" text-anchor="middle">static HTML</text><text class="soft" x="84" y="102" text-anchor="middle">built once</text>
+  <rect class="bx-g" x="166" y="60" width="128" height="50" rx="8"/><text class="lbl" x="230" y="84" text-anchor="middle">islands</text><text class="soft" x="230" y="102" text-anchor="middle">a little JS</text>
+  <rect class="bx-y" x="312" y="60" width="140" height="50" rx="8"/><text class="lbl" x="382" y="84" text-anchor="middle">server components</text><text class="soft" x="382" y="102" text-anchor="middle">JS where needed</text>
+  <rect class="bx-y" x="470" y="60" width="128" height="50" rx="8"/><text class="lbl" x="534" y="84" text-anchor="middle">SSR + hydrate</text><text class="soft" x="534" y="102" text-anchor="middle">all JS, early HTML</text>
+  <rect class="bx-r" x="616" y="60" width="124" height="50" rx="8"/><text class="lbl" x="678" y="84" text-anchor="middle">client only</text><text class="soft" x="678" y="102" text-anchor="middle">all JS, late HTML</text>
+  <text class="soft" x="20" y="148">less JavaScript in the browser</text><text class="soft" x="740" y="148" text-anchor="end">more JavaScript in the browser</text>
+  <text class="soft" x="20" y="36">documents: articles, product pages</text><text class="soft" x="740" y="36" text-anchor="end">apps: editors, dashboards</text>
+</svg></div><figcaption>One question runs along this line: how much of the page's work happens in the shopper's browser?</figcaption></figure><aside class="mn">The SSR note's going-deeper chapter covers reading a page-load timeline, streaming and caching rendered pages. This dive builds on it.</aside>
+<p class="full">Each note presents one option. The real decision is which option for which page, measured on the phone your customers actually own. A developer's laptop on office wifi makes every approach look fast. A three-year-old Android phone on a train shows the differences, and that phone is the median customer. This deep dive measures one page four ways, follows the six ways rendering goes wrong, and ends with budgets the build can enforce.</p>
+
+
+<a class="next" href="#fast"><small>next · chapter 2</small>What “fast” means →</a>
+</section>
+<section id="fast" data-title="What fast means">
+<p class="ch">chapter 2 <span>· 2 min</span></p>
+<h2>What “fast” means</h2>
+<div class="gist"><p><b>Gist</b> Three Core Web Vitals score a page: LCP for when the main content appears, INP for how quickly it responds to taps, and CLS for how much it jumps. Judge them on real visits at the 75th percentile, split by page and device; use lab runs on a simulated mid-range phone to find causes.</p></div>
+
+<p>“The page is slow” means different things at different moments. Browsers and tools agree on a handful of named moments, and three of them, the Core Web Vitals, are what search engines and most teams use as the scoreboard.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 175" role="img" aria-label="A page-load timeline. After the request, the HTML arrives: time to first byte. Then the image, CSS and fonts load, during which first contentful paint happens. Largest contentful paint marks when the main image appears. Then JavaScript runs to hydrate the page, until it becomes interactive. A tap during hydration has to wait, which hurts interaction to next paint.">
+  <path class="ln" d="M20 130 H740"/>
+  <rect class="bx" x="20" y="96" width="70" height="28" rx="4"/><text class="soft" x="55" y="115" text-anchor="middle">request</text>
+  <rect class="bx-g" x="90" y="96" width="150" height="28" rx="4"/><text class="soft" x="165" y="115" text-anchor="middle">HTML arrives</text>
+  <rect class="bx-y" x="240" y="96" width="190" height="28" rx="4"/><text class="soft" x="335" y="115" text-anchor="middle">image, CSS, fonts</text>
+  <rect class="bx-r" x="430" y="96" width="250" height="28" rx="4"/><text class="soft" x="555" y="115" text-anchor="middle">JavaScript runs: hydration</text>
+  <path class="ln-d" d="M90 90 V60"/><text class="lbl" x="90" y="52" text-anchor="middle">TTFB</text>
+  <path class="ln-d" d="M240 90 V60"/><text class="lbl" x="240" y="52" text-anchor="middle">FCP</text>
+  <path class="ln-d" d="M430 90 V60"/><text class="lbl" x="430" y="52" text-anchor="middle">LCP</text>
+  <path class="ln-d" d="M680 90 V60"/><text class="lbl" x="680" y="52" text-anchor="middle">interactive</text>
+  <text class="soft bad" x="555" y="84" text-anchor="middle">a tap here waits: INP suffers</text>
+  <text class="soft" x="20" y="160">0 s</text><text class="soft" x="740" y="160" text-anchor="end">about 4 s on a mid-range phone</text>
+</svg></div><figcaption>Visible and usable are different moments. The gap between them is where shoppers tap and nothing happens.</figcaption></figure><div class="tbl"><table><thead><tr><th scope="col">Metric</th><th scope="col">Measures</th><th scope="col">Good at the 75th percentile</th></tr></thead><tbody><tr class=hot><td><b>LCP</b>, largest contentful paint</td><td>when the main thing (the mug photo) appears</td><td>2.5 s or less</td></tr><tr class=hot><td><b>INP</b>, interaction to next paint</td><td>how long the page takes to respond to taps and keys, over the whole visit</td><td>200 ms or less</td></tr><tr class=hot><td><b>CLS</b>, cumulative layout shift</td><td>how much content jumps around while loading</td><td>0.1 or less</td></tr><tr><td>TTFB, time to first byte</td><td>how long the server took to start answering</td><td>about 0.8 s or less</td></tr><tr><td>FCP, first contentful paint</td><td>when anything at all appears</td><td>1.8 s or less</td></tr></tbody></table></div><aside class="mn">INP replaced an older metric (first input delay) in 2024. It watches every interaction, not just the first.</aside><div class="full">
+<h3>Lab numbers and field numbers</h3>
+<p>There are two ways to measure, and they disagree for good reasons.</p>
+<div class="tbl"><table><thead><tr><th scope="col"></th><th scope="col">Lab</th><th scope="col">Field</th></tr></thead><tbody><tr><td>How</td><td>one controlled load, in Lighthouse or WebPageTest, on a simulated phone</td><td>real visits, measured in real browsers and sent to you</td></tr><tr><td>Good for</td><td>comparing two builds; finding why</td><td>knowing what customers experience</td></tr><tr><td>Misses</td><td>real devices, real networks, real caches, and INP (a lab load has no shopper tapping)</td><td>the cause: it tells you that, not why</td></tr></tbody></table></div><p>Use the field numbers to decide whether there is a problem, and the lab to find and fix it. Report the field numbers at the 75th percentile, split by page type and by device class. An average across all visits mixes the fast office laptops with the slow phones and hides exactly the customers who leave.</p>
+<h3>Who the median customer is</h3>
+<p>For the shop's analytics, the most common device is a mid-range Android phone about three years old. Its processor runs JavaScript three to five times slower than a developer laptop, and in the evening, on mobile data, its connection is closer to slow 4G than to the office network. Every number in this deep dive is for that phone. If the page is good there, it is good everywhere.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why can't a Lighthouse run measure INP?</summary><p>INP measures how the page responds to the shopper's taps and keys during a visit. A lab load has nobody interacting with it.</p></details><details><summary>Why report the 75th percentile and not the average?</summary><p>The average mixes fast laptops with slow phones and hides the customers having the worst experience.</p></details></div>
+<a class="next" href="#fourways"><small>next · chapter 3</small>One page, four ways →</a>
+</section>
+<section id="fourways" data-title="Four ways">
+<p class="ch">chapter 3 <span>· 2 min</span></p>
+<h2>One page, four ways</h2>
+<div class="gist"><p><b>Gist</b> Client-only rendering shows the product late. Server rendering shows it early but becomes usable no sooner, because the same JavaScript must hydrate it. Static pages win on first byte with the same hydration cost. Islands ship a fraction of the JavaScript and are usable almost as soon as visible. Choose per page type, not per site.</p></div>
+
+<p>The team built the product page four ways and measured each on the simulated mid-range phone. The page shows a photo, name, price, description, reviews, an “Add to basket” button and a size picker. The numbers are the shop's, rounded; yours will differ, but the pattern rarely does.</p>
+<div class="tbl"><table><thead><tr><th scope="col"></th><th scope="col">Client only</th><th scope="col">Server render + full hydration</th><th scope="col">Static, rebuilt on change</th><th scope="col">Islands</th></tr></thead><tbody><tr><td>HTML sent</td><td>1 KB, nearly empty</td><td>40 KB with content</td><td>40 KB with content</td><td>40 KB with content</td></tr><tr><td>JavaScript sent (compressed)</td><td>310 KB</td><td>310 KB</td><td>310 KB, or less with islands</td><td>38 KB</td></tr><tr><td>Server work per visit</td><td>none</td><td>render every time: 120 ms</td><td>none; served from the CDN</td><td>none, or render once</td></tr><tr class=hot><td>LCP</td><td>4.1 s</td><td>2.2 s</td><td>1.6 s</td><td>1.5 s</td></tr><tr><td>Interactive (hydration done)</td><td>4.6 s</td><td>4.4 s</td><td>4.3 s</td><td>1.9 s</td></tr><tr><td>Risk to INP</td><td>high while loading</td><td>high while loading</td><td>high while loading</td><td>low</td></tr><tr><td>Price is current</td><td>yes, fetched</td><td>yes, rendered</td><td>as of the last rebuild</td><td>as of the last rebuild; live price can be an island</td></tr></tbody></table></div><aside class="mn">Server rendering fixed when the mug appears. It did not fix when the button works. Only shipping less JavaScript did.</aside>
+<h3>What the table says</h3>
+<ul>
+  <li><b>Client only</b> loses on LCP because nothing can appear until the JavaScript has downloaded, run and fetched the data, one after another.</li>
+  <li><b>Server rendering</b> moves the mug photo two seconds earlier. The button still works at 4.4 s, because the same 310 KB of JavaScript must still download and run to hydrate the page.</li>
+  <li><b>Static</b> wins on first byte, because the HTML comes straight from the CDN, but has the same hydration cost.</li>
+  <li><b>Islands</b> hydrate only the size picker, the basket button and the review form. Everything else is HTML that needs no JavaScript at all.</li>
+</ul>
+<div class="full">
+<h3>Choosing per page, not per site</h3>
+<p>A shop is not one kind of page. Each page type gets the approach that fits what it is.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Page</th><th scope="col">Nature</th><th scope="col">Approach</th></tr></thead><tbody><tr><td>home, category, product</td><td>documents with a few controls; most visits from search and links</td><td>static or cached server render, with islands</td></tr><tr><td>search results</td><td>a document whose content depends on the query</td><td>server render, cached briefly per query; filters as an island</td></tr><tr><td>basket and checkout</td><td>personal, a form, must be current</td><td>server render per request, small JavaScript, forms that work without it</td></tr><tr><td>account pages</td><td>personal, read mostly</td><td>server render, not cached by the CDN</td></tr><tr><td>the shop's admin tool</td><td>an app used all day by staff on laptops</td><td>client-rendered app; fine there</td></tr></tbody></table></div><p>Most modern frameworks let different routes use different approaches in one codebase. The mistake is choosing once, for the whole site, based on the page type the team works on most, which is usually the admin tool.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Server rendering moved LCP from 4.1 s to 2.2 s but the page became usable only at 4.4 s. Why?</summary><p>The same 310 KB of JavaScript still had to download and run to hydrate the page.</p></details><details><summary>Why is a client-rendered admin tool acceptable when a client-rendered product page is not?</summary><p>Staff load the admin tool once a day on laptops; customers arrive at the product page on phones and leave within seconds.</p></details></div>
+<a class="next" href="#drills"><small>next · chapter 4</small>Failure drills →</a>
+</section>
+<section id="drills" data-title="Failure drills">
+<p class="ch">chapter 4 <span>· 5 min</span></p>
+<h2>Failure drills</h2>
+<div class="gist"><p><b>Gist</b> Six ways rendering goes wrong: a hydration mismatch from dates and time zones, a button that looks ready but does nothing, a page that jumps as late content arrives, requests that wait for each other, a cached page showing someone else's basket, and a bundle that grows month by month.</p></div>
+<aside class="mn">Each of these has been seen on a real shop. Try to name the cause before reading it.</aside>
+<ul class="drill-index" aria-label="The six drills">
+  <li><a href="#drill-1">1 · mismatch</a></li><li><a href="#drill-2">2 · dead button</a></li><li><a href="#drill-3">3 · jumping page</a></li>
+  <li><a href="#drill-4">4 · the waterfall</a></li><li><a href="#drill-5">5 · someone's basket</a></li><li><a href="#drill-6">6 · the creeping bundle</a></li>
+</ul>
+<div class="drill" id="drill-1"><header><span>Drill 1</span><h3>The page that rendered twice</h3></header><dl><dt>Timeline</dt><dd>The product page shows “Order in the next 3 hours for delivery tomorrow”. The server renders it at 14:00:00 in its own time zone. The browser hydrates at 14:00:03 in the shopper's time zone and gets a different text.</dd><dt class="full">What you see</dt><dd class="full">A flicker as the text changes, a console warning about a hydration mismatch, and on some framework versions the whole section rendered again from scratch, or event handlers attached to the wrong elements.</dd><dt class="full">Why</dt><dd class="full">Hydration assumes the browser's first render produces exactly the HTML the server sent. Anything that differs between the two runs breaks that: the clock, the time zone, random ids, the window size, data read from local storage.</dd><dt>What saves you</dt><dd>Render the same thing on both sides, then change it after hydration. Send times as timestamps and format them in an effect that runs only in the browser, or render them as a small island. Use the framework's stable id helper, never random numbers. Log mismatch warnings from real visits so they are noticed.</dd></dl><p class="rule">Rule: the first render in the browser must match the server's HTML exactly. Anything that can differ waits until after hydration.</p></div><div class="drill" id="drill-2"><header><span>Drill 2</span><h3>The button that did nothing</h3></header><dl><dt>Timeline</dt><dd>The photo appears at 1.6 s. The shopper taps “Add to basket” at 2.0 s. Hydration finishes at 4.3 s. Nothing happened at the tap; they tap again, then again.</dd><dt class="full">What you see</dt><dd class="full">Rage taps in the analytics, a poor INP, and sometimes three mugs in the basket once the queued taps are replayed. Customers describe the site as “broken”, not “slow”.</dd><dt>What saves you</dt><dd>Make the important controls work before JavaScript arrives. A real form with a <code>POST</code> to the basket works the moment the HTML is there; JavaScript can improve it later. Hydrate the button first or make it an island. And keep the gap short, because every control cannot be a form.</dd></dl><p class="rule">Rule: a page that looks ready must be ready. Use real links and forms for the actions that matter.</p></div><div class="drill" id="drill-3"><header><span>Drill 3</span><h3>The page that jumped</h3></header><dl><dt>Timeline</dt><dd>The shopper starts reading the description. The reviews widget loads above it and pushes it down. A web font arrives and the text reflows. A promotion banner slides in at the top. They tap “Add to basket” just as it moves, and hit “Remove” on the line below.</dd><dt class="full">What you see</dt><dd class="full">CLS of 0.35, and mis-taps that feel like the shop is fighting the customer.</dd><dt>What saves you</dt><dd>Reserve space for everything that arrives late: width and height on images, a fixed-height placeholder for the reviews and the banner, and a fallback font sized to match the web font. Never insert content above what the reader is looking at unless they asked for it.</dd></dl><p class="rule">Rule: everything that loads late gets its space reserved before it arrives.</p></div><div class="drill" id="drill-4"><header><span>Drill 4</span><h3>One thing after another</h3></header><dl><dt>Timeline</dt><dd>The client-rendered page loads HTML, then the JavaScript bundle, then runs it, which requests the product, which, once it arrives, requests the reviews, which contain image addresses, which are then requested. Each step waits for the one before.</dd><dt class="full">What you see</dt><dd class="full">Six round trips in a row on a connection where each costs 150 ms or more before any bytes arrive. The page is slow even though every single request is fast.</dd><dt>What saves you</dt><dd>Break the chain. Fetch data on the server, where round trips to the database are short, and send it with the HTML. Start independent requests at the same time instead of one after another. Tell the browser early about the hero image with a preload hint, so it does not wait to discover it. The performance panel's network view shows a chain as a staircase.</dd></dl><p class="rule">Rule: count the steps that wait for each other. On a phone, the chain is slower than any request in it.</p></div><div class="drill" id="drill-5"><header><span>Drill 5</span><h3>Someone else's basket</h3></header><dl><dt>Timeline</dt><dd>The product page is server-rendered and cached at the CDN for 60 seconds to cut server load. Its header shows “Basket (3)” and the signed-in shopper's first name. The first visitor after each expiry decides what everyone sees for the next minute.</dd><dt class="full">What you see</dt><dd class="full">Strangers greeted as “Hi Sam” with someone else's basket count. In the worst version the cached page included part of an address.</dd><dt>What saves you</dt><dd>This is drill 6 of the Caching deep dive, at the rendering layer. Keep cached HTML free of anything personal: render the shared page for everyone, and fill the personal parts in the browser or at the edge, from a request that is never cached. Mark personal responses <code>private</code> so no shared cache keeps them.</dd></dl><p class="rule">Rule: a page that is cached for everyone must contain nothing that belongs to anyone.</p></div><div class="drill" id="drill-6"><header><span>Drill 6</span><h3>The bundle that crept back</h3></header><dl><dt>Timeline</dt><dd>In March the product page shipped 38 KB of JavaScript. A developer adds a date-formatting library to the shared component that shows delivery dates. Another adds an analytics helper to the layout. By September the page ships 290 KB, and nobody decided that.</dd><dt class="full">What you see</dt><dd class="full">INP and LCP slowly worsening month after month in the field data, with no single change to blame.</dd><dt>What saves you</dt><dd>A budget the build enforces: the product page's JavaScript may not exceed, say, 60 KB compressed, and the pull request that crosses it fails with the size difference shown. Check what a new dependency costs before adding it. Look at the bundle map once a quarter.</dd></dl><p class="rule">Rule: JavaScript grows by default. Only a budget that fails the build keeps it small.</p></div><div class="full">
+<h3>What the six drills add up to</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Habit</th><th scope="col">Drill</th></tr></thead><tbody><tr><td>the first browser render matches the server; dates and ids wait for hydration</td><td>1</td></tr><tr><td>key actions work as plain links and forms before JavaScript</td><td>2</td></tr><tr><td>late content has its space reserved</td><td>3</td></tr><tr><td>data is fetched on the server or in parallel; the hero image is announced early</td><td>4</td></tr><tr><td>shared cached HTML holds nothing personal</td><td>5</td></tr><tr><td>JavaScript budgets per page fail the build</td><td>6</td></tr></tbody></table></div>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>A delivery-time message flickers after the page loads. Which drill, and the fix?</summary><p>Drill 1, a hydration mismatch. Render something stable on both sides and fill in the local time after hydration.</p></details><details><summary>Shoppers tap “Add to basket” three times and get three mugs. What should the button be?</summary><p>A real form that posts to the basket, so it works before JavaScript loads; JavaScript then improves it.</p></details></div>
+<a class="next" href="#hydration"><small>next · chapter 5</small>The cost of hydration: the hard problem →</a>
+</section>
+<section id="hydration" data-title="Hydration">
+<p class="ch">chapter 5 <span>· 3 min</span></p>
+<h2>The cost of hydration: the hard problem</h2>
+<div class="gist"><p><b>Gist</b> Hydration downloads code for every component, downloads the data a second time, and reruns the server's work on the slowest computer in the system, all to attach event handlers. Progressive hydration reorders that work; islands, server components and resumability avoid most of it.</p></div>
+
+<p>Chapter 3's table had one stubborn number: the page was visible at 1.6 s and usable at 4.3 s, and server rendering did not change the second number. That gap is the hard problem of modern rendering, and it comes from what hydration has to do.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Hydration has to…</th><th scope="col">Cost</th></tr></thead><tbody><tr><td>download the code for every component on the page</td><td>the 310 KB, even for paragraphs that never change</td></tr><tr><td>download the data again, embedded as JSON in the page</td><td>the product appears twice: as HTML and as data</td></tr><tr><td>run every component again in the browser</td><td>the same work the server already did</td></tr><tr class=hot><td>attach event handlers to the existing elements</td><td>small; the only part that was really needed</td></tr></tbody></table></div><aside class="mn">Hydration is doing the server's work a second time, on the slowest computer in the system.</aside>
+<h3>Four ways to do less of it</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Approach</th><th scope="col">Idea</th><th scope="col">Trade-off</th></tr></thead><tbody><tr><td><b>Progressive hydration</b></td><td>hydrate the important parts first, the rest when idle or visible</td><td>the total work is the same; it is just ordered better</td></tr><tr><td><b>Islands</b></td><td>only marked components get JavaScript at all</td><td>sharing state between islands needs care; suits documents, not apps</td></tr><tr><td><b>Server components</b></td><td>components marked as server-only render to HTML and never send their code; client components hydrate as usual</td><td>two kinds of component with rules about which can contain which; needs a framework that supports it</td></tr><tr><td><b>Resumability</b></td><td>the server records where it stopped; the browser resumes on the first interaction instead of re-running everything</td><td>a different programming model; fewer frameworks</td></tr></tbody></table></div><div class="full">
+<p>They share one idea: most of a page is a document, and documents do not need code in the browser. The approaches differ in who decides which parts are interactive. With islands you mark the interactive parts. With server components you mark them too, from the other direction: everything is server-only unless it says it needs the browser. Progressive hydration keeps one kind of component and only changes the order.</p>
+<h3>The product page with server components</h3>
+<div class="card"><div class="card-head"><span>product-page.tsx</span><span>only the marked parts send code to the browser</span></div><pre><code><span class="c">// server component: runs on the server, sends HTML, sends no JavaScript</span>
+<span class="k">export</span> <span class="k">default</span> <span class="k">async</span> <span class="k">function</span> ProductPage({ id }: { id: string }) {
+  <span class="k">const</span> product = <span class="k">await</span> db.product(id);                 <span class="c">// straight to the data, no API round trip</span>
+  <span class="k">return</span> (
+    &lt;main&gt;
+      &lt;ProductPhoto product={product} /&gt;               {/* server-only */}
+      &lt;h1&gt;{product.name}&lt;/h1&gt;
+      &lt;Price amount={product.price} /&gt;                 {/* server-only */}
+      &lt;SizePicker sizes={product.sizes} /&gt;             {/* <span class="s">"use client"</span>: hydrates */}
+      &lt;AddToBasket productId={id} /&gt;                   {/* <span class="s">"use client"</span>: hydrates */}
+      &lt;Reviews productId={id} /&gt;                       {/* server-only, streamed */}
+    &lt;/main&gt;
+  );
+}</code></pre></div><p>The two client components are the only code the browser receives for this page, which is how the island column in chapter 3 got to 38 KB without a separate framework. Whichever approach you choose, measure the hydration gap on the median phone before and after. It is the number that tells you whether the choice worked.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>What does a server component send to the browser?</summary><p>Its HTML only. Its code is never downloaded, so it is not hydrated.</p></details><details><summary>Progressive hydration makes the page usable sooner. Why doesn't it reduce the total work?</summary><p>It still hydrates every component; it only changes the order, doing the important ones first.</p></details></div>
+<a class="next" href="#lessjs"><small>next · chapter 6</small>Loading less JavaScript →</a>
+</section>
+<section id="lessjs" data-title="Less JavaScript">
+<p class="ch">chapter 6 <span>· 3 min</span></p>
+<h2>Loading less JavaScript</h2>
+<div class="gist"><p><b>Gist</b> JavaScript costs on the network and again on the processor. Split code by route, by interaction, by visibility and until idle, prefetch on intent, and avoid chains of tiny chunks. Third-party scripts are often the biggest cost and need owners, budgets and lightweight stand-ins.</p></div>
+
+<p>JavaScript is the most expensive thing a page sends. An image of 300 KB is decoded quickly and mostly off the main thread. A script of 300 KB must be downloaded, parsed, compiled and run, on the main thread, before the page can respond to a tap. On the median phone, the running alone often takes over a second.</p>
+<h3>Split by when it is needed</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Split</th><th scope="col">Loads</th><th scope="col">For the product page</th></tr></thead><tbody><tr><td><b>by route</b></td><td>when the page is visited</td><td>the product page never loads checkout's code</td></tr><tr><td><b>by interaction</b></td><td>when the shopper starts to use it</td><td>the review form's editor loads when “Write a review” is tapped</td></tr><tr><td><b>by visibility</b></td><td>when it scrolls into view</td><td>the “you might also like” carousel</td></tr><tr><td><b>after load</b></td><td>when the browser is idle</td><td>analytics and the chat widget</td></tr></tbody></table></div><div class="card"><div class="card-head"><span>reviews.tsx</span><span>the editor is downloaded only when someone wants to write</span></div><pre><code><span class="k">const</span> ReviewEditor = lazy(() =&gt; <span class="k">import</span>(<span class="s">"./ReviewEditor"</span>));   <span class="c">// a separate chunk</span>
+
+<span class="k">function</span> WriteReview() {
+  <span class="k">const</span> [open, setOpen] = useState(<span class="k">false</span>);
+  <span class="k">return</span> open
+    ? &lt;Suspense fallback={&lt;p&gt;Loading the editor…&lt;/p&gt;}&gt;&lt;ReviewEditor /&gt;&lt;/Suspense&gt;
+    : &lt;button onMouseEnter={() =&gt; <span class="k">import</span>(<span class="s">"./ReviewEditor"</span>)}   <span class="c">// start early on hover</span>
+              onClick={() =&gt; setOpen(<span class="k">true</span>)}&gt;Write a review&lt;/button&gt;;
+}</code></pre></div><aside class="mn">Prefetch on hover or when the link scrolls into view. The chunk then arrives in the 200 ms between pointing and tapping.</aside><div class="full">
+<h3>Don't split too finely</h3>
+<p>Each chunk is a request, and chunks that import other chunks form the chain from drill 4. Forty tiny chunks for one screen can load slower than four sensible ones. Split along the lines in the table above, then check the network panel for a staircase.</p>
+<h3>Third-party scripts</h3>
+<p>On many shops the largest JavaScript is not the shop's own: a tag manager, two analytics tools, a chat widget, a reviews provider, an A/B testing script that hides the page until it has decided. They are added by other teams, outside the code review, and they run on the same main thread.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Script</th><th scope="col">Better</th></tr></thead><tbody><tr><td>chat widget</td><td>a static button that loads the real widget when tapped (a facade)</td></tr><tr><td>analytics</td><td>after load, or sent from the server where possible</td></tr><tr><td>A/B test that hides the page</td><td>decide on the server or at the edge, so the page arrives already chosen</td></tr><tr><td>video embed</td><td>a thumbnail image that becomes the player when tapped</td></tr><tr><td>tag manager</td><td>an owner, a review of every tag, and the same budget as your own code</td></tr></tbody></table></div><h3>Smaller code, not just later code</h3>
+<p>Splitting moves code later; deleting it is better. Check what each dependency costs before adding it; many have smaller alternatives or are replaced by features the browser now has. Send modern JavaScript to modern browsers instead of compiling everything for ten-year-old ones. And look at the bundle map: a treemap of what is in each chunk shows the 70 KB locale file that nobody knew was there.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why is a 300 KB script more expensive than a 300 KB image?</summary><p>The script must be parsed, compiled and run on the main thread before the page can respond; the image is mostly decoded off it.</p></details><details><summary>A chat widget adds 200 KB to every page. What is a facade?</summary><p>A lightweight button that looks like the widget and loads the real one only when tapped.</p></details></div>
+<a class="next" href="#budgets"><small>next · chapter 7</small>Budgets, worked out →</a>
+</section>
+<section id="budgets" data-title="Budgets">
+<p class="ch">chapter 7 <span>· 3 min</span></p>
+<h2>Budgets, worked out</h2>
+<div class="gist"><p><b>Gist</b> Work back from LCP under 2.5 s on the median phone: connection, first byte, HTML and CSS, the hero image, and a margin. The hero image is the largest single item. Set per-page budgets for JavaScript, images and lab metrics that fail the build, and keep every task under 50 ms for INP.</p></div>
+
+<p>Targets become real when they are turned into budgets that the build can check. Here is the product page's, worked back from “LCP under 2.5 s for three customers in four”.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Step on the median phone</th><th scope="col">Budget</th><th scope="col">Reasoning</th></tr></thead><tbody><tr><td>DNS, connection, TLS</td><td>0.5 s</td><td>three round trips at about 150 ms on mobile; reused on later pages</td></tr><tr><td>first byte from the CDN</td><td>0.2 s</td><td>cached HTML; a server render would need 0.3–0.6 s more</td></tr><tr><td>HTML and critical CSS</td><td>0.3 s</td><td>about 40 KB of HTML, CSS inlined or one small file</td></tr><tr><td>hero image</td><td>0.9 s</td><td>about 100 KB in a modern format at the size the screen needs, announced early</td></tr><tr><td>margin</td><td>0.6 s</td><td>the 75th percentile is worse than the simulated phone</td></tr><tr><td><b>LCP</b></td><td><b>2.5 s</b></td><td></td></tr></tbody></table></div><aside class="mn">The budget shows why the hero image matters more than the framework: it is the biggest single item on the path to LCP.</aside>
+<h3>The hero image and the fonts</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Habit</th><th scope="col">Why</th></tr></thead><tbody><tr><td>serve the image at the size the screen shows it, in several widths (<code>srcset</code>)</td><td>a phone 400 pixels wide does not need the 2,000-pixel photo</td></tr><tr><td>use a modern format such as AVIF or WebP</td><td>often half the bytes of a JPEG at the same quality</td></tr><tr><td>mark the hero <code>fetchpriority="high"</code>, and never lazy-load it</td><td>lazy loading the largest image delays LCP by exactly the thing it was meant to speed up</td></tr><tr><td>lazy-load images below the first screen</td><td>they compete with the hero for the same slow connection</td></tr><tr><td>one or two font files, subset to the characters you use, with a fallback sized to match</td><td>fonts block text or make it jump (drill 3)</td></tr></tbody></table></div>
+<h3>Budgets the build checks</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Budget</th><th scope="col">Product page</th><th scope="col">Checkout</th><th scope="col">Admin tool</th></tr></thead><tbody><tr class=hot><td>JavaScript, compressed, on load</td><td>60 KB</td><td>120 KB</td><td>500 KB</td></tr><tr><td>largest image</td><td>120 KB</td><td>none on the path</td><td>not checked</td></tr><tr><td>lab LCP on the simulated phone</td><td>2.0 s</td><td>2.5 s</td><td>not checked</td></tr><tr><td>lab total blocking time</td><td>150 ms</td><td>200 ms</td><td>not checked</td></tr><tr><td>third-party scripts on load</td><td>1</td><td>0</td><td>any</td></tr></tbody></table></div><div class="full">
+<p>Budgets differ by page because pages differ. The admin tool is used on laptops by staff who load it once a day; a big bundle there costs little. The product page is the first contact with customers who came from a search result and will leave in three seconds.</p>
+<h3>INP is a budget on long tasks</h3>
+<p>The browser can respond to a tap only between tasks. Any piece of JavaScript that runs longer than 50 ms is a long task, and a tap that arrives during one waits for it to finish. Hydration, large re-renders, heavy event handlers and third-party scripts are the usual long tasks. The budget is therefore: no single task over 50 ms after the page appears, and expensive work split into pieces that let the browser respond in between, or moved off the main thread altogether.</p>
+<h3>What a kilobyte costs</h3>
+<p>As a rule of thumb from the shop's own measurements on the median phone: each 100 KB of compressed JavaScript on the critical path added about 0.3 s to download on slow 4G and about 0.5 s of main-thread work. The exact numbers depend on the code, but the shape does not: JavaScript costs twice, once on the network and once on the processor, and the second cost does not shrink with a faster connection.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Which single item usually dominates the path to LCP?</summary><p>The hero image: its size, format and how early the browser knows to fetch it.</p></details><details><summary>Why does a faster connection not fix a heavy JavaScript bundle?</summary><p>Half of its cost is running on the phone's processor, which the network does not change.</p></details></div>
+<a class="next" href="#edge"><small>next · chapter 8</small>Caching and streaming HTML →</a>
+</section>
+<section id="edge" data-title="Cache &amp; stream">
+<p class="ch">chapter 8 <span>· 3 min</span></p>
+<h2>Caching and streaming HTML</h2>
+<div class="gist"><p><b>Gist</b> Cache the parts of a page that are the same for everyone, fetch personal parts separately, and check current values where decisions are made. Stream the shell first and slow parts later into reserved space, but decide the status code before streaming starts. Render at build time, near the data, or at the edge according to what the page needs.</p></div>
+
+<p>A server-rendered page is only fast if the server is. The going-deeper chapter of the SSR note introduced streaming and caching rendered HTML; this chapter puts them together for the shop.</p>
+<h3>Cache what is the same for everyone</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Part of the product page</th><th scope="col">Same for everyone?</th><th scope="col">Served from</th></tr></thead><tbody><tr><td>photo, name, description, sizes</td><td>yes</td><td>cached HTML at the CDN, refreshed when the product changes</td></tr><tr><td>price</td><td>yes, but changes</td><td>cached with a short life, or a small island that fetches it</td></tr><tr><td>reviews</td><td>yes, slow to compute</td><td>streamed in after the rest, cached separately</td></tr><tr><td>“Basket (3)”, “Hi Sam”</td><td>no</td><td>the browser, from an uncached request after the page loads</td></tr><tr><td>stock for the chosen size</td><td>yes, but must be current at checkout</td><td>shown from a short cache; checked for real when added to the basket</td></tr></tbody></table></div><aside class="mn">Same rule as the Caching dive: show from a copy, decide on the original.</aside>
+<h3>Streaming: send the shell first</h3>
+<p>With streaming, the server sends the top of the page as soon as it is ready, and slower parts follow in the same response as they complete. The photo and name go first; the reviews, which need a slow query, arrive half a second later and slot into a reserved space (drill 3).</p>
+<div class="full">
+<h3>The status code is sent first</h3>
+<p>Streaming has one consequence that surprises teams. The HTTP status code is part of the first bytes. Once the shell has been sent with <code>200 OK</code>, the server cannot change its mind if the reviews query fails or the product turns out not to exist. So decide everything that affects the status before streaming starts: does the product exist (404), is the shopper allowed to see it, should this be a redirect. Stream only the parts whose failure the page can survive, and give each a fallback that renders in its slot.</p>
+<h3>Search engines and link previews</h3>
+<p>Crawlers increasingly run JavaScript, but link previews in chat apps and many smaller crawlers do not, and those that do may not wait for slow data. A product page whose name, price and photo are in the first HTML is indexed and previewed correctly by everything. That alone is often the business reason for server rendering, separate from speed.</p>
+<h3>Moving between pages</h3>
+<p>The first page load gets the attention, but a shopper looks at five or six pages per visit. Two approaches handle the next page differently.</p>
+<div class="tbl"><table><thead><tr><th scope="col"></th><th scope="col">Full page loads</th><th scope="col">Client-side navigation</th></tr></thead><tbody><tr><td>Next page</td><td>the browser fetches new HTML, as on the first visit</td><td>JavaScript fetches data and renders the new page in place</td></tr><tr><td>Cost</td><td>a new document each time; shared files come from cache</td><td>the router and every route's code must be loaded first</td></tr><tr><td>Strengths</td><td>simple; the back button restores the old page instantly from the browser's page cache</td><td>smooth transitions; state such as an open basket drawer survives</td></tr><tr><td>Watch</td><td>make it fast with prefetching and cached HTML</td><td>scroll position, focus for screen readers, and memory over a long visit</td></tr></tbody></table></div>
+<p>Browsers have closed much of the gap. Prefetching the likely next page on hover, and view transitions that animate between full page loads, give documents most of the smoothness of an app without its JavaScript. For a shop, full page loads with prefetching are usually the better default; the basket drawer can be an island.</p>
+<h3>Where to render</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Where</th><th scope="col">Good for</th><th scope="col">Watch</th></tr></thead><tbody><tr><td>at build time</td><td>pages that change rarely: help, about, most category pages</td><td>rebuild time grows with page count; rebuild one page on change</td></tr><tr><td>on a server near the data</td><td>personal pages, anything that needs several queries</td><td>distance to the shopper; cache what you can</td></tr><tr><td>at the edge, near the shopper</td><td>light personalisation: country, language, A/B variant</td><td>the database is far away; one slow query from the edge is many round trips</td></tr></tbody></table></div>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>The product does not exist, but the page was already streaming with 200 OK. What went wrong?</summary><p>The existence check should have happened before streaming started, so the server could answer 404.</p></details><details><summary>Why render personalisation at the edge but not database-heavy pages?</summary><p>The edge is near the shopper but far from the database; several queries from there cost many long round trips.</p></details></div>
+<a class="next" href="#running"><small>next · chapter 9</small>Testing it and running it →</a>
+</section>
+<section id="running" data-title="Running it">
+<p class="ch">chapter 9 <span>· 2 min</span></p>
+<h2>Testing it and running it</h2>
+<div class="gist"><p><b>Gist</b> In every pull request, check bundle sizes against budgets, run Lighthouse on key pages, test the key action with JavaScript off and fail on hydration warnings. In production, collect Core Web Vitals from real visits by page and device, and graph conversion next to them.</p></div>
+
+<p>Rendering performance decays quietly: a few kilobytes here, an extra script there, a slower query. It stays good only when it is measured on every change and watched in the field.</p>
+<h3>In the pull request</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Check</th><th scope="col">How</th><th scope="col">Fails when</th></tr></thead><tbody><tr><td><b>bundle size</b></td><td>a size checker compares each page's JavaScript with its budget</td><td>a budget from chapter 7 is crossed; the diff shows which import did it</td></tr><tr><td><b>lab run</b></td><td>Lighthouse in CI on the product, category and checkout pages, simulated phone, three runs, median</td><td>LCP or total blocking time is over budget</td></tr><tr><td><b>no-JavaScript test</b></td><td>load the product page with JavaScript disabled; add to basket</td><td>the key action needs JavaScript (drill 2)</td></tr><tr><td><b>hydration warnings</b></td><td>the end-to-end tests fail on any hydration mismatch in the console</td><td>drill 1</td></tr><tr><td><b>layout shift</b></td><td>the lab run's CLS, plus a test that loads with a slow reviews response</td><td>late content moves the page (drill 3)</td></tr></tbody></table></div><aside class="mn">Lab runs are noisy. Run three, take the median, and set budgets with a little room.</aside>
+<h3>In the field</h3>
+<p>A small script in every page measures the Core Web Vitals in real visits and sends them to your analytics, with the page type, device class and connection type. The dashboard shows the 75th percentile per page type, per week.</p>
+<div class="card"><div class="card-head"><span>vitals.ts</span><span>real numbers from real phones</span></div><pre><code><span class="k">import</span> { onLCP, onINP, onCLS } <span class="k">from</span> <span class="s">"web-vitals"</span>;
+
+<span class="k">function</span> send(metric) {
+  navigator.sendBeacon(<span class="s">"/vitals"</span>, JSON.stringify({
+    name: metric.name, value: metric.value,
+    page: document.body.dataset.pageType,          <span class="c">// "product", "category", "checkout"</span>
+    device: navigator.hardwareConcurrency &lt;= 4 ? <span class="s">"low"</span> : <span class="s">"high"</span>,
+  }));
+}
+onLCP(send); onINP(send); onCLS(send);</code></pre></div><div class="full">
+<h3>Runbook: “LCP got worse”</h3>
+<ol>
+  <li><b>Which pages and devices?</b> The field dashboard, split. One page type: a change to that page. All pages: something shared, like the layout, a font or a third-party script. Only low-end devices: JavaScript or image weight.</li>
+  <li><b>Which part of the timeline?</b> A lab run of the same page: is the extra time in first byte (server or cache), in the hero image, or in waiting for scripts?</li>
+  <li><b>First byte:</b> the CDN hit rate for HTML, then the server's render time. A page that stopped being cacheable shows up here.</li>
+  <li><b>Hero image:</b> its size, format and whether it is still announced early. A redesign often swaps in a 2 MB image.</li>
+  <li><b>Scripts:</b> the bundle map and the list of third-party scripts against last month's.</li>
+</ol>
+<h3>Watch the business number too</h3>
+<p>Put conversion rate next to LCP and INP on the same dashboard, by device class. The point of all this is shoppers who stay and buy, and the shop found that phones in the slowest quarter converted at half the rate of the fastest. That graph is what keeps the budgets funded.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>LCP worsened only on low-end devices, on all page types. Where do you look first?</summary><p>Something shared and heavy: JavaScript or image weight in the layout, or a new third-party script.</p></details><details><summary>What does loading the page with JavaScript disabled prove?</summary><p>That the key actions, such as adding to the basket, work before scripts load, which is what shoppers on slow phones depend on.</p></details></div>
+<a class="next" href="#tools"><small>next · chapter 10</small>Tools, a lab and the checklist →</a>
+</section>
+<section id="tools" data-title="Tools &amp; lab">
+<p class="ch">chapter 10 <span>· 3 min</span></p>
+<h2>Tools, a lab and the checklist</h2>
+<div class="gist"><p><b>Gist</b> Frameworks offer per-route choices; islands, server components and resumability cut hydration; Lighthouse, WebPageTest and the web-vitals library measure. The lab rebuilds the search results page, and the checklist turns the deep dive into review questions.</p></div>
+
+<h3>Tools</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Need</th><th scope="col">Examples</th></tr></thead><tbody><tr><td>frameworks with per-route rendering choices</td><td>Next.js, React Router (formerly Remix), Nuxt, SvelteKit, Angular</td></tr><tr><td>documents with islands</td><td>Astro, Fresh, Eleventy with is-land</td></tr><tr><td>resumable rendering</td><td>Qwik</td></tr><tr><td>lab measurement</td><td>Lighthouse and Lighthouse CI, WebPageTest, the browser's performance panel</td></tr><tr><td>field measurement</td><td>the web-vitals library, the Chrome User Experience Report, real-user monitoring products</td></tr><tr><td>bundle size</td><td>size-limit, bundle analyzers and treemaps for Vite, Rollup and webpack</td></tr></tbody></table></div><aside class="mn">The framework matters less than the page-by-page choice and the budget. Every one of these can ship a slow page.</aside>
+<h3>Lab</h3>
+<p>The shop's search results page shows 24 products for a query, with filters for size, colour and price, and a sort order. Most visits come from the shop's own search box; some from search engines. The page currently is client-rendered: LCP 4.3 s and INP 380 ms on the median phone.</p>
+<ol class="keep">
+  <li>Which approach from chapter 3 fits, and why not static?</li>
+  <li>What can be cached, and for how long?</li>
+  <li>How do the filters work before JavaScript has loaded?</li>
+  <li>Where does the 380 ms INP probably come from, and what do you do?</li>
+  <li>Set the JavaScript budget, and say what the pull-request check does when someone adds a 90 KB date picker for the delivery-date filter.</li>
+</ol>
+<div class="check quiz"><h3>model answer</h3>
+<details><summary>1 · Approach</summary><p>Server render per query, with the filter panel and the sort control as the only hydrated parts. Static does not fit: the content depends on the query, and the combinations are endless.</p></details>
+<details><summary>2 · Caching</summary><p>The HTML for a query and filter combination is the same for everyone, so it can be cached at the CDN for a minute, keyed by the normalised query string. The basket count and greeting are fetched separately in the browser (drill 5). Prices shown are display only; the basket checks them.</p></details>
+<details><summary>3 · Filters without JavaScript</summary><p>The filter panel is a real form with <code>GET</code>, so choosing filters and pressing “Apply” loads the filtered page as a normal link. JavaScript later makes it update without the button. Every filtered state then also has its own address that can be shared and cached.</p></details>
+<details><summary>4 · INP</summary><p>Most likely each filter change re-renders all 24 product cards and runs the whole client-side search logic in one long task. With server rendering, a filter change fetches new HTML for the list; the client work per tap becomes small. Check the performance panel for long tasks after a tap to confirm.</p></details>
+<details><summary>5 · Budget</summary><p>About 50 KB compressed for the page. The date picker alone would almost double it, so the check fails and shows the import. The fix is to load the date picker only when that filter is opened (chapter 6), or to use the browser's own date input.</p></details>
+</div>
+<h3>The review checklist</h3>
+<div class="checklist"><div class="cl"><h3>Choosing</h3><ul><li>Each page type has its own rendering approach, chosen for what it is</li><li>Documents ship as HTML with JavaScript only for interactive parts</li><li>Personal and current data is never inside shared cached HTML</li></ul></div><div class="cl"><h3>Measuring</h3><ul><li>Field Core Web Vitals at the 75th percentile, by page type and device class</li><li>Lab runs on a simulated mid-range phone, not a laptop</li><li>Conversion is graphed next to speed</li></ul></div><div class="cl"><h3>The first view</h3><ul><li>The hero image is sized, compressed, in a modern format and announced early</li><li>Data is fetched on the server or in parallel, never in a chain</li><li>Late content has reserved space; fonts have a matched fallback</li><li>The status code is decided before streaming starts</li></ul></div><div class="cl"><h3>Interaction</h3><ul><li>Key actions work as links and forms before JavaScript loads</li><li>The first browser render matches the server's HTML</li><li>No task over 50 ms after the page appears</li><li>Interactive parts hydrate first, or are islands</li></ul></div><div class="cl"><h3>JavaScript</h3><ul><li>Code is split by route, interaction and visibility, not into dozens of tiny chunks</li><li>Third-party scripts have owners, budgets and facades</li><li>Each new dependency's size is checked before it is added</li></ul></div><div class="cl"><h3>In the build</h3><ul><li>Per-page JavaScript budgets fail the pull request</li><li>Lighthouse CI checks LCP and blocking time on key pages</li><li>End-to-end tests fail on hydration warnings and run once without JavaScript</li></ul></div></div>
+
+<a class="next" href="#top"><small>the end</small>Back to the top ↑</a>
+</section>
+<p class="sources"><b>Sources.</b> web.dev: “Web Vitals”, “Interaction to Next Paint”, “Rendering on the Web” (Jason Miller and Addy Osmani) and “Optimize Largest Contentful Paint”. Jason Miller, “Islands Architecture” (2020). The React documentation on Server Components and the Astro documentation on islands. Alex Russell, “The Performance Inequality Gap” (2024). The Lighthouse and web-vitals documentation.</p>
+</div></article>
+<footer class="foot"><span>Jef’s Notes · deep dive 11 · Rendering on the Web</span></footer>
+</main>
+
+<div class="dock" data-dock>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+  <div class="dock-in">
+    <a class="dock-arrow" data-prev href="#top" aria-label="Previous chapter">‹</a>
+    <button class="dock-mid" type="button" data-open aria-haspopup="dialog" aria-expanded="false">
+      <small data-count>1 / 10</small><span data-current>Recap</span><i aria-hidden="true">☰</i>
+    </button>
+    <a class="dock-arrow" data-next href="#fast" aria-label="Next chapter">›</a>
+  </div>
+</div>
+<div class="sheet-back" data-close hidden></div>
+<div class="sheet" data-sheet role="dialog" aria-modal="true" aria-label="Chapters" hidden>
+  <div class="sheet-head"><b>Chapters</b><button type="button" data-close aria-label="Close">×</button></div>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Three notes in sixty seconds</span><span class="m">1 min</span></a></li><li><a href="#fast" data-ch="1"><span class="n">2</span><span class="t">What “fast” means</span><span class="m">2 min</span></a></li><li><a href="#fourways" data-ch="2"><span class="n">3</span><span class="t">One page, four ways</span><span class="m">2 min</span></a></li><li><a href="#drills" data-ch="3"><span class="n">4</span><span class="t">Failure drills</span><span class="m">5 min</span></a></li><li><a href="#hydration" data-ch="4"><span class="n">5</span><span class="t">The cost of hydration: the hard problem</span><span class="m">3 min</span></a></li><li><a href="#lessjs" data-ch="5"><span class="n">6</span><span class="t">Loading less JavaScript</span><span class="m">3 min</span></a></li><li><a href="#budgets" data-ch="6"><span class="n">7</span><span class="t">Budgets, worked out</span><span class="m">3 min</span></a></li><li><a href="#edge" data-ch="7"><span class="n">8</span><span class="t">Caching and streaming HTML</span><span class="m">3 min</span></a></li><li><a href="#running" data-ch="8"><span class="n">9</span><span class="t">Testing it and running it</span><span class="m">2 min</span></a></li><li><a href="#tools" data-ch="9"><span class="n">10</span><span class="t">Tools, a lab and the checklist</span><span class="m">3 min</span></a></li></ol>
+  <div class="sheet-foot">
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+    <a href="#top" data-close>Top of page ↑</a>
+  </div>
+</div>
+</body>
+</html>

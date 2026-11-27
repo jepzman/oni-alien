@@ -1,0 +1,334 @@
+<!-- Handbook 2 · Identity and Access in the Cloud · Appendix A. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Appendix</p>
+  <p class="chno">A</p>
+  <h1>Policy cookbook</h1>
+  <p class="promise">The policies from this book for the jobs you'll meet most, collected in one place, with what each is for and what to change. Larder's names, account IDs and organisation ID are placeholders: replace them with yours, validate with IAM Access Analyzer (<a href="#ch9">Chapter 9</a>), and try each on staging before production.</p>
+</header>
+
+<div class="box box-warn">
+  <p class="label">Before you copy</p>
+  <p>Every policy here is valid JSON and was checked against the evaluation rules in <a href="#ch10">Chapter 10</a>, but a policy is only right for the job it was written for. Read each line, replace every ARN, and keep the conditions: they do most of the work. Statements shown on their own (without <code>Version</code>) go inside a policy's <code>Statement</code> list.</p>
+</div>
+
+<!-- ======================================================== A.1 -->
+<h2 class="sec" id="sA-1"><span class="n">A.1</span>Permissions for workloads</h2>
+
+<h3>Read one prefix, write another, read one secret</h3>
+<p>A service's whole job in four statements: list and read its config, write its output without delete, read one secret. Change the bucket, prefixes and secret name. From <a href="#ch9">Chapter 9</a>.</p>
+<p class="code-title"><span>dispatch-task-policy.json</span><span>customer managed, attached to role dispatch-task</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [
+    {
+      <span class="k">"Sid"</span>: <span class="s">"ListOwnPrefixes"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+      <span class="k">"Action"</span>: <span class="s">"s3:ListBucket"</span>,
+      <span class="k">"Resource"</span>: <span class="s">"arn:aws:s3:::larder-dispatch-prod"</span>,
+      <span class="k">"Condition"</span>: { <span class="k">"StringLike"</span>: { <span class="s">"s3:prefix"</span>: [<span class="s">"config/*"</span>, <span class="s">"routes/*"</span>] } }
+    },
+    {
+      <span class="k">"Sid"</span>: <span class="s">"ReadConfig"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+      <span class="k">"Action"</span>: <span class="s">"s3:GetObject"</span>,
+      <span class="k">"Resource"</span>: <span class="s">"arn:aws:s3:::larder-dispatch-prod/config/*"</span>
+    },
+    {
+      <span class="k">"Sid"</span>: <span class="s">"WriteRoutePlans"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+      <span class="k">"Action"</span>: <span class="s">"s3:PutObject"</span>,
+      <span class="k">"Resource"</span>: <span class="s">"arn:aws:s3:::larder-dispatch-prod/routes/*"</span>
+    },
+    {
+      <span class="k">"Sid"</span>: <span class="s">"ReadMapsKey"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+      <span class="k">"Action"</span>: <span class="s">"secretsmanager:GetSecretValue"</span>,
+      <span class="k">"Resource"</span>: <span class="s">"arn:aws:secretsmanager:eu-central-1:111122223333:secret:dispatch/prod/maps-api-key-??????"</span>
+    }
+  ]
+}</code></pre>
+
+<h3>Each team's own secrets, by tag</h3>
+<p>Attribute-based access: one policy for every team, matching the principal's <code>team</code> tag to the secret's. Only the platform team may set <code>team</code> tags, or anyone could tag themselves into another team. From <a href="#ch9">Chapter 9</a>.</p>
+<p class="code-title"><span>team-secrets.json</span><span>attribute-based access control</span></p>
+<pre><code>{
+  <span class="k">"Sid"</span>: <span class="s">"ReadOwnTeamsSecrets"</span>,
+  <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+  <span class="k">"Action"</span>: <span class="s">"secretsmanager:GetSecretValue"</span>,
+  <span class="k">"Resource"</span>: <span class="s">"*"</span>,
+  <span class="k">"Condition"</span>: {
+    <span class="k">"StringEquals"</span>: { <span class="s">"aws:ResourceTag/team"</span>: <span class="s">"${aws:PrincipalTag/team}"</span> }
+  }
+}</code></pre>
+
+<h3>Deploy one container service</h3>
+<p>For a CI role: push one image repository, register task definitions, update one service, and pass only that service's two roles. <code>ecr:GetAuthorizationToken</code> and task definition actions don't support resource-level permissions, so they need <code>*</code>. From <a href="#ch17">Chapter 17</a> and <a href="#ch24">Chapter 24</a>.</p>
+<p class="code-title"><span>policies/github-deploy-prod.json</span><span>JSON</span></p>
+<pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {"Sid": "PushImage", "Effect": "Allow",
+     "Action": ["ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart",
+                "ecr:CompleteLayerUpload", "ecr:PutImage"],
+     "Resource": "arn:aws:ecr:eu-central-1:111122223333:repository/larder-core"},
+    {"Sid": "EcrLogin", "Effect": "Allow", "Action": "ecr:GetAuthorizationToken", "Resource": "*"},
+    {"Sid": "TaskDefinitions", "Effect": "Allow",
+     "Action": ["ecs:RegisterTaskDefinition", "ecs:DescribeTaskDefinition"], "Resource": "*"},
+    {"Sid": "Deploy", "Effect": "Allow", "Action": ["ecs:UpdateService", "ecs:DescribeServices"],
+     "Resource": "arn:aws:ecs:eu-central-1:111122223333:service/prod/larder-core"},
+    {"Sid": "PassServiceRoles", "Effect": "Allow", "Action": "iam:PassRole",
+     "Resource": ["arn:aws:iam::111122223333:role/larder-core",
+                  "arn:aws:iam::111122223333:role/larder-core-execution"]}
+  ]
+}</code></pre>
+
+<!-- ======================================================== A.2 -->
+<h2 class="sec" id="sA-2"><span class="n">A.2</span>Trust policies</h2>
+
+<h3>A role for container tasks</h3>
+<p>Lets the container service assume the role for tasks in one account and region only. The source conditions stop another account's tasks using your role through the service (the confused deputy, <a href="#ch21">Chapter 21</a>). From <a href="#ch15">Chapter 15</a>.</p>
+<p class="code-title"><span>task role trust policy</span><span>ECS</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [
+    {
+      <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+      <span class="k">"Principal"</span>: {
+        <span class="k">"Service"</span>: <span class="s">"ecs-tasks.amazonaws.com"</span>
+      },
+      <span class="k">"Action"</span>: <span class="s">"sts:AssumeRole"</span>,
+      <span class="k">"Condition"</span>: {
+        <span class="k">"ArnLike"</span>: {
+          <span class="k">"aws:SourceArn"</span>: <span class="s">"arn:aws:ecs:eu-central-1:111122223333:*"</span>
+        },
+        <span class="k">"StringEquals"</span>: {
+          <span class="k">"aws:SourceAccount"</span>: <span class="s">"111122223333"</span>
+        }
+      }
+    }
+  ]
+}</code></pre>
+
+<h3>One GitHub repository and environment</h3>
+<p>Only jobs in the <code>production</code> environment of one repository can assume the role. Match <code>sub</code> exactly with <code>StringEquals</code>; never trust a whole organisation's repositories with a wildcard. From <a href="#ch17">Chapter 17</a>.</p>
+<p class="code-title"><span>github-deploy-prod trust policy</span><span>production account</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [{
+    <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+    <span class="k">"Principal"</span>: { <span class="k">"Federated"</span>: <span class="s">"arn:aws:iam::111122223333:oidc-provider/token.actions.githubusercontent.com"</span> },
+    <span class="k">"Action"</span>: <span class="s">"sts:AssumeRoleWithWebIdentity"</span>,
+    <span class="k">"Condition"</span>: {
+      <span class="k">"StringEquals"</span>: {
+        <span class="s">"token.actions.githubusercontent.com:aud"</span>: <span class="s">"sts.amazonaws.com"</span>,
+        <span class="s">"token.actions.githubusercontent.com:sub"</span>: <span class="s">"repo:larder/larder-core:environment:production"</span>
+      }
+    }
+  }]
+}</code></pre>
+
+<h3>A vendor's role, with an external ID</h3>
+<p>Trust one role in the vendor's account, and require the external ID the vendor generated for you. Grant the role as little as possible: here, one prefix of one bucket. From <a href="#ch21">Chapter 21</a>.</p>
+<p class="code-title"><span>wmsb-nightly-file trust policy</span><span>production account</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [{
+    <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+    <span class="k">"Principal"</span>: { <span class="k">"AWS"</span>: <span class="s">"arn:aws:iam::999911112222:role/wmsb-file-delivery"</span> },
+    <span class="k">"Action"</span>: <span class="s">"sts:AssumeRole"</span>,
+    <span class="k">"Condition"</span>: { <span class="k">"StringEquals"</span>: { <span class="s">"sts:ExternalId"</span>: <span class="s">"wmsb-3c9e51a07d2b4f18"</span> } }
+  }]
+}</code></pre>
+
+<h3>Pods in one Kubernetes namespace</h3>
+<p>EKS Pod Identity: the cluster's agent assumes the role and tags the session; conditions on those tags pin the role to one cluster, namespace and service account. From <a href="#ch16">Chapter 16</a>.</p>
+<p class="code-title"><span>engine-a-pod-role trust policy</span><span>EKS Pod Identity</span></p>
+<pre><code>{ <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [{ <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+                  <span class="k">"Principal"</span>: { <span class="k">"Service"</span>: <span class="s">"pods.eks.amazonaws.com"</span> },
+                  <span class="k">"Action"</span>: [<span class="s">"sts:AssumeRole"</span>, <span class="s">"sts:TagSession"</span>] }] }</code></pre>
+
+<h3>Named people, with MFA (IAM users only)</h3>
+<p>For accounts that still have IAM users: only named users, with MFA, and the session must carry their own name. With single sign-on (<a href="#ch12">Chapter 12</a>) you don't need this: use permission sets instead. From <a href="#ch8">Chapter 8</a>.</p>
+<p class="code-title"><span>prod-operator-trust.json</span><span>trust policy</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [{
+    <span class="k">"Sid"</span>: <span class="s">"EngineersWithMfaAndTheirOwnName"</span>,
+    <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+    <span class="k">"Principal"</span>: { <span class="k">"AWS"</span>: [
+      <span class="s">"arn:aws:iam::111122223333:user/ben"</span>,
+      <span class="s">"arn:aws:iam::111122223333:user/eli"</span>
+    ] },
+    <span class="k">"Action"</span>: [<span class="s">"sts:AssumeRole"</span>, <span class="s">"sts:SetSourceIdentity"</span>],
+    <span class="k">"Condition"</span>: {
+      <span class="k">"Bool"</span>: { <span class="s">"aws:MultiFactorAuthPresent"</span>: <span class="s">"true"</span> },
+      <span class="k">"StringEquals"</span>: { <span class="s">"sts:SourceIdentity"</span>: <span class="s">"${aws:username}"</span> }
+    }
+  }]
+}</code></pre>
+
+<!-- ======================================================== A.3 -->
+<h2 class="sec" id="sA-3"><span class="n">A.3</span>Resource policies</h2>
+
+<h3>Bucket: encrypted connections only</h3>
+<p>Refuses any request to the bucket over plain HTTP. Add it to every bucket; it costs nothing and breaks nothing that should work.</p>
+<p class="code-title"><span>bucket policy statement</span><span>S3</span></p>
+<pre><code>{
+  <span class="k">"Sid"</span>: <span class="s">"OnlyEncryptedConnections"</span>,
+  <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+  <span class="k">"Principal"</span>: <span class="s">"*"</span>,
+  <span class="k">"Action"</span>: <span class="s">"s3:*"</span>,
+  <span class="k">"Resource"</span>: [
+    <span class="s">"arn:aws:s3:::larder-dispatch-prod"</span>,
+    <span class="s">"arn:aws:s3:::larder-dispatch-prod/*"</span>
+  ],
+  <span class="k">"Condition"</span>: {
+    <span class="k">"Bool"</span>: {
+      <span class="k">"aws:SecureTransport"</span>: <span class="s">"false"</span>
+    }
+  }
+}</code></pre>
+
+<h3>Bucket: restricted data only from our networks</h3>
+<p>The network perimeter for restricted data: requests must come through the production VPC, or from an AWS service working for a Larder principal. Break-glass is excepted. Search CloudTrail with S3 data events for everything it would deny before enforcing. From <a href="#ch22">Chapter 22</a>.</p>
+<pre><code>{
+  <span class="k">"Sid"</span>: <span class="s">"RestrictedDataOnlyFromOurNetworks"</span>,
+  <span class="k">"Effect"</span>: <span class="s">"Deny"</span>, <span class="k">"Principal"</span>: <span class="s">"*"</span>,
+  <span class="k">"Action"</span>: <span class="s">"s3:*"</span>,
+  <span class="k">"Resource"</span>: [<span class="s">"arn:aws:s3:::larder-settlements"</span>, <span class="s">"arn:aws:s3:::larder-settlements/*"</span>],
+  <span class="k">"Condition"</span>: {
+    <span class="k">"StringNotEqualsIfExists"</span>: { <span class="s">"aws:SourceVpc"</span>: [<span class="s">"vpc-0prod1a2b3c4d5e6f"</span>] },
+    <span class="k">"BoolIfExists"</span>: { <span class="s">"aws:ViaAWSService"</span>: <span class="s">"false"</span>, <span class="s">"aws:PrincipalIsAWSService"</span>: <span class="s">"false"</span> },
+    <span class="k">"ArnNotLike"</span>: { <span class="s">"aws:PrincipalArn"</span>: <span class="s">"arn:aws:iam::*:role/break-glass-admin"</span> }
+  }
+}</code></pre>
+
+<h3>KMS key: administrators manage, two roles decrypt through S3</h3>
+<p>Separates managing a key from using it, and lets the two roles use it only when S3 calls on their behalf. Keep an administration statement for a role that will always exist, and the break-glass role, or you can lock yourself out. From <a href="#ch18">Chapter 18</a>.</p>
+<p class="code-title"><span>order-exports key policy</span><span>Larder, production</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [
+    {
+      <span class="k">"Sid"</span>: <span class="s">"PlatformAdminsManageButCannotUse"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+      <span class="k">"Principal"</span>: { <span class="k">"AWS"</span>: <span class="s">"arn:aws:iam::111122223333:root"</span> },
+      <span class="k">"Action"</span>: [<span class="s">"kms:Describe*"</span>, <span class="s">"kms:Get*"</span>, <span class="s">"kms:List*"</span>, <span class="s">"kms:Enable*"</span>, <span class="s">"kms:Disable*"</span>, <span class="s">"kms:Put*"</span>,
+                 <span class="s">"kms:Update*"</span>, <span class="s">"kms:Revoke*"</span>, <span class="s">"kms:TagResource"</span>, <span class="s">"kms:UntagResource"</span>,
+                 <span class="s">"kms:ScheduleKeyDeletion"</span>, <span class="s">"kms:CancelKeyDeletion"</span>],
+      <span class="k">"Resource"</span>: <span class="s">"*"</span>,
+      <span class="k">"Condition"</span>: { <span class="k">"ArnLike"</span>: { <span class="s">"aws:PrincipalArn"</span>:
+        <span class="s">"arn:aws:iam::111122223333:role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_PlatformAdmin_*"</span> } }
+    },
+    {
+      <span class="k">"Sid"</span>: <span class="s">"ExportJobAndFinanceUseItOnlyThroughS3"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+      <span class="k">"Principal"</span>: { <span class="k">"AWS"</span>: [<span class="s">"arn:aws:iam::111122223333:role/order-export-job"</span>,
+                               <span class="s">"arn:aws:iam::111122223333:role/finance-reports"</span>] },
+      <span class="k">"Action"</span>: [<span class="s">"kms:Decrypt"</span>, <span class="s">"kms:GenerateDataKey"</span>],
+      <span class="k">"Resource"</span>: <span class="s">"*"</span>,
+      <span class="k">"Condition"</span>: { <span class="k">"StringEquals"</span>: { <span class="s">"kms:ViaService"</span>: <span class="s">"s3.eu-central-1.amazonaws.com"</span> } }
+    }
+  ]
+}</code></pre>
+
+<!-- ======================================================== A.4 -->
+<h2 class="sec" id="sA-4"><span class="n">A.4</span>Guardrails</h2>
+
+<h3>Protect a database and its backups</h3>
+<p>Only the database-change role may modify or delete the database, and nobody may delete its snapshots. Use it as a permission policy (<a href="#ch10">Chapter 10</a>) or, better, as an SCP (<a href="#ch20">Chapter 20</a>).</p>
+<p class="code-title"><span>protect-orders-db.json</span><span>customer managed policy, Larder</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [
+    {
+      <span class="k">"Sid"</span>: <span class="s">"OnlyDbChangeMayAlterOrdersDb"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+      <span class="k">"Action"</span>: [<span class="s">"rds:ModifyDBInstance"</span>, <span class="s">"rds:DeleteDBInstance"</span>],
+      <span class="k">"Resource"</span>: <span class="s">"arn:aws:rds:eu-central-1:111122223333:db:orders-prod"</span>,
+      <span class="k">"Condition"</span>: { <span class="k">"StringNotLike"</span>: { <span class="s">"aws:PrincipalArn"</span>: [
+        <span class="s">"arn:aws:iam::111122223333:role/db-change"</span>,
+        <span class="s">"arn:aws:iam::111122223333:role/break-glass-*"</span>
+      ] } }
+    },
+    {
+      <span class="k">"Sid"</span>: <span class="s">"NobodyDeletesBackups"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+      <span class="k">"Action"</span>: [<span class="s">"rds:DeleteDBSnapshot"</span>, <span class="s">"rds:DeleteDBInstanceAutomatedBackup"</span>],
+      <span class="k">"Resource"</span>: <span class="s">"*"</span>
+    }
+  ]
+}</code></pre>
+
+<h3>Baseline SCP for every account</h3>
+<p>Stay in the organisation, keep the audit trail, require IMDSv2 and stay in approved regions. Attach it to a sandbox OU for a week before the root. The region statement's <code>NotAction</code> list exempts global services; check it against your services. From <a href="#ch20">Chapter 20</a>.</p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [
+    { <span class="k">"Sid"</span>: <span class="s">"StayInTheOrganisation"</span>, <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+      <span class="k">"Action"</span>: <span class="s">"organizations:LeaveOrganization"</span>, <span class="k">"Resource"</span>: <span class="s">"*"</span> },
+    { <span class="k">"Sid"</span>: <span class="s">"KeepTheAuditTrail"</span>, <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+      <span class="k">"Action"</span>: [<span class="s">"cloudtrail:StopLogging"</span>, <span class="s">"cloudtrail:DeleteTrail"</span>, <span class="s">"cloudtrail:UpdateTrail"</span>],
+      <span class="k">"Resource"</span>: <span class="s">"*"</span>,
+      <span class="k">"Condition"</span>: { <span class="k">"ArnNotLike"</span>: { <span class="s">"aws:PrincipalArn"</span>: <span class="s">"arn:aws:iam::*:role/break-glass-admin"</span> } } },
+    { <span class="k">"Sid"</span>: <span class="s">"OnlyIMDSv2"</span>, <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+      <span class="k">"Action"</span>: <span class="s">"ec2:RunInstances"</span>, <span class="k">"Resource"</span>: <span class="s">"arn:aws:ec2:*:*:instance/*"</span>,
+      <span class="k">"Condition"</span>: { <span class="k">"StringNotEquals"</span>: { <span class="s">"ec2:MetadataHttpTokens"</span>: <span class="s">"required"</span> } } },
+    { <span class="k">"Sid"</span>: <span class="s">"OnlyFrankfurt"</span>, <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+      <span class="k">"NotAction"</span>: [<span class="s">"iam:*"</span>, <span class="s">"organizations:*"</span>, <span class="s">"sts:*"</span>, <span class="s">"sso:*"</span>, <span class="s">"identitystore:*"</span>, <span class="s">"support:*"</span>,
+                    <span class="s">"cloudfront:*"</span>, <span class="s">"route53:*"</span>, <span class="s">"budgets:*"</span>, <span class="s">"ce:*"</span>, <span class="s">"health:*"</span>, <span class="s">"account:*"</span>],
+      <span class="k">"Resource"</span>: <span class="s">"*"</span>,
+      <span class="k">"Condition"</span>: { <span class="k">"StringNotEquals"</span>: { <span class="s">"aws:RequestedRegion"</span>: <span class="s">"eu-central-1"</span> } } }
+  ]
+}</code></pre>
+
+<h3>Identity perimeter (RCP)</h3>
+<p>No request reaches your resources unless it comes from your organisation or from an AWS service working for you. The tag exception is for vendor roles assumed from outside, such as A.2's. From <a href="#ch22">Chapter 22</a>.</p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [
+    {
+      <span class="k">"Sid"</span>: <span class="s">"OnlyOurIdentities"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Deny"</span>, <span class="k">"Principal"</span>: <span class="s">"*"</span>,
+      <span class="k">"Action"</span>: [<span class="s">"s3:*"</span>, <span class="s">"kms:*"</span>, <span class="s">"secretsmanager:*"</span>, <span class="s">"sqs:*"</span>, <span class="s">"sts:AssumeRole"</span>],
+      <span class="k">"Resource"</span>: <span class="s">"*"</span>,
+      <span class="k">"Condition"</span>: {
+        <span class="k">"StringNotEqualsIfExists"</span>: { <span class="s">"aws:PrincipalOrgID"</span>: <span class="s">"o-a1b2c3d4e5"</span>,
+                                     <span class="s">"aws:ResourceTag/perimeter-exception"</span>: <span class="s">"vendor-role"</span> },
+        <span class="k">"BoolIfExists"</span>: { <span class="s">"aws:PrincipalIsAWSService"</span>: <span class="s">"false"</span> }
+      }
+    },
+    {
+      <span class="k">"Sid"</span>: <span class="s">"AWSServicesOnlyWhenWorkingForUs"</span>,
+      <span class="k">"Effect"</span>: <span class="s">"Deny"</span>, <span class="k">"Principal"</span>: <span class="s">"*"</span>,
+      <span class="k">"Action"</span>: [<span class="s">"s3:*"</span>, <span class="s">"kms:*"</span>, <span class="s">"secretsmanager:*"</span>, <span class="s">"sqs:*"</span>, <span class="s">"sts:AssumeRole"</span>],
+      <span class="k">"Resource"</span>: <span class="s">"*"</span>,
+      <span class="k">"Condition"</span>: {
+        <span class="k">"StringNotEqualsIfExists"</span>: { <span class="s">"aws:SourceOrgID"</span>: <span class="s">"o-a1b2c3d4e5"</span> },
+        <span class="k">"Bool"</span>: { <span class="s">"aws:PrincipalIsAWSService"</span>: <span class="s">"true"</span> }
+      }
+    }
+  ]
+}</code></pre>
+
+<h3>Resource perimeter (SCP statement)</h3>
+<p>Your identities may only use resources in your organisation, so they can't copy data to someone else's bucket. Add exceptions for AWS-owned and partner resources you really use. From <a href="#ch22">Chapter 22</a>.</p>
+<pre><code>{
+  <span class="k">"Sid"</span>: <span class="s">"OnlyOurResources"</span>,
+  <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+  <span class="k">"Action"</span>: [<span class="s">"s3:*"</span>, <span class="s">"sqs:*"</span>, <span class="s">"secretsmanager:*"</span>, <span class="s">"kms:*"</span>],
+  <span class="k">"Resource"</span>: <span class="s">"*"</span>,
+  <span class="k">"Condition"</span>: { <span class="k">"StringNotEqualsIfExists"</span>: { <span class="s">"aws:ResourceOrgID"</span>: <span class="s">"o-a1b2c3d4e5"</span> } }
+}</code></pre>
+
+<!-- ======================================================== A.5 -->
+<h2 class="sec" id="sA-5"><span class="n">A.5</span>Checking a policy before you use it</h2>
+
+<ol class="steps">
+  <li><strong>Validate</strong>: <code>aws accessanalyzer validate-policy --policy-type IDENTITY_POLICY --policy-document file://policy.json</code> (use <code>RESOURCE_POLICY</code> for trust and resource policies, <code>SERVICE_CONTROL_POLICY</code> for SCPs).</li>
+  <li><strong>Prove it doesn't grant what it mustn't</strong>: <code>check-access-not-granted</code> with your never-grant list (<a href="#ch24">Chapter 24</a>).</li>
+  <li><strong>Prove a change adds nothing</strong>: <code>check-no-new-access</code> against the current version, for trust and resource policies.</li>
+  <li><strong>Try it</strong> with the policy simulator or on staging: one request that must work and one that must fail (<a href="#ch11">Chapter 11</a>).</li>
+</ol>
+

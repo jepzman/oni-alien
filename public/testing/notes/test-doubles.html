@@ -10,9 +10,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
 <link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
-<link rel="stylesheet" href="../../assets/bujo.css?v=ae512aa242">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
 <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
-<script src="../../assets/notebook.js?v=b632700836" defer></script>
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
 </head>
 <body class="bujo theme-testing">
 <a class="skip-link" href="#main">Skip to the notes</a>
@@ -31,6 +31,7 @@
 <article class="sheet" id="test-doubles">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Tue · 17.11.26</span><span class="topic">collection · <b>doubles &amp; boundaries</b></span></div>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “stunt doubles”</p>
   <h1><span class="hl">Test Doubles (Stubs, Spies, Mocks)</span></h1>
   <div class="tldr">
@@ -123,6 +124,38 @@ it(<span class="s">"does not email when the card is declined"</span>, <span clas
 });</code></pre>
   </div>
   <p class="aside">tools: Vitest <code>vi.fn</code>, Jest mocks, Sinon (spies/stubs), MSW (stub HTTP at the network layer), unittest.mock (Python), Mockito (Java), NSubstitute (.NET).</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">seams you own, checking commands, doubles that lie</span></h2>
+  <p class="deep-intro">The note says: stub queries, verify commands, double only at boundaries you own. This chapter shows how to build those boundaries, how to check a command without tying the test to the code's insides, and how to notice when a double has stopped telling the truth about the real thing.</p>
+  <h3 class="deep-h"><span>1</span>Seams you own</h3>
+  <p>A double is only as good as the place it plugs in. The cleanest place is an <b>interface your code owns</b>, shaped by what your code needs: <code>Mailer.sendWelcome(user)</code>, not the email provider's 40-method SDK. This is the ports-and-adapters idea: your logic talks to a port; an adapter connects the port to the real world.</p>
+  <ul>
+    <li>Unit tests plug a <b>stub, spy or fake</b> into the port. They are fast and say what the code is for.</li>
+    <li>The adapter gets <b>one or two integration tests</b> against the real thing (a sandbox account, a container), proving the translation works.</li>
+    <li>Nothing mocks the SDK directly. When the SDK's API changes, only the adapter and its tests change.</li>
+  </ul>
+  <p>A useful check: if a test needs more than two doubles to run, the code under test probably has too many collaborators, or the seam is in the wrong place.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="Where doubles plug in. The signup code depends on a Mailer interface the team owns. In production an adapter implements it with the email provider&#x27;s SDK; that adapter has one integration test against a sandbox. In unit tests a spy implements the same interface. The SDK itself is never mocked."><g class="rough"><rect class="d f-y" x="20" y="90" width="150" height="80" rx="10"/><path class="d" d="M174 130 L236 130"/><path class="d" d="M225.2 135.2 L236 130 L225.2 124.8"/><rect class="d f-green" x="240" y="90" width="150" height="80" rx="10"/><path class="d" d="M394 115 L466 60"/><path class="d" d="M460.6 70.7 L466 60 L454.2 62.4"/><path class="d d-dash" d="M394 145 L466 200"/><path class="d" d="M454.2 197.6 L466 200 L460.6 189.3"/><rect class="d f-blue" x="470" y="20" width="270" height="70" rx="10"/><rect class="d f-paper" x="470" y="170" width="270" height="70" rx="10"/></g><text class="t-head" x="95" y="126" text-anchor="middle" font-size="19">signup</text><text class="t" x="95" y="150" text-anchor="middle" font-size="14">your code</text><text class="t-head" x="315" y="126" text-anchor="middle" font-size="19">Mailer</text><text class="t" x="315" y="150" text-anchor="middle" font-size="14">interface you own</text><text class="t-head" x="605" y="51" text-anchor="middle" font-size="17">SDK adapter</text><text class="t" x="605" y="75" text-anchor="middle" font-size="14">1 integration test (sandbox)</text><text class="t-head" x="605" y="201" text-anchor="middle" font-size="17">spy in unit tests</text><text class="t" x="605" y="225" text-anchor="middle" font-size="14">records what was sent</text><text class="t-s t-red" x="20" y="266" text-anchor="start" font-size="16">never mock the provider&#x27;s SDK directly</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Double your own interface. Test the adapter once against the real thing.</figcaption></figure>
+  <h3 class="deep-h"><span>2</span>Checking a command without freezing the code</h3>
+  <p>“Verify commands” is easy to overdo. A test that asserts the exact order of eight calls breaks on every refactor, even when the behaviour is the same. Check the <b>effect that matters</b>, at the level a person would describe it:</p>
+  <ul>
+    <li><b>Was it sent, to whom, with what?</b> One welcome email to ana@example.com containing her name. Not which internal helper built it.</li>
+    <li><b>How many times?</b> Exactly once matters for emails and payments. “At least once” usually doesn't need checking.</li>
+    <li><b>Was it not sent?</b> A failed signup sends nothing. This is often the more valuable assertion.</li>
+  </ul>
+  <p>Prefer a <b>spy that records</b> (and assert on the record afterwards) to a mock that is told in advance what to expect: the test then reads Arrange, Act, Assert in order. And keep to <b>one verified command per test</b>; if a step sends an email and charges a card, that's two tests.</p>
+
+  <h3 class="deep-h"><span>3</span>When a double lies</h3>
+  <p>Every stub states something about the real dependency: “the price service returns 20”, “the payment provider says approved”. When the real thing changes, the stub doesn't, and the tests keep passing on a story that is no longer true.</p>
+  <ul>
+    <li><b>Contract tests</b> for services you run (the previous note in this collection), so the double and the real provider are checked against the same contract.</li>
+    <li><b>Adapter tests against a sandbox</b> for third parties, run nightly, so a change on their side fails a test, not a customer's payment.</li>
+    <li><b>Recorded responses</b> (VCR-style cassettes) made from the real API, with an expiry date, so they are re-recorded instead of trusted for ever.</li>
+    <li><b>A fake with its own contract tests</b> for things you call often (repositories), as in the Fakes note.</li>
+  </ul>
+  <p>Signs a double is lying: production errors in code with full test coverage, and stubs that return fields the real API doesn't have.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 230" role="img" aria-label="A double drifting from reality. The stubbed payment client returns status approved. The real provider changed its response to status authorised months ago. Every unit test passes; production treats every payment as failed. A contract or recorded-response test against the real sandbox would have failed when the provider changed."><g class="rough"><rect class="d f-green" x="20" y="40" width="280" height="80" rx="10"/><rect class="d f-pink d-red" x="460" y="40" width="280" height="80" rx="10"/><path class="d d-red" d="M304 80 L456 80"/><path class="d d-red" d="M445.2 85.2 L456 80 L445.2 74.8"/><path class="d d-red" d="M314.8 74.8 L304 80 L314.8 85.2"/></g><text class="t-head" x="160" y="76" text-anchor="middle" font-size="18">stub says</text><text class="t" x="160" y="100" text-anchor="middle" font-size="15">{ status: &quot;approved&quot; }</text><text class="t-head t-red" x="600" y="76" text-anchor="middle" font-size="18">provider says</text><text class="t" x="600" y="100" text-anchor="middle" font-size="15">{ status: &quot;authorised&quot; }</text><text class="t-s t-red" x="380" y="70" text-anchor="middle">drift</text><text class="t-s t-green" x="160" y="156" text-anchor="middle" font-size="17">unit tests: all green</text><text class="t-s t-red" x="600" y="156" text-anchor="middle" font-size="17">production: every payment “fails”</text><text class="t-s t-pen" x="380" y="206" text-anchor="middle" font-size="17">catch it: adapter test against the sandbox, run nightly</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A double is a claim about the real thing. Check the claim somewhere.</figcaption></figure>
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">
@@ -172,13 +205,18 @@ it(<span class="s">"does not email when the card is declined"</span>, <span clas
     </div>
   </div>
   <h3>Related patterns</h3>
-  <ul class="related"><li><b>Fakes</b></li><li><b>Contract testing</b></li><li><b>Controlled time &amp; randomness</b></li><li><b>Circuit breaker</b> (Vol. 1)</li></ul>
+  <ul class="related"><li><a href="../notes/fakes.html"><b>Fakes</b></a></li><li><a href="../notes/contract-testing.html"><b>Contract testing</b></a></li><li><a href="../notes/deterministic-tests.html"><b>Controlled time &amp; randomness</b></a></li><li><a href="../../distributed/notes/circuit-breaker.html"><b>Circuit breaker</b></a> (Vol. 1)</li></ul>
   <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
   <div class="quiz">
     <details><summary>Stub or spy for a price lookup?</summary><p>A stub: it's a query, so return a canned price and assert on your own result.</p></details>
     <details><summary>Stub or spy for sending an email?</summary><p>A spy or mock: it's a command, so check the email was requested correctly.</p></details>
     <details><summary>Why wrap third-party SDKs before doubling them?</summary><p>So you double an interface you own and can prove the wrapper against the real SDK in an integration test.</p></details>
     <details><summary>What's the danger of over-mocking?</summary><p>Tests become coupled to implementation details and pass even when the real system is broken.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A signup test mocks the repository, the hasher, the clock, the email sender and the logger, and asserts the order of eight calls. A harmless refactor breaks it. What do you change?</span></summary><p>Use a fake repository and the real hasher, fix the clock, and keep a spy only on the email sender (the thing you send). Assert outcomes: the user is saved and one welcome email is sent, not the order of internal calls.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Find a test with three or more mocks. Replace the ones for things you read with stubs or fakes, keep one spy on an outgoing call, and assert results instead of calls. Then refactor the code under test and see whether the new test still passes.</p>
   </div>
   <div class="remember">
     <span class="tag">remember!!</span>

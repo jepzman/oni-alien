@@ -10,9 +10,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
 <link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
-<link rel="stylesheet" href="../../assets/bujo.css?v=ae512aa242">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
 <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
-<script src="../../assets/notebook.js?v=b632700836" defer></script>
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
 </head>
 <body class="bujo">
 <a class="skip-link" href="#main">Skip to the notes</a>
@@ -31,6 +31,7 @@
 <article class="sheet" id="service-discovery">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
   <div class="page-meta"><span class="day">Wed · 07.10.26</span><span class="topic">collection · <b>communication</b></span></div>
+  <p class="revised"><span class="tag">revised</span> Nov 2026 · a “what would you do?” question, a try it and a going-deeper chapter</p>
   <p class="kicker">a.k.a. “look it up, don't hard-code it”</p>
   <h1><span class="hl">Service Discovery</span></h1>
   <div class="tldr">
@@ -119,6 +120,37 @@
 <span class="k">await</span> fetch(<span class="s">`http://${pick.Address}:${pick.Port}/charge`</span>, { method: <span class="s">"POST"</span> });</code></pre>
   </div>
   <p class="aside">registries: Kubernetes Services + DNS (CoreDNS) + EndpointSlices, HashiCorp Consul, Netflix Eureka, etcd / ZooKeeper, AWS Cloud Map, Spring Cloud LoadBalancer; meshes do client-side discovery in the sidecar.</p>
+  <section class="deep" id="deep" aria-label="Going deeper">
+  <h2><span class="num">＋</span>Going deeper <span class="side">cached answers, clean shutdowns, staying in the zone</span></h2>
+  <p class="deep-intro">The note covers registering, health and lookup. In production, most discovery bugs aren't in the registry. They come from answers that are cached too long, from instances that disappear before callers know, and from traffic that crosses zones without anyone noticing. This chapter covers all three.</p>
+  <h3 class="deep-h"><span>1</span>Answers that stick</h3>
+  <p>A lookup is only as fresh as the place it is cached. Three caches catch people out:</p>
+  <ul>
+    <li><b>DNS caches.</b> Records have a time to live, but some runtimes ignore it (older JVM settings cached DNS for ever). Check what your runtime does, and keep TTLs short, around 5–30 seconds, for service names.</li>
+    <li><b>Connection pools.</b> A pool opens connections once and reuses them. The lookup happens at connect time, so a pool full of connections to old instances keeps using them until they break.</li>
+    <li><b>Long-lived HTTP/2 and gRPC connections.</b> One connection carries thousands of requests. When Payments scales from two pods to four, existing clients keep sending everything to the first two. The fix is a <b>maximum connection age</b> on the server (gRPC has a setting for this), or client-side load balancing that watches the registry and spreads requests across all instances.</li>
+  </ul>
+  <p>A good test: scale a service from 2 to 6 instances under load and check that the new instances get their share within a minute.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="Long-lived connections and new instances. A client opened three HTTP/2 connections when Payments had two pods, and keeps reusing them. Payments scales out to four pods, but the two new pods receive no traffic, because no new connections are opened. With a maximum connection age, connections are closed every few minutes and reopened across all four pods."><g class="rough"><rect class="d f-paper" x="20" y="100" width="130" height="80" rx="10"/><rect class="d f-green" x="500" y="14" width="200" height="50" rx="10"/><rect class="d f-green" x="500" y="78" width="200" height="50" rx="10"/><rect class="d f-paper d-red" x="500" y="142" width="200" height="50" rx="10"/><rect class="d f-paper d-red" x="500" y="206" width="200" height="50" rx="10"/><path class="d" d="M154 140 L496 28"/><path class="d" d="M487.4 36.3 L496 28 L484.1 26.4"/><path class="d" d="M154 140 L496 50"/><path class="d" d="M486.9 57.8 L496 50 L484.2 47.7"/><path class="d" d="M154 140 L496 103"/><path class="d" d="M485.8 109.4 L496 103 L484.7 99.0"/></g><text class="t-head" x="85" y="136" text-anchor="middle" font-size="18">client</text><text class="t" x="85" y="160" text-anchor="middle" font-size="14">3 HTTP/2 conns</text><text class="t-head" x="600" y="46" text-anchor="middle" font-size="16">pod 1</text><text class="t-head" x="600" y="110" text-anchor="middle" font-size="16">pod 2</text><text class="t-head t-red" x="600" y="174" text-anchor="middle" font-size="16">pod 3 (new)</text><text class="t-head t-red" x="600" y="238" text-anchor="middle" font-size="16">pod 4 (new)</text><text class="t-s t-red" x="20" y="222" text-anchor="start" font-size="17">pods 3 and 4: idle</text><text class="t-s t-pen" x="20" y="252" text-anchor="start" font-size="17">fix: max connection age,</text><text class="t-s t-pen" x="20" y="274" text-anchor="start" font-size="17">or a client that rebalances</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Discovery answers once per connection. Long-lived connections keep using the old answer.</figcaption></figure>
+  <h3 class="deep-h"><span>2</span>Leaving without errors</h3>
+  <p>Most errors during deploys come from instances that stop before every caller knows they're gone. In Kubernetes, the pod gets SIGTERM and its removal from the endpoints list happen <b>at the same time</b>, and the removal takes a few seconds to reach every caller and proxy. If the app exits at once, those callers send requests to a closed port.</p>
+  <p>The usual order:</p>
+  <ol>
+    <li><b>Keep serving for a few seconds</b> after SIGTERM (a preStop hook that sleeps 5–10 s), so the removal spreads.</li>
+    <li><b>Stop accepting new connections,</b> finish in-flight requests, close keep-alive connections politely.</li>
+    <li><b>Exit</b> well before the grace period (30 s by default) runs out, or the platform kills the process mid-request.</li>
+  </ol>
+  <p>Do the same on the way in: a new instance should only become ready once it can really serve (connections open, caches warm), so readiness, not liveness, decides when traffic starts.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Shutting down a pod without errors. At time zero the pod receives SIGTERM and the platform starts removing it from discovery, which takes a few seconds to reach every caller. During a preStop wait of 10 seconds the pod keeps serving. Then the app stops taking new requests, finishes in-flight ones, and exits well before the 30 second grace period ends."><g class="rough"><path class="d" d="M20 170 L744 170"/><path class="d" d="M733.2 175.2 L744 170 L733.2 164.8"/><rect class="d f-pink" x="20" y="40" width="140" height="80" rx="10"/><path class="d d-thin" d="M30 124 V166"/><rect class="d f-y" x="180" y="40" width="190" height="80" rx="10"/><path class="d d-thin" d="M190 124 V166"/><rect class="d f-blue" x="390" y="40" width="200" height="80" rx="10"/><path class="d d-thin" d="M400 124 V166"/><rect class="d f-green" x="610" y="40" width="130" height="80" rx="10"/><path class="d d-thin" d="M620 124 V166"/></g><text class="t-head" x="90" y="76" text-anchor="middle" font-size="17">SIGTERM</text><text class="t" x="90" y="100" text-anchor="middle" font-size="13">0 s</text><text class="t-head" x="275" y="76" text-anchor="middle" font-size="17">preStop wait</text><text class="t" x="275" y="100" text-anchor="middle" font-size="13">0–10 s · still serving</text><text class="t-head" x="490" y="76" text-anchor="middle" font-size="17">drain</text><text class="t" x="490" y="100" text-anchor="middle" font-size="13">10–20 s · finish requests</text><text class="t-head" x="675" y="76" text-anchor="middle" font-size="17">exit</text><text class="t" x="675" y="100" text-anchor="middle" font-size="13">~20 s</text><text class="t-s t-pen" x="250" y="214" text-anchor="middle" font-size="17">meanwhile: removal spreads to every caller (seconds)</text><text class="t-s" x="250" y="244" text-anchor="middle" font-size="16">grace period 30 s: the hard deadline</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Wait until the callers have heard, then drain, then exit.</figcaption></figure>
+  <h3 class="deep-h"><span>3</span>Staying in your zone</h3>
+  <p>Spread across three zones, a service with round-robin load balancing sends two thirds of its calls to another zone. That adds a millisecond or two each way and, in most clouds, a charge for every gigabyte that crosses zones. For chatty services it becomes a visible line on the bill.</p>
+  <ul>
+    <li><b>Prefer the same zone</b> when it has healthy instances, and fall back to others when it doesn't (Kubernetes topology-aware routing, or zone-aware load balancing in a mesh).</li>
+    <li><b>Keep enough instances per zone.</b> Zone preference with one instance per zone means one slow pod gets a third of all traffic.</li>
+    <li><b>Eject outliers.</b> An instance that passes its health check but returns errors or slow answers should be taken out of rotation for a while (outlier detection). Health checks see the instance from the outside; outlier detection sees what callers actually get.</li>
+  </ul>
+
+  </section>
   <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
   <div class="tchart">
     <div class="gain">
@@ -169,13 +201,20 @@
     </div>
   </div>
   <h3>Related patterns</h3>
-  <ul class="related"><li><b>Sidecar &amp; service mesh</b></li><li><b>API gateway</b></li><li><b>Leader election</b> · often uses the same store</li><li><b>Health checks</b></li><li><b>Circuit breaker</b></li></ul>
+  <ul class="related"><li><a href="../notes/sidecar.html"><b>Sidecar &amp; service mesh</b></a></li><li><a href="../notes/api-gateway.html"><b>API gateway</b></a></li><li><a href="../notes/leader-election.html"><b>Leader election</b></a> · often uses the same store</li><li><a href="../../cloud/notes/health-checks.html"><b>Health checks</b></a></li><li><a href="../notes/circuit-breaker.html"><b>Circuit breaker</b></a></li></ul>
+  <p class="aside deeper">on a card → <a href="../../cheatsheets/shell-network/index.html">Shell &amp; Network: the cheat sheet</a></p>
+  <p class="aside deeper">on a card → <a href="../../cheatsheets/docker-kubernetes/index.html">Docker &amp; Kubernetes: the cheat sheet</a></p>
   <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
   <div class="quiz">
     <details><summary>Client-side vs server-side discovery?</summary><p>Client-side: the caller queries the registry and picks an instance. Server-side: the caller hits a load balancer or DNS name that does the lookup.</p></details>
     <details><summary>How does a registry learn an instance has died?</summary><p>Missed heartbeats (TTL expiry) or failed health checks remove it from the list.</p></details>
     <details><summary>What's the difference between liveness and readiness checks?</summary><p>Liveness asks “is the process stuck and in need of a restart?”; readiness asks “can it serve traffic right now?”, which decides whether it stays in rotation.</p></details>
     <details><summary>What does Kubernetes use for service discovery?</summary><p>Service objects with stable DNS names, backed by EndpointSlices that list the ready pods.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>After a deploy, 5% of calls to Orders fail for about 30 seconds. The new pods show as healthy in the registry before they finish loading their cache. What do you fix?</span></summary><p>The readiness check: make it pass only when the pod can serve (cache loaded, connections open), so traffic waits. Add a short drain on shutdown so old pods leave the registry before they stop.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>In a local Kubernetes cluster, run two replicas behind a Service and curl it by name in a loop. Delete one pod and watch requests keep working. Then add a readiness probe that fails for the first 20 seconds and see how a new pod joins.</p>
   </div>
   <div class="remember">
     <span class="tag">remember!!</span>

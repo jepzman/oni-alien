@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>One Number Everywhere · Deep dive · Jef’s Notes</title>
+<meta name="description" content="A deep dive on metrics layers: how questions compile to SQL, six failure drills (fan and chasm traps, averages of averages, distinct counts, weeks, half-filtered ratios), defining a metric, four variants, caching numbers, testing metrics, governance, tools, a lab and a checklist.">
+<meta name="theme-color" content="#E4E1D9">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,700;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/dive.css?v=2b16c30ec1">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/dive.js?v=03c39c00d2" defer></script>
+</head>
+<body class="dive">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah" d="M0 0 L10 4 L0 8z"/></marker><marker id="ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path class="ah-r" d="M0 0 L10 4 L0 8z"/></marker></defs></svg>
+<a class="skip-link" href="#main">Skip to the text</a>
+<header class="site" id="top">
+  <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>deep dive 14</small></a>
+  <a class="site-link" href="../../index.html#deep-dives">Shelf</a>
+</header>
+<div class="strip" data-strip>
+  <div class="strip-in">
+    <nav aria-label="Chapters"><a href="#recap" data-ch="0"><b>1</b> Recap</a><a href="#compiler" data-ch="1"><b>2</b> Mechanism</a><a href="#drills" data-ch="2"><b>3</b> Failure drills</a><a href="#definitions" data-ch="3"><b>4</b> Definitions</a><a href="#variants" data-ch="4"><b>5</b> Variants</a><a href="#numbers" data-ch="5"><b>6</b> Numbers</a><a href="#testing" data-ch="6"><b>7</b> Testing</a><a href="#running" data-ch="7"><b>8</b> Running it</a><a href="#tools" data-ch="8"><b>9</b> Tools</a><a href="#lab" data-ch="9"><b>10</b> Lab</a></nav>
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+  </div>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+</div>
+
+<main id="main" class="wrap"><article class="page"><div class="col">
+<p class="eyebrow">Deep dive 14 · builds on Vol. 9, notes 08, 10, 15 and 16</p>
+<h1><span>One Number Everywhere</span></h1>
+<p class="sub">From a Monday meeting with three revenues to one definition every tool uses: the traps that multiply numbers, how a metrics layer writes SQL, what a definition must decide, and how to keep it fast and trusted.</p>
+<ul class="facts"><li><b>Full read</b> about 29 min</li><li><b>Skim</b> about 11 min: yellow boxes, tables and drill rules</li><li><b>Example</b> week 14 revenue: €1.92M, €2.31M or €2.05M?</li></ul>
+<nav class="toc" aria-label="Contents">
+  <h2 class="toc-h">In this deep dive</h2>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Four notes in sixty seconds</span><span class="m">2 min</span></a></li><li><a href="#compiler" data-ch="1"><span class="n">2</span><span class="t">The real mechanism: a compiler for questions</span><span class="m">3 min</span></a></li><li><a href="#drills" data-ch="2"><span class="n">3</span><span class="t">Failure drills</span><span class="m">5 min</span></a></li><li><a href="#definitions" data-ch="3"><span class="n">4</span><span class="t">The hard problem: deciding what a number means</span><span class="m">3 min</span></a></li><li><a href="#variants" data-ch="4"><span class="n">5</span><span class="t">Four ways to one number</span><span class="m">3 min</span></a></li><li><a href="#numbers" data-ch="5"><span class="n">6</span><span class="t">Keeping it fast</span><span class="m">2 min</span></a></li><li><a href="#testing" data-ch="6"><span class="n">7</span><span class="t">Testing numbers</span><span class="m">3 min</span></a></li><li><a href="#running" data-ch="7"><span class="n">8</span><span class="t">Running it: governance</span><span class="m">2 min</span></a></li><li><a href="#tools" data-ch="8"><span class="n">9</span><span class="t">Tools</span><span class="m">2 min</span></a></li><li><a href="#lab" data-ch="9"><span class="n">10</span><span class="t">A lab and the checklist</span><span class="m">3 min</span></a></li></ol>
+  <p class="toc-src">Read first: <a href="../../pipelines/notes/conformed-dimensions.html">Conformed Dimensions</a><a href="../../pipelines/notes/one-big-table.html">One Big Table vs Star</a><a href="../../pipelines/notes/metrics-layer.html">Metrics Layer</a><a href="../../pipelines/notes/aggregates-rollups.html">Aggregates &amp; Rollups</a></p>
+</nav>
+<section id="recap" data-title="Recap">
+<p class="ch">chapter 1 <span>· 2 min</span></p>
+<h2>Four notes in sixty seconds</h2>
+<div class="gist"><p><b>Gist</b> Conformed dimensions share one calendar and one product list, wide tables serve tools, a metrics layer defines each number once, and aggregates keep it fast. The Monday meeting with three revenues for one week is what happens without them working together.</p></div>
+
+<p>Monday, 09:00. Week 14 revenue is <b>€1.92M</b> on the finance dashboard, <b>€2.31M</b> on marketing's and <b>€2.05M</b> in the spreadsheet the regional managers use. Average order value disagrees too. Forty minutes go on reconciling, and nobody decides anything. Four notes in the volume deal with this; together they are a system.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Note</th><th scope="col">In one line</th></tr></thead><tbody><tr><td>Conformed Dimensions</td><td>one product, one customer, one calendar, shared by every fact</td></tr><tr><td>One Big Table vs Star</td><td>model as a star, serve wide tables to the tools that want them</td></tr><tr><td>Metrics Layer</td><td>define each business number once, in code, and let every tool ask for it</td></tr><tr><td>Aggregates & Rollups</td><td>pre-compute summaries at the grains people ask for, so it's fast</td></tr></tbody></table></div><figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 210" role="img" aria-label="Three dashboards for week 14. Finance shows revenue of 1.92 million euros and average order value of 46.10. Marketing shows 2.31 million and 55.40. The spreadsheet shows 2.05 million and 48.30. Each number is right for the SQL that produced it.">
+  <rect class="bx-g" x="20" y="30" width="220" height="90" rx="8"/><text class="lbl" x="130" y="64" text-anchor="middle">finance</text><text class="soft" x="130" y="92" text-anchor="middle">€1.92M · AOV €46.10</text>
+  <rect class="bx" x="270" y="30" width="220" height="90" rx="8"/><text class="lbl" x="380" y="64" text-anchor="middle">marketing</text><text class="soft" x="380" y="92" text-anchor="middle">€2.31M · AOV €55.40</text>
+  <rect class="bx-y" x="520" y="30" width="220" height="90" rx="8"/><text class="lbl" x="630" y="64" text-anchor="middle">spreadsheet</text><text class="soft" x="630" y="92" text-anchor="middle">€2.05M · AOV €48.30</text>
+  <text class="bad" x="380" y="160" text-anchor="middle" font-size="18">week 14 · three revenues, three average order values</text>
+  <text class="soft" x="380" y="190" text-anchor="middle">every number is “right” for the SQL that made it</text>
+</svg></div><figcaption>Three numbers, each correct for its own SQL. The problem isn't arithmetic; it's definition.</figcaption></figure><aside class="mn">Nothing here is a bug in the usual sense. Every query does what it says. They just say different things.</aside>
+<p class="full">The metrics layer note says “define it once”. This dive is about what that takes in practice: the joins that silently multiply numbers, the definitions nobody wrote down, how a metrics layer turns a question into SQL, how to keep it fast and cheap when 300 managers open it at once, and how to change a definition without breaking last quarter's board pack.</p>
+<h3>Why the three numbers differ</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Source</th><th scope="col">Revenue</th><th scope="col">What its SQL actually does</th></tr></thead><tbody><tr><td>finance</td><td>€1.92M</td><td>net of VAT, after returns booked against the original sale, gift cards excluded</td></tr><tr class=hot><td>marketing</td><td>€2.31M</td><td>gross including VAT, before returns, gift cards included, joined to order discounts (drill 1)</td></tr><tr><td>spreadsheet</td><td>€2.05M</td><td>net of VAT, before returns, gift cards excluded, week = Sunday to Saturday</td></tr></tbody></table></div>
+<p class="full">Only marketing's number contains an outright bug (the discount, drill 1). The other differences are choices: VAT, returns, gift cards, the first day of the week. Fixing the bug takes an afternoon. Agreeing the choices takes a meeting with the finance director, and making them stick takes the rest of this dive.</p>
+
+
+<a class="next" href="#compiler"><small>next · chapter 2</small>The real mechanism: a compiler for questions →</a>
+</section>
+<section id="compiler" data-title="Mechanism">
+<p class="ch">chapter 2 <span>· 3 min</span></p>
+<h2>The real mechanism: a compiler for questions</h2>
+<div class="gist"><p><b>Gist</b> A metrics layer takes a question (metric, dimensions, filters, time grain) and writes SQL from a semantic model that knows each table's grain, how tables join through entities, and how each measure aggregates. Ratios and two-fact metrics are computed part by part and combined last.</p></div>
+
+<p>A metrics layer is a compiler. You give it a <b>question</b> (a metric, some dimensions, filters, a time grain) and it writes the SQL, using a <b>semantic model</b> that knows the tables, how they join, and how each measure aggregates.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 205" role="img" aria-label="How a metrics layer answers a question. The question, revenue by category by week, goes to the semantic model, which knows entities, measures and dimensions. It generates SQL with safe joins and the metric&#x27;s filters. The layer checks for a cache or pre-aggregation, runs the query on the warehouse, and returns the result to whatever tool asked.">
+  <rect class="bx-y" x="10" y="20" width="220" height="70" rx="8"/><text class="lbl" x="120" y="50" text-anchor="middle">question</text><text class="soft" x="120" y="74" text-anchor="middle">revenue × category × week</text>
+  <rect class="bx" x="270" y="20" width="220" height="70" rx="8"/><text class="lbl" x="380" y="50" text-anchor="middle">semantic model</text><text class="soft" x="380" y="74" text-anchor="middle">entities · measures · dims</text>
+  <rect class="bx-g" x="530" y="20" width="220" height="70" rx="8"/><text class="lbl" x="640" y="50" text-anchor="middle">generated SQL</text><text class="soft" x="640" y="74" text-anchor="middle">safe joins · filters</text>
+  <path class="ln" d="M230 55 H268" marker-end="url(#a)"/><path class="ln" d="M490 55 H528" marker-end="url(#a)"/>
+  <rect class="bx" x="530" y="130" width="220" height="60" rx="8"/><text class="lbl" x="640" y="166" text-anchor="middle">cache / aggregate?</text>
+  <path class="ln" d="M640 90 V128" marker-end="url(#a)"/>
+  <rect class="bx" x="270" y="130" width="220" height="60" rx="8"/><text class="lbl" x="380" y="166" text-anchor="middle">warehouse</text>
+  <path class="ln" d="M530 160 H492" marker-end="url(#a)"/>
+  <rect class="bx" x="10" y="130" width="220" height="60" rx="8"/><text class="lbl" x="120" y="166" text-anchor="middle">result · any tool</text>
+  <path class="ln" d="M270 160 H232" marker-end="url(#a)"/>
+</svg></div><figcaption>Question in, SQL out. Every tool gets the same SQL for the same question.</figcaption></figure>
+<h3>What the model knows</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Part</th><th scope="col">For the shop</th><th scope="col">Used to</th></tr></thead><tbody><tr><td><b>semantic model</b></td><td><code>sales</code> on <code>fct_sales</code>, grain order line</td><td>know what one row is</td></tr><tr><td><b>entities</b></td><td>order_line (primary), order, product, customer, shop</td><td>find safe join paths between models</td></tr><tr><td><b>dimensions</b></td><td><code>order_date</code> (time), category, region, channel</td><td>group and filter</td></tr><tr><td><b>measures</b></td><td><code>amount_net</code> (sum), orders (count distinct order_id)</td><td>aggregate correctly at any grain</td></tr><tr><td><b>metrics</b></td><td>revenue, orders, average order value</td><td>the names people use, with filters and owners</td></tr></tbody></table></div><aside class="mn">Entities are the key idea. They tell the layer that sales and returns can both be reached from product, and that order is coarser than order line.</aside><div class="full">
+<h3>The SQL it writes</h3>
+<p>For “revenue by category by ISO week, web channel only”, the layer writes roughly this. Note what it decides for you: which table, which join, where the filter goes, how the week is computed.</p>
+<div class="card"><div class="card-head"><span>generated.sql</span><span>what the layer sends to the warehouse</span></div><pre><code><span class="k">SELECT</span>
+  date_trunc(<span class="s">'week'</span>, s.order_date)       <span class="k">AS</span> metric_time__week,
+  p.category                             <span class="k">AS</span> product__category,
+  sum(s.amount_net)                      <span class="k">AS</span> revenue
+<span class="k">FROM</span> fct_sales s
+<span class="k">LEFT</span> <span class="k">JOIN</span> dim_product p <span class="k">ON</span> s.product_key = p.product_key
+<span class="k">WHERE</span> s.channel = <span class="s">'web'</span>
+  <span class="k">AND</span> <span class="k">NOT</span> p.is_gift_card                  <span class="c">-- the metric's own filter</span>
+<span class="k">GROUP</span> <span class="k">BY</span> 1, 2</code></pre></div><h3>Ratios are computed last</h3>
+<p>Average order value is a <b>ratio metric</b>: revenue divided by orders. The layer computes both at the requested grain and divides at the end, so AOV by region is region revenue over region orders, never the average of shops' averages (drill 3).</p>
+<div class="card"><div class="card-head"><span>ratio.sql</span><span>numerator and denominator at the same grain</span></div><pre><code><span class="k">WITH</span> num <span class="k">AS</span> (<span class="k">SELECT</span> region, sum(amount_net) <span class="k">AS</span> revenue <span class="k">FROM</span> … <span class="k">GROUP</span> <span class="k">BY</span> region),
+     den <span class="k">AS</span> (<span class="k">SELECT</span> region, count(DISTINCT order_id) <span class="k">AS</span> orders <span class="k">FROM</span> … <span class="k">GROUP</span> <span class="k">BY</span> region)
+<span class="k">SELECT</span> region, revenue / nullif(orders, 0) <span class="k">AS</span> average_order_value
+<span class="k">FROM</span> num <span class="k">JOIN</span> den <span class="k">USING</span> (region)</code></pre></div><p>The same goes for metrics built from two facts, such as return rate (returns over sales): each side is aggregated on its own and joined on the shared dimensions, the drill-across from the conformed dimensions note, done automatically.</p>
+<h3>Questions the layer refuses</h3>
+<p>A good layer says no. Ask for “conversion rate by product category” and sessions have no product, so there is no correct answer; the layer returns an error instead of a number. Ask for revenue by a dimension reachable only through a many-to-many path (products in several promotions) and it refuses, because any answer would double count. These refusals feel annoying the first week. They are the reason the numbers can be trusted afterwards: hand-written SQL would have produced something, and someone would have put it on a slide.</p>
+<h3>Symmetric aggregates</h3>
+<p>Some tools (Looker most famously) take a different route around fan traps: when a join could repeat a coarse row, they sum distinct values keyed by the coarse row's primary key, so order 9001's discount counts once however many lines it joins. It works, and it is why every model must declare primary keys correctly. A wrong key there produces a quietly wrong number, so test keys for uniqueness in the pipeline before the layer relies on them.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>What do entities give the layer?</summary><p>Safe join paths between semantic models, and which grains are coarser or finer.</p></details><details><summary>How is average order value by region computed?</summary><p>Region revenue divided by region orders, both aggregated at region level; never the average of shop averages.</p></details></div>
+<a class="next" href="#drills"><small>next · chapter 3</small>Failure drills →</a>
+</section>
+<section id="drills" data-title="Failure drills">
+<p class="ch">chapter 3 <span>· 5 min</span></p>
+<h2>Failure drills</h2>
+<div class="gist"><p><b>Gist</b> Six ways a correct-looking query gives a wrong number: an order discount summed per line, two facts joined through a dimension, an average of averages, weekly unique customers added up, three definitions of a week, and a ratio filtered on one side only.</p></div>
+<aside class="mn">Every drill here passed review and ran for months. The numbers were plausible, just wrong.</aside>
+<ul class="drill-index" aria-label="The six drills">
+  <li><a href="#drill-1">1 · fan trap</a></li><li><a href="#drill-2">2 · chasm trap</a></li><li><a href="#drill-3">3 · average of averages</a></li>
+  <li><a href="#drill-4">4 · customers summed</a></li><li><a href="#drill-5">5 · which week</a></li><li><a href="#drill-6">6 · half a filter</a></li>
+</ul>
+<div class="drill" id="drill-1"><header><span>Drill 1</span><h3>The discount counted per line</h3></header><dl><dt>Timeline</dt><dd>Marketing wants revenue after discounts. Discounts are stored per order (<code>orders.discount</code>), revenue per line. The dashboard joins orders to lines and sums both. Order 9001, two lines and a €5 discount, shows a €10 discount. Across the week, discounts are overstated by 2.5×, the average lines per order.</dd><dt class="full">Tempting mistake</dt><dd class="full">Divide the discount by the number of lines in the dashboard formula. It fixes this tile and breaks the next one, where lines are filtered by category and the divisor is wrong again.</dd><dt class="full">Why</dt><dd class="full">A <b>fan trap</b>: a measure at a coarse grain (order) joined to a finer grain (line) is repeated once per fine row, then summed.</dd><dt>What saves you</dt><dd>Keep each measure at its own grain and aggregate it there: order measures from the order fact, line measures from the line fact, joined after aggregation. Or allocate the discount to lines in the pipeline (by line amount), so it becomes a line measure with a documented rule. A metrics layer that knows the grains refuses to sum an order measure through a join to lines.</dd></dl><p class="rule">Rule: a measure is summed only at its own grain. Coarse numbers joined to fine rows multiply.</p></div><figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 160" role="img" aria-label="Drill 1, the fan trap. Order 9001 has a 5 euro discount and two lines, the kettle and the mugs. Joining the order to its lines repeats the discount on each line, so summing it gives 10 euros.">
+  <rect class="bx-y" x="20" y="40" width="200" height="60" rx="8"/><text class="lbl" x="120" y="66" text-anchor="middle">order 9001</text><text class="soft" x="120" y="88" text-anchor="middle">discount €5</text>
+  <rect class="bx" x="330" y="10" width="200" height="40" rx="8"/><text class="soft" x="430" y="36" text-anchor="middle">line: kettle</text>
+  <rect class="bx" x="330" y="60" width="200" height="40" rx="8"/><text class="soft" x="430" y="86" text-anchor="middle">line: mugs</text>
+  <path class="ln" d="M222 60 L326 32" marker-end="url(#a)"/><path class="ln" d="M222 80 L326 80" marker-end="url(#a)"/>
+  <text class="bad" x="640" y="40" text-anchor="middle" font-size="18">sum(discount) = €10</text>
+  <text class="soft" x="640" y="70" text-anchor="middle">the order's €5, once per line</text>
+  <text class="soft" x="380" y="140" text-anchor="middle">fan trap: an order-level number joined down to its lines</text>
+</svg></div><figcaption>One order, two lines, the discount twice.</figcaption></figure><div class="drill" id="drill-2"><header><span>Drill 2</span><h3>Sales and returns, multiplied</h3></header><dl><dt>Timeline</dt><dd>The category manager's report puts units sold and units returned side by side. The SQL joins <code>fct_sales</code> and <code>fct_returns</code> to <code>dim_product</code> in one query and sums both. For the kettle, 400 sales and 12 returns become 4,800 and 4,800.</dd><dt class="full">Tempting mistake</dt><dd class="full">Add DISTINCT to the sums. Two kettle sales of the same quantity then count once, and the numbers become wrong in a new, quieter way.</dd><dt class="full">Why</dt><dd class="full">A <b>chasm trap</b>: two facts joined through a shared dimension in one query produce every sale × every return for each product. Each sum is multiplied by the other side's row count.</dd><dt>What saves you</dt><dd>Drill across: aggregate each fact to the shared dimension first, then join the small results. Never join two fact tables row to row. In a metrics layer, declare both as separate semantic models with the product entity; the layer generates the two-step query.</dd></dl><p class="rule">Rule: two facts meet only after each has been aggregated.</p></div><div class="drill" id="drill-3"><header><span>Drill 3</span><h3>The average of averages</h3></header><dl><dt>Timeline</dt><dd>The regional AOV is computed by averaging the shops' AOVs. Delft has 2,000 orders at €44; the small Leiden pop-up has 40 orders at €90. The region's AOV comes out at €67. The real one, all revenue over all orders, is €44.90.</dd><dt class="full">Tempting mistake</dt><dd class="full">Weight the average by orders in the dashboard. That is the ratio of sums written by hand, and the next author won't know to do it.</dd><dt class="full">Why</dt><dd class="full">An average of averages gives every shop the same weight whatever its size. It is only right when every group is the same size.</dd><dt>What saves you</dt><dd>Store and aggregate the parts (revenue, orders) and divide last, at whatever grain is asked. Make AOV a ratio metric, so no tool can average it. The same applies to conversion rate, margin percentage and every other ratio.</dd></dl><p class="rule">Rule: ratios are sums divided at the end, never averages of ratios.</p></div><div class="drill" id="drill-4"><header><span>Drill 4</span><h3>More customers than people</h3></header><dl><dt>Timeline</dt><dd>The monthly dashboard sums weekly unique customers: 61,000 + 58,000 + 63,000 + 60,000 = 242,000 “customers in March”. The CRM says 180,000 people bought in March. Regulars who buy every week were counted four times.</dd><dt class="full">Tempting mistake</dt><dd class="full">Label the tile “customer-weeks”. Honest, but nobody reads labels, and the board still hears 242,000 customers.</dd><dt class="full">Why</dt><dd class="full">Distinct counts don't add up across periods or groups that share members. Each week's set overlaps the others.</dd><dt>What saves you</dt><dd>Count distinct at the grain asked, from the fact table, or store mergeable sketches (HyperLogLog) in aggregates and merge them. Mark the measure non-additive in the semantic model so a tool can't sum it.</dd></dl><p class="rule">Rule: distinct counts are recounted or merged, never summed.</p></div><div class="drill" id="drill-5"><header><span>Drill 5</span><h3>Which week is week 14?</h3></header><dl><dt>Timeline</dt><dd>Finance's week 14 is the ISO week, Monday to Sunday. The spreadsheet's week starts on Sunday. Marketing's dashboard truncates UTC timestamps. Easter Sunday's €160,000 of sales lands in three different weeks.</dd><dt class="full">Tempting mistake</dt><dd class="full">Ask everyone to set their tool to ISO weeks. Some tools can't, defaults come back with every new dashboard, and the time zone problem remains.</dd><dt class="full">Why</dt><dd class="full">“Week” has at least three definitions, and the time zone moves sales near midnight. Each tool picked its own default.</dd><dt>What saves you</dt><dd>One calendar dimension (<code>dim_date</code>) with ISO week, fiscal week and fiscal period as columns, keyed on the local date computed once in the pipeline. The metrics layer exposes only those, so “week” means the business's week everywhere.</dd></dl><p class="rule">Rule: time grains come from one calendar, in the business's time zone.</p></div><div class="drill" id="drill-6"><header><span>Drill 6</span><h3>Conversion with half a filter</h3></header><dl><dt>Timeline</dt><dd>Web conversion rate is orders divided by sessions. A dashboard filters “channel = app” by joining the filter to orders only. App orders over all sessions: conversion drops from 3.1 % to 0.9 %, and the app team spends a week investigating a problem that doesn't exist.</dd><dt class="full">Tempting mistake</dt><dd class="full">Tell the app team to filter sessions too. They will, on this dashboard, until the next ratio someone builds.</dd><dt class="full">Why</dt><dd class="full">A filter applied to the numerator but not the denominator changes what the ratio means. Hand-written SQL makes this easy; nothing complains.</dd><dt>What saves you</dt><dd>Ratio metrics in the layer apply every filter to both parts, or refuse when a dimension isn't available on one of them (sessions have no product category, so “conversion by category” must be refused or defined separately).</dd></dl><p class="rule">Rule: a ratio's filters apply to both parts, or the question is refused.</p></div><div class="full">
+<h3>What the six drills add up to</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Habit</th><th scope="col">Drill</th></tr></thead><tbody><tr><td>measures aggregate at their own grain</td><td>1</td></tr><tr><td>facts meet after aggregation (drill across)</td><td>2</td></tr><tr><td>ratios are sums divided last</td><td>3, 6</td></tr><tr><td>distinct counts are recounted or merged</td><td>4</td></tr><tr><td>one calendar in the business time zone</td><td>5</td></tr><tr><td>the layer refuses questions it can't answer correctly</td><td>6</td></tr></tbody></table></div>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Discounts are 2.5× too high after joining orders to lines. Name the trap.</summary><p>A fan trap: an order-level measure repeated for each line and then summed.</p></details><details><summary>Why can't weekly unique customers be added up for the month?</summary><p>Regulars appear in several weeks; distinct counts must be recounted or merged.</p></details></div>
+<a class="next" href="#definitions"><small>next · chapter 4</small>The hard problem: deciding what a number means →</a>
+</section>
+<section id="definitions" data-title="Definitions">
+<p class="ch">chapter 4 <span>· 3 min</span></p>
+<h2>The hard problem: deciding what a number means</h2>
+<div class="gist"><p><b>Gist</b> The three revenues were correct SQL for different definitions. Defining a metric means deciding VAT, returns, discounts, gift cards, dates and as-was categories, writing the answers next to the code, giving it an owner, and changing it like an API: versioned, diffed and announced.</p></div>
+
+<p>The drills are traps a good layer prevents. The harder problem is that the three revenues in chapter 1 are all <b>correct SQL for different definitions</b>, and nobody chose between them. A metrics layer makes a definition executable; it doesn't make the decision. Defining a number means answering a handful of questions explicitly, and getting the right person to sign it.</p>
+<h3>The questions behind “revenue”</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Question</th><th scope="col">Options</th><th scope="col">The shop's answer</th></tr></thead><tbody><tr><td>VAT?</td><td>gross incl. VAT · net</td><td>net</td></tr><tr class=hot><td>returns?</td><td>ignore · on the return date · against the original sale</td><td>against the original sale</td></tr><tr><td>gift cards?</td><td>when sold · when redeemed · excluded</td><td>excluded; redemptions count when spent</td></tr><tr><td>discounts?</td><td>before · after, allocated to lines</td><td>after, allocated by line amount</td></tr><tr><td>shipping fees?</td><td>included · excluded</td><td>excluded (other income)</td></tr><tr><td>cancelled orders?</td><td>included until cancelled · never</td><td>never</td></tr><tr><td>which date?</td><td>placed · paid · shipped</td><td>placed, local time</td></tr><tr class=hot><td>which category?</td><td>as it was · as it is</td><td>as it was (type 2)</td></tr></tbody></table></div><aside class="mn">Returns and the category choice moved more money between the three dashboards than anything else.</aside><div class="full">
+<p>Each row is a business decision. The finance director owns revenue; marketing can have its own metric, <code>gross_merchandise_value</code>, with its own owner, as long as it is never labelled “revenue”. Names are part of the definition.</p>
+<h3>Naming rules</h3>
+<p>Most disagreements start with two things sharing a name. The shop adopts three rules. One name, one definition: there is exactly one <code>revenue</code>, and variants carry what makes them different in the name (<code>revenue_incl_vat</code>, <code>gross_merchandise_value</code>). Units in the name when they aren't obvious (<code>margin_pct</code>, <code>delivery_days</code>). No people or teams in names (<code>revenue_marketing</code> means nothing a year later). The layer enforces the first rule mechanically, because two metrics can't share a name.</p>
+<h3>Writing it down so it can't drift</h3>
+<p>Every certified metric gets a short specification next to its code: the answers above, the owner, the grain, the additivity, and a sentence a non-engineer can read. The code implements the specification; review checks they match.</p>
+<div class="card"><div class="card-head"><span>metrics/revenue.yml</span><span>definition and specification in one place</span></div><pre><code>metrics:
+  - name: revenue
+    label: Revenue
+    description: &gt;
+      Net of VAT, after discounts (allocated to lines), returns booked against
+      the original sale, excluding gift cards, shipping and cancelled orders.
+      Dated by order placed, Europe/Amsterdam. Categories as they were.
+    type: simple
+    type_params: { measure: amount_net_after_returns }
+    filter: |
+      {{ Dimension(&#x27;product__is_gift_card&#x27;) }} = false
+      and {{ Dimension(&#x27;order__is_cancelled&#x27;) }} = false
+    meta: { owner: finance-director, certified: true, since: 2026-12-01 }</code></pre></div><h3>Returns, worked through</h3>
+<p>Order 9001 was placed on 31 March for €45.45 net. One mug, €6.61 net, came back on 3 April. Where does the return go?</p>
+<div class="tbl"><table><thead><tr><th scope="col">Booking rule</th><th scope="col">March revenue</th><th scope="col">April revenue</th><th scope="col">Consequence</th></tr></thead><tbody><tr><td>ignore returns</td><td>€45.45</td><td>€0</td><td>overstates revenue; return-heavy categories look better than they are</td></tr><tr><td>on the return date</td><td>€45.45</td><td>−€6.61</td><td>March is final at close; April carries March's returns</td></tr><tr><td>against the original sale</td><td>€38.84</td><td>€0</td><td>March is right but keeps changing for 60 days after close</td></tr></tbody></table></div><p>The shop chooses “against the original sale” for analysis, because category managers want return-adjusted performance by the month it was sold, and files a snapshot at close for finance (chapter 8). Accounting books the return in April. The difference between the two is real, predictable and documented, so the monthly reconciliation can explain it line by line instead of arguing about it.</p>
+<h3>Changing a definition</h3>
+<p>Definitions change: the business decides shipping is revenue after all. Changing the metric in place rewrites every past report, including the board pack filed last quarter. Treat it like an API change: publish the new definition under a version or a new name, show both side by side for a period, tell every consumer, record the change with a date, then switch the main name and keep the old one available but marked deprecated. Filed numbers stay filed (the history deep dive covers why).</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Marketing wants revenue including VAT. What do you do?</summary><p>Give it its own name and owner (e.g. gross merchandise value); “revenue” stays the finance definition.</p></details><details><summary>Why not change a definition in place?</summary><p>It silently rewrites every past report, including filed ones; version it, show both, then switch.</p></details></div>
+<a class="next" href="#variants"><small>next · chapter 5</small>Four ways to one number →</a>
+</section>
+<section id="variants" data-title="Variants">
+<p class="ch">chapter 5 <span>· 3 min</span></p>
+<h2>Four ways to one number</h2>
+<div class="gist"><p><b>Gist</b> Definitions in every tool is where the problem starts. A documented wide table helps but can't stop averaging. A semantic model inside one BI tool works until a spreadsheet or portal needs the number. A headless metrics layer serves every consumer from one model.</p></div>
+
+<p>There are four common ways to get one number everywhere. Here is each one run against the drills and the shop's tools: two BI tools, spreadsheets, notebooks and the embedded franchisee portal.</p>
+<div class="tbl"><table><thead><tr><th scope="col"></th><th scope="col">A · definitions in each tool</th><th scope="col">B · one big table, documented</th><th scope="col">C · semantic model inside one BI tool</th><th scope="col">D · headless metrics layer</th></tr></thead><tbody><tr><td>where revenue lives</td><td>every dashboard's SQL</td><td>a column per measure in a wide table</td><td>LookML, a Power BI model</td><td>dbt Semantic Layer, Cube</td></tr><tr><td>drill 1, fan trap</td><td>each author's problem</td><td><b>baked in</b> if the table mixes grains</td><td>prevented by declared grains</td><td>prevented by declared grains</td></tr><tr><td>drill 3, ratios</td><td>each author's problem</td><td>users average the column</td><td>ratio measures</td><td>ratio metrics</td></tr><tr class=hot><td>reaches spreadsheets, notebooks, the portal</td><td>copies</td><td>yes, it's a table</td><td><b>only that BI tool</b></td><td>yes, by API and SQL</td></tr><tr><td>new questions</td><td>new SQL each time</td><td>only the columns that exist</td><td>any joinable dimension</td><td>any joinable dimension</td></tr><tr><td>effort to start</td><td>none</td><td>low</td><td>medium</td><td>medium to high</td></tr></tbody></table></div><aside class="mn">Most shops end up with D behind their main BI tool, or with C when one tool really is all they use.</aside><div class="full">
+<p>Variant A is where everyone starts and why the Monday meeting happens. Variant B is a sensible first step: one wide table per subject (<code>obt_sales</code>) with clearly named, pre-computed measure columns removes most disagreement, but it can't stop someone averaging the AOV column, and every new question needs a new column. Variant C is excellent when one BI tool is the only consumer: Looker and Power BI models know grains and ratios. But the spreadsheet and the franchisee portal can't use it, so their numbers drift. Variant D puts the model outside any tool, so every consumer asks the same layer.</p>
+<h3>Variant B, done well</h3>
+<p>If a layer is not possible yet, a wide table can still remove most of the Monday arguments. Give it one grain per table, pre-computed measure columns named after the agreed definitions (<code>revenue</code>, never <code>amount</code>), the parts of every ratio rather than the ratio itself (<code>revenue</code> and <code>orders</code>, not <code>aov</code>), a calendar from <code>dim_date</code>, and column descriptions copied from the specification. It is variant D's definitions without the compiler, and it makes the later move to a layer a matter of pointing the model at tables that are already right.</p>
+<h3>The shop's choice</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Consumer</th><th scope="col">Reads</th></tr></thead><tbody><tr><td>finance and management dashboards</td><td>the metrics layer, through the BI tool's connector</td></tr><tr><td>regional managers' spreadsheets</td><td>the metrics layer's spreadsheet add-in, or a scheduled extract it produces</td></tr><tr><td>analysts' notebooks</td><td>the metrics layer's SQL or Python API for metrics; raw marts for exploration</td></tr><tr><td>the franchisee portal</td><td>the layer's API with a security context per franchisee</td></tr><tr><td>ad-hoc exploration</td><td>marts directly, clearly labelled “not certified”</td></tr></tbody></table></div><p>Exploration stays free. Only numbers that leave the analytics team need to come from the layer.</p>
+<h3>Getting from A to D without a big bang</h3>
+<ol>
+<li><b>Find the numbers that matter.</b> List the ten metrics that appear in management reports. Ignore the other four hundred for now.</li>
+<li><b>Define them, one meeting each.</b> Owner, specification, code, fixtures. Put them in the layer and certify them.</li>
+<li><b>Move the top dashboards.</b> Repoint the five most-viewed dashboards' tiles to the layer, compare old and new values side by side for two weeks, explain every difference, then switch.</li>
+<li><b>Mark the rest.</b> Every tile not coming from the layer gets a “not certified” label. People stop putting those on slides on their own.</li>
+</ol>
+<p>At the shop this took six weeks for revenue, orders, AOV, margin and return rate. The Monday meeting got shorter after the second week, when finance and marketing were looking at the same tile with two clearly named metrics on it.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why isn't a BI tool's semantic model enough for the shop?</summary><p>Spreadsheets, notebooks and the franchisee portal can't use it, so their numbers drift.</p></details><details><summary>Does exploration have to go through the layer?</summary><p>No; only numbers that leave the analytics team, labelled certified.</p></details></div>
+<a class="next" href="#numbers"><small>next · chapter 6</small>Keeping it fast →</a>
+</section>
+<section id="numbers" data-title="Numbers">
+<p class="ch">chapter 6 <span>· 2 min</span></p>
+<h2>Keeping it fast</h2>
+<div class="gist"><p><b>Gist</b> Three hundred dashboard opens on a Monday are 2,400 queries. Pre-aggregations at day × shop × category answer most of them from a few million rows in milliseconds. Sketches make distinct counts mergeable. Invalidate caches on publish, not on a timer.</p></div>
+
+<p>A metrics layer adds a hop to every query, and it concentrates load: everybody's dashboards now run through it. The numbers decide whether it feels instant.</p>
+<h3>Monday morning, worked out</h3>
+<div class="tbl"><table><thead><tr><th scope="col"></th><th scope="col">Without caching</th><th scope="col">With pre-aggregations</th></tr></thead><tbody><tr><td>dashboard opens 08:55–09:15</td><td>300</td><td>300</td></tr><tr><td>queries per open (tiles)</td><td>8</td><td>8</td></tr><tr><td>queries reaching the warehouse</td><td>2,400</td><td>~40 (cache misses and refreshes)</td></tr><tr><td>rows scanned per query</td><td>60 M lines (a year)</td><td>~20,000 (daily aggregate rows)</td></tr><tr><td>median tile time</td><td>4–6 s</td><td>&lt; 300 ms</td></tr></tbody></table></div><aside class="mn">Pre-aggregations are aggregates (Vol. 9) that the layer builds and routes to by itself.</aside><div class="full">
+<h3>A latency budget</h3>
+<p>People decide whether to trust a dashboard partly by how it feels. Set targets and measure them per tile: under one second for the management dashboard's tiles (pre-aggregated, cached), under five seconds for exploratory questions the layer compiles to the fact tables, and an honest spinner with a message beyond that. Tiles that regularly miss the first target are the list of pre-aggregations to build next.</p>
+<h3>Sizing the pre-aggregations</h3>
+<p>The common dashboard grain is day × shop × category: 365 × 31 × 200 = about 2.3 million rows a year, a few dozen megabytes. Week × region × category is under 100,000. The layer answers any question at or above a stored grain from it (summing additive measures, merging sketches) and falls back to the fact for anything finer. Refresh only the days a batch touched, as with any aggregate.</p>
+<h3>Distinct counts, approximately</h3>
+<p>Unique customers can't be summed (drill 4). A HyperLogLog sketch with 2<sup>14</sup> registers is about 16 KB and accurate to about ±0.8 %. Stored per day × shop × category, merged at query time, it answers “unique customers by region this quarter” from the aggregate. Mark such metrics as approximate in their description; finance reports that need exact counts query the fact.</p>
+<h3>Cache freshness</h3>
+<p>A cache keyed on the query and invalidated when the underlying data publishes (write–audit–publish gives a clean moment) is always consistent with the warehouse. A time-based cache of 15 minutes is simpler, but after a correction the dashboard and the warehouse disagree for up to 15 minutes, which is exactly the kind of disagreement this whole exercise was meant to end.</p>
+<h3>What the layer itself costs</h3>
+<p>A headless layer is a small service: a couple of containers for the API and the cache, plus the storage for pre-aggregations. At the shop's size that is far less than the warehouse compute it saves on Monday mornings. The real cost is people: someone has to own the model, review metric changes and answer “why is this number different”. Budget a part-time owner from the start; a metrics layer nobody maintains drifts back into variant A within a year, with extra steps.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Why invalidate the cache on publish rather than every 15 minutes?</summary><p>So the dashboard never disagrees with the warehouse after a correction.</p></details><details><summary>How are unique customers answered from an aggregate?</summary><p>Store HyperLogLog sketches per row and merge them at query time.</p></details></div>
+<a class="next" href="#testing"><small>next · chapter 7</small>Testing numbers →</a>
+</section>
+<section id="testing" data-title="Testing">
+<p class="ch">chapter 7 <span>· 3 min</span></p>
+<h2>Testing numbers</h2>
+<div class="gist"><p><b>Gist</b> Pin numbers down: hand-computed fixtures for each metric, a metric diff on every pull request, the same metric through every consumer path, monthly reconciliation with the finance ledger, and additivity checks.</p></div>
+
+<p>Metric bugs look like plausible numbers. Tests must therefore pin numbers down: known inputs with known outputs, the same metric through different paths, and agreement with the books.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Test</th><th scope="col">Checks</th><th scope="col">Catches</th></tr></thead><tbody><tr><td><b>metric unit tests</b></td><td>tiny fixtures with hand-computed totals, including a two-line order with a discount</td><td>drills 1, 3, 6</td></tr><tr class=hot><td><b>metric diff in CI</b></td><td>every pull request recomputes key metrics for the last 90 days and shows what changed</td><td>unintended definition changes</td></tr><tr><td><b>cross-path consistency</b></td><td>revenue via the API, via the BI tool and via the extract agree to the cent</td><td>a tool bypassing the layer</td></tr><tr class=hot><td><b>ledger reconciliation</b></td><td>monthly revenue within 0.1 % of the finance ledger, differences explained</td><td>definitions drifting from accounting</td></tr><tr><td><b>additivity checks</b></td><td>sum of shops equals the region; sum of days equals the month</td><td>non-additive measures summed</td></tr></tbody></table></div><aside class="mn">The metric diff on pull requests is the single most useful habit: reviewers see “revenue for March changes by −€41,200” before merging.</aside><div class="full">
+<div class="card"><div class="card-head"><span>metric_fixture.yml</span><span>order 9001 as a test</span></div><pre><code># two lines, an order discount of €5 incl. VAT (€4.13 net), one mug returned
+given:
+  orders:      [{order_id: 9001, discount_net: 4.13, placed: 2026-03-31}]
+  order_lines: [{line: 1, order_id: 9001, sku: K-100, amount_net: 32.23},
+                {line: 2, order_id: 9001, sku: M-210, amount_net: 13.22}]
+  returns:     [{line: 2, qty: 1, amount_net: 6.61, returned: 2026-04-03}]
+expect:
+  revenue:             {2026-03-31: 34.71}   # 45.45 − 4.13 discount − 6.61 return
+  orders:              {2026-03-31: 1}
+  average_order_value: {2026-03-31: 34.71}</code></pre></div><p>Write the expected values by hand from the specification, not by running the query. The point is that a person and the code agree on what the definition means. When they don't, one of them is wrong, and it is worth finding out which before the board does.</p>
+<h3>Reconciling with the ledger, worked</h3>
+<p>Finance's general ledger for March says €7.912M net sales. The layer says €7.884M. The gap is €28,000, 0.35 %, above the 0.1 % threshold. Broken down by cause:</p>
+<div class="tbl"><table><thead><tr><th scope="col">Cause</th><th scope="col">Amount</th><th scope="col">Expected?</th></tr></thead><tbody><tr><td>returns booked in April by accounting, against March by the layer</td><td>+€41,200 in the layer's favour</td><td>yes, documented</td></tr><tr><td>shipping fees: ledger books them as sales, the layer excludes them</td><td>−€63,800</td><td>yes, documented</td></tr><tr><td>two days of Delft till sales missing from the warehouse</td><td>−€5,400</td><td><b>no</b>: a pipeline gap</td></tr></tbody></table></div><p>The first two lines are definitions and stay. The third is a bug the reconciliation found: a till upload that never arrived. After replaying it, the unexplained part is zero, which is the real target. The threshold is for the unexplained remainder, not for the total gap.</p>
+<h3>Testing through the tools</h3>
+<p>Once a week, a job asks every consumer path for the same three numbers (revenue, orders, AOV for last week): the layer's API, the BI tool's export, the spreadsheet extract, the franchisee portal for one franchisee summed with the others. Any difference means a path has its own SQL somewhere. It is the cheapest way to find the dashboard someone built straight on the marts last month.</p>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>What does a metric diff in CI show reviewers?</summary><p>How much each key metric changes over recent periods if the pull request is merged.</p></details><details><summary>Why write expected fixture values by hand?</summary><p>So a person and the code independently agree on what the definition means.</p></details></div>
+<a class="next" href="#running"><small>next · chapter 8</small>Running it: governance →</a>
+</section>
+<section id="running" data-title="Running it">
+<p class="ch">chapter 8 <span>· 2 min</span></p>
+<h2>Running it: governance</h2>
+<div class="gist"><p><b>Gist</b> Every certified metric has an owner, a badge, a change log and a deprecation path; definitions freeze at month end. Watch how much traffic goes through the layer, the Monday cache hit rate, and uncertified numbers in management reports.</p></div>
+
+<p>Running a metrics layer is mostly governance: who owns which number, how definitions change, and which numbers people may trust.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Practice</th><th scope="col">How it looks at the shop</th></tr></thead><tbody><tr><td><b>owners</b></td><td>every certified metric has a named business owner who approves changes</td></tr><tr><td><b>certification</b></td><td>certified metrics carry a badge in every tool; everything else says “not certified”</td></tr><tr><td><b>change log</b></td><td>each definition change has a date, a reason and the size of the effect on the last 12 months</td></tr><tr><td><b>deprecation</b></td><td>old metrics stay queryable for a quarter, marked deprecated, then retired</td></tr><tr><td><b>month-end freeze</b></td><td>no definition changes between the last working day and the close</td></tr></tbody></table></div><aside class="mn">A metric without an owner is a metric that will be changed by whoever is in a hurry.</aside><div class="full">
+<h3>Retiring a metric</h3>
+<p>Metrics accumulate: <code>revenue_old</code>, <code>revenue_marketing_2024</code>, <code>aov_excl_outliers</code>. Each one is a chance for the Monday meeting to come back. Every quarter, list metrics with no queries in 90 days and propose retiring them to their owners; list duplicates that differ only in one filter and merge them into one metric with a dimension. Retiring is as deliberate as adding: marked deprecated, announced, removed after a quarter. The certified list should get shorter as often as it gets longer.</p>
+<h3>Three metrics about the metrics</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Metric</th><th scope="col">Means</th><th scope="col">Act when</th></tr></thead><tbody><tr><td>share of dashboard queries through the layer</td><td>how much is governed</td><td>below 80 %: find the dashboards on raw marts</td></tr><tr><td>cache hit rate on Monday morning</td><td>how fast it feels</td><td>below 90 %: add a pre-aggregation</td></tr><tr><td>uncertified metrics used in management reports</td><td>trust leaking</td><td>any: certify them or remove them</td></tr></tbody></table></div><h3>Announcing a change</h3>
+<p>When shipping fees become part of revenue, the owner sends one short note to everyone who uses the metric: what changes, from which date, the effect on the last twelve months (from the metric diff: +3.1 % on average, +4.8 % in December), what happens to filed reports (nothing: they stay as filed), and where the old definition can still be found (<code>revenue_v1</code>, until the end of the quarter). Five sentences prevent five meetings.</p>
+<h3>The runbook</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Situation</th><th scope="col">Do</th></tr></thead><tbody><tr><td>two dashboards disagree</td><td>check both go through the layer; if one doesn't, move it; if both do, compare the generated SQL</td></tr><tr><td>finance's ledger and revenue differ by 0.4 %</td><td>list the difference by day and type (returns, gift cards, shipping); fix the definition or document the gap</td></tr><tr><td>a definition must change</td><td>new version beside the old, metric diff to show the effect, owner sign-off, announce, switch, deprecate</td></tr><tr><td>the layer is slow on Monday</td><td>look at the slowest uncached queries; add a pre-aggregation at their grain</td></tr><tr><td>a team wants “just a quick number”</td><td>explore on marts; if the number leaves the team, it goes through the layer</td></tr></tbody></table></div>
+</div>
+<div class="check quiz"><h3>checkpoint</h3><details><summary>Two dashboards disagree. First check?</summary><p>Whether both go through the layer; one usually has its own SQL on the marts.</p></details><details><summary>What is a month-end freeze?</summary><p>No definition changes between the last working day and the close.</p></details></div>
+<a class="next" href="#tools"><small>next · chapter 9</small>Tools →</a>
+</section>
+<section id="tools" data-title="Tools">
+<p class="ch">chapter 9 <span>· 2 min</span></p>
+<h2>Tools</h2>
+<div class="gist"><p><b>Gist</b> dbt's Semantic Layer and Cube are headless layers reachable from many tools; LookML and Power BI models live inside their BI tool. All compile questions to SQL and help with traps and speed. None decides what revenue means.</p></div>
+
+<p>Metrics layers come in two kinds: inside a BI tool, or standalone (“headless”) and reachable from many tools. All of them compile questions into SQL from a semantic model; they differ in reach, caching and how much modelling they expect.</p>
+<div class="tbl"><table><thead><tr><th scope="col">Tool</th><th scope="col">Kind</th><th scope="col">Gives you</th><th scope="col">Leaves to you</th></tr></thead><tbody><tr><td>dbt Semantic Layer (MetricFlow)</td><td>headless, in the dbt project</td><td>metrics next to the models, safe joins via entities, ratio and cumulative metrics, APIs and BI connectors</td><td>caching depends on the platform; the definitions</td></tr><tr><td>Cube</td><td>headless service</td><td>data model, pre-aggregations with routing, caching, REST, GraphQL and SQL APIs, security context per user</td><td>running the service; the definitions</td></tr><tr><td>Looker (LookML)</td><td>inside the BI tool</td><td>a mature model with explores, symmetric aggregates against fan-out, aggregate awareness</td><td>reaching tools other than Looker</td></tr><tr><td>Power BI semantic models</td><td>inside the BI tool</td><td>DAX measures, relationships, aggregations, row-level security</td><td>non-Microsoft consumers; DAX skills</td></tr><tr><td>Malloy, AtScale and others</td><td>language or headless</td><td>a modelling language or OLAP-style layer</td><td>smaller ecosystems</td></tr></tbody></table></div><aside class="mn">Looker's symmetric aggregates solve the fan trap by de-duplicating on primary keys inside the sum. It's clever, and it's why declaring primary keys matters in every tool.</aside><div class="full">
+<h3>What the tools map to</h3>
+<div class="tbl"><table><thead><tr><th scope="col">Chapter</th><th scope="col">Tool feature</th></tr></thead><tbody><tr><td>2 · compiling questions</td><td>MetricFlow query planning, Cube's data model, LookML explores</td></tr><tr><td>3 · fan and chasm traps</td><td>entities and join paths; symmetric aggregates; refusing unsafe joins</td></tr><tr><td>4 · definitions</td><td>metric descriptions and <code>meta</code> (owner, certification)</td></tr><tr><td>6 · speed</td><td>Cube pre-aggregations, Looker aggregate awareness, Power BI aggregations, warehouse result caches</td></tr><tr><td>7 · metric diff</td><td>dbt's state comparison in CI with a metrics query, or a small script against the layer's API</td></tr><tr><td>8 · certification</td><td>badges and endorsements in BI tools, the layer's metadata</td></tr></tbody></table></div><h3>Choosing one</h3>
+<div class="tbl"><table><thead><tr><th scope="col">If</th><th scope="col">Then</th></tr></thead><tbody><tr><td>one BI tool is genuinely the only consumer</td><td>its own semantic model (LookML, Power BI)</td></tr><tr><td>the team already models in dbt</td><td>dbt Semantic Layer, so metrics live beside the models</td></tr><tr><td>many consumers and an app that embeds numbers</td><td>a headless layer with caching and a security context (Cube, or dbt's layer with a caching platform)</td></tr><tr><td>none of the above yet</td><td>variant B: one documented wide table per subject, and the definitions written down; move to a layer when the second tool arrives</td></tr></tbody></table></div><p>None of them chooses whether returns are booked against the original sale. That is chapter 4, and it is the part that ends the Monday meeting.</p>
+</div>
+
+<a class="next" href="#lab"><small>next · chapter 10</small>A lab and the checklist →</a>
+</section>
+<section id="lab" data-title="Lab">
+<p class="ch">chapter 10 <span>· 3 min</span></p>
+<h2>A lab and the checklist</h2>
+<div class="gist"><p><b>Gist</b> The lab defines gross margin and return rate for franchisees and the board: ratios from line-level parts, costs fixed at the sale date, returns against the sale, security through the layer. The checklist turns the dive into review questions.</p></div>
+
+<p><b>The lab.</b> Franchisees join the portal in July. They want three numbers for their own shops: revenue, gross margin percentage and return rate. Head office wants the same numbers across all shops for the board. The product cost table is maintained by purchasing and changes monthly; returns can arrive up to 60 days after the sale.</p>
+<ol>
+<li>Define gross margin percentage: what are its parts, and at which grain are they stored?</li>
+<li>Return rate: units or money? Against which date? Where can it be computed?</li>
+<li>Which cost applies to a sale in March if the cost changes in April?</li>
+<li>How does a franchisee see only their shops, through the same metrics?</li>
+<li>The board wants “margin by region” as a single number per region. A slide averages shops' margins. What do you say?</li>
+</ol>
+<div class="check quiz"><h3>model answer</h3>
+<details><summary>1 · Gross margin %</summary><p>A ratio metric: (revenue − cost of goods) / revenue, both summed at the line grain and divided last. Store <code>cost_of_goods</code> on each sales line at load time, so it is a line measure like revenue.</p></details>
+<details><summary>2 · Return rate</summary><p>Decide with the owner; the shop picks money: returned revenue / revenue, returns booked against the original sale date. It needs both facts, so it is a drill-across metric on the shared dimensions (product, shop, date of sale). Recent periods are incomplete for 60 days: say so on the dashboard.</p></details>
+<details><summary>3 · Which cost</summary><p>The cost valid on the sale date, looked up at load time from a type 2 cost history and stored on the line. Then March margin never changes when April's cost is entered.</p></details>
+<details><summary>4 · Franchisees</summary><p>The portal calls the layer with a security context from a signed token; the layer adds the franchisee's shops as a filter to every query, on both parts of every ratio. Same definitions, fewer rows.</p></details>
+<details><summary>5 · The slide</summary><p>An average of shop margins is drill 3: it weights the pop-up the same as Delft. Ask the layer for margin by region; it sums revenue and cost per region and divides.</p></details>
+</div>
+<h3>The review checklist</h3>
+<div class="checklist"><div class="cl"><h3>Definitions</h3><ul><li>Every certified metric has an owner and a written specification</li><li>Names are unique: no two metrics called revenue</li><li>VAT, returns, discounts, gift cards and dates are decided, not defaulted</li><li>Changes are versioned, diffed and announced</li></ul></div><div class="cl"><h3>Model</h3><ul><li>Each semantic model has a stated grain and primary key</li><li>Measures declare additivity</li><li>Ratios are numerator and denominator, divided last</li><li>Facts meet only through conformed dimensions</li></ul></div><div class="cl"><h3>Time</h3><ul><li>One calendar dimension with ISO and fiscal weeks</li><li>Local business dates computed once in the pipeline</li><li>Late-arriving periods are labelled incomplete</li></ul></div><div class="cl"><h3>Reach</h3><ul><li>Dashboards, spreadsheets, notebooks and the portal all read the layer</li><li>Exploration on marts is labelled “not certified”</li><li>Row-level security passes through the layer</li></ul></div><div class="cl"><h3>Speed</h3><ul><li>Pre-aggregations at the common grains</li><li>Cache invalidated on publish</li><li>Approximate metrics say so</li></ul></div><div class="cl"><h3>Tests</h3><ul><li>Metric unit tests with hand-computed fixtures</li><li>Metric diff on every pull request</li><li>Monthly reconciliation with the ledger</li><li>Weekly cross-path consistency check</li></ul></div></div>
+
+<a class="next" href="#top"><small>the end</small>Back to the top ↑</a>
+</section>
+<p class="sources"><b>Sources.</b> dbt Labs, “About MetricFlow” and semantic models documentation. Cube documentation, “Data modeling” and “Pre-aggregations”. Looker documentation, “Symmetric aggregates”. Ralph Kimball and Margy Ross, <i>The Data Warehouse Toolkit</i>, 3rd ed. (2013), on additivity and drilling across. Benn Stancil, “The missing piece of the modern data stack” (2021). Philippe Flajolet et al., “HyperLogLog” (2007).</p>
+</div></article>
+<footer class="foot"><span>Jef’s Notes · deep dive 14 · One Number Everywhere</span></footer>
+</main>
+
+<div class="dock" data-dock>
+  <div class="progress" aria-hidden="true"><i data-progress></i></div>
+  <div class="dock-in">
+    <a class="dock-arrow" data-prev href="#top" aria-label="Previous chapter">‹</a>
+    <button class="dock-mid" type="button" data-open aria-haspopup="dialog" aria-expanded="false">
+      <small data-count>1 / 10</small><span data-current>Recap</span><i aria-hidden="true">☰</i>
+    </button>
+    <a class="dock-arrow" data-next href="#compiler" aria-label="Next chapter">›</a>
+  </div>
+</div>
+<div class="sheet-back" data-close hidden></div>
+<div class="sheet" data-sheet role="dialog" aria-modal="true" aria-label="Chapters" hidden>
+  <div class="sheet-head"><b>Chapters</b><button type="button" data-close aria-label="Close">×</button></div>
+  <ol><li><a href="#recap" data-ch="0"><span class="n">1</span><span class="t">Four notes in sixty seconds</span><span class="m">2 min</span></a></li><li><a href="#compiler" data-ch="1"><span class="n">2</span><span class="t">The real mechanism: a compiler for questions</span><span class="m">3 min</span></a></li><li><a href="#drills" data-ch="2"><span class="n">3</span><span class="t">Failure drills</span><span class="m">5 min</span></a></li><li><a href="#definitions" data-ch="3"><span class="n">4</span><span class="t">The hard problem: deciding what a number means</span><span class="m">3 min</span></a></li><li><a href="#variants" data-ch="4"><span class="n">5</span><span class="t">Four ways to one number</span><span class="m">3 min</span></a></li><li><a href="#numbers" data-ch="5"><span class="n">6</span><span class="t">Keeping it fast</span><span class="m">2 min</span></a></li><li><a href="#testing" data-ch="6"><span class="n">7</span><span class="t">Testing numbers</span><span class="m">3 min</span></a></li><li><a href="#running" data-ch="7"><span class="n">8</span><span class="t">Running it: governance</span><span class="m">2 min</span></a></li><li><a href="#tools" data-ch="8"><span class="n">9</span><span class="t">Tools</span><span class="m">2 min</span></a></li><li><a href="#lab" data-ch="9"><span class="n">10</span><span class="t">A lab and the checklist</span><span class="m">3 min</span></a></li></ol>
+  <div class="sheet-foot">
+    <button class="skim-btn" type="button" data-skim aria-pressed="false">Skim mode</button>
+    <a href="#top" data-close>Top of page ↑</a>
+  </div>
+</div>
+</body>
+</html>

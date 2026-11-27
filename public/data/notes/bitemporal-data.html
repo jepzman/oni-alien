@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bitemporal Data · Jef’s Notes</title>
+<meta name="description" content="Record both when a fact was true and when you knew it, so corrections never erase history.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-data">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 3 · data &amp; database patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="bitemporal-data">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 02.11.26</span><span class="topic">collection · <b>modelling</b></span></div>
+  <p class="kicker">a.k.a. “what was true, and what did we know?”</p>
+  <h1><span class="hl">Bitemporal Data</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>A history table answers “what was the value on that day?”. Some questions need more: “what did <b>we believe</b> on 5 March about the price on 1 March?” <b>Bitemporal</b> rows carry two time ranges: <b>valid time</b> (when the fact was true in the world) and <b>recorded time</b> (when the database held that belief). A correction never updates in place: it closes the old row's recorded range and adds a new row, so every past report can be reproduced exactly.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> modelling time</li><li><b>Builds on:</b> history tables (one time axis)</li><li><b>Standard:</b> SQL:2011 application-time and system-versioned tables</li><li><b>Pairs with:</b> event sourcing, audit logging</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">An invoice on 5 March used a price of €10 valid from 1 March. On 20 March someone finds the price was really €12 and fixes the row. Correct, and now <span class="hl-pink">nobody can explain the invoice</span>: the database says the 1 March price was €12, and the €10 it believed at the time is gone.</p>
+  <ul>
+    <li>A plain history table keeps <b>versions over time</b>, but a back-dated correction rewrites what that time looked like.</li>
+    <li>Auditors, regulators and support ask “why did the system do that, on that day?” and need the data <b>as it was known then</b>.</li>
+    <li>Insurance, payroll, pricing and contracts change <b>in the past</b> all the time: retroactive raises, late claims, corrected rates.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of an overwritten correction. On 5 March an invoice is sent using a price of 10 euros, valid from 1 March. On 20 March someone corrects the price for 1 March to 12 euros by updating the row. Now nobody can explain the invoice: the database says the price on 1 March was 12 euros, and the old value is gone."><g class="rough"><rect class="d f-y" x="20" y="40" width="210" height="70" rx="10"/><rect class="d f-blue" x="20" y="160" width="210" height="70" rx="10"/><rect class="d d-thin f-paper" x="330" y="70" width="260" height="58" rx="4"/><path class="d d-thin f-y" d="M330 74 a4 4 0 0 1 4 -4 h252 a4 4 0 0 1 4 4 v28 h-260 z"/><path class="d" d="M234 195 L326 110"/><path class="d" d="M321.6 121.2 L326 110 L314.5 113.5"/></g><text class="t-head" x="125" y="71" text-anchor="middle" font-size="16">5 March: invoice</text><text class="t" x="125" y="95" text-anchor="middle" font-size="13">used €10 for 1 March</text><text class="t-head" x="125" y="191" text-anchor="middle" font-size="16">20 March: fix</text><text class="t" x="125" y="215" text-anchor="middle" font-size="13">UPDATE price = €12</text><text class="t-head" x="460" y="93" text-anchor="middle" font-size="17">prices</text><text class="t" x="340" y="121" font-size="16">sku 812 · from 1 Mar · €12</text><text class="t-s t-red" x="460" y="180" text-anchor="middle" font-size="17">the €10 is gone</text><text class="t-s t-red" x="460" y="210" text-anchor="middle" font-size="17">“why did we charge €10?”</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>The correction is right. But now the 5 March invoice can't be explained.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">a ship's logbook</span></h2>
+  <p>A ship's log is never rubbed out. When the navigator finds on Thursday that Monday's position was wrong, they add a <b>correction in red ink, dated Thursday</b>, next to the Monday entry. You can now read two things: <b>where the ship really was on Monday</b>, and <b>what the log said on any given day</b>.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a ship&#x27;s logbook. An entry says the ship was at a certain position on Monday at noon. On Thursday the navigator finds a mistake and adds a correction in red ink, dated Thursday, saying the Monday position was different. The Monday entry is never erased: you can read what the log said on any day, and what really happened."><g class="rough"><g transform="translate(40 50) scale(1.8)"><g class="d"><path class="f-y" d="M4 6 h22 a6 6 0 0 1 6 6 v44 a6 6 0 0 0 -6 -6 h-22 z"/><path class="f-y" d="M60 6 h-22 a6 6 0 0 0 -6 6 v44 a6 6 0 0 1 6 -6 h22 z"/></g></g><rect class="d f-paper" x="190" y="40" width="260" height="60" rx="10"/><rect class="d f-pink d-red" x="190" y="140" width="260" height="60" rx="10"/></g><text class="t-head" x="320" y="66" text-anchor="middle" font-size="16">Mon 12:00 · pos A</text><text class="t" x="320" y="90" text-anchor="middle" font-size="13">written Monday</text><text class="t-head t-red" x="320" y="166" text-anchor="middle" font-size="16">Mon 12:00 · pos B</text><text class="t" x="320" y="190" text-anchor="middle" font-size="13">correction, written Thursday</text><text class="t-s" x="600" y="90" text-anchor="middle" font-size="16">when it happened:</text><text class="t-s t-pen" x="600" y="114" text-anchor="middle" font-size="16">Monday (both lines)</text><text class="t-s" x="600" y="170" text-anchor="middle" font-size="16">when we wrote it:</text><text class="t-s t-pen" x="600" y="194" text-anchor="middle" font-size="16">Monday, then Thursday</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A logbook: corrections are added in red, dated, never rubbed out.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>When the ship was there (Monday)</td><td>Valid time: <code>valid_from</code> / <code>valid_to</code></td></tr>
+      <tr><td>When the line was written (Monday, then Thursday)</td><td>Recorded time: <code>recorded_from</code> / <code>recorded_to</code></td></tr>
+      <tr><td>A correction in red ink</td><td>Close the old row's recorded range, insert a new row</td></tr>
+      <tr><td>Never rubbing out</td><td>No UPDATE of facts, no DELETE</td></tr>
+      <tr><td>Reading the log as of Tuesday</td><td>Query <code>AS OF</code> a recorded time</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">two time ranges per row</span></h2>
+  <p>Each row says: <b>this value applied for this period</b> (valid time), and <b>we held this belief for this period</b> (recorded time). The database sets recorded time itself, from the transaction clock; people set valid time. A query fixes both: “price valid on 1 March, as recorded on 5 March”.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="The two time lines of a bitemporal row. Valid time is when the price applied in the real world: from 1 March. Recorded time is when the database believed it: the 10 euro row was believed from 1 March until 20 March, then closed; the 12 euro row has been believed since 20 March. A query can ask: what did we believe on 5 March about 1 March? The answer is 10 euros."><g class="rough"><path class="d d-thin" d="M80 30 V250 H740"/><rect class="d f-paper" x="140" y="74" width="600" height="70" rx="10"/><rect class="d f-green" x="140" y="150" width="600" height="70" rx="10"/><path class="d d-red d-dash" d="M300 40 V240"/></g><text class="t-s" x="740" y="276" text-anchor="end" font-size="15">valid time (when it was true) →</text><text class="t-s" x="70" y="40" text-anchor="end" font-size="14">recorded</text><text class="t-s" x="70" y="58" text-anchor="end" font-size="14">time ↓</text><text class="t-s" x="70" y="90" text-anchor="end" font-size="14">1 Mar</text><text class="t-s" x="70" y="160" text-anchor="end" font-size="14">20 Mar</text><text class="t-head" x="440" y="105" text-anchor="middle" font-size="16">€10 · valid from 1 Mar</text><text class="t" x="440" y="129" text-anchor="middle" font-size="13">recorded 1 Mar → 20 Mar (closed)</text><text class="t-head" x="440" y="181" text-anchor="middle" font-size="16">€12 · valid from 1 Mar</text><text class="t" x="440" y="205" text-anchor="middle" font-size="13">recorded 20 Mar → now</text><text class="t-s t-red" x="310" y="46" text-anchor="start" font-size="15">5 Mar: what did we believe? → €10</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Two time axes per row: when it was true, and when we knew it.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Decide which facts need it</b><p>Prices, rates, contracts, entitlements: facts that are corrected after they've been used. Most tables only need a history table.</p></li>
+    <li><b>Add both ranges</b><p><code>valid_period</code> and <code>recorded_period</code> as ranges (or four timestamp columns), with “open” meaning until further notice.</p></li>
+    <li><b>Forbid overlaps</b><p>An exclusion constraint (or the database's temporal support) stops two current beliefs about the same moment.</p></li>
+    <li><b>Correct by closing and inserting</b><p>In one transaction: end the old row's recorded range now, insert the corrected row with recorded time from now.</p></li>
+    <li><b>Query with both times</b><p>“As known now” for normal screens; “as known on date X” to reproduce a past report or invoice.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Valid time</dt><dd>When a fact was true in the real world (also: application or business time).</dd></div>
+    <div><dt>Recorded time</dt><dd>When the database held the fact (also: transaction or system time).</dd></div>
+    <div><dt>Bitemporal</dt><dd>Tracking both time axes on the same row.</dd></div>
+    <div><dt>As-of query</dt><dd>A query fixed to a past recorded time.</dd></div>
+    <div><dt>Retroactive change</dt><dd>A correction that applies to a period in the past.</dd></div>
+    <div><dt>Exclusion constraint</dt><dd>A PostgreSQL rule that stops overlapping ranges for the same key.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>prices_bitemporal.sql</span><span>PostgreSQL ranges</span></div>
+<pre><code><span class="k">CREATE</span> EXTENSION <span class="k">IF</span> <span class="k">NOT</span> <span class="k">EXISTS</span> btree_gist;
+
+<span class="k">CREATE</span> <span class="k">TABLE</span> prices (
+  sku            text      <span class="k">NOT</span> <span class="k">NULL</span>,
+  price_cents    int       <span class="k">NOT</span> <span class="k">NULL</span>,
+  valid_period   daterange <span class="k">NOT</span> <span class="k">NULL</span>,                            <span class="c">-- when it applied</span>
+  recorded_period tstzrange <span class="k">NOT</span> <span class="k">NULL</span> <span class="k">DEFAULT</span> tstzrange(now(), <span class="k">NULL</span>),  <span class="c">-- when we believed it</span>
+  EXCLUDE <span class="k">USING</span> gist (sku <span class="k">WITH</span> =, valid_period <span class="k">WITH</span> &amp;&amp;, recorded_period <span class="k">WITH</span> &amp;&amp;)
+);
+
+<span class="c">-- correct the price for March, on 20 March: close the old belief, add the new one</span>
+<span class="k">BEGIN</span>;
+<span class="k">UPDATE</span> prices <span class="k">SET</span> recorded_period = tstzrange(lower(recorded_period), now())
+ <span class="k">WHERE</span> sku = <span class="s">'812'</span> <span class="k">AND</span> valid_period &amp;&amp; <span class="s">'[2026-03-01,2026-04-01)'</span> <span class="k">AND</span> upper_inf(recorded_period);
+<span class="k">INSERT</span> <span class="k">INTO</span> prices (sku, price_cents, valid_period) <span class="k">VALUES</span> (<span class="s">'812'</span>, 1200, <span class="s">'[2026-03-01,2026-04-01)'</span>);
+<span class="k">COMMIT</span>;
+
+<span class="c">-- what did we believe on 5 March about the price on 1 March?</span>
+<span class="k">SELECT</span> price_cents <span class="k">FROM</span> prices
+ <span class="k">WHERE</span> sku = <span class="s">'812'</span> <span class="k">AND</span> valid_period @&gt; date <span class="s">'2026-03-01'</span>
+   <span class="k">AND</span> recorded_period @&gt; timestamptz <span class="s">'2026-03-05 12:00'</span>;</code></pre>
+  </div>
+  <p class="aside">tools: PostgreSQL ranges + exclusion constraints (temporal_tables / periods extensions), SQL Server and MariaDB system-versioned tables (recorded time), IBM Db2 and Oracle bitemporal support, XTDB (bitemporal by design), Datomic (recorded time).</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Every past report can be reproduced</b>, exactly as it was.</li><li><b>Corrections are safe</b>: they never destroy what was believed.</li><li><b>Clear audit answers</b>: what we knew, and when we knew it.</li><li><b>Retroactive changes</b> (late raises, corrected rates) fit naturally.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Harder queries</b>: every read must pick both times.</li><li><b>More rows</b>: every correction adds one.</li><li><b>Easy to get wrong</b> by hand; constraints and helpers are a must.</li><li><b>Patchy database support</b> for valid time.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Database ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>a history table with one time axis</b> to <b>bitemporal rows with valid and recorded time</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="2"><td>Simplicity<small>easy to reason about?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Two time ranges in every query.</td></tr>
+      <tr data-before="4" data-after="3"><td>Read speed<small>fast queries?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Range indexes help, but reads do more.</td></tr>
+      <tr data-before="4" data-after="3"><td>Write speed<small>cheap inserts &amp; updates?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Corrections are two writes in a transaction.</td></tr>
+      <tr data-before="3" data-after="5"><td>Integrity<small>data stays correct?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Nothing believed is ever lost.</td></tr>
+      <tr data-before="3" data-after="3"><td>Scalability<small>10× more rows?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral: grows with corrections, not reads.</td></tr>
+      <tr data-before="3" data-after="2"><td>Low storage cost<small>cheap to keep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Extra rows and range indexes.</td></tr>
+      <tr data-before="3" data-after="5"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Any “as of” question can be asked.</td></tr>
+      <tr data-before="3" data-after="3"><td>Operability<small>calm to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change shape?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Bitemporal everything</h3><p>Every table gets four timestamps and every query gets harder. <span class="fix">Fix →</span> use it only for facts that are corrected after they're used; keep history tables elsewhere.</p></li>
+    <li><h3>Updating in place</h3><p>Someone “just fixes” a price with a plain UPDATE. <span class="fix">Fix →</span> allow changes only through a function or procedure, and revoke direct UPDATE.</p></li>
+    <li><h3>Overlapping beliefs</h3><p>Two current rows claim different prices for the same day. <span class="fix">Fix →</span> an exclusion constraint on (key, valid range, recorded range).</p></li>
+    <li><h3>App clock for recorded time</h3><p>Recorded time set by the app drifts or can be faked. <span class="fix">Fix →</span> let the database set it from the transaction time.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Prices, rates, tariffs and contracts used in invoices.</li><li>Insurance, payroll and benefits, where changes are back-dated.</li><li>Regulated reporting that must be reproducible.</li><li>Any “why did the system decide that, then?” question.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Facts are never corrected after use; a history table is enough.</li><li>You only need “who changed what, when”; use an audit log.</li><li>The team can't keep every query honest about both times.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/history-tables.html"><b>History tables</b></a></li><li><a href="../../distributed/notes/event-sourcing.html"><b>Event sourcing</b></a> (Vol. 1)</li><li><a href="../../security/notes/audit-logging.html"><b>Audit logging</b></a> (Vol. 5)</li><li><a href="../notes/star-schema.html"><b>Star schema</b></a></li></ul>
+  <p class="aside deeper">go deeper → <a href="../../deep-dives/history-in-the-warehouse/index.html">History in the Warehouse: the deep dive</a></p>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What is the difference between valid time and recorded time?</summary><p>Valid time is when a fact was true in the world; recorded time is when the database held it as its belief.</p></details>
+    <details><summary>Why can't a history table answer “what did we believe on 5 March”?</summary><p>A back-dated correction rewrites the version for that period, so the earlier belief is lost.</p></details>
+    <details><summary>How is a correction stored?</summary><p>Close the old row's recorded range at now, and insert the corrected row with recorded time from now, in one transaction.</p></details>
+    <details><summary>Who should set recorded time?</summary><p>The database, from the transaction clock, so it can't drift or be faked.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A customer disputes a March invoice. The rate table was corrected in April with a back-dated change, and support can't see the rate the invoice used. What should the table have been, and what do you do now?</span></summary><p>Bitemporal: corrections close the old belief and add a new row, so “rate for March as known on the invoice date” stays answerable. Now: use backups or the audit log to reconstruct the old rate for this dispute, and convert the rate table so the next correction keeps both.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Take a table of prices or rates you own. Add valid and recorded ranges in a copy (with the exclusion constraint above), load a few months of data, then make a back-dated correction. Write two queries: the current price for a past date, and the price for that date as known a week before the correction.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Two clocks: <span class="hl">when it was true</span>, and <span class="hl">when we knew it</span>. Correct in red ink, never with an eraser.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/17-bitemporal-data.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Richard T. Snodgrass, <i>Developing Time-Oriented Database Applications in SQL</i> (1999).</li><li>Martin Fowler, “Bitemporal History” (2021).</li><li>Krishna Kulkarni and Jan-Eike Michels, “Temporal features in SQL:2011”, <i>SIGMOD Record</i> (2012).</li><li>PostgreSQL documentation, “Range Types” and “Exclusion Constraints”.</li></ul>
+  </div>
+  <p class="folio">17</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="upserts.html"><small>← previous note</small>16 · Upserts</a>
+  <a href="vector-indexes.html"><small>Next note →</small>18 · Vector Indexes</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 3 · a student's bullet journal on data &amp; database patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

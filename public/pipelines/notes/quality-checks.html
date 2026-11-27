@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Quality Checks &amp; Quarantine · Jef’s Notes</title>
+<meta name="description" content="Test rows and whole batches on every load; set bad rows aside instead of loading them.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-pipelines">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 9 · data pipelines &amp; analytics</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="quality-checks">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Mon · 14.06.27</span><span class="topic">collection · <b>keeping it trustworthy</b></span></div>
+  <p class="kicker">a.k.a. “data tests and a quarantine table”</p>
+  <h1><span class="hl">Quality Checks &amp; Quarantine</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Check data on every load, at two levels. <b>Row checks</b> (not null, accepted values, ranges, foreign keys) send failing rows to a <b>quarantine table</b> with a reason, so good rows keep flowing. <b>Batch checks</b> (row count, totals and the share of bad rows against the usual band) decide whether the batch may be <b>published at all</b>. Quarantined rows are fixed and replayed, never silently dropped.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> keeping it trustworthy</li><li><b>Also called:</b> data tests, dead-letter table</li><li><b>Lives in:</b> dbt tests, Great Expectations, Soda, Elementary</li><li><b>Pairs with:</b> write–audit–publish, dead-letter queues</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">After a till firmware update, the Delft shop sends prices <b>in cents</b>: the €39 kettle arrives as €3,900, and Delft's revenue jumps by <span class="hl-pink">€1.2 million</span>. In the same batch, rows with no shop id vanish in an inner join. Both problems reach the report, one loudly and one silently.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of bad rows reaching the report. After a till firmware update, the Delft shop sends prices in cents instead of euros, so a 39 euro kettle arrives as 3,900 euros. Delft&#x27;s revenue jumps by 1.2 million euros. In the same batch, rows with no shop id disappear in an inner join. Both reach the report unnoticed."><g class="rough"><rect class="d d-thin f-paper" x="20" y="40" width="260" height="110" rx="4"/><path class="d d-thin f-y" d="M20 44 a4 4 0 0 1 4 -4 h252 a4 4 0 0 1 4 4 v28 h-260 z"/><path class="d d-thin d-soft" d="M26 98 h248"/><rect class="f-hl" x="23" y="100" width="254" height="22" rx="2" style="stroke:none"/><path class="d d-thin d-soft" d="M26 124 h248"/><path class="d" d="M286 100 L400 100"/><path class="d" d="M389.2 105.2 L400 100 L389.2 94.8"/><rect class="d f-blue" x="406" y="50" width="180" height="100" rx="10"/><path class="d d-red" d="M592 100 L640 100"/><path class="d d-red" d="M629.2 105.2 L640 100 L629.2 94.8"/><rect class="d f-pink d-red" x="646" y="60" width="100" height="80" rx="10"/></g><text class="t-head" x="150" y="63" text-anchor="middle" font-size="17">till batch · Delft</text><text class="t" x="30" y="91" font-size="16">kettle · €39</text><text class="t" x="30" y="117" font-size="16">kettle · €3,900</text><text class="t" x="30" y="143" font-size="16">mugs · shop: NULL</text><text class="t-head" x="496" y="96" text-anchor="middle" font-size="21">fct_sales</text><text class="t" x="496" y="120" text-anchor="middle" font-size="15">loaded as is</text><text class="t-head t-red" x="696" y="107" text-anchor="middle" font-size="20">+€1.2M</text><text class="t-s t-red" x="380" y="220" text-anchor="middle">the NULL shop rows vanished in an inner join</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A kettle at €3,900 and rows that silently vanish: both reach the report.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the factory quality line</span></h2>
+  <p>On a factory line, an inspector pulls bad items into a <b>side bin with a tag</b> saying what's wrong, and the line keeps running. If too many items are bad, the inspector <b>pulls the cord and stops the line</b>, because something upstream is broken.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="Doodle of a factory quality line. Items pass an inspector. Bad items are pulled into a side bin with a tag saying why, and the line keeps running. If too many items are bad, the inspector pulls the cord and stops the line."><g class="rough"><path class="d" d="M20 110 H740"/><rect class="d d-thin f-green" x="40" y="92" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M40 92 l13 10.4 l13 -10.4"/><rect class="d d-thin f-green" x="78" y="92" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M78 92 l13 10.4 l13 -10.4"/><rect class="d d-thin f-green" x="116" y="92" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M116 92 l13 10.4 l13 -10.4"/><rect class="d d-thin f-green" x="154" y="92" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M154 92 l13 10.4 l13 -10.4"/><rect class="d d-thin f-green" x="192" y="92" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M192 92 l13 10.4 l13 -10.4"/><g transform="translate(260 70) scale(0.9)"><g class="d"><path class="f-paper" d="M2 30 q28 -30 56 0 q-28 30 -56 0 z"/><circle cx="30" cy="30" r="9"/></g></g><rect class="d d-thin f-green" x="360" y="92" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M360 92 l13 10.4 l13 -10.4"/><rect class="d d-thin f-green" x="398" y="92" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M398 92 l13 10.4 l13 -10.4"/><rect class="d d-thin f-green" x="436" y="92" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M436 92 l13 10.4 l13 -10.4"/><rect class="d d-thin f-green" x="474" y="92" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M474 92 l13 10.4 l13 -10.4"/><path class="d d-red" d="M300 120 L300 180"/><path class="d d-red" d="M294.8 169.2 L300 180 L305.2 169.2"/><g transform="translate(274 176) scale(0.9)"><g class="d d-red"><path class="f-paper" d="M8 14 h44 l-5 46 h-34 z"/><path d="M2 14 h56 M22 14 v-8 h16 v8 M22 24 v28 M38 24 v28"/></g></g><rect class="d f-pink d-red" x="560" y="30" width="180" height="60" rx="10"/></g><text class="t-s t-red" x="390" y="214" text-anchor="start">tag: price out of range</text><text class="t-head t-red" x="650" y="56" text-anchor="middle" font-size="17">stop the line</text><text class="t" x="650" y="80" text-anchor="middle" font-size="14">if &gt; 1 % bad</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Pull bad items into a tagged bin; if too many are bad, stop the line.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>The inspector</td><td>Row checks on every incoming row</td></tr>
+      <tr><td>The side bin</td><td>The quarantine table</td></tr>
+      <tr><td>The tag</td><td>The failed rule, the batch id, the time</td></tr>
+      <tr><td>Pulling the cord</td><td>A batch check that stops publishing</td></tr>
+      <tr><td>Reworking items from the bin</td><td>Fixing and replaying quarantined rows</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">rows to quarantine, batches to a gate</span></h2>
+  <p><b>Row checks</b> split each batch: good rows continue, bad rows go to quarantine with the reason. Nothing disappears silently. <b>Batch checks</b> look at the whole: is the row count or revenue far from the usual for this weekday, are more than 1 % of rows quarantined, are there duplicates, is the newest event recent? A failed batch check stops the publish (write–audit–publish), because a broken source is likely.</p>
+  <p>Give each check a <b>severity</b>: warn (notify) or error (stop). Start with few, strong checks on what reports depend on.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 300" role="img" aria-label="Two levels of checks. Row checks run on every row: not null, accepted values, ranges, foreign keys. Failing rows go to a quarantine table with the reason and the batch id, and good rows continue. Batch checks run on the whole batch: row count and revenue against the usual band for that weekday, share of quarantined rows, duplicates, freshness. A failed batch check stops the publish."><g class="rough"><rect class="d f-y" x="20" y="100" width="150" height="80" rx="10"/><path class="d" d="M176 140 L230 140"/><path class="d" d="M219.2 145.2 L230 140 L219.2 134.8"/><rect class="d f-blue" x="236" y="90" width="190" height="100" rx="10"/><path class="d" d="M432 120 L500 70"/><path class="d" d="M494.4 80.6 L500 70 L488.2 72.2"/><path class="d d-red" d="M432 160 L500 220"/><path class="d d-red" d="M488.4 216.8 L500 220 L495.4 208.9"/><rect class="d f-green" x="506" y="30" width="234" height="80" rx="10"/><rect class="d f-pink d-red" x="506" y="190" width="234" height="80" rx="10"/></g><text class="t-head" x="95" y="147" text-anchor="middle" font-size="22">batch</text><text class="t-head" x="331" y="136" text-anchor="middle" font-size="20">row checks</text><text class="t" x="331" y="160" text-anchor="middle" font-size="14">null · range · FK</text><text class="t-head" x="623" y="66" text-anchor="middle" font-size="20">batch checks</text><text class="t" x="623" y="90" text-anchor="middle" font-size="14">count · sum · % bad</text><text class="t-head t-red" x="623" y="226" text-anchor="middle" font-size="20">quarantine</text><text class="t" x="623" y="250" text-anchor="middle" font-size="14">row · reason · batch id</text><text class="t-s t-red" x="623" y="140" text-anchor="middle">fail → stop publish</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Rows that fail go to quarantine with a reason. A batch that fails stops the publish.</figcaption></figure>
+  <ol class="steps">
+    <li><b>List what reports depend on</b><p>Keys, amounts, dates, shop and product ids.</p></li>
+    <li><b>Add row checks</b><p>Not null, accepted values, ranges (0 &lt; price &lt; 2,000), foreign keys that resolve.</p></li>
+    <li><b>Route failures to quarantine</b><p>Same columns plus reason, batch id, time; alert the owner.</p></li>
+    <li><b>Add batch checks with thresholds</b><p>Count and sum within ±30 % of the same weekday's median; quarantined share &lt; 1 %.</p></li>
+    <li><b>Fix and replay</b><p>Correct at the source or map in staging, then reprocess the quarantined rows.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Row check</dt><dd>A rule each row must pass.</dd></div>
+    <div><dt>Batch check</dt><dd>A rule about the whole batch: volume, totals, duplicates.</dd></div>
+    <div><dt>Quarantine</dt><dd>A table holding rejected rows and why.</dd></div>
+    <div><dt>Severity</dt><dd>Warn (notify) or error (stop).</dd></div>
+    <div><dt>Anomaly detection</dt><dd>Flagging values far from their usual range.</dd></div>
+    <div><dt>Freshness check</dt><dd>Is the newest data recent enough?</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>load_till_sales.sql + schema.yml</span><span>SQL · dbt tests</span></div>
+<pre><code><span class="c">-- row checks: split the batch, never drop rows silently</span>
+<span class="k">INSERT</span> <span class="k">INTO</span> quarantine_till_sales
+<span class="k">SELECT</span> b.*, <span class="k">CASE</span> <span class="k">WHEN</span> b.shop_id <span class="k">IS</span> <span class="k">NULL</span> <span class="k">THEN</span> <span class="s">'shop_id missing'</span>
+                 <span class="k">WHEN</span> b.unit_price <span class="k">NOT</span> <span class="k">BETWEEN</span> 0.01 <span class="k">AND</span> 2000 <span class="k">THEN</span> <span class="s">'price out of range'</span>
+            <span class="k">END</span> <span class="k">AS</span> reason, :batch_id, now()
+<span class="k">FROM</span>   stg_till_batch b
+<span class="k">WHERE</span>  b.shop_id <span class="k">IS</span> <span class="k">NULL</span> <span class="k">OR</span> b.unit_price <span class="k">NOT</span> <span class="k">BETWEEN</span> 0.01 <span class="k">AND</span> 2000;
+
+<span class="k">INSERT</span> <span class="k">INTO</span> stg_till_sales_clean
+<span class="k">SELECT</span> * <span class="k">FROM</span> stg_till_batch
+<span class="k">WHERE</span>  shop_id <span class="k">IS</span> <span class="k">NOT</span> <span class="k">NULL</span> <span class="k">AND</span> unit_price <span class="k">BETWEEN</span> 0.01 <span class="k">AND</span> 2000;
+
+<span class="c"># schema.yml · batch-level checks in dbt</span>
+models:
+  - name: fct_sales
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: <span class="s">"(select count(*) from quarantine_till_sales where batch_id = '{{ var('batch_id') }}') &lt; 0.01 * (select count(*) from stg_till_batch)"</span>
+    columns:
+      - name: order_line_id
+        tests: [unique, not_null]</code></pre>
+  </div>
+  <p class="aside">tools: dbt tests and dbt-expectations, Great Expectations, Soda, Elementary and Monte Carlo (anomaly detection), Deequ for Spark, Dataform assertions.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Bad rows don't reach reports</b>, and good rows aren't held back.</li><li><b>Nothing vanishes silently</b>: every rejected row has a reason.</li><li><b>Broken sources are caught</b> by volume and sum checks.</li><li><b>Fix and replay</b> instead of hand-editing facts.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Checks to write and tune</b>: too loose misses, too strict cries wolf.</li><li><b>Quarantine needs an owner</b>, or it fills up unread.</li><li><b>Reports can be incomplete</b> while rows wait in quarantine.</li><li><b>Extra compute</b> on every load.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Pipeline ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>loading everything that arrives</b> to <b>row checks with quarantine and batch checks that gate publishing</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="3"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A few rules and one extra table.</td></tr>
+      <tr data-before="3" data-after="3"><td>Freshness<small>how recent?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral, unless a batch check stops a publish.</td></tr>
+      <tr data-before="2" data-after="5"><td>Correctness<small>is the number right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Bad rows are caught and nothing disappears.</td></tr>
+      <tr data-before="3" data-after="4"><td>Replayability<small>safe to rerun?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Quarantined rows replay through the same path.</td></tr>
+      <tr data-before="3" data-after="3"><td>Scalability<small>10× the data?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low cost<small>cheap to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Checks cost a little compute.</td></tr>
+      <tr data-before="3" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="1" data-after="5"><td>Observability<small>know when it's wrong?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Every failure has a rule, a reason and an alert.</td></tr>
+      <tr data-before="3" data-after="3"><td>Evolvability<small>easy to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">New columns need new checks.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Inner joins as filters</h3><p>Rows with a missing key vanish without a trace. <span class="fix">Fix →</span> check foreign keys explicitly; quarantine or use an unknown member.</p></li>
+    <li><h3>Alert fatigue</h3><p>Fifty warnings a day, all ignored, including the real one. <span class="fix">Fix →</span> few checks, tuned thresholds, error only on what matters.</p></li>
+    <li><h3>Quarantine nobody reads</h3><p>Thousands of rows rot there; revenue is quietly short. <span class="fix">Fix →</span> an owner, a daily count on the dashboard, and an age limit.</p></li>
+    <li><h3>Fixed thresholds</h3><p>“At least 90,000 rows” fails every Sunday and every holiday. <span class="fix">Fix →</span> compare with the same weekday's median, or use anomaly detection.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Every load that feeds a report people act on.</li><li>Sources you don't control: tills, partners, spreadsheets.</li><li>Data with known valid ranges.</li><li>Pipelines with write–audit–publish.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Raw landing: keep everything there, check downstream.</li><li>Exploratory data where “bad” isn't defined yet.</li><li>Duplicating checks the source already enforces with constraints you trust.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/write-audit-publish.html"><b>Write–audit–publish</b></a></li><li><a href="../notes/idempotent-loads.html"><b>Idempotent loads</b></a></li><li><a href="../notes/data-contracts.html"><b>Data contracts</b></a></li><li><a href="../notes/late-arriving-data.html"><b>Late-arriving data</b></a></li></ul>
+  <p class="aside deeper">go deeper → <a href="../../deep-dives/data-quality-observability/index.html">Data Quality &amp; Pipeline Observability: the deep dive</a></p>
+  <p class="aside deeper">on a card → <a href="../../cheatsheets/warehouse/index.html">Data Warehouse: the cheat sheet</a></p>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What is the difference between row checks and batch checks?</summary><p>Row checks judge each row and quarantine failures; batch checks judge the whole batch and can stop publishing.</p></details>
+    <details><summary>Why quarantine instead of dropping bad rows?</summary><p>So nothing disappears silently: rows can be fixed and replayed, and counted.</p></details>
+    <details><summary>Why compare volume with the same weekday rather than a fixed number?</summary><p>Volume varies by weekday and season; a fixed threshold either misses problems or fails every Sunday.</p></details>
+    <details><summary>What should happen when 5 % of a batch is quarantined?</summary><p>A batch check should fail and stop the publish, because a source is probably broken.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A new shop opens and its till sends a product code the warehouse doesn't know. Its sales are missing from the report. What should have happened, and what do you build?</span></summary><p>The rows should have gone to quarantine with “unknown product” and alerted the owner, or loaded against an unknown-member product key. Add a foreign-key row check with quarantine, a daily quarantine count on the dashboard, and a replay once the product is added.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Take a day of real data and write three row checks and two batch checks. Run them, and look at what the quarantine table catches. Then change one threshold to the same weekday's median and see which alerts disappear.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Bad items to the <span class="hl">tagged bin</span>. Too many? <span class="hl">Stop the line</span>.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/13-quality-checks.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>dbt documentation, “Data tests” and the dbt-expectations package.</li><li>Great Expectations documentation, “Expectations”.</li><li>Barr Moses, Lior Gavish and Molly Vorwerck, <i>Data Quality Fundamentals</i> (2022).</li><li>Amazon Deequ, “Unit tests for data” (2018).</li></ul>
+  </div>
+  <p class="folio">13</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="data-contracts.html"><small>← previous note</small>12 · Data Contracts</a>
+  <a href="dag-orchestration.html"><small>Next note →</small>14 · DAG Orchestration &amp; Lineage</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 9 · a student's bullet journal on data pipelines &amp; analytics</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

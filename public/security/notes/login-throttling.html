@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rate-Limited Login · Jef’s Notes</title>
+<meta name="description" content="Slow down and block password guessing per account, per IP and overall.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-security">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 5 · security patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="login-throttling">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 31.12.26</span><span class="topic">collection · <b>identity &amp; access</b></span></div>
+  <p class="kicker">a.k.a. “slow the guessers, not the users”</p>
+  <h1><span class="hl">Rate-Limited Login</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Login is attacked by <b>guessing</b> (one account, many passwords) and <b>credential stuffing</b> (many accounts, passwords leaked elsewhere, from thousands of IPs). One limit can't stop both. Layer them: <b>per account</b> (growing delays and a challenge after a few failures, never a permanent lock), <b>per IP and network</b>, and <b>site-wide</b> (step up checks when the failure rate spikes). Add breached-password checks, identical error messages, new-sign-in alerts, and passkeys.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> identity</li><li><b>Stops:</b> password guessing, credential stuffing</li><li><b>Builds on:</b> rate limiter (Vol. 1)</li><li><b>Pairs with:</b> passkeys, password hashing, audit logging</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Attackers take <b>2 million</b> email/password pairs leaked from other sites and try them on the shop's login, spread over <b>5,000 IP addresses</b> at a few attempts each. About 0.5% work, because people reuse passwords: <span class="hl-pink">roughly 10,000 accounts taken over</span>, and no single IP ever looked unusual.</p>
+  <ul>
+    <li>A per-IP limit alone misses attacks spread over many IPs.</li>
+    <li>A per-account <b>permanent lock</b> lets attackers lock out anyone, including your biggest customers.</li>
+    <li>Different error messages for “no such user” and “wrong password” tell attackers which emails exist.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of credential stuffing. Attackers take 2 million email and password pairs leaked from other sites and try them on the shop&#x27;s login, spread over thousands of IP addresses at a few attempts each. About one in 200 works because people reuse passwords: thousands of accounts are taken over without any single IP looking suspicious."><g class="rough"><rect class="d f-pink d-red" x="14" y="50" width="220" height="80" rx="10"/><path class="d d-red d-dash" d="M238 90 L366 30"/><path class="d d-red" d="M358.4 39.3 L366 30 L354.0 29.9"/><path class="d d-red d-dash" d="M238 90 L366 60"/><path class="d d-red" d="M356.7 67.5 L366 60 L354.3 57.4"/><path class="d d-red d-dash" d="M238 90 L366 90"/><path class="d d-red" d="M355.2 95.2 L366 90 L355.2 84.8"/><path class="d d-red d-dash" d="M238 90 L366 120"/><path class="d d-red" d="M354.3 122.6 L366 120 L356.7 112.5"/><path class="d d-red d-dash" d="M238 90 L366 150"/><path class="d d-red" d="M354.0 150.1 L366 150 L358.4 140.7"/><rect class="d f-y" x="370" y="20" width="160" height="140" rx="10"/><path class="d d-red" d="M534 90 L596 90"/><path class="d d-red" d="M585.2 95.2 L596 90 L585.2 84.8"/><rect class="d f-pink d-red" x="600" y="50" width="140" height="80" rx="10"/></g><text class="t-head t-red" x="124" y="86" text-anchor="middle" font-size="15">2 million leaked pairs</text><text class="t" x="124" y="110" text-anchor="middle" font-size="13">from other sites</text><text class="t-head" x="450" y="86" text-anchor="middle" font-size="19">login</text><text class="t" x="450" y="110" text-anchor="middle" font-size="14">no limits</text><text class="t-head t-red" x="670" y="86" text-anchor="middle" font-size="18">≈ 10,000</text><text class="t" x="670" y="110" text-anchor="middle" font-size="13">accounts taken</text><text class="t-s t-red" x="380" y="214" text-anchor="middle" font-size="16">5,000 IPs × a few tries each: no single IP looks odd</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Leaked passwords from other sites, tried here from thousands of IPs: 0.5% get in.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the cash machine</span></h2>
+  <p>Three wrong PINs and the cash machine <b>keeps the card</b>. But the bank also watches <b>the machine</b> (many cards failing at the same one) and <b>the whole network</b> (an unusual spike of failures everywhere). Each pattern gets its own limit and its own response.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a bank card at a cash machine. Three wrong PINs and the machine keeps the card. Separately, the bank watches for many cards failing at the same machine, and for one machine trying many cards: each pattern triggers its own response."><g class="rough"><g transform="translate(40 70) scale(1.6)"><g class="d"><rect class="f-y" x="2" y="10" width="58" height="40" rx="5"/><rect x="10" y="20" width="14" height="12"/><path d="M32 22 h20 M32 30 h14 M10 40 h42"/></g></g><rect class="d f-green" x="230" y="30" width="240" height="60" rx="10"/><rect class="d f-blue" x="230" y="110" width="240" height="60" rx="10"/><rect class="d f-paper" x="230" y="190" width="240" height="50" rx="10"/></g><text class="t-head" x="350" y="56" text-anchor="middle" font-size="17">per card</text><text class="t" x="350" y="80" text-anchor="middle" font-size="13">3 wrong PINs → kept</text><text class="t-head" x="350" y="136" text-anchor="middle" font-size="17">per machine</text><text class="t" x="350" y="160" text-anchor="middle" font-size="13">many cards failing → alarm</text><text class="t-head" x="350" y="211" text-anchor="middle" font-size="16">whole network</text><text class="t" x="350" y="235" text-anchor="middle" font-size="12">unusual spike → review</text><text class="t-s" x="620" y="140" text-anchor="middle" font-size="16">three different patterns,</text><text class="t-s" x="620" y="166" text-anchor="middle" font-size="16">three different limits</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Three wrong PINs and the card is kept. The bank also watches the machine, not just the card.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Wrong PINs on one card</td><td>Failures per account</td></tr>
+      <tr><td>Many cards failing at one machine</td><td>Failures per IP address or network</td></tr>
+      <tr><td>A spike across the network</td><td>The site-wide failure rate</td></tr>
+      <tr><td>Keeping the card</td><td>Delays and a challenge (and a reset path), not a silent permanent lock</td></tr>
+      <tr><td>The bank calling you</td><td>An email or push alert about a new sign-in</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">three layers of limits, plus fewer passwords</span></h2>
+  <p>Count failures in a fast store (Redis) by account, by IP and network, and overall, with sliding windows. Respond in steps: a short delay, then a challenge (CAPTCHA or proof of work), then a temporary block for that source. Give the same message for unknown user and wrong password. Reduce what's worth stealing: block known-breached passwords, and move people to passkeys.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 280" role="img" aria-label="Layered limits on login. Per account: after 5 failures, add delays and a challenge, never a permanent lock. Per IP and per network: cap attempts, with higher limits for known shared networks. Globally: watch the overall failure rate and switch on extra checks during an attack. Also check passwords against known breached lists and offer passkeys."><g class="rough"><rect class="d f-green" x="20" y="40" width="220" height="90" rx="10"/><rect class="d f-blue" x="270" y="40" width="220" height="90" rx="10"/><rect class="d f-y" x="520" y="40" width="220" height="90" rx="10"/></g><text class="t-head" x="130" y="81" text-anchor="middle" font-size="17">per account</text><text class="t" x="130" y="105" text-anchor="middle" font-size="13">5 fails → slow + challenge</text><text class="t-head" x="380" y="81" text-anchor="middle" font-size="17">per IP / network</text><text class="t" x="380" y="105" text-anchor="middle" font-size="13">cap, shared nets higher</text><text class="t-head" x="630" y="81" text-anchor="middle" font-size="17">whole site</text><text class="t" x="630" y="105" text-anchor="middle" font-size="13">failure rate spike → step up</text><text class="t-s t-pen" x="380" y="176" text-anchor="middle" font-size="16">same answer for “wrong password” and “no such user”</text><text class="t-s t-pen" x="380" y="206" text-anchor="middle" font-size="15">block breached passwords · offer passkeys · alert the user on new sign-ins</text><text class="t-s t-red" x="380" y="244" text-anchor="middle" font-size="15">no permanent lockout: attackers could lock out anyone</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Limits per account, per source, and overall, because attacks spread across all three.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Count by account, source and overall</b><p>Failures per account (15 min), per IP and per /24 or ASN (1 h), and site-wide per minute.</p></li>
+    <li><b>Respond in steps</b><p>Delay, then challenge, then temporary block for the source. Never a permanent account lock without a recovery path.</p></li>
+    <li><b>Hide which accounts exist</b><p>The same response and timing for unknown user and wrong password, also on reset and sign-up pages.</p></li>
+    <li><b>Block breached passwords</b><p>Check new and changed passwords against known breach lists (k-anonymity range queries).</p></li>
+    <li><b>Watch and alert</b><p>Alert on failure-rate spikes; notify users of sign-ins from new devices; log every attempt for the audit trail.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Credential stuffing</dt><dd>Trying username/password pairs leaked from other sites.</dd></div>
+    <div><dt>Brute force</dt><dd>Trying many passwords against one account.</dd></div>
+    <div><dt>Password spraying</dt><dd>Trying a few common passwords against many accounts.</dd></div>
+    <div><dt>Lockout</dt><dd>Blocking an account after failures; risky if permanent.</dd></div>
+    <div><dt>Step-up challenge</dt><dd>An extra check (CAPTCHA, second factor) when risk is high.</dd></div>
+    <div><dt>Account enumeration</dt><dd>Learning which usernames exist from different responses.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>login-limits.ts</span><span>Node.js + Redis (rate-limiter-flexible)</span></div>
+<pre><code><span class="k">import</span> { RateLimiterRedis } <span class="k">from</span> <span class="s">"rate-limiter-flexible"</span>;
+
+<span class="k">const</span> perAccount = <span class="k">new</span> RateLimiterRedis({ storeClient: redis, keyPrefix: <span class="s">"fail:acct"</span>, points: 5, duration: 15 * 60 });
+<span class="k">const</span> perIp      = <span class="k">new</span> RateLimiterRedis({ storeClient: redis, keyPrefix: <span class="s">"fail:ip"</span>,   points: 50, duration: 60 * 60 });
+
+app.post(<span class="s">"/login"</span>, <span class="k">async</span> (req, res) =&gt; {
+  <span class="k">const</span> email = normalise(req.body.email);
+  <span class="k">const</span> [acct, ip] = <span class="k">await</span> Promise.all([perAccount.get(email), perIp.get(req.ip)]);
+  <span class="k">if</span> ((ip?.consumedPoints ?? 0) &gt;= 50) <span class="k">return</span> res.status(429).json({ error: <span class="s">"Too many attempts. Try again later."</span> });
+  <span class="k">if</span> ((acct?.consumedPoints ?? 0) &gt;= 5 &amp;&amp; !(<span class="k">await</span> verifyChallenge(req))) {
+    <span class="k">return</span> res.status(401).json({ error: <span class="s">"Please complete the check."</span>, challenge: <span class="k">true</span> });
+  }
+
+  <span class="k">const</span> user = <span class="k">await</span> users.findByEmail(email);
+  <span class="k">const</span> ok = <span class="k">await</span> verifyPassword(user?.passwordHash ?? DUMMY_HASH, req.body.password);  <span class="c">// same timing</span>
+  <span class="k">if</span> (!user || !ok) {
+    <span class="k">await</span> Promise.all([perAccount.penalty(email), perIp.penalty(req.ip)]);
+    audit(<span class="s">"login.failed"</span>, { email, ip: req.ip });
+    <span class="k">return</span> res.status(401).json({ error: <span class="s">"Email or password is incorrect."</span> });  <span class="c">// same message</span>
+  }
+  <span class="k">await</span> perAccount.delete(email);
+  <span class="k">await</span> startSession(res, user, req);   <span class="c">// and alert the user if this device is new</span>
+});</code></pre>
+  </div>
+  <p class="aside">tools: rate-limiter-flexible, express-rate-limit with a Redis store, Cloudflare / AWS WAF bot and login protection, Have I Been Pwned Pwned Passwords range API, Cloudflare Turnstile or hCaptcha, identity providers' built-in attack protection.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Stuffing and guessing slowed down</b> by orders of magnitude.</li><li><b>No easy lockout</b> attacks on real users.</li><li><b>Fewer accounts with leaked passwords</b>.</li><li><b>Attacks become visible</b> in metrics and logs.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Some real users</b> see delays or challenges.</li><li><b>Shared IPs</b> (offices, mobile carriers) need higher limits.</li><li><b>Tuning</b>: limits that are too strict or too loose.</li><li><b>Doesn't fix password reuse</b>: passkeys do.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Security ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>a login with no limits</b> to <b>layered limits, breached-password checks and identical errors</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to get right?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Three counters and a step-up path.</td></tr>
+      <tr data-before="4" data-after="3"><td>Usability<small>little friction?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A few users meet a challenge.</td></tr>
+      <tr data-before="2" data-after="4"><td>Confidentiality<small>secrets stay secret?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Far fewer accounts taken over.</td></tr>
+      <tr data-before="3" data-after="4"><td>Integrity<small>can't be tampered with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Fewer attacker sessions acting as users.</td></tr>
+      <tr data-before="2" data-after="4"><td>Availability<small>stays up under attack?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Floods of login attempts are cut off early.</td></tr>
+      <tr data-before="2" data-after="4"><td>Containment<small>small blast radius?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A stuffing run gets a few accounts, not thousands.</td></tr>
+      <tr data-before="2" data-after="4"><td>Auditability<small>can we tell what happened?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Every attempt logged; spikes alert.</td></tr>
+      <tr data-before="4" data-after="3"><td>Low cost<small>cheap to build &amp; run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A Redis store and maybe a challenge service.</td></tr>
+      <tr data-before="3" data-after="3"><td>Developer experience<small>easy to build with?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Libraries help; tuning takes care.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Only per-IP limits</h3><p>Stuffing spread over thousands of IPs passes untouched. <span class="fix">Fix →</span> add per-account and site-wide limits.</p></li>
+    <li><h3>Permanent lockout</h3><p>Attackers lock out real users on purpose by failing their logins. <span class="fix">Fix →</span> delays and challenges instead; temporary blocks for sources, not accounts.</p></li>
+    <li><h3>Telling attackers who exists</h3><p>“No account with that email” on login, reset or sign-up. <span class="fix">Fix →</span> the same message and timing for every case.</p></li>
+    <li><h3>Forgetting other doors</h3><p>Login is limited, but the mobile API, password reset and the old v1 endpoint are not. <span class="fix">Fix →</span> apply the same limits to every way of checking a password or sending a reset.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Every password login, reset and second-factor check.</li><li>APIs that accept username and password (move them to tokens if you can).</li><li>Sign-up and reset forms that reveal whether an account exists.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Passkey-only sign-in has less to guess (still limit, more loosely).</li><li>Machine credentials: use short-lived tokens, not passwords.</li><li>Never: there's no login that shouldn't have limits.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/passkeys.html"><b>Passkeys</b></a></li><li><a href="../notes/password-hashing.html"><b>Password hashing</b></a></li><li><a href="../../distributed/notes/rate-limiter.html"><b>Rate limiter</b></a> (Vol. 1)</li><li><a href="../notes/audit-logging.html"><b>Audit logging</b></a></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why isn't a per-IP limit enough?</summary><p>Credential stuffing spreads attempts across thousands of IPs, so no single IP reaches the limit.</p></details>
+    <details><summary>Why avoid permanent account lockouts?</summary><p>Attackers can lock out real users on purpose just by failing their logins.</p></details>
+    <details><summary>What is account enumeration?</summary><p>Learning which emails have accounts because responses or timing differ for unknown users.</p></details>
+    <details><summary>What reduces the value of leaked passwords most?</summary><p>Blocking known-breached passwords and moving users to passkeys.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Overnight, failed logins jump from 2,000 to 900,000 an hour, spread over 40,000 IPs, at about 20 attempts per IP. Successful logins from new devices also rise. What do you do first?</span></summary><p>Treat it as credential stuffing: switch on site-wide step-up (a challenge for all logins, or for logins from new devices), tighten per-account and per-network limits, and alert or force resets for accounts that signed in from new devices during the attack. Then review the logs and offer passkeys.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>On your own login in a local or staging environment, send 20 wrong passwords for one account and then 20 for 20 different accounts from one IP (a small script). Check what each layer did. Then compare the responses and timing for a real and a non-existent email, and make them identical.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Limit by <span class="hl">account</span>, by <span class="hl">source</span> and <span class="hl">overall</span>. Slow the guessers, never lock out the users.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/18-login-throttling.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>OWASP Cheat Sheet Series, “Authentication” and “Credential Stuffing Prevention”.</li><li>NIST SP 800-63B, section 5.2.2, “Rate Limiting (Throttling)”.</li><li>Troy Hunt, Pwned Passwords and the k-anonymity range API.</li><li>OWASP Automated Threats to Web Applications, OAT-008 (Credential Stuffing).</li></ul>
+  </div>
+  <p class="folio">18</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="signed-webhooks.html"><small>← previous note</small>17 · Signed Webhooks</a>
+  <a href="../index.html"><small>back to →</small>Index</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 5 · a student's bullet journal on security patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

@@ -1,8 +1,9 @@
 # Handoff: Jef's Handbooks (Series 3). Draft for review
 
 Status as of 2026-11-26: **approved and in progress.** Owner decisions: title OK, AWS as the main provider, Larder as
-the running example, 25 chapters, labs may cost up to about $1 (with clean-up steps). Written: Parts I and II
-(chapters 1–10). The book is on the landing page (Series 3 shelf) and in `journals.json` (chapter PDFs + whole-book PDF).
+the running example, 25 chapters, labs may cost up to about $1 (with clean-up steps). Complete: all 25 chapters
+(Parts I–VI) and appendices A–E. The book is on the landing page (a **Handbooks** section after Deep dives, added when main's
+format-based landing page was merged in) and in `journals.json` (chapter PDFs + whole-book PDF).
 
 - Contents page: `public/handbooks/cloud-networking/index.html`
 - Sample chapter: `public/handbooks/cloud-networking/08-inside-a-vpc.html`
@@ -107,13 +108,17 @@ NAT Elastic IP `198.51.100.7` (StockPilot allow-lists it). Chapter 9 should rete
 
 ## 5. Progress and checklist
 
-1. [x] Landing page: Series 3 shelf; `journals.json` entries for chapter and whole-book PDFs.
-2. [x] Part I: chapters 1–6. [x] Part II: chapters 7–10.
-3. [ ] Part III (11–15), then Parts IV–VI in order, then the appendices. Forward references already promise:
-   ch. 11 transit gateway appliance mode and SG referencing; ch. 12 builds Larder's PrivateLink endpoint service for
-   Korenwolf (NLB + endpoint service); ch. 13 BGP for store VPNs and MTU; ch. 19 pods in `100.64.0.0/10`;
+1. [x] Landing page: Handbooks section (`handbook_items()` in `build_notes.py`); `journals.json` entries for chapter and whole-book PDFs.
+2. [x] Part I: chapters 1–6. [x] Part II: chapters 7–10. [x] Part III: chapters 11–15. [x] Part IV: chapters 16–18. [x] Part V: chapters 19–21. [x] Part VI: chapters 22–25.
+3. [x] Appendices: A (CIDR tables generated with Python's ipaddress; the one-off generator lives in the history),
+   B (provider translation table, hand-written), C (lab setup; its lab table was generated from the chapter cards),
+   D (glossary) and E (answers) are **generated at build time** from every chapter's key terms and quiz by
+   `glossary_body()` / `answers_body()` in `scripts/build_handbooks.py`, so they stay in sync automatically.
+   Appendix pages are `appendix-<letter>-<slug>.html`; cross-references are written `href="#appC"`.
+   ch. 24 networks as code, VPC sharing vs per-team VPCs; ch. 25 second region and DNS failover;
+   ch. 21 identity-aware access instead of client VPN;
    ch. 22 flow logs and Reachability Analyzer; ch. 25 second region (`10.32.0.0/12`) and DNS failover.
-4. Lab code: the Python labs (ch. 2, 4, 10) were run and print what the text says. The Terraform labs (ch. 8, 9)
+4. Lab code: the Python labs (ch. 2, 4, 10, 14, 23, 24's plan check) and the openssl mTLS lab (ch. 21) were run and print what the text says. The Terraform labs (ch. 8, 9, 11, 12, 13, 15, 16, 17, 18, 20, 22, 24)
    were not run or validated (Terraform wasn't available in the session); run `terraform validate` and one real apply.
 5. Per chapter: figures checked at desktop and 375 px, light and dark (no horizontal overflow); labs not yet run in a
    real account (owner or a later session should run the AWS labs once); links checked.
@@ -166,3 +171,12 @@ Must not contradict the casebook: ADR 0021 (24 May 2027, staff tools SSO/SCIM) a
 
 1. Title and subtitle. 2. 25 chapters in six parts, as above. 3. AWS main provider again. 4. The Larder storyline
 facts above. 5. Sample chapter: **9** (policies). 6. On the Series 3 shelf now, as “coming soon”.
+
+## 7. Merge with main (2026-11-26)
+
+- Main had moved on (Books 3 and 5, deep dives, cheat sheets, the Darkside, a spine-shelf landing page, cached PDFs).
+  Merged into this branch; generated pages taken from main and rebuilt.
+- Chapter 9's story now matches the casebook's 29 Oct 2026 incident (PR 233, applied 18:10, Bram reverts 18:35).
+- PDFs: `scripts/build-pdf.mjs` renders never-rendered PDFs automatically, so the handbook's 11 PDFs build on the
+  next deploy without touching `pdf-build.json`. Verified locally with
+  `CHROMIUM_PATH=/opt/pw-browsers/chromium PDF_JOURNALS=handbooks/cloud-networking npm run pdf`.

@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How Do We Get Data Out of a Mainframe? · Jef’s Notes</title>
+<meta name="description" content="Choose change capture by testing it: database logs, timestamps or snapshots, and the copybooks, encodings and packed numbers in between.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;700&family=IM+Fell+English+SC&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
+<link rel="stylesheet" href="../../assets/vendor.css?v=c5b54458f8">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-vendor">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>on the client's floor · vol. 3</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="mainframe-integration">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="vpass vpass--contractor" aria-label="Contractor pass">
+    <div class="vpass-in">
+      <div class="vpass-top"><span>METROVOLT</span><small>THE GRID</small></div>
+      <div class="vpass-body">
+        <div class="vpass-photo" aria-hidden="true"><svg viewBox="0 0 52 62" width="40" height="48"><circle cx="26" cy="22" r="11" fill="#9AA2A6"/><path d="M6 60 q20 -30 40 0" fill="#9AA2A6"/></svg></div>
+        <div><div class="vpass-name">Ines Duarte</div><div class="vpass-firm">Wrenfield Digital</div></div>
+      </div>
+      <div class="vpass-esc">CONTRACTOR · LODESTAR</div>
+      <div class="vpass-foot"><span>21 OCT 27 · FL 19</span><span>No. 0694</span></div>
+    </div>
+  </div>
+  <div class="page-meta"><span class="day">Thu · 21.10.27 · day 109 on site</span><span class="topic">collection · <b>the data and its seams</b></span></div>
+  <p class="kicker">a.k.a. “change data capture from a mainframe”</p>
+  <h1><span class="hl">How Do We Get Data Out of a Mainframe?</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Getting data out of an old mainframe has two problems: <b>knowing what changed</b> and <b>translating what you get</b>. Test the change-capture options on <b>real tables</b>: reading the <b>database log</b>, trusting <b>update timestamps</b>, or comparing <b>nightly snapshots</b>; each table may need a different one. Then build a translation layer for <b>copybooks</b>, <b>EBCDIC</b> text and <b>packed decimals</b>, with a test for every field type.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> the data and its seams</li><li><b>Lives in:</b> discovery/change-capture-spike.md</li><li><b>Pairs with:</b> the strangler plan, being overruled</li></ul>
+  <h2 id="problem"><span class="num">1</span>The situation <span class="side">The Grid, 21 October 2027</span></h2>
+  <p class="lead">During the waves, some MetroVolt processes will still update MAVIS while Lodestar serves migrated customers. Lodestar needs to know <b>what changed in MAVIS</b> during the day. MAVIS can only produce a <b>nightly extract</b>.</p>
+  <ul>
+    <li>Hana's favourite idea since the bid: read the database's change log (her “option 1 of 3, subject to discovery”).</li>
+    <li>Bilal's: use “last updated” timestamps. Simple, if they exist.</li>
+    <li>And everything MAVIS gives out comes in <b>COBOL copybook layouts</b>, <b>EBCDIC</b> text and <b>packed decimal</b> numbers. <span class="hl-pink">One wrong field definition corrupts money.</span></li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 240" role="img" aria-label="Doodle of the question Lodestar needs answered during the day: which customer records changed in MAVIS since the last sync? MAVIS can only produce a nightly extract. Three options are drawn: reading the database log, using update timestamps, or comparing nightly snapshots. Between MAVIS and the new platform: copybooks, EBCDIC text and packed decimal numbers."><g class="rough"><rect class="d f-paper" x="24" y="50" width="180" height="110" rx="10"/><rect class="d f-blue" x="556" y="50" width="180" height="110" rx="10"/><rect class="d f-y" x="250" y="30" width="260" height="42" rx="10"/><rect class="d f-y" x="250" y="82" width="260" height="42" rx="10"/><rect class="d f-y" x="250" y="134" width="260" height="42" rx="10"/></g><text class="t-head" x="114" y="101" text-anchor="middle" style="font-size:22px">MAVIS</text><text class="t" x="114" y="125" text-anchor="middle" style="font-size:16px">DB2 · COBOL</text><text class="t-head" x="646" y="101" text-anchor="middle" style="font-size:22px">Lodestar</text><text class="t" x="646" y="125" text-anchor="middle" style="font-size:16px">new platform</text><text class="t-head" x="380" y="58" text-anchor="middle" style="font-size:17px">database log?</text><text class="t-head" x="380" y="110" text-anchor="middle" style="font-size:17px">timestamps?</text><text class="t-head" x="380" y="162" text-anchor="middle" style="font-size:17px">snapshots?</text><text class="t-s t-pen" x="380" y="216" text-anchor="middle" style="font-size:18px">copybooks · EBCDIC · packed decimals in between</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>“What changed since 09:00?” MAVIS can only answer at 02:10.</figcaption></figure>
+  <h2 id="sides"><span class="num">2</span>Both sides of the table <span class="side">the same moment, seen twice</span></h2>
+  <div class="sides">
+    <div class="client">
+      <h3><span class="who">MetroVolt</span> MetroVolt's mainframe team</h3>
+      <p>The mainframe team is four people who keep MAVIS running at night. Any option that touches the database log needs their time, a new licence and a change to a system they've kept stable for decades. Their first answer to new tools is no.</p>
+      <p class="thought">“Don't break the thing that never breaks.”</p>
+    </div>
+    <div class="vendor">
+      <h3><span class="who">Wrenfield</span> Hana</h3>
+      <p>Hana needs change capture that's fast enough for the waves, cheap enough for the budget, and acceptable to the people who run the mainframe. Her favourite design may be right, but only a test on real tables will show it.</p>
+      <p class="thought">“Test all three. Let the tables choose.”</p>
+    </div>
+  </div>
+  <p>The best integration with an old system is often a mix: the fancy option where it matters, the boring one everywhere else.</p>
+  <h2 id="analogy"><span class="num">3</span>Real-life analogy <span class="side">news from a village with no phone</span></h2>
+  <p>You need to know what happens in a village with no phone. You could put someone at the <b>post office reading every letter</b> as it's posted (fast, but they need permission), ask each house to <b>write the date on their door</b> when something changes (if they remember), or <b>photograph the whole street every night</b> and compare (slow, but it never misses anything). And everything is written in the local dialect, which you'll need to translate.</p>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to the job</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">On Lodestar</th></tr></thead>
+    <tbody>
+      <tr><td>Reading every letter at the post office</td><td>Database log capture</td></tr>
+      <tr><td>A date on every door</td><td>Update timestamps</td></tr>
+      <tr><td>Photographing the street nightly</td><td>Snapshot compare</td></tr>
+      <tr><td>Permission from the postmaster</td><td>The mainframe team and a licence</td></tr>
+      <tr><td>The local dialect</td><td>Copybooks, EBCDIC and packed decimals</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">4</span>How it works <span class="side">test the options on real tables, then mix</span></h2>
+  <p>Hana runs a <b>two-week spike</b> with the mainframe team's blessing, read-only, in the test region.</p>
+  <ul>
+    <li><b>Log capture</b> on the nine core customer tables: changes arrive in about <b>40 seconds</b>. It needs a commercial tool (about <b>£85k a year</b>) and the mainframe team to configure it.</li>
+    <li><b>Timestamps</b>: <b>18 %</b> of the tables have no reliable “last updated” column; some programs update rows without touching it.</li>
+    <li><b>Snapshot compare</b>: works for every table, with a <b>24-hour</b> delay and a large nightly comparison.</li>
+  </ul>
+  <p>The proposal: <b>log capture for the nine core tables</b>, where minutes matter; <b>snapshots for everything else</b>. In parallel, Lottie and Bert build the <b>translation layer</b>: 84 copybooks turned into field definitions, EBCDIC to Unicode, packed decimals to numbers, each field type with a test against the golden master. A pound sign in EBCDIC is a different byte; the test catches it on day two.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 330" role="img" aria-label="Three change-capture options, tested in October. Database log capture: tested on nine core tables, about 40 seconds&#x27; delay, needs a licence of 85,000 pounds a year and MetroVolt&#x27;s mainframe team. Timestamps: 18 per cent of tables have no reliable update time. Nightly snapshot compare: works for every table, 24 hours&#x27; delay. Proposal: log capture for the nine core tables, snapshots for the rest. Underneath, the translation layer: 84 copybooks, EBCDIC to Unicode, packed decimals to numbers, each with a test."><g class="rough"><rect class="d f-green" x="14" y="20" width="232" height="100" rx="10"/><rect class="d f-pink" x="264" y="20" width="232" height="100" rx="10"/><rect class="d f-y" x="514" y="20" width="232" height="100" rx="10"/><rect class="d f-blue" x="14" y="140" width="732" height="60" rx="10"/><rect class="d f-paper" x="14" y="220" width="732" height="70" rx="10"/></g><text class="t-head" x="130" y="66" text-anchor="middle" style="font-size:20px">log capture</text><text class="t" x="130" y="90" text-anchor="middle" style="font-size:15px">40 s · £85k/yr licence</text><text class="t-head" x="380" y="66" text-anchor="middle" style="font-size:20px">timestamps</text><text class="t" x="380" y="90" text-anchor="middle" style="font-size:15px">18 % of tables: none</text><text class="t-head" x="630" y="66" text-anchor="middle" style="font-size:20px">snapshots</text><text class="t" x="630" y="90" text-anchor="middle" style="font-size:15px">24 h · all tables</text><text class="t-head" x="380" y="177" text-anchor="middle" style="font-size:18px">proposal: log capture for 9 core tables · snapshots for the rest</text><text class="t-head" x="380" y="251" text-anchor="middle" style="font-size:19px">translation layer</text><text class="t" x="380" y="275" text-anchor="middle" style="font-size:15px">84 copybooks · EBCDIC → Unicode · packed decimals → numbers · a test each</text><text class="t-s t-pen" x="380" y="316" text-anchor="middle" style="font-size:17px">(Hollis will overrule part of this in January: see note 14)</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Test each option on real tables; mix them by what each table needs.</figcaption></figure>
+  <ol class="steps">
+    <li><b>List what needs to be fresh, and how fresh</b><p>Per table, not per system.</p></li>
+    <li><b>Spike every option on real tables</b><p>Read-only, with the owners' blessing.</p></li>
+    <li><b>Measure delay, cost and effort</b><p>Including the client's people and licences.</p></li>
+    <li><b>Mix options by table</b><p>Fancy where it matters, boring elsewhere.</p></li>
+    <li><b>Build the translation layer early</b><p>Copybooks, encodings, number formats.</p></li>
+    <li><b>A test for every field type</b><p>Money fields first.</p></li>
+  </ol>
+  <h3>Vocabulary</h3>
+  <dl class="vocab">
+    <div><dt>Change data capture (CDC)</dt><dd>Detecting and delivering changes made to a database.</dd></div>
+    <div><dt>Log-based capture</dt><dd>Reading changes from the database's own transaction log.</dd></div>
+    <div><dt>Snapshot compare</dt><dd>Comparing two full copies to find what changed.</dd></div>
+    <div><dt>Copybook</dt><dd>A COBOL definition of a record's layout.</dd></div>
+    <div><dt>EBCDIC</dt><dd>The character encoding used on IBM mainframes.</dd></div>
+    <div><dt>Packed decimal (COMP-3)</dt><dd>A compact way of storing numbers, two digits per byte.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>discovery/change-capture-spike.md</span><span>Hana · Thu 21 Oct 2027</span></div>
+<pre><code>CHANGE CAPTURE · SPIKE RESULTS (MAVIS test region, 4–15 Oct)
+
+option          tables tested   delay     cost / effort                    verdict
+log capture     9 core          ≈ 40 s    licence ≈ £85k/yr · mainframe    core tables
+                                          team 6 days to configure
+timestamps      412             —         18 % of tables: no reliable      no
+                                          &quot;last updated&quot;
+snapshot diff   412             24 h      nightly compare, 2 h window      the rest
+proposal        log capture: CUSTOMER, ACCOUNT, ADDRESS, METER_LINK, CONTACT,
+                PSR, TARIFF_ASSIGN, BALANCE, AGREEMENT · snapshots: 403 others
+translation     84 copybooks → field definitions · EBCDIC → Unicode (£ = x&#x27;5B&#x27;!)
+                COMP-3 → decimal · 1 test per field type, checked vs golden master</code></pre>
+  </div>
+  <h2 id="contract"><span class="num">5</span>What the contract says <span class="side">what the design schedule left open</span></h2>
+  <div class="contract">
+    <div class="doc"><span>Lodestar SOW · Schedule 2, §3.3</span><span>v1.0 · Sep 2027</span></div>
+    <span class="stamp">subject to discovery</span>
+    <p class="clause"><b>3.3</b> Change detection between MAVIS and the new platform: mechanism to be confirmed in discovery (options: log capture, timestamps, snapshot compare).</p>
+    <span class="margin">we left it open in the bid on purpose. good thing.</span>
+    <p class="clause"><b>Sch. 5</b> Third-party licences required by the Solution are excluded from the Charges unless listed in Schedule 5.</p>
+    <span class="margin">£85k a year isn't in Schedule 5. it's in the change request.</span>
+    <p class="plain"><b>In plain words:</b> leaving the mechanism “subject to discovery” let the spike decide without a fight. A licence the design now needs isn't in the price, so it goes to the client openly as part of the discovery findings.</p>
+  </div>
+  <h2 id="health"><span class="num">6</span>Account health <span class="side">the same move, green, amber and red</span></h2>
+  <div class="health">
+    <div class="g is-now"><h3>Green <span class="now-tag">Lodestar now</span> <span class="lamp"></span></h3><p class="when">the mainframe team is curious</p><ul><li>Spike together.</li><li>Share results the same day.</li><li>Let them choose with you.</li></ul></div>
+    <div class="a"><h3>Amber <span class="lamp"></span></h3><p class="when">the mainframe team is wary</p><ul><li>Read-only, in test, with their blessing.</li><li>Measure their effort honestly.</li><li>Offer the boring option too.</li></ul></div>
+    <div class="r"><h3>Red <span class="lamp"></span></h3><p class="when">“no new tools on the mainframe”</p><ul><li>Snapshots everywhere, with the delay priced.</li><li>Show what the delay costs the waves.</li><li>Escalate only with numbers.</li></ul></div>
+  </div>
+  <h2 id="pressure"><span class="num">7</span>Pressure gauge <span class="side">how hard this is on the team</span></h2>
+  <div class="pressure" style="--p: 3">
+    <svg viewBox="0 0 170 104" aria-hidden="true"><g class="rough">
+      <path class="d d-thin" d="M15 88 A70 70 0 0 1 155 88"/>
+      <path d="M15 88 A70 70 0 0 1 28 48" stroke="#8FD19E" stroke-width="10" fill="none"/>
+      <path d="M28 48 A70 70 0 0 1 63 21" stroke="#CDE38A" stroke-width="10" fill="none"/>
+      <path d="M63 21 A70 70 0 0 1 107 21" stroke="#F5C84C" stroke-width="10" fill="none"/>
+      <path d="M107 21 A70 70 0 0 1 142 48" stroke="#F2A15A" stroke-width="10" fill="none"/>
+      <path d="M142 48 A70 70 0 0 1 155 88" stroke="#F08A80" stroke-width="10" fill="none"/>
+      <path class="d needle" d="M85 88 L85 30"/><circle class="f-ink" cx="85" cy="88" r="6"/>
+    </g></svg>
+    <div>
+      <h3>3 of 5 · a favourite idea on trial</h3>
+      <p class="lvl">a two-week spike · one engineer's pride</p>
+      <ul><li>Hana's idea won for nine tables and lost for 403. Say both halves out loud; she earned both.</li><li>A wrong byte in a money field is the stuff of headlines. The tests are worth the boredom.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">8</span>Vendor ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>picking the favourite mechanism for everything</b> with <b>testing all three on real tables and mixing them</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the move</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="4"><td>Client trust<small>do they believe us?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The mainframe team sees its concerns tested, not dismissed.</td></tr>
+      <tr data-before="3" data-after="4"><td>Team health<small>can people sleep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Hana's idea is used where it's best.</td></tr>
+      <tr data-before="3" data-after="3"><td>Margin protected<small>do we still make money?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A licence appears; priced openly.</td></tr>
+      <tr data-before="3" data-after="4"><td>Scope clarity<small>do we agree what's in?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Each table's mechanism is listed.</td></tr>
+      <tr data-before="3" data-after="5"><td>Technical integrity<small>is the design honest?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The design fits the real tables.</td></tr>
+      <tr data-before="2" data-after="4"><td>Risk control<small>do we see it coming?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Encoding errors caught on day two.</td></tr>
+      <tr data-before="3" data-after="4"><td>Political cover<small>is there a paper trail?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Spike results on file.</td></tr>
+      <tr data-before="3" data-after="3"><td>Speed<small>how quick to do?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Two weeks.</td></tr>
+      <tr data-before="3" data-after="2"><td>Low overhead<small>light to keep up?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Two mechanisms to run instead of one.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical vendor engagement, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">9</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>One mechanism for every table</h3><p>Overkill for most, too slow for some. <span class="fix">Fix →</span> decide per table.</p></li>
+    <li><h3>Trusting timestamps</h3><p>Some programs don't update them. <span class="fix">Fix →</span> test them on real tables.</p></li>
+    <li><h3>Ignoring the mainframe team</h3><p>Their no stops everything. <span class="fix">Fix →</span> spike with their blessing.</p></li>
+    <li><h3>Translating by hand</h3><p>One wrong copybook field corrupts money. <span class="fix">Fix →</span> generated definitions and a test per type.</p></li>
+    <li><h3>Hiding the licence cost</h3><p>It appears at go-live. <span class="fix">Fix →</span> price it in the findings.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">10</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Integrating with a mainframe or any system without change events.</li><li>When freshness needs differ by table.</li><li>Before committing to a CDC tool.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>The old system already publishes reliable change events.</li></ul>
+    </div>
+  </div>
+  <h3>Related notes</h3>
+  <ul class="related"><li><a href="../../data/notes/change-data-capture.html"><b>Change Data Capture</b></a> (patterns, Vol. 9)</li><li><a href="../notes/strangler-plan.html"><b>How Do We Strangle a Customer System?</b></a> (this volume)</li><li><a href="../notes/overruled.html"><b>What If the Client Overrules Our Design?</b></a> (this volume)</li><li><a href="../../vendor-1/notes/solution-on-two-pages.html"><b>How Do I Design on Two Pages of Facts?</b></a> (vol. 1)</li></ul>
+  <h2 id="quiz"><span class="num">11</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What were the three change-capture options?</summary><p>Database log capture, update timestamps, and nightly snapshot compare.</p></details>
+    <details><summary>Why weren't timestamps enough?</summary><p>18 % of tables had no reliable “last updated” column.</p></details>
+    <details><summary>What was proposed?</summary><p>Log capture for nine core tables, snapshots for the other 403.</p></details>
+    <details><summary>What is a copybook?</summary><p>A COBOL definition of a record's layout.</p></details>
+    <details><summary>Why a test per field type?</summary><p>Encodings and packed decimals are easy to get wrong, and money fields can't be.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>The mainframe team says they can't spare six days to configure log capture until March. What do you do?</span></summary><p>Price the impact (snapshots only until March, with a 24-hour delay during the pilot), show it to Elaine and Hollis, and let them decide whether to free the time or accept the delay.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Pick a system you need data from. For three of its tables, write how fresh you need the data and how you'd detect changes. Would one mechanism really fit all three?</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Test change capture <span class="hl">on real tables</span>. Fancy where it matters, boring <span class="hl">everywhere else</span>.</p>
+  </div>
+  <div class="late">
+    <span class="time">Thu 21 October 2027 · 22:05 · hotel near The Grid</span>
+    <p>Log capture: 40 seconds on nine tables. Hana's idea works. For nine tables.</p>
+    <p>The pound sign is a different byte in EBCDIC. Lottie's test caught it. Imagine finding that on 380,000 bills.</p>
+    <p>£85k a year for the licence. That's going in the findings, not in our margin.</p>
+    <p class="sign">— I.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/06-mainframe-integration.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Martin Kleppmann, <i>Designing Data-Intensive Applications</i> (2017): change data capture.</li><li>IBM, <i>Enterprise COBOL for z/OS Programming Guide</i>: data representation and COMP-3.</li><li>Debezium documentation: log-based change data capture concepts.</li></ul>
+  </div>
+  <div class="titleblock" aria-label="Sheet details"><span class="tb-k">book</span><span class="tb-v">On the Client's Floor</span><span class="tb-k">vol.</span><span class="tb-v">3</span><span class="tb-k">sheet</span><span class="tb-v">06 / 15</span><span class="tb-k">rev.</span><span class="tb-v">A</span><span class="tb-k">drawn by</span><span class="tb-v">Jefrey</span></div>
+  <p class="folio">06</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="profiling-the-data.html"><small>← previous note</small>05 · How Bad Is the Data, Really?</a>
+  <a href="billing-interface.html"><small>Next note →</small>07 · What Does the Billing System Really Need?</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · On the Client's Floor · vol. 3</span><span>by Jefrey Romel Tagunicar</span></footer>
+<p class="foot-note">A story about fictional companies: MetroVolt, Wrenfield Digital, Vexmoor Consulting and Halvorsen Systems are invented. Contract wording is illustrative, not legal advice; real contracts and procurement rules differ by country.</p>
+</main>
+</body>
+</html>

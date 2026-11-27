@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Transaction Script vs Domain Model · Jef’s Notes</title>
+<meta name="description" content="One procedure per use case, or objects that hold the rules: choose per area.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-app">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 8 · inside the application</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="transaction-script">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Tue · 20.04.27</span><span class="topic">collection · <b>shaping the app</b></span></div>
+  <p class="kicker">a.k.a. “recipe card or trained chef?”</p>
+  <h1><span class="hl">Transaction Script vs Domain Model</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Two ways to organise business logic. A <b>transaction script</b> is one procedure per use case: validate, load, compute, save, top to bottom. Simple, obvious, ideal when rules are <b>few</b>. A <b>domain model</b> puts rules on <b>objects</b> that collaborate (entities, value objects, aggregates). More setup, but it stays sane when rules are <b>many and shared</b>. Choose <b>per area</b>, and move from script to model when rules start <b>repeating and branching</b>.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> domain logic pattern</li><li><b>From:</b> Fowler, PoEAA (2002)</li><li><b>Also there:</b> Table Module (now retired)</li><li><b>Pairs with:</b> subdomains and anemic model (Vol. 7)</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">Picking one style for the whole app means it's <span class="hl-pink">too heavy</span> in some places and <span class="hl-pink">too weak</span> in others.</p>
+  <ul>
+    <li>A returns script grew to 2,000 lines of nested ifs.</li>
+    <li>A two-field sign-up form got aggregates and domain events.</li>
+    <li>Rules copied between scripts drift apart.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of two mismatches. On the left, a returns process started as a twenty-line script and grew over three years into a two-thousand-line procedure with nested if-statements for every special case. On the right, a newsletter sign-up form was built with aggregates, domain events and a repository for two fields."><g class="rough"><rect class="d f-pink d-red" x="20" y="30" width="340" height="160" rx="10"/><rect class="d f-pink d-red" x="400" y="30" width="340" height="160" rx="10"/></g><text class="t-head" x="190" y="62" text-anchor="middle">processReturn()</text><text class="t" x="190" y="100" text-anchor="middle">if … if … else if …</text><text class="t" x="190" y="134" text-anchor="middle">2,000 lines, 3 years</text><text class="t-head" x="570" y="62" text-anchor="middle">newsletter sign-up</text><text class="t" x="570" y="100" text-anchor="middle">aggregate · events · repo</text><text class="t" x="570" y="134" text-anchor="middle">for two fields</text><text class="t-s t-red" x="380" y="236" text-anchor="middle">the wrong shape for the job, both ways</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A script that grew to 2,000 lines of ifs, and a two-field form built with aggregates and events.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">the recipe card and the chef</span></h2>
+  <p>For a simple dish, a <b>recipe card</b> with numbered steps is perfect: anyone can follow it. For a restaurant with a changing menu, allergies and substitutions, a card with a thousand margin notes fails; you need a <b>trained chef</b> who understands the ingredients and the rules.</p>
+  <ul>
+    <li>The card is a <b>transaction script</b>.</li>
+    <li>The chef is a <b>domain model</b>.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 250" role="img" aria-label="Doodle of a recipe card and a trained chef. For a simple dish, a recipe card with numbered steps is perfect: anyone can follow it. For a restaurant with a changing menu, allergies and substitutions, you need a chef who understands ingredients and rules, not a card with a thousand exceptions written in the margin."><g class="rough"><rect class="d f-y" x="20" y="40" width="340" height="120" rx="10"/><rect class="d f-green" x="400" y="40" width="340" height="120" rx="10"/></g><text class="t-head" x="190" y="74" text-anchor="middle">recipe card</text><text class="t" x="190" y="112" text-anchor="middle">steps 1, 2, 3: done</text><text class="t-head" x="570" y="74" text-anchor="middle">trained chef</text><text class="t" x="570" y="112" text-anchor="middle">knows the rules, adapts</text><text class="t-s t-pen" x="190" y="200" text-anchor="middle">transaction script</text><text class="t-s t-pen" x="570" y="200" text-anchor="middle">domain model</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>A recipe card for a simple dish; a trained chef for a kitchen full of rules and exceptions.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>Recipe card, numbered steps</td><td>One procedure per use case</td></tr>
+      <tr><td>Anyone can follow it</td><td>Easy to read, no abstractions</td></tr>
+      <tr><td>Margin notes for every exception</td><td>Nested ifs as rules grow</td></tr>
+      <tr><td>A chef who knows the rules</td><td>Objects that hold and enforce the rules</td></tr>
+      <tr><td>Cards for snacks, chef for dinner</td><td>Scripts for simple areas, a model for the core</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">choose per area, move when it hurts</span></h2>
+  <p>Fowler's third option, <b>Table Module</b> (one class per table working on record sets), suited .NET DataSets in 2002 and is rarely used now. The real choice today is script or model, often both in one app, decided by the <b>subdomain</b> (Vol. 7).</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 320" role="img" aria-label="The two styles and when to move. A transaction script is one procedure per use case: validate, load, compute, save, in order. A domain model puts rules on objects that collaborate. The signals to move from script to model: the same rules repeated across scripts, long conditionals about state, and bugs from rules forgotten in one script. Different areas of one app can use different styles."><g class="rough"><rect class="d f-y" x="20" y="20" width="300" height="150" rx="10"/><rect class="d f-green" x="440" y="20" width="300" height="150" rx="10"/><path class="d" d="M324 95 L436 95"/><path class="d" d="M425.2 100.2 L436 95 L425.2 89.8"/></g><text class="t-head" x="170" y="52" text-anchor="middle">transaction script</text><text class="t" x="170" y="90" text-anchor="middle">validate → load</text><text class="t" x="170" y="124" text-anchor="middle">→ compute → save</text><text class="t-head" x="590" y="52" text-anchor="middle">domain model</text><text class="t" x="590" y="90" text-anchor="middle">order.cancel()</text><text class="t" x="590" y="124" text-anchor="middle">rules on objects</text><text class="t-s" x="380" y="84" text-anchor="middle">move when…</text><text class="t-s t-pen" x="380" y="210" text-anchor="middle">the same rule appears in 3 scripts</text><text class="t-s t-pen" x="380" y="245" text-anchor="middle">long if/else about state</text><text class="t-s t-pen" x="380" y="280" text-anchor="middle">bugs from a rule forgotten in one place</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Script: one procedure per use case. Model: rules on objects. Move when rules repeat and branch.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Start simple</b><p>A new area with few rules: a script per use case is fine.</p></li>
+    <li><b>Watch for repetition</b><p>The same rule copied into several scripts is the first signal.</p></li>
+    <li><b>Watch for state branching</b><p><code>if (status === …)</code> chains about what's allowed when.</p></li>
+    <li><b>Extract rules onto objects</b><p>Move the repeated rule to an entity or value object method.</p></li>
+    <li><b>Grow the model gradually</b><p>One rule at a time, with tests, not a big rewrite.</p></li>
+    <li><b>Keep scripts where they fit</b><p>Reports, admin screens and imports can stay as scripts.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Transaction script</dt><dd>A procedure that handles one request from start to finish.</dd></div>
+    <div><dt>Domain model</dt><dd>Objects that hold both data and the business rules.</dd></div>
+    <div><dt>Table module</dt><dd>One class per table handling all its rows; mostly retired.</dd></div>
+    <div><dt>Use case</dt><dd>One thing a user or system wants to do.</dd></div>
+    <div><dt>Shotgun surgery</dt><dd>One change requiring edits in many places: a sign of copied rules.</dd></div>
+    <div><dt>Refactor to a model</dt><dd>Gradually moving rules from scripts onto objects.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>returns.ts</span><span>a script, and the rule that outgrew it</span></div>
+<pre><code><span class="c">// transaction script: clear and fine while rules are few</span>
+<span class="k">export</span> <span class="k">async</span> <span class="k">function</span> requestReturn(orderId: OrderId, lineId: LineId) {
+  <span class="k">const</span> order = <span class="k">await</span> db.orders.find(orderId);
+  <span class="k">if</span> (!order) <span class="k">throw</span> <span class="k">new</span> NotFound();
+  <span class="k">if</span> (daysSince(order.deliveredAt) &gt; 30) <span class="k">throw</span> <span class="k">new</span> Error(<span class="s">"Return window closed"</span>);
+  <span class="k">await</span> db.returns.insert({ orderId, lineId, status: <span class="s">"requested"</span> });
+}
+
+<span class="c">// the 30-day rule now appears in returns, refunds and exchanges -&gt; move it onto the model</span>
+<span class="k">export</span> <span class="k">class</span> Order {
+  canBeReturned(now: Date) { <span class="k">return</span> this.deliveredAt &amp;&amp; daysBetween(this.deliveredAt, now) &lt;= 30; }
+}</code></pre>
+  </div>
+  <p class="aside">tools: none special: plain functions for scripts; for models, the building blocks in Vol. 7. Refactoring tools and characterization tests help when moving a script to a model.</p>
+  <section class="thennow verdict-core" aria-label="Then and now">
+    <span class="tag">then &amp; now</span>
+    <span class="verdict" title="as useful as when it was written">still core</span>
+    <div class="tn-cols">
+      <div class="tn-then"><h3>Then <small>Fowler, PoEAA 2002</small></h3><p>Fowler offered three ways to organise domain logic (transaction script, table module, domain model) with a famous chart: scripts are cheapest for simple logic, models win as complexity grows.</p></div>
+      <div class="tn-now"><h3>Now <small>2026</small></h3><p>The chart still holds. Table module faded with .NET DataSets. The choice is now usually made per subdomain, and functional programming adds a third way: pure functions over precise types, which behaves like a model without classes.</p></div>
+    </div>
+    <p class="tn-take"><b>Verdict:</b> Still core: it's the real choice behind most “anemic or rich?” debates.</p>
+  </section>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Scripts</b>: fastest to write and read for simple logic.</li><li><b>Models</b>: rules in one place as complexity grows.</li><li><b>Choosing per area</b> avoids both failure modes.</li><li><b>Gradual move</b> from one to the other.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Scripts</b> rot into duplication when rules grow.</li><li><b>Models</b> cost design time and more code.</li><li><b>Two styles</b> in one app to explain.</li><li><b>Knowing when</b> to switch takes judgement.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Code-design ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>one logic style for the whole app</b> to <b>scripts for simple areas and a domain model where rules are rich</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="3" data-after="4"><td>Simplicity<small>easy to follow?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Each area uses the lightest style that works.</td></tr>
+      <tr data-before="3" data-after="4"><td>Domain clarity<small>reads like the business?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The rich areas speak the business's language on objects.</td></tr>
+      <tr data-before="2" data-after="4"><td>Correctness<small>rules can't be broken?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Shared rules live in one place.</td></tr>
+      <tr data-before="2" data-after="4"><td>Changeability<small>safe to change?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Rules change once, not in every script.</td></tr>
+      <tr data-before="3" data-after="4"><td>Testability<small>test without the world?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Model rules tested alone; scripts tested end to end.</td></tr>
+      <tr data-before="3" data-after="3"><td>Low coupling<small>parts change alone?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="3"><td>Performance<small>fast enough?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+      <tr data-before="3" data-after="4"><td>Low ceremony<small>little boilerplate?</small></td><td class="dcell"></td><td class="score"></td><td class="why">No ceremony where it isn't needed.</td></tr>
+      <tr data-before="3" data-after="3"><td>Team scalability<small>many teams at once?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>One style everywhere</h3><p>A rich model for CSV exports, or scripts for the pricing engine. <span class="fix">Fix →</span> decide per area by how complex the rules are.</p></li>
+    <li><h3>Scripts that never move</h3><p>Rules copied into the fifth script. <span class="fix">Fix →</span> extract on the second or third copy.</p></li>
+    <li><h3>Big-bang rewrite</h3><p>“Let's rebuild returns as a domain model” for six months. <span class="fix">Fix →</span> move one rule at a time behind tests.</p></li>
+    <li><h3>Scripts calling scripts</h3><p>Procedures chained into a hidden workflow. <span class="fix">Fix →</span> name the workflow, or move rules onto objects.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Deciding how to structure logic for a new area.</li><li>A procedure that keeps growing branches.</li><li>Reviewing whether an area is over- or under-engineered.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>Pure data pipelines and reports (scripts or SQL).</li><li>Debating style for an area that hasn't caused problems.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/active-record-data-mapper.html"><b>Active Record vs Data Mapper</b></a></li><li><a href="../notes/functional-core.html"><b>Functional Core, Imperative Shell</b></a></li><li><a href="../../ddd/notes/anemic-domain-model.html"><b>Anemic Domain Model</b></a> (Vol. 7)</li><li><a href="../../ddd/notes/subdomains.html"><b>Core, Supporting &amp; Generic Subdomains</b></a> (Vol. 7)</li></ul>
+  <p class="aside deeper">on a card → <a href="../../cheatsheets/refactoring/index.html">Refactoring: the cheat sheet</a></p>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>What is a transaction script?</summary><p>A single procedure that handles one request or use case from start to finish.</p></details>
+    <details><summary>When does a domain model pay off?</summary><p>When rules are many, shared between use cases, and depend on state.</p></details>
+    <details><summary>What's a signal to move from script to model?</summary><p>The same rule copied into several scripts, or long conditionals about state.</p></details>
+    <details><summary>Can one app use both?</summary><p>Yes, and it usually should: scripts for simple areas, a model for the core.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>A colleague wants to rewrite the 2,000-line returns script as a full domain model before adding a new “exchange” feature. The deadline is in six weeks. What do you suggest?</span></summary><p>Don't rewrite first. Write characterization tests around the script, extract the rules the exchange feature also needs (return window, condition checks) onto Order and a small value object, and build exchange on those. Move more rules later, one at a time.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Find your longest procedure-style function. Mark each business rule in it, then search the codebase for the same rule elsewhere. Move the most-copied one onto an object and replace the copies.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>A <span class="hl">recipe card</span> for a snack; a <span class="hl">chef</span> for a kitchen full of rules.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/11-transaction-script.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Martin Fowler, <i>Patterns of Enterprise Application Architecture</i> (2002), ch. 2 “Organizing Domain Logic”.</li><li>Vlad Khononov, <i>Learning Domain-Driven Design</i> (2021), ch. 5 “Implementing Simple Business Logic”.</li><li>Michael Feathers, <i>Working Effectively with Legacy Code</i> (2004).</li><li>Martin Fowler, <i>Refactoring</i>, 2nd ed. (2018).</li></ul>
+  </div>
+  <p class="folio">11</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="dto-remote-facade.html"><small>← previous note</small>10 · DTOs &amp; Remote Facade</a>
+  <a href="ports-adapters.html"><small>Next note →</small>12 · Ports &amp; Adapters</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 8 · a student's bullet journal on inside the application</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>

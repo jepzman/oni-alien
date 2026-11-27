@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vector Indexes · Jef’s Notes</title>
+<meta name="description" content="Find the nearest items by meaning, not by exact value, without comparing against every row.">
+<meta name="theme-color" content="#E6E3DC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Caveat:wght@500;700&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="../../assets/notebook.css?v=b2a4ccf01b">
+<link rel="stylesheet" href="../../assets/bujo.css?v=5eb888ad2e">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+<script src="../../assets/notebook.js?v=520827edac" defer></script>
+</head>
+<body class="bujo theme-data">
+<a class="skip-link" href="#main">Skip to the notes</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="../../index.html"><b>Jef’s<span>.</span>Notes</b><small>vol. 3 · data &amp; database patterns</small></a>
+    <nav aria-label="Main">
+      <a href="../../index.html#shelf">Shelf</a>
+      <a href="../index.html#index">Index</a>
+      <a class="hide-sm" href="../all.html">Whole journal</a>
+      <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export as PDF</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="desk">
+<article class="sheet" id="vector-indexes">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/></filter></svg>
+  <div class="page-meta"><span class="day">Thu · 05.11.26</span><span class="topic">collection · <b>reading fast</b></span></div>
+  <p class="kicker">a.k.a. “nearest by meaning, without checking everything”</p>
+  <h1><span class="hl">Vector Indexes</span></h1>
+  <div class="tldr">
+    <span class="tag">TL;DR</span>
+    <p>Search by meaning turns text, images or products into <b>embeddings</b>: long lists of numbers where similar things are close together. Finding the closest ones by comparing against every row is exact but slow. An <b>approximate nearest-neighbour (ANN) index</b>, usually <b>HNSW</b> or <b>IVF</b>, finds almost all of the true nearest items in milliseconds. You trade a little <b>recall</b> for a lot of speed, so measure recall, and plan how filters and re-embedding work before you rely on it.</p>
+  </div>
+  <ul class="chips" aria-label="At a glance"><li><b>Family:</b> reading fast</li><li><b>Common kinds:</b> HNSW graph · IVF clusters · product quantization</li><li><b>Lives in:</b> pgvector, a search engine, or a vector database</li><li><b>Pairs with:</b> indexing, cache-aside, AI app patterns (Vol. 7)</li></ul>
+  <aside class="key" aria-label="Key to the signifiers on this page">
+    <h3>Key</h3>
+    <ul>
+      <li><span class="sig">–</span> note</li>
+      <li><span class="sig">★</span> key idea</li>
+      <li><span class="sig">!</span> watch out</li>
+      <li><span class="sig">→</span> fix / leads to</li>
+      <li><span class="sig">×</span> avoid</li>
+      <li><span class="sig">✓</span> do this</li>
+    </ul>
+  </aside>
+
+  <h2 id="problem"><span class="num">1</span>The problem <span class="side">why do we even need this?</span></h2>
+  <p class="lead">“Budget trainers” should find “cheap running shoes”: no shared words, same meaning. Embeddings make that possible, but finding the nearest of <b>5 million</b> vectors by comparing each one takes <span class="hl-pink">2.4 seconds and a whole CPU core per search</span>.</p>
+  <ul>
+    <li>A normal B-tree index can't help: “close in meaning” isn't a sort order.</li>
+    <li>Exact search grows with the table; ten times more products means ten times slower.</li>
+    <li>Search, recommendations and retrieval for AI features all need this lookup, many times per page.</li>
+  </ul>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of semantic search done by brute force. A shopper searches for budget trainers. Each of 5 million product embeddings is compared with the query, one by one. The answer is good, cheap running shoes, but it takes 2.4 seconds and uses a whole CPU core per query."><g class="rough"><rect class="d f-y" x="14" y="90" width="206" height="70" rx="10"/><path class="d" d="M224 125 L270 125"/><path class="d" d="M259.2 130.2 L270 125 L259.2 119.8"/><rect class="d d-thin f-paper" x="280" y="70" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M280 70 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="312" y="70" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M312 70 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="344" y="70" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M344 70 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="376" y="70" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M376 70 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="408" y="70" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M408 70 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="440" y="70" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M440 70 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="472" y="70" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M472 70 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="504" y="70" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M504 70 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="536" y="70" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M536 70 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="568" y="70" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M568 70 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="600" y="70" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M600 70 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="632" y="70" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M632 70 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="280" y="110" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M280 110 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="312" y="110" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M312 110 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="344" y="110" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M344 110 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="376" y="110" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M376 110 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="408" y="110" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M408 110 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="440" y="110" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M440 110 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="472" y="110" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M472 110 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="504" y="110" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M504 110 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="536" y="110" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M536 110 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="568" y="110" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M568 110 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="600" y="110" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M600 110 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="632" y="110" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M632 110 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="280" y="150" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M280 150 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="312" y="150" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M312 150 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="344" y="150" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M344 150 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="376" y="150" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M376 150 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="408" y="150" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M408 150 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="440" y="150" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M440 150 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="472" y="150" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M472 150 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="504" y="150" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M504 150 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="536" y="150" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M536 150 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="568" y="150" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M568 150 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="600" y="150" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M600 150 l13 10.4 l13 -10.4"/><rect class="d d-thin f-paper" x="632" y="150" width="26" height="18.72" rx="2"/><path class="d d-thin" d="M632 150 l13 10.4 l13 -10.4"/></g><text class="t-head" x="117" y="121" text-anchor="middle" font-size="16">“budget trainers”</text><text class="t" x="117" y="145" text-anchor="middle" font-size="13">query vector</text><text class="t-s t-red" x="470" y="210" text-anchor="middle" font-size="17">compare with all 5,000,000 vectors</text><text class="t-s t-red" x="470" y="240" text-anchor="middle" font-size="17">2.4 s per search · one CPU core busy</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Compare the query with every row: the right answer, far too slowly.</figcaption></figure>
+  <h2 id="analogy"><span class="num">2</span>Real-life analogy <span class="side">a library arranged by topic</span></h2>
+  <p>In a library arranged by topic, you don't read every spine. You go to the <b>sports floor</b>, then the <b>running section</b>, then look along <b>nearby shelves</b>. You find almost everything you'd want in seconds. Now and then a book shelved somewhere odd is missed: that's the price of not checking everything.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 260" role="img" aria-label="Doodle of finding a book in a library arranged by topic. Instead of reading every spine, you go to the floor for the right subject, then the right section, then look along the nearby shelves. You might miss a book shelved in a strange place, but you find almost everything nearby in seconds."><g class="rough"><rect class="d f-paper" x="20" y="40" width="207" height="80" rx="10"/><rect class="d f-y" x="277" y="40" width="207" height="80" rx="10"/><path class="d" d="M231 80 L273 80"/><path class="d" d="M262.2 85.2 L273 80 L262.2 74.8"/><rect class="d f-green" x="533" y="40" width="207" height="80" rx="10"/><path class="d" d="M487 80 L529 80"/><path class="d" d="M518.2 85.2 L529 80 L518.2 74.8"/></g><text class="t-head" x="123.5" y="76" text-anchor="middle" font-size="19">floor</text><text class="t" x="123.5" y="100" text-anchor="middle" font-size="15">sports</text><text class="t-head" x="380.5" y="76" text-anchor="middle" font-size="19">section</text><text class="t" x="380.5" y="100" text-anchor="middle" font-size="15">running</text><text class="t-head" x="636.5" y="76" text-anchor="middle" font-size="19">shelf</text><text class="t" x="636.5" y="100" text-anchor="middle" font-size="15">shoes</text><text class="t-s t-pen" x="380" y="170" text-anchor="middle" font-size="17">you don&#x27;t read all 5 million spines</text><text class="t-s t-red" x="380" y="202" text-anchor="middle" font-size="16">and once in a while you miss one shelved oddly</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>Go to the right floor, then the right shelf, then look around: almost always enough.</figcaption></figure>
+  <div class="table-scroll">
+  <table class="map">
+    <caption>Translating it to software</caption>
+    <thead><tr><th scope="col">In real life</th><th scope="col">In your code</th></tr></thead>
+    <tbody>
+      <tr><td>A book's place in the topic layout</td><td>Its embedding: a vector of, say, 768 numbers</td></tr>
+      <tr><td>Floor → section → shelf</td><td>The index's coarse-to-fine search (HNSW layers, IVF clusters)</td></tr>
+      <tr><td>Looking along nearby shelves</td><td>Checking a small candidate set (<code>ef_search</code>, <code>probes</code>)</td></tr>
+      <tr><td>The oddly shelved book you miss</td><td>Recall below 100%: approximate, not exact</td></tr>
+      <tr><td>Re-shelving after a new system</td><td>Re-embedding everything when the model changes</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2 id="how"><span class="num">3</span>How it solves it <span class="side">search a graph, not the whole table</span></h2>
+  <p><b>HNSW</b> links each vector to its nearest neighbours in several layers. A search enters at the sparse top, hops greedily toward the query, drops a layer, and repeats, comparing a few hundred vectors instead of millions. <b>IVF</b> instead groups vectors into clusters and searches only the few clusters nearest the query. HNSW is usually faster and more accurate; IVF builds faster and uses less memory.</p>
+<figure class="fig"><div class="fig-scroll"><svg viewBox="0 0 760 290" role="img" aria-label="How an HNSW vector index searches. The graph has layers: a sparse top layer with long links and a dense bottom layer with short ones. A search enters at the top, greedily moves to the neighbour closest to the query, drops a layer, and repeats, ending with a small neighbourhood in the bottom layer from which the nearest items are returned."><g class="rough"><path class="d d-thin" d="M80 40 H640"/><circle class="d f-paper" cx="80" cy="40" r="7"/><circle class="d f-paper" cx="267" cy="40" r="7"/><circle class="d f-paper" cx="453" cy="40" r="7"/><circle class="d f-paper" cx="640" cy="40" r="7"/><path class="d d-thin" d="M80 120 H640"/><circle class="d f-paper" cx="80" cy="120" r="7"/><circle class="d f-paper" cx="160" cy="120" r="7"/><circle class="d f-paper" cx="240" cy="120" r="7"/><circle class="d f-paper" cx="320" cy="120" r="7"/><circle class="d f-paper" cx="400" cy="120" r="7"/><circle class="d f-paper" cx="480" cy="120" r="7"/><circle class="d f-paper" cx="560" cy="120" r="7"/><circle class="d f-paper" cx="640" cy="120" r="7"/><path class="d d-thin" d="M80 200 H640"/><circle class="d f-paper" cx="80" cy="200" r="7"/><circle class="d f-paper" cx="117" cy="200" r="7"/><circle class="d f-paper" cx="155" cy="200" r="7"/><circle class="d f-paper" cx="192" cy="200" r="7"/><circle class="d f-paper" cx="229" cy="200" r="7"/><circle class="d f-paper" cx="267" cy="200" r="7"/><circle class="d f-paper" cx="304" cy="200" r="7"/><circle class="d f-paper" cx="341" cy="200" r="7"/><circle class="d f-paper" cx="379" cy="200" r="7"/><circle class="d f-paper" cx="416" cy="200" r="7"/><circle class="d f-paper" cx="453" cy="200" r="7"/><circle class="d f-paper" cx="491" cy="200" r="7"/><circle class="d f-paper" cx="528" cy="200" r="7"/><circle class="d f-paper" cx="565" cy="200" r="7"/><circle class="d f-paper" cx="603" cy="200" r="7"/><circle class="d f-paper" cx="640" cy="200" r="7"/><path class="d d-green" d="M80 40 L453 40"/><path class="d d-green" d="M442.2 45.2 L453 40 L442.2 34.8"/><path class="d d-green" d="M456 46 L477 113"/><path class="d d-green" d="M468.8 104.3 L477 113 L478.7 101.1"/><path class="d d-green" d="M487 120 L553 120"/><path class="d d-green" d="M542.2 125.2 L553 120 L542.2 114.8"/><path class="d d-green" d="M561 127 L565 191"/><path class="d d-green" d="M559.1 180.5 L565 191 L569.5 179.9"/><circle class="d f-green" cx="565" cy="200" r="11"/></g><text class="t-s" x="80" y="26" text-anchor="start" font-size="14">top layer: few nodes, long links</text><text class="t-s" x="80" y="106" text-anchor="start" font-size="14">middle layer</text><text class="t-s" x="80" y="186" text-anchor="start" font-size="14">bottom: every item, short links</text><text class="t-s t-green" x="565" y="232" text-anchor="middle" font-size="16">nearest ✓</text><text class="t-s t-pen" x="300" y="264" text-anchor="middle" font-size="16">tune: m (links per node) · ef (how wide each search looks)</text></svg></div><p class="swipe">← swipe to see the whole drawing →</p><figcaption>HNSW: long hops on the sparse top layers, short hops at the bottom. A few hundred comparisons, not millions.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Store embeddings with their model</b><p>A vector column plus the model name and version, so you know which vectors belong together.</p></li>
+    <li><b>Choose the distance</b><p>Cosine for most text models (or inner product on normalised vectors); use the one the model was trained for.</p></li>
+    <li><b>Build an ANN index</b><p>pgvector: <code>CREATE INDEX … USING hnsw (embedding vector_cosine_ops)</code>; or IVF with a list count.</p></li>
+    <li><b>Measure recall</b><p>Run 100 real queries exactly (no index) and with the index; recall@10 = share of the true top 10 the index found. Tune until it's good enough, often 95%+.</p></li>
+    <li><b>Plan filters and updates</b><p>Decide how “in stock, in the shopper's country” combines with the search, and how you re-embed when the model changes.</p></li>
+  </ol>
+  <h3>Vocabulary for the exam</h3>
+  <dl class="vocab">
+    <div><dt>Embedding</dt><dd>A vector of numbers that places similar items close together.</dd></div>
+    <div><dt>Nearest-neighbour search</dt><dd>Finding the vectors closest to a query vector.</dd></div>
+    <div><dt>ANN</dt><dd>Approximate nearest neighbour: fast, finds most of the true nearest.</dd></div>
+    <div><dt>HNSW</dt><dd>Hierarchical navigable small world: a layered graph index.</dd></div>
+    <div><dt>IVF</dt><dd>Inverted file index: vectors grouped into clusters.</dd></div>
+    <div><dt>Recall@k</dt><dd>Share of the true top k results the index returns.</dd></div>
+  </dl>
+  <div class="card">
+    <div class="card-head"><span>search.sql</span><span>PostgreSQL + pgvector 0.8</span></div>
+<pre><code><span class="k">CREATE</span> EXTENSION <span class="k">IF</span> <span class="k">NOT</span> <span class="k">EXISTS</span> vector;
+
+<span class="k">ALTER</span> <span class="k">TABLE</span> products <span class="k">ADD</span> <span class="k">COLUMN</span> embedding vector(768);       <span class="c">-- from one embedding model</span>
+<span class="k">ALTER</span> <span class="k">TABLE</span> products <span class="k">ADD</span> <span class="k">COLUMN</span> embedding_model text;          <span class="c">-- which one (re-embed on change)</span>
+
+<span class="k">CREATE</span> <span class="k">INDEX</span> products_embedding_hnsw <span class="k">ON</span> products
+  <span class="k">USING</span> hnsw (embedding vector_cosine_ops) <span class="k">WITH</span> (m = 16, ef_construction = 64);
+
+<span class="c">-- per query: look wider for better recall, and keep filtering inside the index scan</span>
+<span class="k">SET</span> hnsw.ef_search = 100;
+<span class="k">SET</span> hnsw.iterative_scan = relaxed_order;   <span class="c">-- keep searching if filters remove too many</span>
+
+<span class="k">SELECT</span> id, name, embedding &lt;=&gt; $1 <span class="k">AS</span> distance      <span class="c">-- &lt;=&gt; is cosine distance</span>
+  <span class="k">FROM</span> products
+ <span class="k">WHERE</span> in_stock <span class="k">AND</span> country = $2
+ <span class="k">ORDER</span> <span class="k">BY</span> embedding &lt;=&gt; $1
+ <span class="k">LIMIT</span> 10;</code></pre>
+  </div>
+  <p class="aside">tools: pgvector (PostgreSQL), OpenSearch / Elasticsearch k-NN, Redis vector search, SQLite sqlite-vec, Qdrant, Weaviate, Milvus, FAISS (library), ann-benchmarks.com for comparing index types.</p>
+  <h2 id="tradeoffs"><span class="num">4</span>Gains vs losses <span class="side">nothing is free</span></h2>
+  <div class="tchart">
+    <div class="gain">
+      <h3>What we gain</h3>
+      <ul><li><b>Milliseconds instead of seconds</b> at millions of vectors.</li><li><b>Search by meaning</b>, not just matching words.</li><li><b>One store</b> with pgvector: vectors next to the rows they describe.</li><li><b>Tunable</b>: trade recall for speed per query.</li></ul>
+    </div>
+    <div class="loss">
+      <h3>What we lose</h3>
+      <ul><li><b>Approximate</b>: some true matches are missed.</li><li><b>Memory hungry</b>: HNSW indexes like to fit in RAM.</li><li><b>Slow builds</b> and slower inserts than a B-tree.</li><li><b>Filters are tricky</b> and model changes mean re-embedding everything.</li></ul>
+    </div>
+  </div>
+  <h2 id="ratings"><span class="num">5</span>Database ratings <span class="side">1 = poor · 5 = great</span></h2>
+  <p>Each line compares <b>exact search over every vector</b> to <b>an HNSW index on the same vectors</b>.</p>
+  <div class="ratings-wrap table-scroll">
+  <table class="ratings">
+    <thead><tr><th scope="col">Quality</th><th scope="col">With the pattern</th><th scope="col">Before → after</th><th scope="col">Why</th></tr></thead>
+    <tbody>
+      <tr data-before="4" data-after="3"><td>Simplicity<small>easy to reason about?</small></td><td class="dcell"></td><td class="score"></td><td class="why">An index to tune and a recall number to watch.</td></tr>
+      <tr data-before="1" data-after="5"><td>Read speed<small>fast queries?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Milliseconds instead of seconds.</td></tr>
+      <tr data-before="4" data-after="2"><td>Write speed<small>cheap inserts &amp; updates?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Each insert updates the graph.</td></tr>
+      <tr data-before="5" data-after="4"><td>Integrity<small>data stays correct?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Results are approximate.</td></tr>
+      <tr data-before="1" data-after="4"><td>Scalability<small>10× more rows?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Grows roughly with log n, not n.</td></tr>
+      <tr data-before="4" data-after="2"><td>Low storage cost<small>cheap to keep?</small></td><td class="dcell"></td><td class="score"></td><td class="why">The graph often doubles the memory.</td></tr>
+      <tr data-before="3" data-after="3"><td>Query flexibility<small>answer new questions?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Neutral: filters need care.</td></tr>
+      <tr data-before="4" data-after="3"><td>Operability<small>calm to run?</small></td><td class="dcell"></td><td class="score"></td><td class="why">Index builds and memory to watch.</td></tr>
+      <tr data-before="3" data-after="2"><td>Evolvability<small>easy to change shape?</small></td><td class="dcell"></td><td class="score"></td><td class="why">A model change means re-embedding and rebuilding.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><i class="dot on"></i> kept</span><span><i class="dot gain"></i> gained</span><span><i class="dot lost"></i> lost</span><span>ratings are relative guidance for a typical app, not laws</span></div>
+  <h2 id="pitfalls"><span class="num">6</span>Common pitfalls <span class="side">the usual ways this goes wrong</span></h2>
+  <ul class="pits">
+    <li><h3>Filtering after the search</h3><p>The index returns the 10 nearest, then the WHERE removes 9 out-of-stock ones, and the shopper sees one result. <span class="fix">Fix →</span> use iterative or filtered index scans, partial indexes per common filter, or ask for more candidates.</p></li>
+    <li><h3>Mixing models</h3><p>New products embedded with a new model, old ones with the old model: distances mean nothing. <span class="fix">Fix →</span> store the model with each vector; re-embed everything before switching queries.</p></li>
+    <li><h3>Never measuring recall</h3><p>The index silently returns worse results after a parameter change. <span class="fix">Fix →</span> keep a fixed set of queries with exact answers and check recall@10 in CI or a nightly job.</p></li>
+    <li><h3>Index bigger than memory</h3><p>HNSW pages are read from disk and latency jumps. <span class="fix">Fix →</span> size RAM for the index, use smaller vectors (or half precision), or quantize.</p></li>
+  </ul>
+  <h2 id="when"><span class="num">7</span>When to use it (and when not) <span class="side"></span></h2>
+  <div class="grid2">
+    <div>
+      <h3 class="green">Use it when…</h3>
+      <ul class="check yes"><li>Semantic search, “similar items” and recommendations.</li><li>Retrieval for AI features (RAG) over your own documents.</li><li>Deduplicating near-identical text or images.</li><li>More than a few thousand vectors per query.</li></ul>
+    </div>
+    <div>
+      <h3 class="red">Skip it when…</h3>
+      <ul class="check no"><li>A few thousand vectors: exact search is fast enough and has perfect recall.</li><li>Keyword or exact-match search does the job (SKUs, names, codes).</li><li>You can't afford to re-embed when the model changes, and need results to stay stable.</li></ul>
+    </div>
+  </div>
+  <h3>Related patterns</h3>
+  <ul class="related"><li><a href="../notes/indexing.html"><b>Indexing</b></a></li><li><a href="../../distributed/notes/cache-aside.html"><b>Cache-aside</b></a> (Vol. 1)</li><li><a href="../notes/materialized-views.html"><b>Materialized views</b></a></li><li><a href="../notes/multitenancy.html"><b>Multitenancy</b></a></li></ul>
+  <h2 id="quiz"><span class="num">8</span>Self-check quiz <span class="side"></span></h2>
+  <div class="quiz">
+    <details><summary>Why can't a B-tree index speed up nearest-neighbour search on embeddings?</summary><p>A B-tree orders values along one dimension; closeness in a 768-dimension space isn't a sort order.</p></details>
+    <details><summary>What does recall@10 measure?</summary><p>The share of the true 10 nearest items (from exact search) that the approximate index returned.</p></details>
+    <details><summary>HNSW or IVF: which is usually faster and more accurate, and what does it cost?</summary><p>HNSW; it costs more memory and slower builds than IVF.</p></details>
+    <details><summary>Why store the model name with each vector?</summary><p>Vectors from different models aren't comparable; you must know which to re-embed when the model changes.</p></details>
+    <details><summary><span class="q-body"><span class="q-sit">what would you do?</span>Product search uses pgvector with HNSW. In one country, shoppers often get only two or three results, though many products match. The query filters by country after ordering by distance. What is happening, and what do you change?</span></summary><p>The index returns its nearest candidates first, and the country filter removes most of them. Use iterative index scans (or raise ef_search), add a partial index per large country, or include the country in the search, and measure recall for filtered queries specifically.</p></details>
+  </div>
+  <div class="tryit">
+    <span class="tag">try it</span>
+    <p>Load 100,000 sentences or product titles with embeddings into PostgreSQL with pgvector. Time 100 queries with exact search, then build an HNSW index and time them again. Compute recall@10 for the index against the exact results, then change <code>hnsw.ef_search</code> from 40 to 200 and watch speed and recall move together.</p>
+  </div>
+  <div class="remember">
+    <span class="tag">remember!!</span>
+    <p>Close in <span class="hl">meaning</span>, found in <span class="hl">milliseconds</span>. Approximate, so measure recall.</p>
+  </div>
+  <div class="export no-print">
+    <button class="btn" type="button" data-print><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export this note as PDF</button>
+    <a class="btn btn--ghost" href="../pdf/18-vector-indexes.pdf">Download ready-made PDF</a>
+    <span class="hint">In the print window choose “Save as PDF”. On a phone, the ready-made PDF is easiest.</span>
+  </div>
+  <div class="sources">
+    <h3>Further reading</h3>
+    <ul><li>Yu. A. Malkov and D. A. Yashunin, “Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs” (2016/2018).</li><li>Hervé Jégou, Matthijs Douze and Cordelia Schmid, “Product quantization for nearest neighbor search” (2011).</li><li>pgvector documentation (github.com/pgvector/pgvector).</li><li>ann-benchmarks.com: benchmarks of approximate nearest-neighbour libraries.</li></ul>
+  </div>
+  <p class="folio">18</p>
+</article>
+<nav class="pager" aria-label="Notes">
+  <a href="bitemporal-data.html"><small>← previous note</small>17 · Bitemporal Data</a>
+  <a href="../index.html"><small>back to →</small>Index</a>
+</nav>
+<footer class="foot"><span>Jef’s Notes · Vol. 3 · a student's bullet journal on data &amp; database patterns</span><span>by Jefrey Romel Tagunicar</span></footer>
+</main>
+</body>
+</html>
