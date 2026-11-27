@@ -188,4 +188,4 @@ of Larder (Stagedoor, a Lisbon ticketing platform, proposed); no sample chapters
 sketches for 7–8, and the mechanics of starting a book: **`docs/HANDOFF-handbooks-next.md`**.
 
 Update, 2026-11-27: Stagedoor approved; **Handbook 3 · Linux for Cloud Engineers** started (21 chapters, Ubuntu,
-Parts I–III written): **`docs/HANDOFF-handbook-3-linux.md`**.
+Parts I–IV written): **`docs/HANDOFF-handbook-3-linux.md`**.

@@ -1,0 +1,409 @@
+<!-- Handbook 3 · Linux for Cloud Engineers · Chapter 15. Body only. -->
+<header class="opener">
+  <p class="eyebrow">Part IV · Networking from the host</p>
+  <p class="chno">15</p>
+  <h1>Host firewalls</h1>
+  <p class="promise">A service that listens on a network address can be reached by anything that can route to it, unless something says no. This chapter shows how Linux filters packets, how to write a small default-deny ruleset with nftables (and its friendlier front end, ufw), how to test it without locking yourself out, and how a host firewall relates to the security groups of a cloud network.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain where netfilter's hooks sit in a packet's path, and what a stateful firewall remembers.</li>
+      <li>Write, check and load an nftables ruleset that denies inbound traffic by default.</li>
+      <li>Choose between dropping and rejecting, and predict what a client sees for each.</li>
+      <li>Use ufw for simple hosts, and know what it generates underneath.</li>
+      <li>Explain how a host firewall and a cloud security group divide the work.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li><a href="#ch13">Chapter 13</a> (listening sockets, refused vs timed out) and its <code>netlab.sh</code>.</li>
+      <li>Handbook 1, Chapter 9 (security groups and network ACLs) for the cloud side.</li>
+      <li>A Linux VM with <code>sudo</code>, and <code>sudo apt install nftables ufw netcat-openbsd</code>.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>30 minutes, a Linux VM with <code>sudo</code>, free; rules are applied inside the lab namespaces, not to your machine</dd>
+      <dt>Main distribution</dt><dd>Ubuntu, with RHEL's firewalld in 15.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Stagedoor">
+  <p class="label">At Stagedoor</p>
+  <p>In September 2026, a group of twelve venues asks Stagedoor for a security assessment before signing a contract, and Joana hires a small firm to test the servers. Their report arrives on Tuesday 6 October. The first finding is short: <em>from either web server, every listening port on every other server is reachable</em>. From <code>door-3</code>, the testers could reach PostgreSQL on <code>door-4</code> (needed), SSH on every server from every other server (not needed), and a metrics exporter on port 9100 on <code>door-4</code> that nobody remembered installing, which lists the database's settings to anyone who asks.</p>
+  <p>Atlantica's private network has no firewall between one customer's servers, and none of Stagedoor's servers has one of its own. If either web server, the machines that face the internet, were ever compromised, nothing would stand between the attacker and the database but its password.</p>
+</aside>
+
+<!-- ======================================================== 15.1 -->
+<h2 class="sec" id="s15-1"><span class="n">15.1</span>Netfilter: where packets are checked</h2>
+
+<p class="lead">Linux filters packets in the kernel, with a framework called <span class="term">netfilter</span>. It offers <strong>hooks</strong>, points in a packet's path where rules can inspect it and decide: accept, drop, reject, or change it. Tools only differ in how you write the rules.</p>
+
+<figure class="wide" id="fig15-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 250" role="img" aria-labelledby="fig15-1-t fig15-1-d">
+      <title id="fig15-1-t">Netfilter hooks in a packet's path</title>
+      <desc id="fig15-1-d">A packet arrives on a network interface and passes the prerouting hook. The routing decision then sends it one of two ways. If it's addressed to this machine, it passes the input hook and reaches a local process, such as PostgreSQL. If it's for another machine, as on a router or a container host, it passes the forward hook. Packets a local process sends pass the output hook. Everything leaving passes the postrouting hook, then the interface. A host firewall for a server mostly lives in the input hook; containers and routers use forward; NAT uses prerouting and postrouting.</desc>
+      <defs><marker id="c15ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="ext" x="10" y="100" width="90" height="44" rx="5"/><text class="t-small" x="55" y="127" text-anchor="middle">in: eth0</text>
+      <rect class="node" x="120" y="100" width="110" height="44" rx="5"/><text class="t-mono" x="175" y="127" text-anchor="middle">prerouting</text>
+      <rect class="priv" x="250" y="100" width="100" height="44" rx="5"/><text class="t-small" x="300" y="122" text-anchor="middle">routing</text><text class="t-small" x="300" y="136" text-anchor="middle">decision</text>
+      <rect class="node-accent" x="380" y="30" width="110" height="44" rx="5"/><text class="t-mono on-accent" x="435" y="57" text-anchor="middle">input</text>
+      <rect class="node" x="520" y="30" width="230" height="44" rx="5"/><text class="t-small" x="635" y="57" text-anchor="middle">local process (PostgreSQL, sshd)</text>
+      <rect class="node" x="380" y="170" width="110" height="44" rx="5"/><text class="t-mono" x="435" y="197" text-anchor="middle">forward</text>
+      <rect class="node" x="520" y="100" width="110" height="44" rx="5"/><text class="t-mono" x="575" y="127" text-anchor="middle">output</text>
+      <rect class="node" x="520" y="170" width="120" height="44" rx="5"/><text class="t-mono" x="580" y="197" text-anchor="middle">postrouting</text>
+      <rect class="ext" x="660" y="170" width="90" height="44" rx="5"/><text class="t-small" x="705" y="197" text-anchor="middle">out: eth0</text>
+      <path class="wire" d="M100 122 H116" marker-end="url(#c15ah)"/><path class="wire" d="M230 122 H246" marker-end="url(#c15ah)"/>
+      <path class="wire" d="M350 110 H362 V52 H376" marker-end="url(#c15ah)"/><text class="t-small" x="300" y="90" text-anchor="middle">for me</text>
+      <path class="wire" d="M350 134 H362 V192 H376" marker-end="url(#c15ah)"/><text class="t-small" x="300" y="166" text-anchor="middle">for others</text>
+      <path class="wire" d="M490 52 H516" marker-end="url(#c15ah)"/>
+      <path class="wire" d="M600 74 V96" marker-end="url(#c15ah)"/><text class="t-small" x="606" y="90">replies</text>
+      <path class="wire" d="M575 144 V166" marker-end="url(#c15ah)"/>
+      <path class="wire" d="M490 192 H516" marker-end="url(#c15ah)"/><path class="wire" d="M640 192 H656" marker-end="url(#c15ah)"/>
+    </svg>
+  </div>
+  <figcaption><b>Figure 15.1</b> A server's own firewall lives mostly at <code>input</code>: packets addressed to this machine, on their way to a local process. Container hosts and routers also filter at <code>forward</code>.</figcaption>
+</figure>
+
+<p>Netfilter's rules have been written with several tools over the years: <code>iptables</code> (since 2001, still everywhere in documentation), and <span class="term">nftables</span> (<code>nft</code>), its replacement, the default on current Debian, Ubuntu and RHEL. On modern systems, the <code>iptables</code> command is usually <code>iptables-nft</code>, a compatibility layer that writes nftables rules, so both can be seen with <code>nft list ruleset</code>. Front ends such as <strong>ufw</strong> (Ubuntu) and <strong>firewalld</strong> (RHEL) generate the rules for you.</p>
+
+<p>Netfilter is <strong>stateful</strong>: its connection tracking (<code>conntrack</code>) remembers every connection it has seen, so a rule can say “accept anything that belongs to a connection we already accepted”. That one rule is what lets a server with a strict inbound policy still receive the replies to its own outgoing connections, its DNS answers and its package downloads.</p>
+
+<!-- ======================================================== 15.2 -->
+<h2 class="sec" id="s15-2"><span class="n">15.2</span>An nftables ruleset, line by line</h2>
+
+<p>nftables organises rules into <strong>tables</strong> (a namespace for your rules; family <code>inet</code> covers IPv4 and IPv6 together), <strong>chains</strong> (lists of rules attached to a hook, with a default <strong>policy</strong>) and <strong>rules</strong>, evaluated top to bottom until one decides. <strong>Sets</strong> hold lists of addresses or ports a rule can match in one step. Here's the ruleset Stagedoor wrote for <code>door-4</code>:</p>
+
+<p class="code-title"><span>door4.nft</span><span>nftables</span></p>
+<pre><code>#!/usr/sbin/nft -f
+<span class="c"># door4.nft · inbound firewall for the database server: deny by default, allow what's needed</span>
+flush ruleset
+
+table inet filter {
+    <span class="k">set</span> web_servers {
+        type ipv4_addr
+        elements = { 10.40.0.12, 10.40.0.13 }
+    }
+
+    chain input {
+        type filter hook input priority filter; policy drop;
+
+        ct state established,related accept       <span class="c"># replies to connections already allowed</span>
+        ct state invalid drop
+        iif <span class="s">"lo"</span> accept                            <span class="c"># the machine talking to itself</span>
+        ip protocol icmp accept                    <span class="c"># ping and error messages such as "fragmentation needed"</span>
+
+        tcp dport 22 ip saddr 10.40.0.1 accept comment <span class="s">"SSH from the admin network"</span>
+        tcp dport 5432 ip saddr @web_servers accept comment <span class="s">"PostgreSQL from the web servers"</span>
+
+        counter comment <span class="s">"everything else is dropped"</span>
+    }
+}</code></pre>
+
+<ul>
+  <li><code>flush ruleset</code> removes all existing rules first, so loading the file always gives exactly this ruleset, whatever was there before.</li>
+  <li><code>policy drop</code> on the <code>input</code> chain is <strong>default deny</strong>: a packet that no rule accepts is dropped (Handbook 2, Chapter 1 used the same idea for permissions).</li>
+  <li>The first rule accepts packets of <strong>established</strong> connections (and related ones, such as ICMP errors about them). Without it, every reply to an outgoing connection would be dropped, as the lab shows.</li>
+  <li>Loopback is always allowed: programs on the server talk to each other on <code>127.0.0.1</code>.</li>
+  <li>ICMP is allowed, because blocking it all breaks path-MTU discovery (Handbook 1, Chapter 3) and ping, which the next person debugging will want.</li>
+  <li>Then one rule per thing that should be reachable, from where. Each has a comment saying why.</li>
+  <li>The final <code>counter</code> counts what falls through to the policy: a cheap way to see how much is being dropped.</li>
+</ul>
+
+<p>Load it with <code>sudo nft -f door4.nft</code>, after checking it with <code>sudo nft -c -f door4.nft</code> (<code>-c</code>: parse and check, change nothing). <code>sudo nft list ruleset</code> shows what's loaded; <code>sudo nft -a list ruleset</code> adds each rule's handle, for deleting single rules. To load it at boot, put it in <code>/etc/nftables.conf</code> (Debian and Ubuntu's location) and enable the service: <code>sudo systemctl enable --now nftables</code>.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">Deny inbound by default, accept established connections first, then allow each service only from the sources that need it, with a comment saying why.</p>
+</div>
+
+<!-- ======================================================== 15.3 -->
+<h2 class="sec" id="s15-3"><span class="n">15.3</span>Drop or reject?</h2>
+
+<p>A firewall can refuse a packet in two ways, and the client notices the difference:</p>
+<ul>
+  <li><strong>Drop</strong>: discard silently. The client hears nothing and retries until it times out, seconds later. Scanners learn little; legitimate clients that are blocked by mistake hang.</li>
+  <li><strong>Reject</strong>: discard and answer, with a TCP reset (<code>reject with tcp reset</code>) or an ICMP “unreachable”. The client fails at once with “Connection refused”, indistinguishable from nothing listening.</li>
+</ul>
+
+<p>A common compromise: drop by default (the policy), and reject on the specific ports where internal clients should fail fast rather than hang. Whichever you choose, remember <a href="#ch13">Chapter 13</a>'s rule the other way round: a timeout points at a dropping firewall; a refusal may be a rejecting one, not only an empty port.</p>
+
+<!-- ======================================================== 15.4 -->
+<h2 class="sec" id="s15-4"><span class="n">15.4</span>Not locking yourself out</h2>
+
+<p>The classic firewall accident is a rule that cuts off the SSH session you're typing in. On a cloud server, that means the provider's serial console, or a rescue instance. Four habits prevent it:</p>
+<ol class="steps">
+  <li><strong>Accept established connections first.</strong> Your current SSH session is an established connection; with that rule at the top, a mistake further down usually spares it.</li>
+  <li><strong>Check before loading</strong>: <code>nft -c -f</code>.</li>
+  <li><strong>Load with an automatic undo</strong>: save the current rules (<code>sudo nft list ruleset &gt; /root/rules.before</code>), schedule their return (<code>echo "nft -f /root/rules.before" | sudo at now + 5 minutes</code>, or <code>sudo systemd-run --on-active=5min nft -f /root/rules.before</code>), load the new ones, and cancel the undo only once you've opened a <em>new</em> SSH session successfully.</li>
+  <li><strong>Keep a second way in</strong>: the provider's console, or a session manager that doesn't depend on SSH (<a href="#ch16">Chapter 16</a>).</li>
+</ol>
+
+<!-- ======================================================== 15.5 -->
+<h2 class="sec" id="s15-5"><span class="n">15.5</span>ufw: the simple front end</h2>
+
+<p><strong>ufw</strong> (“uncomplicated firewall”), installed on Ubuntu but inactive by default, writes rules for you from short commands:</p>
+<pre><code>sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow from 10.40.0.1 to any port 22 proto tcp
+sudo ufw allow 443/tcp
+sudo ufw enable                    <span class="c"># asks for confirmation if you're connected over SSH</span>
+sudo ufw status verbose
+sudo ufw status numbered; sudo ufw delete 2</code></pre>
+
+<p>It's a good choice for a single host with a handful of rules, and its <code>limit</code> rule (refuse an address that opens more than six connections in thirty seconds) is a cheap brake on SSH password guessing. Underneath it generates a lot: the lab counts 69 chains for two rules. For servers whose rules live in Git and are reviewed, a short nftables file says exactly what it does and is easier to read in a pull request. Use one or the other on a machine, never both.</p>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: Docker and your firewall</p>
+  <p>Docker manages its own rules in the <code>nat</code> and <code>filter</code> tables. A port published with <code>docker run -p 5432:5432</code> is forwarded to the container through the <code>forward</code> hook (Figure 15.1), so it bypasses ufw's and your own <code>input</code> rules: the database in a container is reachable from everywhere even though <code>ufw status</code> says otherwise. Publish on a specific address (<code>-p 10.40.0.14:5432:5432</code> or <code>127.0.0.1:…</code>), or put your rules in Docker's <code>DOCKER-USER</code> chain. Docker also sets the <code>forward</code> policy to drop, which is why this book's lab script needed a line for machines with Docker installed (<a href="#ch13">Chapter 13</a>).</p>
+</div>
+
+<!-- ======================================================== 15.6 -->
+<h2 class="sec" id="s15-6"><span class="n">15.6</span>Host firewalls and security groups</h2>
+
+<p>In the cloud, the network itself can filter: AWS security groups and network ACLs (Handbook 1, Chapter 9), Azure network security groups, Google Cloud firewall rules. A security group is in many ways the same thing as this chapter's ruleset (stateful, default deny inbound, allow by source and port) but enforced by the provider, outside the VM.</p>
+
+<figure class="wide" id="fig15-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 220" role="img" aria-labelledby="fig15-2-t fig15-2-d">
+      <title id="fig15-2-t">A security group and a host firewall on the same path</title>
+      <desc id="fig15-2-d">A packet from a web server to the database VM first meets the cloud security group, enforced by the provider outside the VM, then the host firewall inside the VM, then the listening socket. Security group: managed through the provider's API, can't be changed from inside a compromised VM, can refer to other security groups as sources, visible in one place for many VMs. Host firewall: travels with the machine, works on any provider or on bare metal, sees the process and interface, can be tested locally, and protects against neighbours on the same network. Use both: the security group as the main control, the host firewall as a second layer.</desc>
+      <defs><marker id="c15ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="ext" x="10" y="20" width="120" height="50" rx="5"/><text class="t-small" x="70" y="49" text-anchor="middle">web server</text>
+      <rect class="node-accent" x="160" y="20" width="200" height="50" rx="5"/><text class="t-label on-accent" x="260" y="42" text-anchor="middle">security group</text><text class="t-small on-accent" x="260" y="60" text-anchor="middle">enforced by the provider</text>
+      <rect class="node" x="390" y="20" width="200" height="50" rx="5"/><text class="t-label" x="490" y="42" text-anchor="middle">host firewall (nftables)</text><text class="t-small" x="490" y="60" text-anchor="middle">inside the VM</text>
+      <rect class="node" x="620" y="20" width="130" height="50" rx="5"/><text class="t-small" x="685" y="49" text-anchor="middle">PostgreSQL :5432</text>
+      <path class="wire" d="M130 45 H156" marker-end="url(#c15ah2)"/><path class="wire" d="M360 45 H386" marker-end="url(#c15ah2)"/><path class="wire" d="M590 45 H616" marker-end="url(#c15ah2)"/>
+      <rect class="priv" x="160" y="86" width="200" height="122" rx="5"/>
+      <text class="t-small" x="172" y="108">+ survives a compromised VM</text><text class="t-small" x="172" y="128">+ sources can be other groups</text><text class="t-small" x="172" y="148">+ one view across many VMs</text><text class="t-small" x="172" y="168">− only on that provider</text><text class="t-small" x="172" y="188">− can't see processes</text>
+      <rect class="priv" x="390" y="86" width="200" height="122" rx="5"/>
+      <text class="t-small" x="402" y="108">+ travels with the machine</text><text class="t-small" x="402" y="128">+ works anywhere, bare metal too</text><text class="t-small" x="402" y="148">+ stops same-network neighbours</text><text class="t-small" x="402" y="168">− root on the VM can change it</text><text class="t-small" x="402" y="188">− one more place to keep in sync</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 15.2</b> Two filters on the same path, each good at what the other isn't. In the cloud, the security group is the main control and the host firewall a second layer; on hosting without network filtering, like Atlantica's, the host firewall is the only one.</figcaption>
+</figure>
+
+<p>Two differences matter in practice. A security group can't be switched off by someone who has broken into the VM, while a host firewall can (they'd need root, but that's what they're after). And a host firewall is the only filter between two VMs in the same security group or subnet that allow each other broadly, which is exactly the lateral movement Stagedoor's testers demonstrated. Defence in depth is having both, each written down.</p>
+
+<!-- ======================================================== 15.7 -->
+<h2 class="sec" id="s15-7"><span class="n">15.7</span>Across distributions</h2>
+
+<div class="box box-provider">
+  <p class="label">On the RHEL family</p>
+  <p>RHEL, Rocky, AlmaLinux and Fedora use <strong>firewalld</strong>, enabled by default, with <strong>zones</strong> (sets of rules applied to interfaces or source addresses) and <strong>services</strong> (named port lists): <code>sudo firewall-cmd --add-service=https --permanent</code>, <code>sudo firewall-cmd --zone=internal --add-source=10.40.0.0/24 --permanent</code>, then <code>sudo firewall-cmd --reload</code>. Without <code>--permanent</code>, a change lasts until the next reload, a handy built-in undo. firewalld writes nftables rules underneath. Amazon Linux 2023 has no host firewall enabled by default and relies on security groups.</p>
+</div>
+
+<!-- ======================================================== 15.8 -->
+<h2 class="sec" id="s15-8"><span class="n">15.8</span>Lab: a firewall for door-4</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 15 · Default deny, tested from both sides</p>
+  <p><strong>You'll</strong> start three listeners on <code>door-4</code> as the testers found them, probe them from a web server and from the admin network, load Stagedoor's ruleset and probe again, break it twice to see why two of its lines exist, then try ufw. All the rules live inside the lab's namespaces, so your own machine's firewall is never touched. <strong>You need</strong> <a href="#ch13">Chapter 13</a>'s <code>netlab.sh</code> and the packages in the chapter card. <strong>Cost:</strong> nothing. <strong>Clean-up:</strong> the last step.</p>
+</div>
+
+<ol class="steps">
+  <li><strong>Set the scene.</strong> In <code>~/lab15</code>, start the lab network and three listeners on <code>door-4</code>, standing in for SSH, PostgreSQL and the forgotten metrics exporter:
+<pre><code>sudo ~/netlab.sh up
+for p in 22 5432 9100; do sudo ip netns exec door-4 nc -lk 10.40.0.14 $p &gt;/dev/null 2&gt;&amp;1 &amp; done</code></pre></li>
+  <li><strong>A probe.</strong> Save this script; it tries each port from <code>door-2</code> (a web server) and from your machine (<code>10.40.0.1</code>, standing in for the admin network) and classifies the answer as in <a href="#ch13">Chapter 13</a>:
+<p class="code-title"><span>probe.sh</span><span>bash</span></p>
+<pre><code>#!/usr/bin/env bash
+<span class="c"># probe.sh · try door-4's ports from door-2 (a web server) and from this machine (the admin network)</span>
+<span class="k">for</span> port <span class="k">in</span> 22 5432 9100; <span class="k">do</span>
+  <span class="k">for</span> from <span class="k">in</span> door-2 admin; <span class="k">do</span>
+    <span class="k">if</span> [ <span class="s">"$from"</span> = admin ]; <span class="k">then</span> run=(); <span class="k">else</span> run=(ip netns exec <span class="s">"$from"</span>); <span class="k">fi</span>
+    out=$(<span class="s">"${run[@]}"</span> nc -zv -w 2 10.40.0.14 <span class="s">"$port"</span> 2&gt;&amp;1)
+    <span class="k">case</span> <span class="s">"$out"</span> <span class="k">in</span>
+      *succeeded*) result=<span class="s">"open"</span> ;;
+      *refused*)   result=<span class="s">"refused (nothing listening)"</span> ;;
+      *)           result=<span class="s">"no answer (dropped)"</span> ;;
+    <span class="k">esac</span>
+    printf <span class="s">'%-7s -&gt; 10.40.0.14:%-5s %s\n'</span> <span class="s">"$from"</span> <span class="s">"$port"</span> <span class="s">"$result"</span>
+  <span class="k">done</span>
+<span class="k">done</span></code></pre>
+<pre><code>chmod +x probe.sh; sudo ./probe.sh</code></pre>
+<pre><code>door-2  -&gt; 10.40.0.14:22    open
+admin   -&gt; 10.40.0.14:22    open
+door-2  -&gt; 10.40.0.14:5432  open
+admin   -&gt; 10.40.0.14:5432  open
+door-2  -&gt; 10.40.0.14:9100  open
+admin   -&gt; 10.40.0.14:9100  open</code></pre>
+  Everything open from everywhere: the testers' first finding.</li>
+  <li><strong>Load the ruleset</strong> from 15.2 (save it as <code>door4.nft</code>), checking it first:
+<pre><code>sudo ip netns exec door-4 nft -c -f door4.nft &amp;&amp; echo "syntax OK"
+sudo ip netns exec door-4 nft -f door4.nft
+sudo ip netns exec door-4 nft list ruleset</code></pre>
+<pre><code>syntax OK
+table inet filter {
+	set web_servers {
+		type ipv4_addr
+		elements = { 10.40.0.12, 10.40.0.13 }
+	}
+
+	chain input {
+		type filter hook input priority filter; policy drop;
+		ct state established,related accept
+		ct state invalid drop
+		iif "lo" accept
+		ip protocol icmp accept
+		tcp dport 22 ip saddr 10.40.0.1 accept comment "SSH from the admin network"
+		tcp dport 5432 ip saddr @web_servers accept comment "PostgreSQL from the web servers"
+		counter packets 0 bytes 0 comment "everything else is dropped"
+	}
+}</code></pre>
+  Probe again:
+<pre><code>sudo ./probe.sh</code></pre>
+<pre><code>door-2  -&gt; 10.40.0.14:22    no answer (dropped)
+admin   -&gt; 10.40.0.14:22    open
+door-2  -&gt; 10.40.0.14:5432  open
+admin   -&gt; 10.40.0.14:5432  no answer (dropped)
+door-2  -&gt; 10.40.0.14:9100  no answer (dropped)
+admin   -&gt; 10.40.0.14:9100  no answer (dropped)</code></pre>
+  SSH only from the admin network, PostgreSQL only from the web server, the exporter from nowhere, and everything refused <em>silently</em> (two-second timeouts). The counter saw it:
+<pre><code>sudo ip netns exec door-4 nft list chain inet filter input | grep counter</code></pre>
+<pre><code>		counter packets 8 bytes 480 comment "everything else is dropped"</code></pre>
+  Eight packets: the four blocked probes each sent a SYN and then a retry.</li>
+  <li><strong>Break it: forget the established rule.</strong> <code>door-4</code> must also make outgoing connections (to DNS, to package mirrors, to a backup server). Give <code>door-2</code> a listener and connect to it from <code>door-4</code>, first with the ruleset as it is, then with the <code>ct state established,related accept</code> line commented out:
+<pre><code>sudo ip netns exec door-2 nc -lk 10.40.0.12 8080 &gt;/dev/null 2&gt;&amp;1 &amp;
+sudo ip netns exec door-4 nc -zv -w 2 10.40.0.12 8080</code></pre>
+<pre><code>Connection to 10.40.0.12 8080 port [tcp/http-alt] succeeded!</code></pre>
+<pre><code>sed 's/^        ct state established,related accept/#&amp;/' door4.nft &gt; broken.nft
+sudo ip netns exec door-4 nft -f broken.nft
+sudo ip netns exec door-4 nc -zv -w 2 10.40.0.12 8080; echo "exit status: $?"</code></pre>
+<pre><code>nc: connect to 10.40.0.12 port 8080 (tcp) timed out: Operation now in progress
+exit status: 1</code></pre>
+  <code>door-2</code>'s reply (its SYN-ACK) arrived at <code>door-4</code>'s <code>input</code> hook and matched no rule. Outgoing traffic wasn't filtered at all; the <em>reply</em> was. Put the real ruleset back: <code>sudo ip netns exec door-4 nft -f door4.nft</code>.</li>
+  <li><strong>Reject instead of drop</strong> for the metrics port, so internal clients fail fast:
+<pre><code>sed 's/^        counter comment "everything else is dropped"/        tcp dport 9100 reject with tcp reset comment "refuse metrics politely"\n&amp;/' door4.nft &gt; reject.nft
+sudo ip netns exec door-4 nft -f reject.nft
+sudo ./probe.sh | grep 9100</code></pre>
+<pre><code>door-2  -&gt; 10.40.0.14:9100  refused (nothing listening)
+admin   -&gt; 10.40.0.14:9100  refused (nothing listening)</code></pre>
+  The probe now says “refused (nothing listening)”, and so would any client: a reject looks exactly like a closed port, although <code>nc</code> is still listening on 9100 behind the firewall. Restore <code>door4.nft</code>.</li>
+  <li><strong>ufw on a web server.</strong> In <code>door-2</code>'s namespace, the same kind of policy in ufw's words:
+<pre><code>sudo ip netns exec door-2 ufw default deny incoming
+sudo ip netns exec door-2 ufw allow from 10.40.0.1 to any port 22 proto tcp
+sudo ip netns exec door-2 ufw allow 443/tcp
+sudo ip netns exec door-2 ufw --force enable
+sudo ip netns exec door-2 ufw status verbose</code></pre>
+<pre><code>Default incoming policy changed to 'deny'
+(be sure to update your rules accordingly)
+Rules updated
+Rules updated
+Firewall is active and enabled on system startup
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), deny (routed)
+New profiles: skip
+
+To                         Action      From
+--                         ------      ----
+22/tcp                     ALLOW IN    10.40.0.1                 
+443/tcp                    ALLOW IN    Anywhere                  </code></pre>
+  How much did that generate?
+<pre><code>sudo ip netns exec door-2 nft list ruleset 2&gt;/dev/null | grep -c chain</code></pre>
+<pre><code>69</code></pre>
+  69 chains, for two rules (on a machine with IPv6, ufw would add <code>(v6)</code> rules and more chains). Reset it: <code>sudo ip netns exec door-2 ufw --force reset</code>, which also leaves dated backups of its rule files in <code>/etc/ufw/</code>; delete those if you like.</li>
+  <li><strong>Clean up.</strong>
+<pre><code>sudo pkill -f "nc -lk 10.40.0"
+sudo ~/netlab.sh down
+rm broken.nft reject.nft</code></pre></li>
+</ol>
+
+<p><strong>Stretch goals.</strong> (1) Add a rule that allows SSH from anywhere but limits new connections to five per minute per source: <code>tcp dport 22 ct state new meter ssh4 { ip saddr limit rate 5/minute } accept</code>. Test with a loop of <code>nc -z</code>. (2) Use <code>conntrack -L</code> (package <code>conntrack</code>) inside <code>door-4</code> while a connection from <code>door-2</code> is open, and find its entry. (3) Write the same policy for <code>door-2</code> in nftables, allowing 443 from anywhere and SSH from the admin network, and compare its length with ufw's output.</p>
+
+<aside class="box box-story" aria-label="Stagedoor, solved">
+  <p class="label">At Stagedoor: four rulesets in Git</p>
+  <p>Rafaela and Tiago write one nftables file per server role, reviewed like code in the operations repository: web servers accept 80 and 443 from anywhere and SSH from the office's VPN address; <code>door-4</code> accepts PostgreSQL from the two web servers and SSH from the VPN, exactly as in the lab. They roll it out on Thursday 8 October, one server at a time, each time with an automatic undo scheduled for five minutes later and a second SSH session open, and cancel the undo only after logging in afresh. The metrics exporter on <code>door-4</code> is removed (a monitoring agent that pushes, rather than listens, replaces it), and <code>/etc/nftables.conf</code> with <code>nftables.service</code> loads the rules at every boot.</p>
+  <p>The testers' retest on 15 October finds only 443 open on the web servers and nothing reachable on <code>door-4</code> from <code>door-3</code> except PostgreSQL. In the move to AWS (Handbook 5 tells it), each of these files will become a security group as well, and the host firewall will stay as the second layer.</p>
+</aside>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s15-9"><span class="n">15.9</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Default deny without an established/related rule</td><td>Replies to outgoing connections are dropped: DNS, updates and backups fail.</td><td><code>ct state established,related accept</code> first.</td></tr>
+      <tr><td>Loading rules over SSH without an undo</td><td>Locked out; console or rescue needed.</td><td>Save, schedule a restore, load, test a new session, then cancel.</td></tr>
+      <tr><td>ufw and hand-written nftables on one host</td><td>Two sets of rules fight; nobody knows which applies.</td><td>One tool per machine.</td></tr>
+      <tr><td>Trusting ufw with Docker-published ports</td><td>Containers are reachable despite <code>ufw status</code>.</td><td>Publish on specific addresses; use <code>DOCKER-USER</code>.</td></tr>
+      <tr><td>Blocking all ICMP</td><td>Path-MTU discovery breaks; some connections hang mysteriously.</td><td>Allow ICMP (or at least its error types).</td></tr>
+      <tr><td>Rules with no comments, made by hand</td><td>Nobody can tell which rules still matter.</td><td>A file in Git, one comment per rule.</td></tr>
+      <tr><td>Relying only on security groups between VMs that allow each other</td><td>A compromised neighbour reaches everything.</td><td>Narrow groups by role, plus a host firewall.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum15">
+  <h2 class="sec" id="sum15"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li><strong>Netfilter</strong> filters packets in the kernel at hooks: <code>input</code> (for this machine), <code>forward</code> (through it), <code>output</code> (from it). It's <strong>stateful</strong>, through connection tracking.</li>
+    <li><strong>nftables</strong> organises rules into tables, chains with a policy, rules and sets. A server ruleset: <code>policy drop</code>, established first, loopback, ICMP, then each service from its sources, with comments.</li>
+    <li>Check with <code>nft -c -f</code>, load with an automatic undo, persist with <code>/etc/nftables.conf</code> and <code>nftables.service</code>.</li>
+    <li><strong>Drop</strong> makes clients time out; <strong>reject</strong> makes them fail fast, looking like a closed port.</li>
+    <li><strong>ufw</strong> (Ubuntu) and <strong>firewalld</strong> (RHEL) generate rules from simple commands. Docker's published ports bypass input rules.</li>
+    <li>Cloud <strong>security groups</strong> and host firewalls overlap on purpose: the first survives a compromised VM, the second stops neighbours and travels with the machine.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Netfilter</dt><dd>The Linux kernel's packet-filtering framework, with hooks where rules inspect and act on packets.</dd>
+    <dt>nftables</dt><dd>The current rule language and tool (<code>nft</code>) for netfilter, replacing iptables.</dd>
+    <dt>Chain policy</dt><dd>What happens to a packet that no rule in a base chain decides: accept or drop.</dd>
+    <dt>Connection tracking</dt><dd>Netfilter's record of connections, which lets rules match packets by state such as new or established.</dd>
+    <dt>Drop and reject</dt><dd>Refusing a packet silently, or with a reset or ICMP error that tells the sender at once.</dd>
+    <dt>ufw</dt><dd>Ubuntu's simple firewall front end, which generates netfilter rules from short commands.</dd>
+    <dt>Security group</dt><dd>A cloud provider's stateful firewall attached to instances or network interfaces, enforced outside the VM.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Which netfilter hook sees a packet addressed to this server's PostgreSQL, and which sees a packet passing through a container host to a container? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>The <code>input</code> hook for traffic to a local process such as PostgreSQL. Traffic to a container on a bridged network goes through <code>forward</code> (after NAT in <code>prerouting</code>), which is why rules in <code>input</code> don't protect published container ports.</p></details>
+    </li>
+    <li>
+      <p>Add a rule to <code>door4.nft</code> that allows the monitoring server <code>10.40.0.20</code> to reach port 9187 (a PostgreSQL exporter), and nothing else new. <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>In the <code>input</code> chain, before the final counter: <code>tcp dport 9187 ip saddr 10.40.0.20 accept comment "Postgres exporter for monitoring"</code>. Check with <code>nft -c -f</code>, load, and probe from the monitoring server and from somewhere else.</p></details>
+    </li>
+    <li>
+      <p>Explain why a default-deny <em>inbound</em> policy breaks <code>apt update</code> if the established rule is missing, although <code>apt</code> only makes outgoing connections. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>An outgoing connection needs incoming replies: the DNS answer and the web server's SYN-ACK and data arrive as inbound packets and pass the <code>input</code> hook. Without a rule accepting packets of established (and related) connections, the policy drops them, so the connection times out.</p></details>
+    </li>
+    <li>
+      <p>After you enable ufw with only <code>allow 22/tcp</code> on a VM running Docker, a container published with <code>-p 6379:6379</code> is still reachable from the internet. Why, and what are two fixes? <span class="lvl">debug</span></p>
+      <details><summary>Show answer</summary><p>Docker's NAT rules forward published ports to the container through the <code>forward</code> hook, which ufw's input rules don't cover. Fixes: publish on a specific address (<code>-p 127.0.0.1:6379:6379</code> or a private address), add filtering rules in the <code>DOCKER-USER</code> chain, and, in the cloud, close the port in the security group.</p></details>
+    </li>
+    <li>
+      <p>Design the host firewall policy for Stagedoor's web servers. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Input policy drop; established/related accept; loopback; ICMP; TCP 80 and 443 from anywhere (or only from the load balancer's addresses, if all traffic comes through it); SSH from the admin VPN address only; a counter at the end. Outbound left open, or restricted to the database, DNS, package mirrors and the payment provider if you want to limit what a compromised server can reach. One file in Git, loaded by <code>nftables.service</code>, rolled out with an automatic undo.</p></details>
+    </li>
+    <li>
+      <p>Compare a host firewall with a cloud security group for protecting a database VM. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Both are stateful and can allow the database port only from the web servers. The security group is enforced by the provider, can't be changed from a compromised VM, and can name other groups as sources. The host firewall works anywhere, also filters between neighbours that the security group allows, and can be tested locally, but root on the VM can change it. Use the security group as the main control and the host firewall as a second layer.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>The <a href="https://wiki.nftables.org/">nftables wiki</a>, especially “Quick reference” and “Simple ruleset for a server”.</li>
+    <li><code>man nft</code>, <code>man ufw</code>, <code>man firewall-cmd</code>.</li>
+    <li>Docker: <a href="https://docs.docker.com/engine/network/packet-filtering-firewalls/">Packet filtering and firewalls</a>.</li>
+    <li>Handbook 1: Chapter 9 (security groups and network ACLs) and Chapter 21 (zero trust).</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Contents</span><a href="index.html">Linux for Cloud Engineers</a></div>
+  <div><span>Next</span><a href="#ch16">16 · SSH done right</a></div>
+</nav>

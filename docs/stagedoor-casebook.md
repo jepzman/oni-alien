@@ -133,6 +133,32 @@ load balancer (public address `203.0.113.40`).
   `listen … backlog=4096`, keep-alive to the app; alerts on `TcpExtListenOverflows` and descriptors per worker. Sold
   out at 10:31. Joana's question leads to load tests before big on-sales, against a copy of the servers.
 
+### Part IV (ch. 13–16), written 2026-11-27
+
+- **Ch. 13 (Mon 24 – Thu 27 Aug 2026):** the new database server **`door-4`** (Ubuntu 24.04, `10.40.0.14`), built
+  from Rafaela's checklist. Internal name `db.stagedoor.internal` (internal DNS zone `stagedoor.internal`). Dry run
+  on Mon 24 Aug: `door-2` refused (PostgreSQL on `127.0.0.1:5432` only; fixed with
+  `listen_addresses = 'localhost, 10.40.0.14'` and `pg_hba.conf` for the two web servers); `door-3` connected to the
+  old `10.40.0.11` because of a 2025 `/etc/hosts` line (Leonor, during a DNS outage). Rule: *internal names live in
+  DNS, and nowhere else*. Move Thu 27 Aug 23:00–01:30; `door-1` read-only until Mon 31 Aug, then switched off.
+- **Ch. 14 (Sun 13 Sep 2026, 18:40–19:20):** `scan.stagedoor.example`'s certificate (commercial CA, bought by Marco
+  in 2024, renewed by hand by Leonor in Sep 2025) expired at 17:59 Lisbon (`notAfter=Sep 13 16:59:00 2026 GMT`);
+  reminders went to Marco's bouncing address. Door staff at two Lisbon venues checked names by hand. Let's Encrypt
+  certificate in place at 19:05, queues gone by 19:20. After: certbot for every public name (timer, reload hook,
+  copy to the other web server), external expiry check alerting 21 days ahead, supplier contacts → `ops@`.
+- **Ch. 15 (Tue 6 – Thu 15 Oct 2026):** a security assessment (for a group of twelve venues) reports every port on
+  every server reachable from the web servers, incl. SSH everywhere and a forgotten metrics exporter on `door-4:9100`.
+  Thu 8 Oct: nftables default-deny rulesets per role in Git (web: 80/443 from anywhere, SSH from the **office VPN**;
+  `door-4`: PostgreSQL from the web servers, SSH from the VPN), rolled out with an automatic undo; exporter removed
+  (a push agent replaces it). Retest 15 Oct clean. In AWS each becomes a security group too (Handbook 5).
+- **Ch. 16 (Mon 19 Oct 2026):** root's `authorized_keys` on `door-2`/`door-3` held `leonor@macbook` (2023),
+  `deploy@old-ci` (CI switched off 2025) and `marco@contractor-laptop` (Apr 2024); `PermitRootLogin` allowed keys;
+  password SSH was still on (thousands of guesses a day). All root keys removed; drop-in: no root, no passwords,
+  `AllowGroups ssh-users`, `LogLevel VERBOSE`; personal keys with passphrases; SSH only from the VPN, `door-2` as
+  jump host for `door-4`. Local logs went back four weeks: no use of Marco's key found; earlier use unknowable.
+  Auth logs now shipped with a year's retention. Plan: short-lived SSH certificates, or Session Manager after the
+  move to AWS. Leaver checklist gains: keys in every account, supplier contacts, certificates.
+
 ### Promised for later chapters (keep consistent)
 
 - Ch. 5: a deploy kills requests mid-checkout (uvicorn killed with `kill -9` by the deploy script).

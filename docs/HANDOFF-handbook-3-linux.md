@@ -1,7 +1,7 @@
 # Handoff: Handbook 3 · Linux for Cloud Engineers
 
-Status as of **2026-11-27**: **Parts I–III (chapters 1–12) written and checked**; chapters 13–21 and appendices
-A–C still to write (D and E are generated). `BOOK["next"] = 13`.
+Status as of **2026-11-27**: **Parts I–IV (chapters 1–16) written and checked**; chapters 17–21 and appendices
+A–C still to write (D and E are generated). `BOOK["next"] = 17`.
 
 Read first: `docs/HANDOFF-handbooks.md` §1–2 (what a handbook is, voice, building blocks, look),
 `docs/HANDOFF-handbooks-next.md` §0 (mechanics) and §3 (this book's outline), and **`docs/stagedoor-casebook.md`**
@@ -21,8 +21,8 @@ Read first: `docs/HANDOFF-handbooks.md` §1–2 (what a handbook is, voice, buil
 
 | What | Where |
 | --- | --- |
-| Outline | `content/handbooks/linux/book.py` (key `linux`, no. 3, `next=13`) |
-| Chapters | `content/handbooks/linux/<nn>-<slug>.html`; written: 01–12 |
+| Outline | `content/handbooks/linux/book.py` (key `linux`, no. 3, `next=17`) |
+| Chapters | `content/handbooks/linux/<nn>-<slug>.html`; written: 01–16 |
 | Build | `BOOKS` in `scripts/build_handbooks.py` includes `linux`; `python3 scripts/build_notes.py` |
 | Cover | `.book--hb3` in `public/assets/bujo.css` (graphite `#2A2A2A`, silver band `#B5B5B5`) |
 | PDFs | `handbooks/linux` added to `rebuild` in `pdf-build.json` |
@@ -100,7 +100,36 @@ this kernel, so nginx's default `listen [::]:80` had to be removed before nginx 
   (a few blocks were split from one run into the steps where they belong).
 
 Checks for Parts II–III: same as Part I (ids, references, figures at 1280 px light/dark and 375 px dark, 16 new
-figures inspected); print of `all.html` (12 chapters): 0 clipped blocks, 218 A4 pages.
+figures inspected); print of `all.html` (12 chapters): 0 clipped blocks, 218 A4 pages. After Part IV (16 chapters): 0 clipped, 294 pages.
+
+## 3c. Part IV (chapters 13–16): written 2026-11-27
+
+**The lab network.** Outbound DNS and most hosts are blocked in this sandbox (only the agent proxy's HTTPS CONNECT
+works), so Part IV's labs build their own network: `netlab.sh` (printed in ch. 13) creates network namespaces
+`door-2`, `door-3`, `door-4` (`10.40.0.12/.13/.14`) on a bridge `br-lab` with the host as `10.40.0.1`, and
+per-namespace `/etc/netns/<name>/resolv.conf`. dnsmasq on `10.40.0.1` serves lab names. Docker's `FORWARD DROP`
+policy (with `br_netfilter`) blocked bridged traffic, so the script adds an `ACCEPT` in `DOCKER-USER` when that chain
+exists; ch. 13 and 15 explain why. Packages installed here: `iputils-ping dnsmasq-base traceroute dnsutils tcpdump
+ufw openssh-server openssh-client netcat-openbsd`. IPv6 is disabled in this kernel (ufw shows no v6 rules).
+
+| Ch. | Story (casebook §4) | Lab | Run? |
+| --- | --- | --- | --- |
+| 13 | `door-4` dry run: localhost-only Postgres, stale `/etc/hosts` | `netlab.sh`; `ip`, `ip route get`, `nc -lk` on 127.0.0.1 vs `10.40.0.14`, dnsmasq + `dig`, `getent` vs `dig` | **run** |
+| 14 | Sunday certificate expiry | `mkcerts.sh` (private CA via `openssl ca` with exact dates), `openssl s_server`, `curl -v`/exit 60, `s_client`, `-checkend`, `tcpdump` of plain HTTP | **run** (proxy env vars had to be unset for curl in the lab) |
+| 15 | assessment: everything reachable | `door4.nft`, `probe.sh`; missing established rule; reject vs drop; ufw in a namespace (69 chains) | **run** |
+| 16 | Marco's key in root's file | `sshd_lab.conf`, `sshlab.sh` (sshd per namespace, own host keys and `authorized_keys`), TOFU prompt via `script`, ProxyJump, locked vs expired account, audit, agent, user CA certificate, expired certificate | **run** |
+
+**Verified while testing ch. 16 (used in the text):** with `UsePAM no`, sshd refuses key logins to a
+password-locked account (“account is locked”); with `UsePAM yes` (Ubuntu's default) a password-locked account
+(`usermod -L`) still logs in with a key, while an expired one (`usermod -e 1`) is refused by PAM's account check.
+This supports ch. 4's claim and the casebook (Marco's own account was expired; his key in root's file still worked).
+
+**Not run / not verified:** netplan (the namespaces have no netplan; §13.5's YAML is labelled an illustration);
+`resolvectl` (no systemd-resolved here); `traceroute -T` (mentioned only); firewalld (RHEL box, prose only); Session
+Manager and host certificates (prose and a stretch goal). Online facts quoted with “at the time of writing”: CA/B
+Forum lifetimes (200 days from March 2026, 100 from 2027, 47 from 2029).
+
+Checks: same as before; 8 new figures inspected (13.2 and 16.2 fixed); print check below.
 
 ## 4. Promises Part I made (keep them)
 
@@ -133,7 +162,10 @@ Promises from Parts II–III for later chapters:
 
 ## 5. Next
 
-1. Part IV (13–16): networking from the host. Ch. 13 (`ip`, `ss`, `dig`, netplan) and 14 (curl -v, openssl s_client,
+1. ~~Part IV~~ done. Next: Part V (17–19): scripts (ShellCheck is installed here), hardening (`systemd-analyze
+   security` in the systemd container; a tested cloud-init baseline needs cloud-init: try `cloud-init schema` /
+   `cloud-init single` in a container, or say what wasn't run), containers by hand (`unshare`, cgroups: this kernel has
+   cgroup v1 controllers plus a v2 mount at `/sys/fs/cgroup/unified`). Old note on Part IV: Ch. 13 (`ip`, `ss`, `dig`, netplan) and 14 (curl -v, openssl s_client,
    tcpdump; the certificate that expired on a Sunday) can mostly run here; IPv6 is disabled in this kernel. Ch. 15
    (nftables/ufw) needs a kernel that allows nftables: try the privileged container, else say what wasn't run.
    Ch. 16 (SSH; Marco's key in root's `authorized_keys`) can run with `sshd` in the systemd container.
