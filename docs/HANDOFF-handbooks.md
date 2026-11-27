@@ -121,7 +121,7 @@ NAT Elastic IP `198.51.100.7` (StockPilot allow-lists it). Chapter 9 should rete
 ## 6. Handbook 2 · Identity and Access in the Cloud (approved 2026-11-26)
 
 **Approved by the owner on 2026-11-26** (all six decisions below: yes; sample = Chapter 9; on the shelf now as a
-placeholder). **Parts I–IV (1–19) written 2026-11-26; next Chapter 20.** Status and briefs: **`docs/HANDOFF-handbook-2-identity.md`**.
+placeholder). **Parts I–V (1–22) written 2026-11-27; next Chapter 23.** Status and briefs: **`docs/HANDOFF-handbook-2-identity.md`**.
 
 Outline: `content/handbooks/cloud-identity/book.py` (same format as Handbook 1). Listed in `BOOKS`; until a chapter
 is written, only its contents page is built (no PDF, not in `journals.json`).

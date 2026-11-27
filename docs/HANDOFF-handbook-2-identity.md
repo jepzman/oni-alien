@@ -1,8 +1,8 @@
 # Handoff: Handbook 2 · Identity and Access in the Cloud
 
-Status as of **2026-11-26**: **in progress, 19 of 25 chapters written: Parts I–IV (1–19).** The owner approved
-everything in `docs/HANDOFF-handbooks.md` §6 and picked Chapter 9 as the sample. **Next: Chapter 20** (Part V),
-then Part VI and the appendices (`BOOK["next"]` in `book.py` is 20).
+Status as of **2026-11-27**: **in progress, 22 of 25 chapters written: Parts I–V (1–22).** The owner approved
+everything in `docs/HANDOFF-handbooks.md` §6 and picked Chapter 9 as the sample. **Next: Chapter 23** (Part VI),
+then 24, 25 and the appendices (`BOOK["next"]` in `book.py` is 23).
 
 Read first: `docs/HANDOFF-handbooks.md` §1–2 (what a handbook is, the voice, the building blocks, the look). This
 book uses exactly the same style, blocks, CSS (`public/assets/book.css`) and build as Handbook 1. The best model to copy
@@ -13,7 +13,7 @@ from is `content/handbooks/cloud-networking/09-firewalls.html` (a chapter about 
 | What | Where |
 | --- | --- |
 | Outline (parts, chapters, summaries, topics, appendices) | `content/handbooks/cloud-identity/book.py` |
-| Chapter bodies | `content/handbooks/cloud-identity/<nn>-<slug>.html`; written: 01–19 |
+| Chapter bodies | `content/handbooks/cloud-identity/<nn>-<slug>.html`; written: 01–22 |
 | Built contents page | `public/handbooks/cloud-identity/index.html` |
 | Build | `python3 scripts/build_notes.py` (builds everything, including both handbooks and the landing shelf) |
 | Preview | `npm run serve`, then http://localhost:8080/handbooks/cloud-identity/ |
@@ -240,6 +240,25 @@ switched off on 15 Sep 2027 (casebook); the PSP and external IDs; confused deput
 S3 data-event trail, the medium review finding “no alert on new federation trust” (Eli, 30 Nov 2027), Identity Center
 assignment changes outside TEAM, key-policy changes (ch. 18). Ch. 24: identity as code, policy generation, tests.
 
+## 3e. Part V (chapters 20–22): written 2026-11-27
+
+| Ch. | Story (all in the casebook) | Lab | Run here? |
+| --- | --- | --- | --- |
+| 20 | Jun 2027 OUs, security/backup/sandbox accounts, baseline SCP, `protect-orders-db` as SCP, root credentials removed | `scp_eval.py` (SCPs down the OU tree) + optional real SCP | Python **run** (incl. break steps); AWS not |
+| 21 | WMS B's role + external ID (Apr 2027); backup vault; StockPilot offboarded 15 Sep 2027 | `deputy.py` (confused deputy, 3 trust designs) + optional external-ID role | Python **run**; AWS not |
+| 22 | Nov 2027 data perimeter after Lena's data classes | `perimeter.py` (identity/resource/network) + optional bucket rule | Python **run** (each perimeter removed in turn); AWS not |
+
+All 23 lab scripts in chapters 1–22 are byte-identical to the executed files. Corrections made while checking:
+ch. 22's identity-perimeter RCP must except the vendor role WMS B assumes (its `sts:AssumeRole` comes from outside the
+organisation): done with a resource tag, as AWS's examples do; a lab case was moved to a non-restricted bucket so
+each perimeter's “break it” claim is true; ch. 20's wording about which requests stop at Workloads was corrected.
+
+For Part VI: ch. 23 must tell the medium review finding “alert on new federation trust” (Eli, due 30 Nov 2027,
+Ana Vol. 5), root sign-in alerts (ch. 7), break-glass alarm (ch. 14), Identity Center changes outside TEAM,
+key-policy changes (ch. 18), the S3 data-event trail (exists since Dec 2026, ch. 11), Access Analyzer external and
+unused access (StockPilot finding ch. 21), GuardDuty in the `security` account (ch. 20). Ch. 24: everything as code
+(SCPs, permission sets, perimeter) with review; policy generation (ch. 9 stretch); tests. Ch. 25 capstone.
+
 ## 4. Order of work after Chapter 9
 
 1. Chapter 9 (above). Update this file and `docs/HANDOFF-handbooks.md`.
@@ -256,4 +275,5 @@ assignment changes outside TEAM, key-policy changes (ch. 18). Ch. 24: identity a
 - [ ] AWS labs (ch. 7–11) run once in a real sandbox account; none could be run here.
 - [x] Part III (12–14) written and checked.
 - [x] Part IV (15–19) written and checked.
-- [ ] Chapter 20 next.
+- [x] Part V (20–22) written and checked.
+- [ ] Chapter 23 next.

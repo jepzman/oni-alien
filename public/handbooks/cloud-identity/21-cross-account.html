@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Cross-account access and resource sharing · Identity and Access in the Cloud</title>
+<meta name="description" content="Roles across accounts, resource policies, and the confused deputy problem that external IDs solve.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=86bdfe1bff">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 2</a> · <a href="index.html">Identity and Access in the Cloud</a></span><span>Part V · Chapter 21</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part V · Many accounts</p>
+  <p class="chno">21</p>
+  <h1>Cross-account access and resource sharing</h1>
+  <p class="promise">Accounts are boundaries, and work still has to cross them: your backup account copies production's snapshots, a supplier drops a file into your bucket every night, a partner's system reads an export. This chapter shows the two ways across, roles and resource-based policies, explains the confused deputy problem that every vendor integration must solve, and ends with a checklist for letting another account in, and getting it out again.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Choose between assuming a role in another account and granting access in a resource policy.</li>
+      <li>Set up cross-account access with both sides' policies, including KMS keys.</li>
+      <li>Explain the confused deputy problem, and stop it with <code>sts:ExternalId</code> or <code>aws:SourceArn</code>.</li>
+      <li>Review a vendor's integration request, and offboard a vendor cleanly.</li>
+      <li>Share resources with AWS RAM instead of sharing access.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Cross-account evaluation (<a href="10-evaluation.html">Chapter 10</a>, 10.5); trust policies (<a href="08-users-roles.html">Chapter 8</a>); key policies (<a href="18-secrets-keys.html">Chapter 18</a>).</li>
+      <li>Larder's organisation (<a href="20-organizations.html">Chapter 20</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 40 minutes</dd>
+      <dt>Lab</dt><dd>20 minutes, Python 3; optional AWS step, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 21.7</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>In March 2027, Larder chose how to connect WMS B, its new warehouse system: webhooks for stock changes, an API for pick lists, and a nightly file for finance by 06:00 (ADR 0018). For the file, WMS B's onboarding guide was simple: “Create an IAM role in your account that trusts our AWS account, give it permission to write to your bucket, and paste the role ARN into our settings.” Ben's team did exactly that in an afternoon.</p>
+  <p>Eli, reviewing the change, asked one question the guide had marked as optional: where's the external ID? Section 21.4 explains why that one field is the difference between “WMS B can write into Larder's bucket” and “any WMS B customer can”.</p>
+</aside>
+
+<!-- ======================================================== 21.1 -->
+<h2 class="sec" id="s21-1"><span class="n">21.1</span>Two ways across</h2>
+
+<p class="lead">To let a principal in account A use a resource in account B, you have two mechanisms, and both need the other side's consent (<a href="10-evaluation.html">Chapter 10</a>, 10.5):</p>
+
+<figure class="wide" id="fig21-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 240" role="img" aria-labelledby="fig21-1-t fig21-1-d">
+      <title id="fig21-1-t">The two ways to cross an account boundary</title>
+      <desc id="fig21-1-d">Top: assuming a role. A principal in account A, allowed by its own policy to call sts:AssumeRole, assumes a role in account B whose trust policy names it. The resulting session lives in account B and uses B's permissions for the role; CloudTrail in B records what it does. Bottom: a resource-based policy. The principal in account A keeps its own identity and calls the resource in account B directly; the resource's policy in B names the principal, and A's identity policy must also allow the action.</desc>
+      <defs><marker id="c21ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c21ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="vpc" x="12" y="12" width="230" height="216" rx="8"/><text class="t-label" x="28" y="34">account A</text>
+      <rect class="vpc" x="518" y="12" width="230" height="216" rx="8"/><text class="t-label" x="534" y="34">account B</text>
+      <text class="t-small" x="380" y="30" text-anchor="middle">① assume a role</text>
+      <rect class="node" x="28" y="46" width="198" height="56" rx="5"/><text class="t-label" x="127" y="70" text-anchor="middle">principal</text><text class="t-small" x="127" y="90" text-anchor="middle">may call sts:AssumeRole</text>
+      <rect class="node-accent" x="534" y="46" width="198" height="56" rx="5"/><text class="t-label on-accent" x="633" y="70" text-anchor="middle">role in B</text><text class="t-small on-accent" x="633" y="90" text-anchor="middle">trust policy names A's principal</text>
+      <path class="wire-accent" d="M228 74 H530" marker-end="url(#c21ah2)"/>
+      <text class="t-small" x="380" y="92" text-anchor="middle">session lives in B, logged in B</text>
+      <text class="t-small" x="380" y="144" text-anchor="middle">② resource-based policy</text>
+      <rect class="node" x="28" y="156" width="198" height="56" rx="5"/><text class="t-label" x="127" y="180" text-anchor="middle">principal</text><text class="t-small" x="127" y="200" text-anchor="middle">identity policy allows it</text>
+      <rect class="pub" x="534" y="156" width="198" height="56" rx="5"/><text class="t-label" x="633" y="180" text-anchor="middle">bucket, key, queue</text><text class="t-small" x="633" y="200" text-anchor="middle">its policy names A's principal</text>
+      <path class="wire" d="M228 184 H530" marker-end="url(#c21ah)"/>
+      <text class="t-small" x="380" y="202" text-anchor="middle">keeps its own identity</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 21.1</b> Either the caller becomes someone in B for a while, or B's resource lets the caller in as itself. Both need an allow on each side.</figcaption>
+</figure>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 21.1 · Role or resource policy?</caption>
+    <thead><tr><th></th><th>Assume a role in B</th><th>Resource-based policy in B</th></tr></thead>
+    <tbody>
+      <tr><td>Caller's identity during the call</td><td>a session of B's role</td><td>its own (A's principal)</td></tr>
+      <tr><td>Who controls the permissions</td><td>B, entirely (the role's policies)</td><td>both: A's identity policy and B's resource policy</td></tr>
+      <tr><td>Works for</td><td>any service</td><td>only services with resource policies (S3, KMS, SQS, SNS, Lambda, Secrets Manager…)</td></tr>
+      <tr><td>Using A's and B's resources together</td><td>awkward: the session only has B's permissions</td><td>easy: e.g. copy from B's bucket into A's</td></tr>
+      <tr><td>Typical use</td><td>vendors, tooling, people moving between accounts</td><td>shared buckets, cross-account keys and queues, backups</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== 21.2 -->
+<h2 class="sec" id="s21-2"><span class="n">21.2</span>Cross-account roles</h2>
+
+<p>A cross-account role is an ordinary role (<a href="08-users-roles.html">Chapter 8</a>) whose trust policy names a principal in another account. Name the <strong>specific role</strong> that will call, not the whole account: trusting <code>arn:aws:iam::999911112222:root</code> delegates the choice to every administrator in that account (<a href="10-evaluation.html">Chapter 10</a>, 10.4). Then the caller's own account must allow it to call <code>sts:AssumeRole</code> on your role's ARN. Both sides consent, and both sides can revoke.</p>
+
+<p>The session's actions are logged in <em>your</em> account's CloudTrail, with the caller's original identity visible in the <code>AssumeRole</code> event and, if they set one, in the source identity (<a href="08-users-roles.html">Chapter 8</a>, 8.5). Inside one organisation, people rarely need cross-account roles at all: Identity Center gives them sessions directly in each account (<a href="12-sso.html">Chapter 12</a>).</p>
+
+<!-- ======================================================== 21.3 -->
+<h2 class="sec" id="s21-3"><span class="n">21.3</span>Resource-based policies across accounts</h2>
+
+<p>A resource policy can name principals in other accounts, or a whole organisation with <code>aws:PrincipalOrgID</code> (<a href="22-data-perimeter.html">Chapter 22</a>). Three details catch people out:</p>
+<ul>
+  <li><strong>Encryption keys travel too.</strong> If the bucket or secret uses a customer managed KMS key, the key policy must also let the other account use the key (<a href="18-secrets-keys.html">Chapter 18</a>). Data encrypted with an AWS managed key, such as <code>aws/s3</code>, can't be shared across accounts at all; that's one reason to use a customer managed key.</li>
+  <li><strong>Object ownership.</strong> Objects another account uploads into your bucket should become yours: keep S3 Object Ownership at “bucket owner enforced” (the default for new buckets), so ACLs can't give the uploader control.</li>
+  <li><strong>Both sides still apply</strong>: the caller's account must allow the action in its identity policy, and its SCPs and your RCPs must not deny it.</li>
+</ul>
+
+<!-- ======================================================== 21.4 -->
+<h2 class="sec" id="s21-4"><span class="n">21.4</span>The confused deputy</h2>
+
+<p>A <span class="term">confused deputy</span> is a service with legitimate power that's tricked into using it for someone who shouldn't have it. Vendors that act in customers' AWS accounts are perfect deputies: WMS B's service assumes a role in <em>each</em> customer's account, using whatever role ARN that customer typed into its settings. Now imagine another WMS B customer, Mallory, who types in <em>Larder's</em> role ARN. ARNs aren't secret; they're in logs, screenshots and support tickets. WMS B's service assumes the role, because Larder's trust policy trusts WMS B, and delivers Mallory's file into Larder's bucket, or, if the role could read, Larder's data to Mallory.</p>
+
+<figure class="wide" id="fig21-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 220" role="img" aria-labelledby="fig21-2-t fig21-2-d">
+      <title id="fig21-2-t">How an external ID stops a confused deputy</title>
+      <desc id="fig21-2-d">WMS B's service holds per-tenant settings. Larder's tenant has Larder's role ARN and the external ID WMS B generated for Larder. Mallory's tenant has the same role ARN, copied, but Mallory's own external ID, generated by WMS B. When WMS B assumes the role for Larder, it passes Larder's external ID and the trust policy condition matches. When it acts for Mallory, it passes Mallory's external ID and Larder's trust policy refuses.</desc>
+      <defs><marker id="c21ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="c21ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="vpc" x="12" y="12" width="300" height="196" rx="8"/><text class="t-label" x="28" y="34">WMS B's service (the deputy)</text>
+      <rect class="node" x="28" y="48" width="268" height="66" rx="5"/><text class="t-label" x="40" y="70">tenant: larder</text>
+      <text class="t-mono" x="40" y="90">role: …:role/wmsb-nightly-file</text><text class="t-mono" x="40" y="106">external ID: wmsb-3c9e…</text>
+      <rect class="ext" x="28" y="126" width="268" height="66" rx="5"/><text class="t-label t-warn" x="40" y="148">tenant: mallory</text>
+      <text class="t-mono" x="40" y="168">role: …:role/wmsb-nightly-file</text><text class="t-mono" x="40" y="184">external ID: wmsb-81f0…</text>
+      <rect class="node-accent" x="470" y="60" width="278" height="100" rx="6"/>
+      <text class="t-label on-accent" x="609" y="84" text-anchor="middle">Larder's role, trust policy</text>
+      <text class="t-small on-accent" x="609" y="106" text-anchor="middle">principal: WMS B's delivery role</text>
+      <text class="t-small on-accent" x="609" y="124" text-anchor="middle">condition: sts:ExternalId = wmsb-3c9e…</text>
+      <path class="wire-accent" d="M298 80 H466" marker-end="url(#c21ah4)"/><text class="t-small" x="382" y="72" text-anchor="middle">assumes ✓</text>
+      <path class="wire" d="M298 158 L466 140" marker-end="url(#c21ah3)"/><text class="t-small t-warn" x="382" y="168" text-anchor="middle">refused ✗</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 21.2</b> The vendor passes the external ID it generated for whichever tenant it's working for. Copying a role ARN doesn't copy the ID.</figcaption>
+</figure>
+
+<p>The fix is an <span class="term">external ID</span>: a value the <em>vendor</em> generates, unique to each customer, shows in that customer's settings, and passes on every <code>AssumeRole</code> call it makes for them. The customer requires it in the trust policy:</p>
+
+<p class="code-title"><span>wmsb-nightly-file trust policy</span><span>production account</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [{
+    <span class="k">"Effect"</span>: <span class="s">"Allow"</span>,
+    <span class="k">"Principal"</span>: { <span class="k">"AWS"</span>: <span class="s">"arn:aws:iam::999911112222:role/wmsb-file-delivery"</span> },
+    <span class="k">"Action"</span>: <span class="s">"sts:AssumeRole"</span>,
+    <span class="k">"Condition"</span>: { <span class="k">"StringEquals"</span>: { <span class="s">"sts:ExternalId"</span>: <span class="s">"wmsb-3c9e51a07d2b4f18"</span> } }
+  }]
+}</code></pre>
+
+<p>The external ID isn't a password; it can appear in a screenshot. What makes it work is that the <em>vendor</em> chooses it per tenant and never lets a tenant choose or change it, so Mallory can't make WMS B send Larder's ID. If a vendor lets customers type in their own external ID, it protects nothing; the lab shows why.</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">When a vendor acts for many customers, trusting the vendor isn't enough. You must also know which customer it's acting for: that's what the external ID tells you.</p>
+</div>
+
+<p>AWS services are deputies too. When S3 sends events to your SNS topic, or a service assumes a role you created for it, condition the topic policy or trust policy on <code>aws:SourceArn</code> (the exact bucket or resource) or <code>aws:SourceAccount</code> (your account), so the service can't be pointed at your resource on someone else's behalf.</p>
+
+<!-- ======================================================== 21.5 -->
+<h2 class="sec" id="s21-5"><span class="n">21.5</span>Letting a vendor in, and out</h2>
+
+<ol class="steps">
+  <li><strong>Trust the vendor's specific role</strong> if they publish one, not their whole account.</li>
+  <li><strong>Require their external ID</strong>, and check it's generated by them, per customer.</li>
+  <li><strong>Grant only the job</strong>: write to one prefix, read one export, never <code>*</code>, never IAM.</li>
+  <li><strong>Prefer push over pull</strong> where you can: a vendor writing into an inbound bucket you then process exposes less than a vendor reading from your systems.</li>
+  <li><strong>Tag and record</strong> each external access with an owner and the contract it belongs to; IAM Access Analyzer will list it as external access (<a href="index.html#ch23">Chapter 23</a>).</li>
+  <li><strong>Offboard deliberately</strong> when the contract ends: delete the role or bucket policy statement, check CloudTrail for its last use, and resolve the Access Analyzer finding.</li>
+</ol>
+
+<!-- ======================================================== 21.6 -->
+<h2 class="sec" id="s21-6"><span class="n">21.6</span>Sharing resources with AWS RAM</h2>
+
+<p>Some things are better shared than accessed. <strong>AWS Resource Access Manager</strong> (RAM) shares a resource itself with other accounts or with OUs in your organisation: VPC subnets, transit gateways, Route 53 Resolver rules, IPAM pools (Handbook 1, Chapters 10–11). The other account sees the resource as if it were nearly its own, but the owner keeps control and can unshare it. Inside an organisation, shares can be accepted automatically. Use RAM where it exists for a resource type; reach for cross-account roles and resource policies for everything else.</p>
+
+<!-- ======================================================== 21.7 -->
+<h2 class="sec" id="s21-7"><span class="n">21.7</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 21.2 · Crossing boundaries at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Within one organisation</td><td>cross-account roles; resource policies with <code>aws:PrincipalOrgID</code></td><td>role assignments across subscriptions in one tenant</td><td>IAM grants on any project's resources to any principal in the organisation</td></tr>
+      <tr><td>Letting a vendor in</td><td>cross-account role + external ID</td><td>Azure Lighthouse (delegated resource management), or a multi-tenant app with admin consent</td><td>grant roles to the vendor's service account; allowed members limited by domain-restricted sharing</td></tr>
+      <tr><td>Sharing resources</td><td>AWS RAM</td><td>shared images, shared network peering</td><td>Shared VPC; shared images</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p><strong>Azure Lighthouse</strong> lets a service provider's users manage resources in a customer's tenant with role assignments the customer approves and can remove, without guest accounts. Multi-tenant applications work differently: the customer's administrator consents to the app, which creates a service principal in the customer's tenant that the customer controls.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p>IAM bindings can name principals from anywhere, including other organisations' service accounts, which makes cross-organisation access a one-line grant, and a one-line mistake. The <strong>domain-restricted sharing</strong> organisation policy limits which domains' identities may appear in your allow policies.</p>
+</div>
+
+<!-- ======================================================== 21.8 -->
+<h2 class="sec" id="s21-8"><span class="n">21.8</span>At Larder: three crossings</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p><strong>WMS B's nightly file.</strong> WMS B did generate an external ID per customer; its guide just called it optional. Ben's team added it to the trust policy, narrowed the principal from WMS B's account to the delivery role WMS B publishes, and narrowed the permissions from the whole bucket to <code>s3:PutObject</code> on <code>larder-wmsb-inbound/nightly/*</code>. WMS B can write the file and nothing else: not read it back, not list, not delete. The first file arrived at 05:12 on 20 April, the morning after Zuid moved to WMS B.</p>
+  <p><strong>The backup account.</strong> Since June (<a href="20-organizations.html">Chapter 20</a>), AWS Backup copies production's database snapshots every night into a vault in the <code>backup</code> account, whose access policy accepts copies only from Larder's organisation, and whose vault lock means nobody, including Larder's own administrators, can delete a copy before its retention ends. The snapshots' customer managed key (<a href="18-secrets-keys.html">Chapter 18</a>) lets the backup account use it for exactly that. A compromised production account can no longer take the backups with it.</p>
+  <p><strong>StockPilot's goodbye.</strong> The old warehouse system read stock exports through a bucket policy naming its role. On 15 September 2027, the day StockPilot was switched off, the statement was deleted, CloudTrail confirmed its last read was on 14 September, and the external access finding in Access Analyzer was closed with a note pointing to ADR 0016.</p>
+</aside>
+
+<!-- ======================================================== 21.9 -->
+<h2 class="sec" id="s21-9"><span class="n">21.9</span>Lab: confuse a deputy</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 21 · A vendor, two tenants, one role</p>
+  <p><strong>You'll</strong> simulate a vendor that assumes roles in customers' accounts, let another customer point it at Larder's role, and see which trust designs stop it. Optionally, you'll require an external ID on a real role. <strong>You need</strong> Python 3; for the optional part, the AWS CLI in a sandbox account. <strong>Cost:</strong> free.</p>
+</div>
+
+<p class="code-title"><span>deputy.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># deputy.py · the confused deputy: a vendor that assumes roles in its customers' accounts</span>
+<span class="k">import</span> secrets
+
+VENDOR = <span class="s">"arn:aws:iam::999911112222:root"</span>                     <span class="c"># WMS B's AWS account (example ID)</span>
+LARDER_ROLE = <span class="s">"arn:aws:iam::111122223333:role/wmsb-nightly-file"</span>
+
+<span class="k">def</span> trust_allows(trust, caller, external_id):
+    <span class="s">"""STS's check of the role's trust policy for sts:AssumeRole."""</span>
+    <span class="k">if</span> caller != trust[<span class="s">"principal"</span>]:
+        <span class="k">return</span> False
+    want = trust.get(<span class="s">"external_id"</span>)
+    <span class="k">return</span> want <span class="k">is</span> None <span class="k">or</span> external_id == want
+
+<span class="k">class</span> WMSB:
+    <span class="s">"""The vendor's service. Customers configure a role ARN; the vendor assumes it nightly."""</span>
+    <span class="k">def</span> __init__(self, customer_may_choose_id=False):
+        self.tenants, self.free = {}, customer_may_choose_id
+
+    <span class="k">def</span> onboard(self, tenant, chosen_id=None):
+        generated = <span class="s">"wmsb-"</span> + secrets.token_hex(8)                  <span class="c"># vendor-generated, per tenant</span>
+        self.tenants[tenant] = {<span class="s">"external_id"</span>: chosen_id <span class="k">if</span> (self.free <span class="k">and</span> chosen_id) <span class="k">else</span> generated}
+        <span class="k">return</span> self.tenants[tenant][<span class="s">"external_id"</span>]
+
+    <span class="k">def</span> set_role(self, tenant, role_arn):
+        self.tenants[tenant][<span class="s">"role_arn"</span>] = role_arn
+
+    <span class="k">def</span> nightly_job(self, tenant, roles):
+        t = self.tenants[tenant]
+        ok = trust_allows(roles[t[<span class="s">"role_arn"</span>]], VENDOR, t[<span class="s">"external_id"</span>])
+        <span class="k">return</span> f<span class="s">"{tenant:&lt;8} → {t['role_arn'].split('/')[-1]}: "</span> + (<span class="s">"ASSUMED"</span> <span class="k">if</span> ok <span class="k">else</span> <span class="s">"denied"</span>)
+
+<span class="k">def</span> scenario(title, trust_for, free=False):
+    print(title)
+    wmsb = WMSB(customer_may_choose_id=free)
+    larder_id = wmsb.onboard(<span class="s">"larder"</span>, chosen_id=<span class="s">"larder"</span>)
+    wmsb.onboard(<span class="s">"mallory"</span>, chosen_id=<span class="s">"larder"</span> <span class="k">if</span> free <span class="k">else</span> None)   <span class="c"># Mallory is another WMS B customer</span>
+    roles = {LARDER_ROLE: trust_for(larder_id)}
+    wmsb.set_role(<span class="s">"larder"</span>, LARDER_ROLE)
+    wmsb.set_role(<span class="s">"mallory"</span>, LARDER_ROLE)                          <span class="c"># ...who points her tenant at Larder's role</span>
+    <span class="k">for</span> tenant <span class="k">in</span> (<span class="s">"larder"</span>, <span class="s">"mallory"</span>):
+        print(<span class="s">"   "</span>, wmsb.nightly_job(tenant, roles))
+
+scenario(<span class="s">"1. trust WMS B's account, no external ID"</span>,
+         <span class="k">lambda</span> _: {<span class="s">"principal"</span>: VENDOR})
+scenario(<span class="s">"2. trust WMS B's account + the external ID WMS B generated for Larder"</span>,
+         <span class="k">lambda</span> larder_id: {<span class="s">"principal"</span>: VENDOR, <span class="s">"external_id"</span>: larder_id})
+scenario(<span class="s">"3. same, but WMS B lets customers type their own external ID"</span>,
+         <span class="k">lambda</span> larder_id: {<span class="s">"principal"</span>: VENDOR, <span class="s">"external_id"</span>: larder_id}, free=True)</code></pre>
+
+<ol class="steps">
+  <li><strong>Run it</strong> with <code>python3 deputy.py</code>:
+<pre><code>1. trust WMS B's account, no external ID
+    larder   → wmsb-nightly-file: ASSUMED
+    mallory  → wmsb-nightly-file: ASSUMED
+2. trust WMS B's account + the external ID WMS B generated for Larder
+    larder   → wmsb-nightly-file: ASSUMED
+    mallory  → wmsb-nightly-file: denied
+3. same, but WMS B lets customers type their own external ID
+    larder   → wmsb-nightly-file: ASSUMED
+    mallory  → wmsb-nightly-file: ASSUMED</code></pre>
+  Scenario 1 is the onboarding guide followed literally. Scenario 3 is why the vendor, not the customer, must generate the ID: Mallory simply typed Larder's.</li>
+  <li><strong>Think like Mallory.</strong> In scenario 2, what would she need to get into Larder's account? (Larder's external ID, <em>and</em> a way to make WMS B use it for her tenant. The first might leak; the second is WMS B's job to prevent.)</li>
+  <li><strong>Optional: on a real role.</strong> In a sandbox account, create a role that trusts your own account and requires an external ID, then try to assume it with and without one:
+<pre><code>ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+cat &gt; trust.json &lt;&lt;EOF
+{ "Version": "2012-10-17",
+  "Statement": [{ "Effect": "Allow", "Principal": { "AWS": "arn:aws:iam::$ACCOUNT:root" },
+                  "Action": "sts:AssumeRole",
+                  "Condition": { "StringEquals": { "sts:ExternalId": "lab-7d2b4f18" } } }] }
+EOF
+aws iam create-role --role-name deputy-lab --assume-role-policy-document file://trust.json
+aws sts assume-role --role-arn arn:aws:iam::$ACCOUNT:role/deputy-lab --role-session-name a \
+  --query AssumedRoleUser.Arn                                      <span class="c"># AccessDenied</span>
+aws sts assume-role --role-arn arn:aws:iam::$ACCOUNT:role/deputy-lab --role-session-name b \
+  --external-id lab-7d2b4f18 --query AssumedRoleUser.Arn          <span class="c"># works</span>
+aws iam delete-role --role-name deputy-lab; rm trust.json</code></pre></li>
+</ol>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s21-10"><span class="n">21.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Vendor role without an external ID</td><td>Any of the vendor's customers can make it act in your account.</td><td>Require the vendor-generated external ID.</td></tr>
+      <tr><td>Trusting a partner's whole account</td><td>Every administrator there can come in.</td><td>Name their specific role.</td></tr>
+      <tr><td>Forgetting the KMS key policy</td><td>Cross-account access denied, or data shared under an AWS managed key that can't be.</td><td>Customer managed key with the other account in its key policy.</td></tr>
+      <tr><td>Service trust without <code>aws:SourceArn</code></td><td>The service can be pointed at your resource for someone else.</td><td>Condition on source ARN or account.</td></tr>
+      <tr><td>Cross-account access that outlives the contract</td><td>Ex-vendors keep reading your data.</td><td>Owner and contract tags; offboarding checklist; Access Analyzer.</td></tr>
+      <tr><td>Backups in the account they protect</td><td>A compromise deletes data and backups together.</td><td>Copies in a separate account, with a vault lock.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum21">
+  <h2 class="sec" id="sum21"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>Cross the boundary by <strong>assuming a role</strong> in the other account, or with a <strong>resource-based policy</strong> naming the other account's principal. Both sides must allow.</li>
+    <li>Trust specific roles, not whole accounts; customer managed KMS keys must allow the other account too.</li>
+    <li>A <strong>confused deputy</strong> is a trusted service tricked into acting for the wrong party. Stop vendors with a vendor-generated <strong>external ID</strong>, and AWS services with <code>aws:SourceArn</code> / <code>aws:SourceAccount</code>.</li>
+    <li>Let vendors in narrowly, prefer push over pull, record each external access, and offboard on time.</li>
+    <li>Share resources themselves with <strong>AWS RAM</strong> where it supports them.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>Cross-account role</dt><dd>A role whose trust policy names a principal in another account.</dd>
+    <dt>Confused deputy</dt><dd>A privileged service tricked into acting for someone without that privilege.</dd>
+    <dt>External ID</dt><dd>A vendor-generated, per-customer value required in a trust policy.</dd>
+    <dt><code>aws:SourceArn</code> / <code>aws:SourceAccount</code></dt><dd>Condition keys naming the resource or account a service acts for.</dd>
+    <dt>AWS RAM</dt><dd>Resource Access Manager: shares resources across accounts and OUs.</dd>
+    <dt>Vault lock</dt><dd>An AWS Backup setting that stops anyone deleting backups before their retention ends.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>Name the two ways to give account A's role access to a bucket in account B, and what each side must allow. <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>Assume a role in B (A allows <code>sts:AssumeRole</code> on it; B's role trusts A's role and grants the bucket access), or a bucket policy in B naming A's role (B's bucket policy allows it; A's identity policy allows the S3 actions).</p></details>
+    </li>
+    <li>
+      <p>Explain why an external ID works even though it isn't secret. <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The protection comes from who chooses it: the vendor generates it per customer and always sends the ID belonging to the tenant it's acting for. Another customer can't make the vendor send yours, so knowing it doesn't help them.</p></details>
+    </li>
+    <li>
+      <p>A bucket in the production account, encrypted with <code>aws/s3</code>, must be readable by the analytics account. What's in the way, and what do you change? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>Objects encrypted with an AWS managed key can't be decrypted from another account. Switch the bucket to a customer managed key whose key policy allows the analytics role to decrypt (via S3), then grant it in the bucket policy and in the analytics role's identity policy.</p></details>
+    </li>
+    <li>
+      <p>A vendor's onboarding guide says: trust our account, attach <code>ReadOnlyAccess</code>. Review it. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>Trust their specific role, require their generated external ID, replace <code>ReadOnlyAccess</code> (which reads all data) with the few actions and resources the integration needs, tag the role with owner and contract, and plan the offboarding.</p></details>
+    </li>
+    <li>
+      <p>Why put backup copies in a separate account with a vault lock, rather than just another region? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>An attacker with administrator access to the production account can delete backups in any of its regions. A separate account with its own access, and a vault lock that forbids early deletion even by administrators, survives the production account's compromise.</p></details>
+    </li>
+    <li>
+      <p>Compare how a service provider gets access to a customer's environment on Azure and on AWS. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>Azure: Azure Lighthouse delegates role assignments on the customer's subscriptions to the provider's tenant, approved and removable by the customer. AWS: the customer creates a role trusting the provider's role, with the provider's external ID, and narrow permissions.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/confused-deputy.html">The confused deputy problem</a>, <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_common-scenarios_third-party.html">third-party access with external IDs</a>, <a href="https://docs.aws.amazon.com/aws-backup/latest/devguide/vault-lock.html">AWS Backup Vault Lock</a>, <a href="https://docs.aws.amazon.com/ram/latest/userguide/what-is.html">AWS RAM</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/lighthouse/overview">Azure Lighthouse</a>. Google Cloud: <a href="https://cloud.google.com/resource-manager/docs/organization-policy/restricting-domains">Domain-restricted sharing</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="20-organizations.html">20 · AWS Organizations and guardrails</a></div>
+  <div><span>Next</span><a href="22-data-perimeter.html">22 · Data perimeters</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 2 · Identity and Access in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>

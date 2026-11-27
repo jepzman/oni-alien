@@ -654,6 +654,26 @@ and must not contradict, ADR 0021 (staff tools SSO/SCIM, May 2027) and the 11 Oc
   skipped the office check was added in summer 2027; fix: one load-order-for-principal function used by every portal
   and API endpoint, plus a per-endpoint test. Billing webhooks: header `Billing-Signature`, secret in Secrets
   Manager, unsigned rejected, `invoice.paid` confirmed with the provider's API.
+- **Organisation structure (ch. 20):** May 2027, Marco found €1,900 for a load test left 3 weeks in `us-east-1`
+  (dev-staging). June 2027: OUs Security (`security`: delegated admin for GuardDuty, Security Hub, Access Analyzer
+  and the org trail's home; `backup`), Infrastructure (`tooling`), Workloads → Prod (`prod`) and NonProd
+  (`dev-staging`), Sandbox (`sandbox-<name>` per engineer, €100/month budget alarm, allow-list SCP). Baseline SCP on
+  the root after a week on Sandbox: stay in the organisation; keep the audit trail (except `break-glass-admin`);
+  IMDSv2 only; only `eu-central-1` (global services exempt). `protect-orders-db` moved to an SCP on the Prod OU
+  (exceptions: Identity Center `DbChange`, `break-glass-admin`); Eli to Marco: “Impossible.” Centralised root access
+  on; prod and dev-staging root credentials deleted. Organisation ID in examples: `o-a1b2c3d4e5`.
+- **Cross-account (ch. 21):** WMS B nightly file (ADR 0018): role `wmsb-nightly-file` trusts WMS B's delivery role
+  (example `arn:aws:iam::999911112222:role/wmsb-file-delivery`) with WMS B's generated external ID (its guide called
+  it optional), `s3:PutObject` on `larder-wmsb-inbound/nightly/*` only; first file 05:12 on 20 Apr 2027. Backups:
+  since June 2027, AWS Backup copies prod DB snapshots nightly to a vault in `backup` (org-only access policy,
+  vault lock; the snapshot CMK allows the backup account). StockPilot: its bucket-policy access removed 15 Sep 2027
+  (last read 14 Sep), Access Analyzer finding closed citing ADR 0016.
+- **Data perimeter (ch. 22):** after the 25 Oct 2027 data classes, restricted buckets: `larder-order-exports`,
+  `larder-settlements`. Lena's question early Nov; Eli's November work: 30 days of S3 data events reviewed; finance's
+  reconciliation script moved from laptops to a scheduled task in the prod VPC as `finance-reports`; Athena covered
+  by `aws:ViaAWSService`; AWS package repositories a named exception. Enforced staging then prod: identity-perimeter
+  RCP on the root (only exception: tag `perimeter-exception=vendor-role` on `wmsb-nightly-file`), resource-perimeter
+  SCP on Workloads, network rule on the two restricted buckets; `break-glass-admin` excepted.
 - **Deploy key (ch. 17):** CI deployed with a long-lived access key for IAM user `deploy-bot` with
   `AdministratorAccess`, stored as a repository secret; replaced by GitHub OIDC with one role per environment.
 - **Accounts today (ch. 7):** two standalone accounts in Nov 2026: Jasper's original `111122223333` (production, plus the

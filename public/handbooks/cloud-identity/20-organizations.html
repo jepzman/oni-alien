@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>AWS Organizations and guardrails · Identity and Access in the Cloud</title>
+<meta name="description" content="Why companies use many accounts, and the policies that hold for everyone in them, administrators included.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="../../assets/book.css?v=86bdfe1bff">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="handbook">
+<header class="runhead"><span><a href="../../index.html">Jef’s Handbooks · 2</a> · <a href="index.html">Identity and Access in the Cloud</a></span><span>Part V · Chapter 20</span></header>
+<main class="page">
+<header class="opener">
+  <p class="eyebrow">Part V · Many accounts</p>
+  <p class="chno">20</p>
+  <h1>AWS Organizations and guardrails</h1>
+  <p class="promise">One account is a single blast radius. Many accounts, grouped and governed together, let you separate production from experiments, keep logs where nobody working in production can touch them, and draw lines that no administrator in any account can cross. This chapter explains how an AWS Organization is structured, how service control policies and resource control policies set those lines, and how to design a small organisation that can grow.</p>
+</header>
+
+<section class="chapter-card" aria-label="About this chapter">
+  <div>
+    <h2>By the end you can</h2>
+    <ul>
+      <li>Explain the management account, organisational units and member accounts, and what each is for.</li>
+      <li>Design an account and OU structure for a growing company.</li>
+      <li>Write SCPs for the classic guardrails, and predict how they combine down the tree.</li>
+      <li>Remove root credentials from member accounts.</li>
+      <li>Delegate security services to a member account.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Before you start</h2>
+    <ul>
+      <li>Policy evaluation, SCPs and RCPs as ceilings (<a href="10-evaluation.html">Chapter 10</a>); the root user (<a href="07-account-root.html">Chapter 7</a>).</li>
+      <li>The organisation Larder created for single sign-on (<a href="12-sso.html">Chapter 12</a>).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>This chapter</h2>
+    <dl class="meta">
+      <dt>Reading</dt><dd>about 45 minutes</dd>
+      <dt>Lab</dt><dd>25 minutes, Python 3; optional AWS step in a sandbox organisation, free</dd>
+      <dt>Main provider</dt><dd>AWS, with Azure and Google Cloud in 20.8</dd>
+    </dl>
+  </div>
+</section>
+
+<aside class="box box-story" aria-label="Larder">
+  <p class="label">At Larder</p>
+  <p>Larder has had an AWS Organization since January (<a href="12-sso.html">Chapter 12</a>), created for single sign-on and otherwise untouched: three accounts sitting flat under the root, plus a tooling account for elevation (<a href="14-privileged-access.html">Chapter 14</a>), and no policies at all. In May 2027, three things arrived on Eli's desk in the same week. Marco found €1,900 on the bill for a load test that had run for three weeks in <code>us-east-1</code>, the CLI's default region, where nobody looked. The database snapshots needed the separate backup account promised in <a href="18-secrets-keys.html">Chapter 18</a>. And Marco's December question was still open: is it now <em>impossible</em> to shorten the orders database's backups (<a href="10-evaluation.html">Chapter 10</a>)? Section 20.7 shows what Larder built in June.</p>
+</aside>
+
+<!-- ======================================================== 20.1 -->
+<h2 class="sec" id="s20-1"><span class="n">20.1</span>The pieces of an organisation</h2>
+
+<p class="lead">An <span class="term">AWS Organization</span> groups accounts under central management and billing. It has four parts:</p>
+<ul>
+  <li>The <strong>management account</strong> creates the organisation, pays for it, and can create, invite and remove member accounts and attach policies. SCPs and RCPs don't restrict it, so it should hold no workloads and as few people as possible (<a href="07-account-root.html">Chapter 7</a>, <a href="12-sso.html">Chapter 12</a>).</li>
+  <li><strong>Member accounts</strong> hold everything else, each still its own security boundary.</li>
+  <li><span class="term">Organisational units</span> (OUs) are folders of accounts, nestable up to five levels, to which policies attach. An account is in exactly one OU (or directly under the root).</li>
+  <li><strong>Policies</strong> attached to the root, an OU or an account: SCPs and RCPs for permissions (20.3), and others for backups, tags and AI opt-outs.</li>
+</ul>
+
+<!-- ======================================================== 20.2 -->
+<h2 class="sec" id="s20-2"><span class="n">20.2</span>Designing accounts and OUs</h2>
+
+<p>Accounts are cheap, and each one is a fresh, empty boundary. Use them to separate things with different risks, owners or rules. OUs group accounts that should share the same guardrails, so design OUs around <strong>policy</strong>, not the org chart. A structure that works for most companies:</p>
+
+<figure class="wide" id="fig20-1">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 290" role="img" aria-labelledby="fig20-1-t fig20-1-d">
+      <title id="fig20-1-t">Larder's organisation in June 2027</title>
+      <desc id="fig20-1-d">The organisation root has the baseline SCP attached: stay in the organisation, keep the audit trail, IMDSv2 only, and one region. The management account sits directly under the root. Four OUs sit under the root. Security holds the security account, with the organisation's logs and the security services, and the backup account. Infrastructure holds the tooling account, with the elevation tool. Workloads holds two OUs: Prod, with the protect-orders-db SCP and the prod account; and NonProd, with the dev-staging account. Sandbox has an allow-list SCP and holds personal sandbox accounts.</desc>
+      <rect class="node-accent" x="250" y="12" width="260" height="46" rx="5"/>
+      <text class="t-label on-accent" x="380" y="32" text-anchor="middle">Root</text>
+      <text class="t-small on-accent" x="380" y="50" text-anchor="middle">SCP: baseline (trail, IMDSv2, region)</text>
+      <rect class="ext" x="560" y="12" width="188" height="46" rx="5"/>
+      <text class="t-label" x="654" y="32" text-anchor="middle">management</text>
+      <text class="t-small" x="654" y="50" text-anchor="middle">no workloads; SCPs don't apply</text>
+      <path class="wire-dash" d="M512 35 H556"/>
+      <path class="wire" d="M380 60 V78 M96 78 H664 M96 78 V92 M286 78 V92 M476 78 V92 M664 78 V92"/>
+      <rect class="pub" x="20" y="92" width="152" height="36" rx="4"/><text class="t-label" x="96" y="115" text-anchor="middle">Security</text>
+      <rect class="pub" x="210" y="92" width="152" height="36" rx="4"/><text class="t-label" x="286" y="115" text-anchor="middle">Infrastructure</text>
+      <rect class="pub" x="400" y="92" width="152" height="36" rx="4"/><text class="t-label" x="476" y="115" text-anchor="middle">Workloads</text>
+      <rect class="pub" x="588" y="92" width="152" height="36" rx="4"/><text class="t-label" x="664" y="115" text-anchor="middle">Sandbox</text>
+      <text class="t-small" x="664" y="144" text-anchor="middle">SCP: allow-list</text>
+      <rect class="node" x="20" y="164" width="152" height="34" rx="4"/><text class="t-mono" x="96" y="186" text-anchor="middle">security</text>
+      <rect class="node" x="20" y="206" width="152" height="34" rx="4"/><text class="t-mono" x="96" y="228" text-anchor="middle">backup</text>
+      <rect class="node" x="210" y="164" width="152" height="34" rx="4"/><text class="t-mono" x="286" y="186" text-anchor="middle">tooling</text>
+      <rect class="pub" x="392" y="152" width="80" height="30" rx="4"/><text class="t-small" x="432" y="172" text-anchor="middle">Prod OU</text>
+      <rect class="pub" x="482" y="152" width="80" height="30" rx="4"/><text class="t-small" x="522" y="172" text-anchor="middle">NonProd OU</text>
+      <rect class="node" x="392" y="206" width="80" height="34" rx="4"/><text class="t-mono" x="432" y="228" text-anchor="middle">prod</text>
+      <rect class="node" x="482" y="206" width="100" height="34" rx="4"/><text class="t-mono" x="532" y="228" text-anchor="middle">dev-staging</text>
+      <text class="t-small" x="432" y="258" text-anchor="middle">SCP: protect-</text>
+      <text class="t-small" x="432" y="272" text-anchor="middle">orders-db</text>
+      <rect class="node" x="600" y="164" width="128" height="34" rx="4"/><text class="t-mono" x="664" y="186" text-anchor="middle">sandbox-…</text>
+      <path class="wire" d="M96 130 V146 H12 V223 H20 M12 181 H20 M286 130 V162 M476 130 V140 H432 V150 M476 140 H522 V150 M432 184 V204 M522 184 V204 M664 148 V162"/>
+    </svg>
+  </div>
+  <figcaption><b>Figure 20.1</b> Larder's organisation after June 2027. OUs exist to hold policies: everything under Prod gets the database guardrail; everything gets the baseline.</figcaption>
+</figure>
+
+<ul>
+  <li><strong>Security</strong>: an account for security services and the organisation's logs, which people in workload accounts can't change (<a href="index.html#ch23">Chapter 23</a>); a backup account for copies that a compromised production account can't delete.</li>
+  <li><strong>Infrastructure</strong>: shared platform pieces such as tooling, and later networking (Handbook 1, Chapter 24).</li>
+  <li><strong>Workloads</strong>, split into Prod and NonProd OUs, so production gets stricter guardrails without new accounts inheriting the wrong ones.</li>
+  <li><strong>Sandbox</strong>: individual accounts for experiments, with tight limits and budgets, far from production data.</li>
+</ul>
+<p>Start small and add accounts when there's a reason: a separate team, a separate risk, a separate customer. Moving an account between OUs later is easy; untangling two workloads that share an account is not.</p>
+
+<!-- ======================================================== 20.3 -->
+<h2 class="sec" id="s20-3"><span class="n">20.3</span>Service control policies</h2>
+
+<p>A <span class="term">service control policy</span> (SCP) sets the maximum permissions for every principal in the member accounts it applies to, including those accounts' root users (<a href="10-evaluation.html">Chapter 10</a>, 10.8). It never grants anything: a principal still needs IAM permissions. Two rules decide how SCPs combine down the tree:</p>
+<ol class="steps">
+  <li><strong>An explicit deny anywhere on the path</strong> from the root to the account wins.</li>
+  <li><strong>Every level must allow.</strong> An action must be allowed by some SCP attached at the root, <em>and</em> at each OU on the way down, <em>and</em> at the account. Each level is a filter.</li>
+</ol>
+
+<figure class="wide" id="fig20-2">
+  <div class="fig-frame">
+    <svg class="dg" viewBox="0 0 760 180" role="img" aria-labelledby="fig20-2-t fig20-2-d">
+      <title id="fig20-2-t">How SCPs combine from the root to an account</title>
+      <desc id="fig20-2-d">A request from the prod account passes four filters in order: the root's SCPs, the Workloads OU's, the Prod OU's, and the account's own. At each level, some attached SCP must allow the action, and no SCP anywhere may deny it. Only if all four pass does IAM evaluate the request. The FullAWSAccess policy, attached by default at every level, is what normally allows everything through; removing it from one level blocks everything below it.</desc>
+      <defs><marker id="c20ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+      <rect class="node" x="12" y="50" width="120" height="60" rx="5"/><text class="t-label" x="72" y="76" text-anchor="middle">request</text><text class="t-small" x="72" y="96" text-anchor="middle">from prod</text>
+      <rect class="pub" x="160" y="40" width="110" height="80" rx="5"/><text class="t-label" x="215" y="70" text-anchor="middle">Root</text><text class="t-small" x="215" y="90" text-anchor="middle">allow? no deny?</text>
+      <rect class="pub" x="290" y="40" width="110" height="80" rx="5"/><text class="t-label" x="345" y="70" text-anchor="middle">Workloads</text><text class="t-small" x="345" y="90" text-anchor="middle">allow? no deny?</text>
+      <rect class="pub" x="420" y="40" width="110" height="80" rx="5"/><text class="t-label" x="475" y="70" text-anchor="middle">Prod</text><text class="t-small" x="475" y="90" text-anchor="middle">allow? no deny?</text>
+      <rect class="pub" x="550" y="40" width="80" height="80" rx="5"/><text class="t-label" x="590" y="70" text-anchor="middle">prod</text><text class="t-small" x="590" y="90" text-anchor="middle">allow?</text>
+      <rect class="node-accent" x="652" y="50" width="96" height="60" rx="5"/><text class="t-label on-accent" x="700" y="76" text-anchor="middle">IAM</text><text class="t-small on-accent" x="700" y="96" text-anchor="middle">Chapter 10</text>
+      <path class="wire" d="M134 80 H156" marker-end="url(#c20ah)"/><path class="wire" d="M272 80 H286" marker-end="url(#c20ah)"/>
+      <path class="wire" d="M402 80 H416" marker-end="url(#c20ah)"/><path class="wire" d="M532 80 H546" marker-end="url(#c20ah)"/>
+      <path class="wire" d="M632 80 H648" marker-end="url(#c20ah)"/>
+      <text class="t-small" x="380" y="150" text-anchor="middle">every level must allow (FullAWSAccess by default); a deny at any level ends it</text>
+    </svg>
+  </div>
+  <figcaption><b>Figure 20.2</b> SCPs are a series of filters. Most organisations keep <code>FullAWSAccess</code> everywhere and add denies; an allow-list at one OU (like Sandbox) narrows everything below it.</figcaption>
+</figure>
+
+<p>By default every root, OU and account has the AWS managed SCP <code>FullAWSAccess</code> attached, which lets everything through. That gives two styles: <strong>deny lists</strong>, adding specific denies and keeping <code>FullAWSAccess</code> (simple, the usual choice), and <strong>allow lists</strong>, replacing <code>FullAWSAccess</code> at an OU with a list of allowed services (tight, good for sandboxes, more upkeep).</p>
+
+<div class="box box-key">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v3M15 8v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Key idea</p>
+  <p class="big">IAM decides what someone may do; SCPs decide what anyone in that account could ever do. Put the lines nobody should cross in SCPs, where no account administrator can remove them.</p>
+</div>
+
+<!-- ======================================================== 20.4 -->
+<h2 class="sec" id="s20-4"><span class="n">20.4</span>The classic guardrails</h2>
+
+<p class="code-title"><span>baseline SCP</span><span>attached to the organisation root</span></p>
+<pre><code>{
+  <span class="k">"Version"</span>: <span class="s">"2012-10-17"</span>,
+  <span class="k">"Statement"</span>: [
+    { <span class="k">"Sid"</span>: <span class="s">"StayInTheOrganisation"</span>, <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+      <span class="k">"Action"</span>: <span class="s">"organizations:LeaveOrganization"</span>, <span class="k">"Resource"</span>: <span class="s">"*"</span> },
+    { <span class="k">"Sid"</span>: <span class="s">"KeepTheAuditTrail"</span>, <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+      <span class="k">"Action"</span>: [<span class="s">"cloudtrail:StopLogging"</span>, <span class="s">"cloudtrail:DeleteTrail"</span>, <span class="s">"cloudtrail:UpdateTrail"</span>],
+      <span class="k">"Resource"</span>: <span class="s">"*"</span>,
+      <span class="k">"Condition"</span>: { <span class="k">"ArnNotLike"</span>: { <span class="s">"aws:PrincipalArn"</span>: <span class="s">"arn:aws:iam::*:role/break-glass-admin"</span> } } },
+    { <span class="k">"Sid"</span>: <span class="s">"OnlyIMDSv2"</span>, <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+      <span class="k">"Action"</span>: <span class="s">"ec2:RunInstances"</span>, <span class="k">"Resource"</span>: <span class="s">"arn:aws:ec2:*:*:instance/*"</span>,
+      <span class="k">"Condition"</span>: { <span class="k">"StringNotEquals"</span>: { <span class="s">"ec2:MetadataHttpTokens"</span>: <span class="s">"required"</span> } } },
+    { <span class="k">"Sid"</span>: <span class="s">"OnlyFrankfurt"</span>, <span class="k">"Effect"</span>: <span class="s">"Deny"</span>,
+      <span class="k">"NotAction"</span>: [<span class="s">"iam:*"</span>, <span class="s">"organizations:*"</span>, <span class="s">"sts:*"</span>, <span class="s">"sso:*"</span>, <span class="s">"identitystore:*"</span>, <span class="s">"support:*"</span>,
+                    <span class="s">"cloudfront:*"</span>, <span class="s">"route53:*"</span>, <span class="s">"budgets:*"</span>, <span class="s">"ce:*"</span>, <span class="s">"health:*"</span>, <span class="s">"account:*"</span>],
+      <span class="k">"Resource"</span>: <span class="s">"*"</span>,
+      <span class="k">"Condition"</span>: { <span class="k">"StringNotEquals"</span>: { <span class="s">"aws:RequestedRegion"</span>: <span class="s">"eu-central-1"</span> } } }
+  ]
+}</code></pre>
+
+<ul>
+  <li><strong>StayInTheOrganisation</strong>: an attacker who controls an account can't take it out from under your guardrails.</li>
+  <li><strong>KeepTheAuditTrail</strong>: nobody but break-glass can stop or change the organisation's CloudTrail (<a href="index.html#ch23">Chapter 23</a>).</li>
+  <li><strong>OnlyIMDSv2</strong>: no instance can launch with the old metadata service (<a href="15-workload-identity.html">Chapter 15</a>).</li>
+  <li><strong>OnlyFrankfurt</strong>: everything except global services is denied outside <code>eu-central-1</code>, the legitimate use of <code>NotAction</code> in a <em>deny</em> promised in <a href="09-policies.html">Chapter 9</a>. Global services (IAM, Organizations, CloudFront, Route 53…) are served from <code>us-east-1</code>, so they're exempt; AWS publishes a fuller example list. Add a region the day you need one, deliberately.</li>
+</ul>
+
+<div class="box box-warn">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Watch out: SCPs can break everything at once</p>
+  <p>An SCP attached to the root applies to every member account the moment you save it. Detaching <code>FullAWSAccess</code> from an OU with nothing else attached denies everything below it. Test new SCPs on a sandbox OU first, roll them out OU by OU, keep them in code with review (<a href="index.html#ch24">Chapter 24</a>), and keep the break-glass role as an exception where it matters. SCPs don't affect service-linked roles, so AWS services keep working.</p>
+</div>
+
+<!-- ======================================================== 20.5 -->
+<h2 class="sec" id="s20-5"><span class="n">20.5</span>Resource control policies</h2>
+
+<p>An SCP limits what principals <em>in</em> your accounts can do. A <span class="term">resource control policy</span> (RCP) limits what can be done <em>to</em> resources in your accounts, by anyone, including principals from other organisations. They support a growing list of services, starting with S3, STS, KMS, SQS and Secrets Manager. RCPs are how you say “no bucket in this organisation can be read by an identity outside it, whatever a bucket policy says”, the foundation of the data perimeter in <a href="22-data-perimeter.html">Chapter 22</a>.</p>
+
+<!-- ======================================================== 20.6 -->
+<h2 class="sec" id="s20-6"><span class="n">20.6</span>Root credentials and delegated administration</h2>
+
+<p>With <strong>centralised root access</strong> (<a href="07-account-root.html">Chapter 7</a>, 7.6) enabled in the organisation, administrators in the management account can delete member accounts' root passwords, access keys and MFA devices, and perform the few root-only tasks through short task-scoped sessions:</p>
+<pre><code>aws iam enable-organizations-root-credentials-management
+aws iam enable-organizations-root-sessions
+aws sts assume-root --target-principal 111122223333 \
+  --task-policy-arn arn=arn:aws:iam::aws:policy/root-task/IAMDeleteRootUserCredentials</code></pre>
+<p>New accounts created in the organisation then start with no root credentials at all.</p>
+
+<p><strong>Delegated administration</strong> lets a member account run an organisation-wide security service (GuardDuty, Security Hub, IAM Access Analyzer, CloudTrail organisation trails' administration), so the people who operate those services don't need the management account. Larder's <code>security</code> account is the delegated administrator for all of them; only a handful of people ever sign in to the management account.</p>
+
+<!-- ======================================================== 20.7 -->
+<h2 class="sec" id="s20-7"><span class="n">20.7</span>At Larder: guardrails that hold for everyone</h2>
+
+<aside class="box box-story" aria-label="Larder, solved">
+  <p class="label">At Larder: solved</p>
+  <p>In June 2027, Eli built the structure in Figure 20.1. New accounts: <code>security</code> (delegated administrator for the security services, and home of the organisation's logs, <a href="index.html#ch23">Chapter 23</a>), <code>backup</code> (the database snapshots' copies, <a href="18-secrets-keys.html">Chapter 18</a>, <a href="21-cross-account.html">Chapter 21</a>), and a <code>sandbox-…</code> account per engineer who wants one, with a €100 monthly budget alarm. The tooling account moved under Infrastructure. Production and staging moved into Workloads' two OUs.</p>
+  <p>The baseline SCP went on the root after a week on the Sandbox OU. Its region guardrail answered the €1,900 load test; its IMDSv2 rule made <a href="15-workload-identity.html">Chapter 15</a>'s fix permanent. Then the answer to Marco's question: <code>protect-orders-db</code> moved from an identity policy (<a href="10-evaluation.html">Chapter 10</a>) to an SCP on the Prod OU, with the exceptions rewritten for Identity Center's <code>DbChange</code> role and the break-glass role. It now applies to every principal in the production account, including roles nobody has created yet, and nobody in that account can detach it. Eli's reply to Marco, six months after the question, was one word: “Impossible.” Finally, centralised root access was turned on, and the root credentials of the production and staging accounts were deleted.</p>
+</aside>
+
+<!-- ======================================================== 20.8 -->
+<h2 class="sec" id="s20-8"><span class="n">20.8</span>Across providers</h2>
+
+<div class="table-wrap">
+  <table>
+    <caption>Table 20.1 · Organising many accounts at the big three</caption>
+    <thead><tr><th></th><th>AWS</th><th>Azure</th><th>Google Cloud</th></tr></thead>
+    <tbody>
+      <tr><td>Unit of isolation</td><td>account</td><td>subscription</td><td>project</td></tr>
+      <tr><td>Grouping</td><td>OUs under an organisation root</td><td>management groups under the tenant root group</td><td>folders under an organisation</td></tr>
+      <tr><td>Permission ceilings</td><td>SCPs (principals), RCPs (resources)</td><td>none for RBAC as such; deny assignments are system-created</td><td>IAM deny policies at organisation, folder or project</td></tr>
+      <tr><td>Configuration rules</td><td>SCP conditions, AWS Config, declarative policies</td><td>Azure Policy (deny, audit, modify)</td><td>organisation policy constraints</td></tr>
+      <tr><td>Landing-zone tooling</td><td>Control Tower</td><td>Azure landing zones</td><td>Cloud Foundation Toolkit, Fabric</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box box-provider">
+  <p class="label">On Azure</p>
+  <p><strong>Management groups</strong> hold subscriptions, and both RBAC role assignments and <strong>Azure Policy</strong> assignments inherit down them. Azure Policy is where most guardrails live: allowed locations, required tags, “no public IPs”, with effects such as <em>deny</em>, <em>audit</em> and <em>modify</em>. It governs resource configuration rather than who may call which API, which is the job SCPs do on AWS.</p>
+</div>
+<div class="box box-provider">
+  <p class="label">On Google Cloud</p>
+  <p><strong>Folders</strong> group projects, IAM allow policies inherit down the hierarchy, and <strong>organisation policy constraints</strong> set configuration rules such as allowed resource locations or “no service account keys”. For permission ceilings, IAM <strong>deny policies</strong> attached to the organisation or a folder are the closest thing to SCPs.</p>
+</div>
+
+<!-- ======================================================== 20.9 -->
+<h2 class="sec" id="s20-9"><span class="n">20.9</span>Lab: SCPs down a tree</h2>
+
+<div class="box box-lab">
+  <p class="label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4M6.8 1.5v4.2L2.5 13a1.2 1.2 0 0 0 1 1.8h9a1.2 1.2 0 0 0 1-1.8L9.2 5.7V1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Lab 20 · Larder's organisation in a hundred lines</p>
+  <p><strong>You'll</strong> evaluate requests from different accounts against Larder's OU tree and SCPs, predict which level stops each one, then break the tree on purpose. Optionally, you'll test one SCP in a sandbox organisation. <strong>You need</strong> Python 3; for the optional part, the AWS CLI as an administrator of a sandbox organisation's management account. <strong>Cost:</strong> free.</p>
+</div>
+
+<p class="code-title"><span>scp_eval.py</span><span>Python 3.8+</span></p>
+<pre><code><span class="c"># scp_eval.py · service control policies down an organisation tree: allowed at every level, denied by any</span>
+<span class="k">from</span> fnmatch <span class="k">import</span> fnmatchcase
+
+<span class="k">def</span> as_list(x):
+    <span class="k">return</span> x <span class="k">if</span> isinstance(x, list) <span class="k">else</span> [x]
+
+FULL = {<span class="s">"Effect"</span>: <span class="s">"Allow"</span>, <span class="s">"Action"</span>: <span class="s">"*"</span>, <span class="s">"Resource"</span>: <span class="s">"*"</span>}                       <span class="c"># FullAWSAccess</span>
+GLOBAL = [<span class="s">"iam:*"</span>, <span class="s">"organizations:*"</span>, <span class="s">"sts:*"</span>, <span class="s">"sso:*"</span>, <span class="s">"identitystore:*"</span>, <span class="s">"support:*"</span>,
+          <span class="s">"cloudfront:*"</span>, <span class="s">"route53:*"</span>, <span class="s">"budgets:*"</span>, <span class="s">"ce:*"</span>, <span class="s">"health:*"</span>, <span class="s">"account:*"</span>]
+BASELINE = [
+    {<span class="s">"Effect"</span>: <span class="s">"Deny"</span>, <span class="s">"Action"</span>: <span class="s">"organizations:LeaveOrganization"</span>, <span class="s">"Resource"</span>: <span class="s">"*"</span>},
+    {<span class="s">"Effect"</span>: <span class="s">"Deny"</span>, <span class="s">"Action"</span>: [<span class="s">"cloudtrail:StopLogging"</span>, <span class="s">"cloudtrail:DeleteTrail"</span>], <span class="s">"Resource"</span>: <span class="s">"*"</span>,
+     <span class="s">"Condition"</span>: {<span class="s">"ArnNotLike"</span>: {<span class="s">"aws:PrincipalArn"</span>: <span class="s">"arn:aws:iam::*:role/break-glass-admin"</span>}}},
+    {<span class="s">"Effect"</span>: <span class="s">"Deny"</span>, <span class="s">"Action"</span>: <span class="s">"ec2:RunInstances"</span>, <span class="s">"Resource"</span>: <span class="s">"*"</span>,
+     <span class="s">"Condition"</span>: {<span class="s">"StringNotEquals"</span>: {<span class="s">"ec2:MetadataHttpTokens"</span>: <span class="s">"required"</span>}}},
+    {<span class="s">"Effect"</span>: <span class="s">"Deny"</span>, <span class="s">"NotAction"</span>: GLOBAL, <span class="s">"Resource"</span>: <span class="s">"*"</span>,
+     <span class="s">"Condition"</span>: {<span class="s">"StringNotEquals"</span>: {<span class="s">"aws:RequestedRegion"</span>: <span class="s">"eu-central-1"</span>}}},
+]
+PROTECT_ORDERS_DB = [
+    {<span class="s">"Effect"</span>: <span class="s">"Deny"</span>, <span class="s">"Action"</span>: [<span class="s">"rds:ModifyDBInstance"</span>, <span class="s">"rds:DeleteDBInstance"</span>],
+     <span class="s">"Resource"</span>: <span class="s">"arn:aws:rds:*:*:db:orders-prod"</span>,
+     <span class="s">"Condition"</span>: {<span class="s">"ArnNotLike"</span>: {<span class="s">"aws:PrincipalArn"</span>: [
+         <span class="s">"arn:aws:iam::*:role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_DbChange_*"</span>,
+         <span class="s">"arn:aws:iam::*:role/break-glass-admin"</span>]}}},
+    {<span class="s">"Effect"</span>: <span class="s">"Deny"</span>, <span class="s">"Action"</span>: [<span class="s">"rds:DeleteDBSnapshot"</span>, <span class="s">"rds:DeleteDBInstanceAutomatedBackup"</span>], <span class="s">"Resource"</span>: <span class="s">"*"</span>},
+]
+SANDBOX_ALLOW = [{<span class="s">"Effect"</span>: <span class="s">"Allow"</span>, <span class="s">"Action"</span>: [<span class="s">"ec2:*"</span>, <span class="s">"s3:*"</span>, <span class="s">"lambda:*"</span>, <span class="s">"logs:*"</span>, <span class="s">"iam:*"</span>], <span class="s">"Resource"</span>: <span class="s">"*"</span>}]
+
+TREE = {   <span class="c"># node: (parent, SCPs attached)</span>
+    <span class="s">"Root"</span>:           (None,             [FULL] + BASELINE),
+    <span class="s">"Security"</span>:       (<span class="s">"Root"</span>,           [FULL]),
+    <span class="s">"Infrastructure"</span>: (<span class="s">"Root"</span>,           [FULL]),
+    <span class="s">"Workloads"</span>:      (<span class="s">"Root"</span>,           [FULL]),
+    <span class="s">"Prod"</span>:           (<span class="s">"Workloads"</span>,      [FULL] + PROTECT_ORDERS_DB),
+    <span class="s">"NonProd"</span>:        (<span class="s">"Workloads"</span>,      [FULL]),
+    <span class="s">"Sandbox"</span>:        (<span class="s">"Root"</span>,           SANDBOX_ALLOW),
+    <span class="s">"prod"</span>:           (<span class="s">"Prod"</span>,           [FULL]),
+    <span class="s">"dev-staging"</span>:    (<span class="s">"NonProd"</span>,        [FULL]),
+    <span class="s">"sandbox-dee"</span>:    (<span class="s">"Sandbox"</span>,        [FULL]),
+}
+MANAGEMENT = <span class="s">"management"</span>
+
+<span class="k">def</span> matches(st, req):
+    acts = st.get(<span class="s">"Action"</span>)
+    <span class="k">if</span> acts <span class="k">is not</span> None <span class="k">and not</span> any(fnmatchcase(req[<span class="s">"action"</span>], a) <span class="k">for</span> a <span class="k">in</span> as_list(acts)):
+        <span class="k">return</span> False
+    <span class="k">if</span> <span class="s">"NotAction"</span> <span class="k">in</span> st <span class="k">and</span> any(fnmatchcase(req[<span class="s">"action"</span>], a) <span class="k">for</span> a <span class="k">in</span> as_list(st[<span class="s">"NotAction"</span>])):
+        <span class="k">return</span> False
+    <span class="k">if not</span> any(fnmatchcase(req[<span class="s">"resource"</span>], r) <span class="k">for</span> r <span class="k">in</span> as_list(st[<span class="s">"Resource"</span>])):
+        <span class="k">return</span> False
+    <span class="k">for</span> op, tests <span class="k">in</span> st.get(<span class="s">"Condition"</span>, {}).items():
+        <span class="k">for</span> key, want <span class="k">in</span> tests.items():
+            have = req.get(key, <span class="s">""</span>)
+            hit = any(fnmatchcase(have, w) <span class="k">for</span> w <span class="k">in</span> as_list(want))
+            <span class="k">if</span> op <span class="k">in</span> (<span class="s">"StringNotEquals"</span>, <span class="s">"StringNotLike"</span>, <span class="s">"ArnNotLike"</span>) <span class="k">and</span> hit:
+                <span class="k">return</span> False
+    <span class="k">return</span> True
+
+<span class="k">def</span> decide(account, req):
+    <span class="k">if</span> account == MANAGEMENT:
+        <span class="k">return</span> <span class="s">"ALLOW  (SCPs don't apply to the management account)"</span>
+    path, node = [], account
+    <span class="k">while</span> node:
+        path.append(node)
+        node = TREE[node][0]
+    <span class="k">for</span> level <span class="k">in</span> reversed(path):                     <span class="c"># any deny, anywhere on the path, wins</span>
+        <span class="k">if</span> any(st[<span class="s">"Effect"</span>] == <span class="s">"Deny"</span> <span class="k">and</span> matches(st, req) <span class="k">for</span> st <span class="k">in</span> TREE[level][1]):
+            <span class="k">return</span> f<span class="s">"DENY   explicit deny at {level}"</span>
+    <span class="k">for</span> level <span class="k">in</span> reversed(path):                     <span class="c"># and every level must allow</span>
+        <span class="k">if not</span> any(st[<span class="s">"Effect"</span>] == <span class="s">"Allow"</span> <span class="k">and</span> matches(st, req) <span class="k">for</span> st <span class="k">in</span> TREE[level][1]):
+            <span class="k">return</span> f<span class="s">"DENY   nothing allows it at {level}"</span>
+    <span class="k">return</span> <span class="s">"ALLOW  (now IAM decides, Chapter 10)"</span>
+
+SSO = <span class="s">"arn:aws:iam::111122223333:role/aws-reserved/sso.amazonaws.com/eu-central-1/AWSReservedSSO_{}_3f9a"</span>
+DB = <span class="s">"arn:aws:rds:eu-central-1:111122223333:db:orders-prod"</span>
+<span class="k">def</span> r(action, resource=<span class="s">"*"</span>, region=<span class="s">"eu-central-1"</span>, who=<span class="s">"arn:aws:iam::111122223333:role/some-role"</span>, **extra):
+    <span class="k">return</span> dict(action=action, resource=resource, **{<span class="s">"aws:RequestedRegion"</span>: region, <span class="s">"aws:PrincipalArn"</span>: who}, **extra)
+
+cases = [
+    (<span class="s">"prod"</span>,        <span class="s">"ProdOperator changes orders DB"</span>, r(<span class="s">"rds:ModifyDBInstance"</span>, DB, who=SSO.format(<span class="s">"ProdOperator"</span>))),
+    (<span class="s">"prod"</span>,        <span class="s">"DbChange changes orders DB"</span>,     r(<span class="s">"rds:ModifyDBInstance"</span>, DB, who=SSO.format(<span class="s">"DbChange"</span>))),
+    (<span class="s">"prod"</span>,        <span class="s">"a brand-new role, no boundary"</span>,  r(<span class="s">"rds:ModifyDBInstance"</span>, DB, who=<span class="s">"arn:aws:iam::111122223333:role/new-thing"</span>)),
+    (<span class="s">"prod"</span>,        <span class="s">"PlatformAdmin stops CloudTrail"</span>, r(<span class="s">"cloudtrail:StopLogging"</span>, who=SSO.format(<span class="s">"PlatformAdmin"</span>))),
+    (<span class="s">"prod"</span>,        <span class="s">"break-glass stops CloudTrail"</span>,   r(<span class="s">"cloudtrail:StopLogging"</span>, who=<span class="s">"arn:aws:iam::111122223333:role/break-glass-admin"</span>)),
+    (<span class="s">"dev-staging"</span>, <span class="s">"instance allowing IMDSv1"</span>,       r(<span class="s">"ec2:RunInstances"</span>, **{<span class="s">"ec2:MetadataHttpTokens"</span>: <span class="s">"optional"</span>})),
+    (<span class="s">"dev-staging"</span>, <span class="s">"instance requiring IMDSv2"</span>,      r(<span class="s">"ec2:RunInstances"</span>, **{<span class="s">"ec2:MetadataHttpTokens"</span>: <span class="s">"required"</span>})),
+    (<span class="s">"sandbox-dee"</span>, <span class="s">"instance in us-east-1"</span>,          r(<span class="s">"ec2:RunInstances"</span>, region=<span class="s">"us-east-1"</span>, **{<span class="s">"ec2:MetadataHttpTokens"</span>: <span class="s">"required"</span>})),
+    (<span class="s">"sandbox-dee"</span>, <span class="s">"a database in a sandbox"</span>,        r(<span class="s">"rds:CreateDBInstance"</span>)),
+    (<span class="s">"sandbox-dee"</span>, <span class="s">"a role (IAM is global)"</span>,         r(<span class="s">"iam:CreateRole"</span>, region=<span class="s">"us-east-1"</span>)),
+    (MANAGEMENT,    <span class="s">"stop CloudTrail in management"</span>,  r(<span class="s">"cloudtrail:StopLogging"</span>)),
+]
+<span class="k">for</span> account, name, req <span class="k">in</span> cases:
+    print(f<span class="s">"{account:&lt;12} {name:&lt;32} {decide(account, req)}"</span>)</code></pre>
+
+<ol class="steps">
+  <li><strong>Predict, then run</strong> <code>python3 scp_eval.py</code>:
+<pre><code>prod         ProdOperator changes orders DB   DENY   explicit deny at Prod
+prod         DbChange changes orders DB       ALLOW  (now IAM decides, Chapter 10)
+prod         a brand-new role, no boundary    DENY   explicit deny at Prod
+prod         PlatformAdmin stops CloudTrail   DENY   explicit deny at Root
+prod         break-glass stops CloudTrail     ALLOW  (now IAM decides, Chapter 10)
+dev-staging  instance allowing IMDSv1         DENY   explicit deny at Root
+dev-staging  instance requiring IMDSv2        ALLOW  (now IAM decides, Chapter 10)
+sandbox-dee  instance in us-east-1            DENY   explicit deny at Root
+sandbox-dee  a database in a sandbox          DENY   nothing allows it at Sandbox
+sandbox-dee  a role (IAM is global)           ALLOW  (now IAM decides, Chapter 10)
+management   stop CloudTrail in management    ALLOW  (SCPs don't apply to the management account)</code></pre>
+  The third line is Marco's question answered: a role created tomorrow, without any boundary, still can't change the database. The last line is why the management account holds no workloads.</li>
+  <li><strong>Break it on purpose.</strong> Remove <code>[FULL]</code> from the <code>Workloads</code> OU (leave its list empty) and run again: every prod and dev-staging request that no deny had already stopped is now refused at Workloads, including the database owners' and break-glass's. Put it back. Then attach <code>SANDBOX_ALLOW</code> to the root instead of <code>FULL</code>: production can no longer use RDS, ECS or anything else not on the list.</li>
+  <li><strong>Optional: one SCP for real.</strong> In a sandbox organisation's management account, with SCPs enabled, create the IMDSv2 statement as a policy and attach it to an OU holding a test account:
+<pre><code>cat &gt; imdsv2.json &lt;&lt;'EOF'
+{ "Version": "2012-10-17",
+  "Statement": [{ "Effect": "Deny", "Action": "ec2:RunInstances", "Resource": "arn:aws:ec2:*:*:instance/*",
+                  "Condition": { "StringNotEquals": { "ec2:MetadataHttpTokens": "required" } } }] }
+EOF
+POLICY=$(aws organizations create-policy --name only-imdsv2 --type SERVICE_CONTROL_POLICY \
+  --description "Lab: IMDSv2 only" --content file://imdsv2.json --query Policy.PolicySummary.Id --output text)
+aws organizations attach-policy --policy-id $POLICY --target-id &lt;OU ID&gt;</code></pre>
+  In the test account, <code>aws ec2 run-instances --dry-run --instance-type t3.micro --image-id resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 --metadata-options HttpTokens=optional</code> fails with an explicit deny in a service control policy; with <code>HttpTokens=required</code> it reports that the dry run would have succeeded. Detach and delete the policy afterwards.</li>
+</ol>
+
+<!-- ======================================================== mistakes -->
+<h2 class="sec" id="s20-10"><span class="n">20.10</span>Common mistakes</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mistake</th><th>What happens</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Workloads in the management account</td><td>No SCP protects them; compromise reaches the whole organisation.</td><td>An empty management account; delegated administration.</td></tr>
+      <tr><td>OUs that mirror the org chart</td><td>Policies don't fit; reorganisations mean moving accounts.</td><td>OUs by policy: security, infrastructure, prod, non-prod, sandbox.</td></tr>
+      <tr><td>Guardrails as identity policies only</td><td>New or forgotten identities bypass them.</td><td>SCPs (and RCPs) where no account admin can remove them.</td></tr>
+      <tr><td>Untested SCPs attached at the root</td><td>Every account breaks at once.</td><td>Sandbox OU first, then OU by OU, from code with review.</td></tr>
+      <tr><td>Region denies without global-service exemptions</td><td>IAM, Organizations, CloudFront and friends stop working.</td><td>Exempt global services with <code>NotAction</code>.</td></tr>
+      <tr><td>Member root credentials left in place</td><td>Unrestricted credentials nobody watches.</td><td>Centralised root access; delete member root credentials.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======================================================== summary -->
+<section class="summary" aria-labelledby="sum20">
+  <h2 class="sec" id="sum20"><span class="n">✓</span>Chapter summary</h2>
+  <ul>
+    <li>An <strong>organisation</strong> is a management account, member accounts and OUs; policies attach to the root, OUs and accounts.</li>
+    <li>Design OUs around <strong>policy</strong>: security, infrastructure, prod, non-prod, sandbox. Keep the management account empty.</li>
+    <li><strong>SCPs</strong> cap what principals in member accounts can do: allowed at every level, denied by any. They never grant.</li>
+    <li>Classic guardrails: stay in the organisation, keep the audit trail, IMDSv2 only, approved regions, protect critical data.</li>
+    <li><strong>RCPs</strong> cap what anyone can do to resources in your accounts, the basis of a data perimeter.</li>
+    <li>Remove member root credentials with centralised root access; run security services from a delegated account.</li>
+  </ul>
+
+  <h3>Key terms</h3>
+  <dl class="terms">
+    <dt>AWS Organization</dt><dd>A group of accounts under central management, billing and policy.</dd>
+    <dt>Management account</dt><dd>The account that owns the organisation; not restricted by SCPs or RCPs.</dd>
+    <dt>Organisational unit (OU)</dt><dd>A container of accounts to which policies attach.</dd>
+    <dt>SCP</dt><dd>Service control policy: a ceiling on principals' permissions in member accounts.</dd>
+    <dt>RCP</dt><dd>Resource control policy: a ceiling on access to resources in member accounts.</dd>
+    <dt><code>FullAWSAccess</code></dt><dd>The default SCP that allows everything through a level.</dd>
+    <dt>Delegated administrator</dt><dd>A member account allowed to run an organisation-wide service.</dd>
+  </dl>
+
+  <h3>Check your understanding</h3>
+  <ol class="quiz">
+    <li>
+      <p>An OU has only an allow-list SCP permitting S3 and EC2. A role in an account below it has <code>AdministratorAccess</code>. Can it create a DynamoDB table? <span class="lvl">recall</span></p>
+      <details><summary>Show answer</summary><p>No. Every level must allow the action, and that OU's SCPs don't allow DynamoDB; IAM never gets asked.</p></details>
+    </li>
+    <li>
+      <p>Why is moving <code>protect-orders-db</code> from an identity policy to an SCP a real improvement? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>The identity policy only protected identities it was attached to; any new or forgotten role bypassed it, and account admins could detach it. The SCP applies to every principal in the account, including future ones and the root user, and can only be changed from the organisation's management.</p></details>
+    </li>
+    <li>
+      <p>A region-restriction SCP denies everything outside <code>eu-central-1</code>. Engineers can no longer create IAM roles. Why, and what's the fix? <span class="lvl">apply</span></p>
+      <details><summary>Show answer</summary><p>IAM is a global service whose requests are made in <code>us-east-1</code>, so the deny catches them. Exempt global services with <code>NotAction</code>, as in 20.4.</p></details>
+    </li>
+    <li>
+      <p>Someone proposes running the CI/CD tooling in the management account, “since it deploys to everything”. What do you say? <span class="lvl">explain</span></p>
+      <details><summary>Show answer</summary><p>No: SCPs don't restrict the management account, and a compromise of tooling there would control the whole organisation. Run it in a tooling account under Infrastructure, assuming narrowly scoped roles in workload accounts.</p></details>
+    </li>
+    <li>
+      <p>Design the OUs and SCPs for a company adding a data-science team that needs GPUs in a second region. <span class="lvl">design</span></p>
+      <details><summary>Show answer</summary><p>A new OU (say Workloads/Data) whose accounts may also use the second region: the root's region guardrail moves down to each OU, or gains an exception condition for that OU's accounts. Keep IMDSv2, audit-trail and leave-organisation denies at the root; add a budget alarm and tag policy for GPU spend.</p></details>
+    </li>
+    <li>
+      <p>Compare where you'd enforce “resources only in approved regions” on AWS and on Azure. <span class="lvl">compare</span></p>
+      <details><summary>Show answer</summary><p>AWS: an SCP denying requests outside the approved regions (exempting global services). Azure: an Azure Policy assignment with the “Allowed locations” definition at a management group, which denies creating resources elsewhere.</p></details>
+    </li>
+  </ol>
+
+  <h3>Going further</h3>
+  <ul>
+    <li>AWS: <a href="https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_scps.html">Service control policies</a>, <a href="https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_scps_examples.html">SCP examples</a>, <a href="https://docs.aws.amazon.com/whitepapers/latest/organizing-your-aws-environment/organizing-your-aws-environment.html">Organizing your AWS environment</a>.</li>
+    <li>Azure: <a href="https://learn.microsoft.com/azure/governance/management-groups/overview">Management groups</a>. Google Cloud: <a href="https://cloud.google.com/resource-manager/docs/organization-policy/overview">Organization policy service</a>.</li>
+  </ul>
+</section>
+
+<nav class="next" aria-label="Chapters">
+  <div><span>Previous</span><a href="19-api-access.html">19 · Service-to-service and API access</a></div>
+  <div><span>Next</span><a href="21-cross-account.html">21 · Cross-account access and resource sharing</a></div>
+</nav>
+
+</main>
+<footer class="colophon"><span>Jef’s Handbooks · Handbook 2 · Identity and Access in the Cloud</span><span>by Jefrey Romel Tagunicar</span></footer>
+</body>
+</html>
